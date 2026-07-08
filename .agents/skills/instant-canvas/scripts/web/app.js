@@ -333,8 +333,8 @@ async function renderCanvas() {
 		if (b.type === 'kpi') return renderKpi(b)
 		if (b.type === 'table') return renderTable(b)
 		if (b.type === 'chart') return renderChartShell(b, i)
-		if (b.type === 'form') return window.icRenderForm ? window.icRenderForm(b) : interactivePlaceholder('form')
-		if (b.type === 'confirm') return window.icRenderConfirm ? window.icRenderConfirm(b) : interactivePlaceholder('confirm')
+		if (b.type === 'form') return renderForm(b)
+		if (b.type === 'confirm') return renderConfirm(b)
 		return ''
 	}).join('')
 
@@ -343,12 +343,7 @@ async function renderCanvas() {
 		${tabs}${inner}
 	</div>`
 	mountCharts(blocks)
-	if (window.icAfterCanvasRender)
-		window.icAfterCanvasRender(blocks)
-}
-
-function interactivePlaceholder(kind) {
-	return `<div class="block placeholder">Interactive ${esc(kind)} block — renderer lands in the next phase.</div>`
+	wireInteractive(blocks)
 }
 
 $('main').addEventListener('click', (e) => {
@@ -358,6 +353,350 @@ $('main').addEventListener('click', (e) => {
 		renderCanvas()
 	}
 })
+
+// ---------------------------------------------------------------- interactive blocks (form / confirm)
+
+function controlHtml(field) {
+	const v = field.validation || {}
+	const attrs = []
+	if (field.required && field.type !== 'checkboxGroup') attrs.push('required')
+	if (field.placeholder) attrs.push(`placeholder="${esc(field.placeholder)}"`)
+	if (v.minLength !== undefined) attrs.push(`minlength="${Number(v.minLength)}"`)
+	if (v.maxLength !== undefined) attrs.push(`maxlength="${Number(v.maxLength)}"`)
+	if (v.pattern !== undefined) attrs.push(`pattern="${esc(v.pattern)}"`)
+	if (v.min !== undefined) attrs.push(`min="${Number(v.min)}"`)
+	if (v.max !== undefined) attrs.push(`max="${Number(v.max)}"`)
+	if (v.step !== undefined) attrs.push(`step="${Number(v.step)}"`)
+	const name = `data-field="${esc(field.name)}"`
+	const def = field.default !== undefined ? String(field.default) : ''
+	const options = (field.options || []).map((o) => (typeof o === 'string' ? { label: o, value: o } : o))
+	const a = attrs.join(' ')
+
+	switch (field.type) {
+		case 'textarea':
+			return `<textarea class="inp" ${name} ${a}>${esc(def)}</textarea>`
+		case 'secret':
+			return `<div class="inp-wrap"><input class="inp" type="password" ${name} ${a} autocomplete="off" placeholder="${esc(field.placeholder || '••••••••')}"><button type="button" class="eye" data-eye title="Reveal">👁</button></div>`
+		case 'email': case 'url': case 'tel': case 'date':
+			return `<input class="inp" type="${field.type}" ${name} value="${esc(def)}" ${a}>`
+		case 'datetime':
+			return `<input class="inp" type="datetime-local" ${name} value="${esc(def)}" ${a}>`
+		case 'number':
+			return `<input class="inp" type="number" ${name} value="${esc(def)}" ${a}>`
+		case 'select':
+			return `<select class="inp" ${name} ${field.required ? 'required' : ''}>
+				${field.required && field.default === undefined ? '<option value="" disabled selected>Choose…</option>' : ''}
+				${options.map((o) => `<option value="${esc(o.value)}" ${String(o.value) === def ? 'selected' : ''}>${esc(o.label)}</option>`).join('')}
+			</select>`
+		case 'radio':
+			return `<div class="radios" ${name}>${options.map((o) => `<label><input type="radio" name="f_${esc(field.name)}" value="${esc(o.value)}" ${String(o.value) === def ? 'checked' : ''} ${field.required ? 'required' : ''}> ${esc(o.label)}</label>`).join('')}</div>`
+		case 'checkbox':
+			return `<div class="checkline"><label><input type="checkbox" ${name} ${def === 'true' ? 'checked' : ''} ${field.required ? 'required' : ''}> ${esc(field.label || field.name)}</label></div>`
+		case 'checkboxGroup': {
+			const defs = Array.isArray(field.default) ? field.default.map(String) : []
+			return `<div class="checks" ${name} data-group>${options.map((o) => `<label><input type="checkbox" value="${esc(o.value)}" ${defs.includes(String(o.value)) ? 'checked' : ''}> ${esc(o.label)}</label>`).join('')}</div>`
+		}
+		case 'range': {
+			const min = v.min !== undefined ? Number(v.min) : 0
+			const start = def !== '' ? def : String(min)
+			return `<div class="rangeline"><input type="range" ${name} value="${esc(start)}" ${a}><span class="range-val">${esc(start)}</span></div>`
+		}
+		case 'hidden':
+			return `<input type="hidden" ${name} value="${esc(def)}">`
+		case 'readonly':
+			return `<input class="inp" type="text" ${name} value="${esc(def)}" disabled>`
+		default: // text
+			return `<input class="inp" type="text" ${name} value="${esc(def)}" ${a}>`
+	}
+}
+
+function destinationLine(dest) {
+	if (!dest || dest.kind === 'none')
+		return '<div class="dest">→ values are not written to any file</div>'
+	return `<div class="dest">→ writes to <code>${esc(dest.path)}</code> &nbsp;(${esc(dest.mode || 'merge')})</div>`
+}
+
+function renderForm(block) {
+	const fieldsHtml = (block.fields || []).map((f) => {
+		if (f.type === 'hidden')
+			return controlHtml(f)
+		const label = f.type === 'checkbox'
+			? '' // the checkbox carries its own label line
+			: `<label>${esc(f.label || f.name)} ${f.required ? '<span class="req">*</span>' : ''}</label>`
+		return `<div class="field" data-field-wrap="${esc(f.name)}">
+			${label}
+			${controlHtml(f)}
+			${f.help ? `<div class="help">${esc(f.help)}</div>` : ''}
+			<div class="field-error" data-error-for="${esc(f.name)}"></div>
+		</div>`
+	}).join('')
+	const noSession = !state.session
+	return `<div class="block">
+		${block.title ? `<h2 style="margin:6px 0 2px;font-size:17px">${esc(block.title)}</h2>` : ''}
+		${block.description ? `<p style="color:var(--muted);margin:4px 0 10px">${esc(block.description)}</p>` : ''}
+		<form id="theForm" novalidate>
+			${destinationLine(block.destination)}
+			<div class="secbanner">🔒 <div>These values are saved <b>locally</b> to the file above and are <b>not</b> sent back to the agent or into the chat context.</div></div>
+			${noSession ? '<div class="placeholder" style="margin-bottom:14px">No active agent session for this form — ask the agent to run <code>open</code> to start one.</div>' : ''}
+			${fieldsHtml}
+			<div class="form-actions">
+				<button type="button" class="btn ghost" data-cancel ${noSession ? 'disabled' : ''}>${esc(block.cancelLabel || 'Cancel')}</button>
+				<button type="submit" class="btn primary" ${noSession ? 'disabled' : ''}>${esc(block.submitLabel || 'Save')} →</button>
+			</div>
+		</form>
+	</div>`
+}
+
+function renderConfirm(block) {
+	const severity = block.severity || 'info'
+	const icon = severity === 'danger' ? '🛑' : severity === 'warning' ? '⚠' : 'ⓘ'
+	const noSession = !state.session
+	return `<div class="block">
+		<div class="confirm ${esc(severity)}" id="theConfirm">
+			<div class="confirm-head">${icon} ${esc(block.title)}</div>
+			<div class="confirm-body">
+				${block.description ? `<p style="margin-top:0;color:var(--muted)">${esc(block.description)}</p>` : ''}
+				${(block.details || []).map((d) => `<div class="confirm-detail"><span class="k">${esc(d.label)}</span><span>${esc(d.value)}</span></div>`).join('')}
+				${noSession ? '<div class="placeholder" style="margin-top:10px">No active agent session — ask the agent to run <code>open</code> to start one.</div>' : ''}
+			</div>
+			<div class="confirm-actions">
+				<button class="btn ghost" data-confirm="no" ${noSession ? 'disabled' : ''}>${esc(block.cancelLabel || 'Cancel')}</button>
+				<button class="btn ${severity === 'danger' ? 'danger' : 'primary'}" data-confirm="yes" ${noSession ? 'disabled' : ''}>${esc(block.confirmLabel || 'Confirm')}</button>
+			</div>
+		</div>
+	</div>`
+}
+
+function collectValues(form, fields) {
+	const values = {}
+	for (const f of fields) {
+		if (f.type === 'checkboxGroup') {
+			const group = form.querySelector(`[data-field="${CSS.escape(f.name)}"]`)
+			values[f.name] = [...group.querySelectorAll('input:checked')].map((i) => i.value)
+		} else if (f.type === 'radio') {
+			const hit = form.querySelector(`input[name="f_${CSS.escape(f.name)}"]:checked`)
+			values[f.name] = hit ? hit.value : ''
+		} else if (f.type === 'checkbox') {
+			values[f.name] = form.querySelector(`[data-field="${CSS.escape(f.name)}"]`).checked
+		} else {
+			const el = form.querySelector(`[data-field="${CSS.escape(f.name)}"]`)
+			values[f.name] = el ? el.value : ''
+		}
+	}
+	return values
+}
+
+function showFieldErrors(form, fieldErrors) {
+	form.querySelectorAll('[data-error-for]').forEach((el) => { el.textContent = '' })
+	for (const [name, message] of Object.entries(fieldErrors || {})) {
+		const slot = form.querySelector(`[data-error-for="${CSS.escape(name)}"]`)
+		if (slot) slot.textContent = message
+	}
+}
+
+/** Modal asking to proceed; resolves true/false. Used for overwrite/outside-root confirms. */
+function askConfirmation({ title, bodyHtml, confirmLabel }) {
+	return new Promise((resolve) => {
+		const ov = document.createElement('div')
+		ov.className = 'overlay'
+		ov.innerHTML = `<div class="modal">
+			<div class="modal-head">⚠ ${esc(title)}</div>
+			<div class="modal-body">${bodyHtml}</div>
+			<div class="modal-foot">
+				<button class="btn ghost" data-no>Cancel</button>
+				<button class="btn primary" data-yes>${esc(confirmLabel)}</button>
+			</div>
+		</div>`
+		ov.addEventListener('click', (ev) => {
+			if (ev.target.closest('[data-yes]')) { ov.remove(); resolve(true) }
+			else if (ev.target === ov || ev.target.closest('[data-no]')) { ov.remove(); resolve(false) }
+		})
+		document.body.appendChild(ov)
+	})
+}
+
+function showSuccess(payload) {
+	const { result, fields, destination } = payload
+	const ov = document.createElement('div')
+	ov.className = 'overlay'
+	const wroteFile = result.status === 'saved'
+	ov.innerHTML = `<div class="modal"><div class="modal-body center">
+		<div class="success-mark">✓</div>
+		<h2 style="margin:0 0 6px">${wroteFile ? 'Saved successfully' : 'Submitted'}</h2>
+		<div style="color:var(--muted)">${wroteFile
+			? `${fields.length} values written to <code>${esc(destination.path)}</code>`
+			: `${fields.length} values submitted`}</div>
+		<ul class="fieldlist">${fields.map((f) => `<li>${esc(f)}</li>`).join('')}</ul>
+		<div class="agentbox">
+			<div class="cap">the agent receives (redacted)</div>
+			<pre>${esc(JSON.stringify(result, null, 2))}</pre>
+			<div class="note">↑ field <b>names</b> only — the secret values never leave this machine.</div>
+		</div>
+	</div>
+	<div class="modal-foot"><button class="btn primary" data-close>Done</button></div></div>`
+	ov.addEventListener('click', (ev) => {
+		if (ev.target === ov || ev.target.closest('[data-close]'))
+			ov.remove()
+	})
+	document.body.appendChild(ov)
+}
+
+async function submitForm(form, block) {
+	const values = collectValues(form, block.fields || [])
+	const confirmations = {}
+	for (;;) {
+		const { status, json } = await api(`/api/session/${state.session.id}/submit`, {
+			method: 'POST',
+			body: JSON.stringify({ values, confirmations }),
+		})
+		if (status === 200 && json && json.ok) {
+			showSuccess(json)
+			state.session = null
+			return
+		}
+		if (status === 422 && json && json.fieldErrors) {
+			showFieldErrors(form, json.fieldErrors)
+			return
+		}
+		if (status === 409 && json && json.needsConfirmation) {
+			const need = json.needsConfirmation
+			if (need.outsideRoot) {
+				const yes = await askConfirmation({
+					title: 'Write outside the workspace?',
+					bodyHtml: `<p>This form writes to a file <b>outside</b> the current workspace:</p>
+						<p><code>${esc(need.outsideRoot)}</code></p><p>Continue?</p>`,
+					confirmLabel: 'Write anyway',
+				})
+				if (!yes) return
+				confirmations.outsideRoot = true
+				continue
+			}
+			if (need.overwrite) {
+				const yes = await askConfirmation({
+					title: 'Overwrite matching keys?',
+					bodyHtml: `<p>These keys already exist in the destination and will be overwritten:</p>
+						<ul class="fieldlist">${need.overwrite.map((k) => `<li>${esc(k)}</li>`).join('')}</ul>`,
+					confirmLabel: 'Overwrite',
+				})
+				if (!yes) return
+				confirmations.overwrite = true
+				continue
+			}
+		}
+		if (status === 409 && json && json.result) {
+			toast(`Session already resolved (${json.result.status}).`)
+			renderCanvas()
+			return
+		}
+		toast('Submit failed' + (json && json.error ? `: ${json.error.code}` : ` (HTTP ${status})`))
+		return
+	}
+}
+
+function sessionExpiredView() {
+	const main = document.querySelector('#theForm, #theConfirm')
+	if (main)
+		main.outerHTML = '<div class="placeholder" style="margin:22px 0">⏱ This session has expired — the agent received <code>{"status":"timeout"}</code>. Ask it to run <code>open</code> again.</div>'
+}
+
+function wireInteractive(blocks) {
+	const block = blocks.find((b) => b && (b.type === 'form' || b.type === 'confirm'))
+	if (!block)
+		return
+
+	if (block.type === 'confirm') {
+		const card = document.getElementById('theConfirm')
+		if (!card) return
+		card.addEventListener('click', async (e) => {
+			const btn = e.target.closest('[data-confirm]')
+			if (!btn || !state.session) return
+			card.querySelectorAll('button').forEach((b) => { b.disabled = true })
+			const confirmed = btn.dataset.confirm === 'yes'
+			const { status, json } = await api(`/api/session/${state.session.id}/submit`, {
+				method: 'POST',
+				body: JSON.stringify({ confirmed }),
+			})
+			if (status === 200 && json && json.ok) {
+				toast(confirmed ? 'Confirmed — the agent receives {"confirmed": true}' : 'Cancelled — the agent receives {"confirmed": false}')
+				state.session = null
+				renderCanvas()
+			} else {
+				toast('Could not record the choice.')
+				card.querySelectorAll('button').forEach((b) => { b.disabled = false })
+			}
+		})
+		return
+	}
+
+	const form = document.getElementById('theForm')
+	if (!form) return
+
+	form.addEventListener('click', (e) => {
+		const eye = e.target.closest('[data-eye]')
+		if (eye) {
+			const inp = eye.previousElementSibling
+			inp.type = inp.type === 'password' ? 'text' : 'password'
+			return
+		}
+		if (e.target.closest('[data-cancel]') && state.session) {
+			api(`/api/session/${state.session.id}/cancel`, { method: 'POST', body: '{}' }).then(() => {
+				toast('Cancelled — the agent receives {"status": "cancelled"}')
+				state.session = null
+				renderCanvas()
+			})
+		}
+	})
+
+	form.addEventListener('input', (e) => {
+		if (e.target.type === 'range') {
+			const out = e.target.parentElement.querySelector('.range-val')
+			if (out) out.textContent = e.target.value
+		}
+		const wrap = e.target.closest('[data-field-wrap]')
+		if (wrap) {
+			const slot = wrap.querySelector('[data-error-for]')
+			if (slot) slot.textContent = ''
+		}
+	})
+
+	form.addEventListener('submit', async (e) => {
+		e.preventDefault()
+		if (!state.session)
+			return
+		// Constraint Validation API first (friendly messages), then server re-validates.
+		for (const f of block.fields || []) {
+			if (f.type !== 'checkboxGroup') continue
+			const group = form.querySelector(`[data-field="${CSS.escape(f.name)}"]`)
+			const first = group && group.querySelector('input[type=checkbox]')
+			if (first)
+				first.setCustomValidity(f.required && !group.querySelector('input:checked') ? `Select at least one ${f.label || f.name} option.` : '')
+		}
+		if (!form.checkValidity()) {
+			form.reportValidity()
+			return
+		}
+		const submitBtn = form.querySelector('button[type=submit]')
+		submitBtn.disabled = true
+		try {
+			await submitForm(form, block)
+		} finally {
+			submitBtn.disabled = false
+		}
+	})
+}
+
+// Session push from the kernel (timeout or resolution in another tab).
+function onSessionMessage(msg) {
+	if (!state.session || msg.id !== state.session.id)
+		return
+	if (msg.status === 'timeout') {
+		state.session = null
+		sessionExpiredView()
+	} else {
+		state.session = null
+		renderCanvas()
+	}
+}
 
 // ---------------------------------------------------------------- routing
 
@@ -401,8 +740,7 @@ function connectWs() {
 			if (msg.path === state.activeId)
 				renderCanvas() // re-open of the already-active canvas (fresh session)
 		} else if (msg.type === 'session') {
-			if (window.icOnSession)
-				window.icOnSession(msg)
+			onSessionMessage(msg)
 		}
 	}
 	ws.onclose = () => {
