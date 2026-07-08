@@ -67,10 +67,12 @@ async function readAlive(root) {
 	if (!entry || !entry.port)
 		return null
 	const health = await pingHealth(entry.port)
+	let real = root
+	try { real = fs.realpathSync(path.resolve(root)) } catch { /* not on disk yet */ }
 	const ok = health
 		&& health.ok === true
 		&& health.name === 'instantcanvas'
-		&& health.workspace === normalizeRoot(root)
+		&& (health.workspace === normalizeRoot(root) || health.workspace === normalizeRoot(real))
 	if (!ok) {
 		remove(root)
 		return null

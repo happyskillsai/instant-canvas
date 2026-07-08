@@ -10,7 +10,8 @@ const http = require('node:http')
 const tmpDir = () => fs.mkdtempSync(path.join(os.tmpdir(), 'ic-reg-'))
 
 // Point the registry at an isolated state dir BEFORE loading the module.
-process.env.INSTANTCANVAS_STATE_DIR = tmpDir()
+// ||= so the whole suite shares one state dir when run via index.js.
+process.env.INSTANTCANVAS_STATE_DIR = process.env.INSTANTCANVAS_STATE_DIR || tmpDir()
 const registry = require('../lib/registry')
 const { normalizeRoot } = require('../lib/paths')
 
