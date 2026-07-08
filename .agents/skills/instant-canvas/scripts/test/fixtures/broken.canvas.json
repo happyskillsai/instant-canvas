@@ -1,0 +1,25 @@
+{
+	"instantcanvas": 1,
+	"title": "Broken canvas fixture",
+	"blocks": [
+		{
+			"type": "chart",
+			"kind": "line",
+			"tittle": "Signups",
+			"data": [{ "month": "Apr", "signups": 2000 }],
+			"encoding": { "x": "month", "y": "signup" }
+		},
+		{
+			"type": "markdown"
+		},
+		{
+			"type": "form",
+			"title": "Setup",
+			"destination": { "kind": "env" },
+			"fields": [
+				{ "name": "VOLUME", "label": "Volume", "type": "slider" },
+				{ "name": "VOLUME", "label": "Volume again", "type": "text" }
+			]
+		}
+	]
+}

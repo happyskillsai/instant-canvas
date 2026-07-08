@@ -1,0 +1,19 @@
+{
+	"instantcanvas": 1,
+	"title": "Valid form fixture",
+	"blocks": [
+		{ "type": "markdown", "text": "## Connect your services" },
+		{
+			"type": "form",
+			"title": "API credentials",
+			"destination": { "kind": "env", "path": ".env", "mode": "merge" },
+			"submitLabel": "Save credentials",
+			"fields": [
+				{ "name": "OPENAI_API_KEY", "label": "OpenAI API Key", "type": "secret", "required": true, "help": "Used for embeddings." },
+				{ "name": "SUPABASE_URL", "label": "Supabase URL", "type": "url", "required": true, "placeholder": "https://xxxx.supabase.co" },
+				{ "name": "SUPABASE_SERVICE_ROLE_KEY", "label": "Supabase Service Role Key", "type": "secret", "required": true },
+				{ "name": "ENVIRONMENT", "label": "Environment", "type": "select", "options": ["development", "staging", "production"], "default": "staging" }
+			]
+		}
+	]
+}

@@ -1,0 +1,60 @@
+{
+	"instantcanvas": 1,
+	"title": "Valid display fixture",
+	"pages": [
+		{
+			"name": "Overview",
+			"blocks": [
+				{ "type": "markdown", "text": "## Summary\nAll systems **nominal**." },
+				{
+					"type": "kpi",
+					"cards": [
+						{ "label": "Revenue", "value": 128000, "format": "currency", "currency": "USD", "delta": { "value": 0.12, "label": "QoQ", "positiveIs": "up" } },
+						{ "label": "CAC", "value": 37.4, "format": "currency", "delta": { "value": -0.004, "label": "QoQ" } }
+					]
+				},
+				{
+					"type": "chart",
+					"kind": "line",
+					"title": "Signups",
+					"description": "Actual vs. target",
+					"data": [
+						{ "month": "Apr", "signups": 2000, "target": 2200 },
+						{ "month": "May", "signups": 2500, "target": 2600 }
+					],
+					"encoding": { "x": "month", "y": ["signups", "target"] },
+					"format": { "y": "number" }
+				}
+			]
+		},
+		{
+			"name": "Channels",
+			"blocks": [
+				{
+					"type": "chart",
+					"kind": "pie",
+					"title": "Revenue by channel",
+					"donut": true,
+					"data": [
+						{ "channel": "Paid social", "revenue": 62000 },
+						{ "channel": "Search", "revenue": 41000 }
+					],
+					"encoding": { "category": "channel", "value": "revenue" },
+					"format": { "y": "currency", "currency": "USD" }
+				},
+				{
+					"type": "table",
+					"title": "Top customers",
+					"columns": [
+						{ "key": "customer", "label": "Customer" },
+						{ "key": "rev", "label": "Revenue", "format": "currency" }
+					],
+					"rows": [
+						{ "customer": "Acme", "rev": 43000 },
+						{ "customer": "Globex", "rev": 21000 }
+					]
+				}
+			]
+		}
+	]
+}
