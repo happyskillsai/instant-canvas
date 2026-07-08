@@ -40,8 +40,11 @@ const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&
 
 // Lucide icons (lucide.dev, ISC license) — vendored path data, stroke = currentColor.
 const LUCIDE = {
+	'calendar': '<path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/>',
 	'check': '<path d="M20 6 9 17l-5-5"/>',
 	'chevron-down': '<path d="m6 9 6 6 6-6"/>',
+	'chevron-left': '<path d="m15 18-6-6 6-6"/>',
+	'chevron-right': '<path d="m9 18 6-6-6-6"/>',
 	'clock': '<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>',
 	'corner-left-up': '<path d="M14 9 9 4 4 9"/><path d="M20 20h-7a4 4 0 0 1-4-4V4"/>',
 	'eye': '<path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/>',
@@ -410,8 +413,15 @@ function controlHtml(field) {
 			return `<textarea class="inp" ${name} ${a}>${esc(def)}</textarea>`
 		case 'secret':
 			return `<div class="inp-wrap"><input class="inp" type="password" ${name} ${a} autocomplete="off" placeholder="${esc(field.placeholder || '••••••••')}"><button type="button" class="eye" data-eye title="Reveal">${icon('eye')}</button></div>`
-		case 'email': case 'url': case 'tel': case 'date':
+		case 'email': case 'url': case 'tel':
 			return `<input class="inp" type="${field.type}" ${name} value="${esc(def)}" ${a}>`
+		case 'date':
+			// Bespoke calendar popover; the input carries the ISO value and stays typable.
+			return `<div class="dp-wrap">
+				<input class="inp" type="text" ${name} data-datepicker value="${esc(def)}" ${a}
+					placeholder="${esc(field.placeholder || 'YYYY-MM-DD')}" pattern="\\d{4}-\\d{2}-\\d{2}" inputmode="numeric" autocomplete="off">
+				<button type="button" class="dp-btn" data-dp-toggle title="Pick a date">${icon('calendar')}</button>
+			</div>`
 		case 'datetime':
 			return `<input class="inp" type="datetime-local" ${name} value="${esc(def)}" ${a}>`
 		case 'number':
@@ -442,6 +452,105 @@ function controlHtml(field) {
 			return `<input class="inp" type="text" ${name} value="${esc(def)}" ${a}>`
 	}
 }
+
+// ---------------------------------------------------------------- date picker
+
+const DP = { el: null, input: null, view: null } // one popover at a time
+
+const isoOf = (y, m, d) => `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
+const WEEKDAYS = ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su']
+
+function closeDatePicker() {
+	if (DP.el) {
+		DP.el.remove()
+		DP.el = null
+		DP.input = null
+	}
+}
+
+function renderDatePicker() {
+	const now = new Date()
+	const { y, m } = DP.view
+	const selected = /^\d{4}-\d{2}-\d{2}$/.test(DP.input.value) ? DP.input.value : null
+	const first = new Date(y, m, 1)
+	const startOffset = (first.getDay() + 6) % 7 // Monday-first
+	const start = new Date(y, m, 1 - startOffset)
+	let cells = ''
+	for (let i = 0; i < 42; i++) {
+		const d = new Date(start.getFullYear(), start.getMonth(), start.getDate() + i)
+		const iso = isoOf(d.getFullYear(), d.getMonth(), d.getDate())
+		const cls = [
+			'dp-day',
+			d.getMonth() !== m ? 'dp-out' : '',
+			iso === isoOf(now.getFullYear(), now.getMonth(), now.getDate()) ? 'dp-today' : '',
+			iso === selected ? 'dp-sel' : '',
+		].filter(Boolean).join(' ')
+		cells += `<button type="button" class="${cls}" data-dp-day="${iso}">${d.getDate()}</button>`
+	}
+	DP.el.innerHTML = `
+		<div class="dp-head">
+			<button type="button" class="dp-nav" data-dp-nav="-1">${icon('chevron-left')}</button>
+			<div class="dp-title">${MONTHS[m]} <span>${y}</span></div>
+			<button type="button" class="dp-nav" data-dp-nav="1">${icon('chevron-right')}</button>
+		</div>
+		<div class="dp-week">${WEEKDAYS.map((w) => `<span>${w}</span>`).join('')}</div>
+		<div class="dp-grid">${cells}</div>
+		<div class="dp-foot">
+			<button type="button" class="dp-link" data-dp-clear>Clear</button>
+			<button type="button" class="dp-link" data-dp-today>Today</button>
+		</div>`
+}
+
+function openDatePicker(input) {
+	if (DP.input === input) { closeDatePicker(); return }
+	closeDatePicker()
+	const base = /^\d{4}-\d{2}-\d{2}$/.test(input.value) ? new Date(input.value + 'T00:00:00') : new Date()
+	DP.input = input
+	DP.view = { y: base.getFullYear(), m: base.getMonth() }
+	DP.el = document.createElement('div')
+	DP.el.className = 'dp'
+	renderDatePicker()
+	input.closest('.dp-wrap').appendChild(DP.el)
+	requestAnimationFrame(() => DP.el && DP.el.classList.add('dp-open'))
+
+	DP.el.addEventListener('mousedown', (e) => e.preventDefault()) // keep input focus
+	DP.el.addEventListener('click', (e) => {
+		const nav = e.target.closest('[data-dp-nav]')
+		if (nav) {
+			DP.view.m += Number(nav.dataset.dpNav)
+			if (DP.view.m < 0) { DP.view.m = 11; DP.view.y-- }
+			if (DP.view.m > 11) { DP.view.m = 0; DP.view.y++ }
+			renderDatePicker()
+			return
+		}
+		const day = e.target.closest('[data-dp-day]')
+		const pick = (iso) => {
+			DP.input.value = iso
+			DP.input.dispatchEvent(new Event('input', { bubbles: true }))
+			closeDatePicker()
+		}
+		if (day) return pick(day.dataset.dpDay)
+		if (e.target.closest('[data-dp-today]')) {
+			const t = new Date()
+			return pick(isoOf(t.getFullYear(), t.getMonth(), t.getDate()))
+		}
+		if (e.target.closest('[data-dp-clear]')) {
+			DP.input.value = ''
+			DP.input.dispatchEvent(new Event('input', { bubbles: true }))
+			closeDatePicker()
+		}
+	})
+}
+
+document.addEventListener('click', (e) => {
+	if (DP.el && !e.target.closest('.dp') && !e.target.closest('[data-dp-toggle]') && !e.target.closest('[data-datepicker]'))
+		closeDatePicker()
+})
+document.addEventListener('keydown', (e) => {
+	if (e.key === 'Escape')
+		closeDatePicker()
+})
 
 function destinationLine(dest) {
 	if (!dest || dest.kind === 'none')
@@ -665,6 +774,15 @@ function wireInteractive(blocks) {
 	if (!form) return
 
 	form.addEventListener('click', (e) => {
+		const dpToggle = e.target.closest('[data-dp-toggle]')
+		if (dpToggle) {
+			openDatePicker(dpToggle.parentElement.querySelector('[data-datepicker]'))
+			return
+		}
+		if (e.target.closest('[data-datepicker]') && !DP.el) {
+			openDatePicker(e.target.closest('[data-datepicker]'))
+			return
+		}
 		const eye = e.target.closest('[data-eye]')
 		if (eye) {
 			const inp = eye.previousElementSibling
