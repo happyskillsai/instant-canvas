@@ -426,7 +426,12 @@ async function route(req, res, url) {
 			return sendJson(res, 200, session.result ? { done: true, result: session.result } : { done: false, expiresAt: session.expiresAt })
 		if (method === 'POST' && sessionMatch[2] === '/submit') {
 			if (session.result)
-				return sendJson(res, 409, { ok: false, message: `Session already resolved (${session.result.status}).`, result: session.result })
+				return sendJson(res, 409, {
+					ok: false,
+					...(session.result.status === 'timeout' ? { error: { code: 'SESSION_TIMEOUT', message: 'This session has expired.' } } : {}),
+					message: `Session already resolved (${session.result.status}).`,
+					result: session.result,
+				})
 			return handleSubmit(session, await readBody(req), res)
 		}
 		if (method === 'POST' && sessionMatch[2] === '/cancel') {

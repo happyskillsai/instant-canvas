@@ -115,8 +115,9 @@ async function acquireSpawnLock(root) {
 				try { fs.unlinkSync(file) } catch { /* raced */ }
 				continue
 			}
-			// Someone else is spawning: wait for their kernel (≤ 10 s).
-			const deadline = Date.now() + 10000
+			// Someone else is spawning: wait for their kernel (≤ 10 s; env knob for tests).
+			const waitMs = Number(process.env.INSTANTCANVAS_LOCK_WAIT_MS) || 10000
+			const deadline = Date.now() + waitMs
 			while (Date.now() < deadline) {
 				const entry = await readAlive(root)
 				if (entry)
