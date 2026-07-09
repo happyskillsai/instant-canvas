@@ -254,6 +254,30 @@ test('destinations: json merge, kind none with includeValues (secrets always exc
 	assert.match(fs.readFileSync(path.resolve(root, '..', 'outside-target.env'), 'utf8'), /KEY=v/)
 	fs.unlinkSync(path.resolve(root, '..', 'outside-target.env'))
 
+	// url protocol whitelist + custom pattern with verbatim message
+	mkCanvas('rules-form.canvas.json', {
+		type: 'form',
+		destination: { kind: 'json', path: 'rules.json' },
+		fields: [
+			{ name: 'siteUrl', label: 'Site', type: 'url', required: true, validation: { protocols: ['https'] } },
+			{ name: 'ftpUrl', label: 'Mirror', type: 'url' }, // default protocol set
+			{ name: 'licenseKey', label: 'License', type: 'text', validation: { pattern: '^[A-Z0-9]{8}$', patternMessage: 'License key must be exactly 8 uppercase letters or digits.' } },
+		],
+	})
+	const r = await openInteractive(root, 'rules-form.canvas.json')
+	const badRules = await apiReq(entry, 'POST', `/api/session/${r.sessionId}/submit`, {
+		values: { siteUrl: 'http://insecure.example.com', ftpUrl: 'gopher://old.example.com', licenseKey: 'nope' },
+	})
+	assert.equal(badRules.status, 422)
+	assert.match(badRules.json.fieldErrors.siteUrl, /must use https/)
+	assert.match(badRules.json.fieldErrors.ftpUrl, /must use http, https, ftp/)
+	assert.equal(badRules.json.fieldErrors.licenseKey, 'License key must be exactly 8 uppercase letters or digits.', 'patternMessage is verbatim')
+	const goodRules = await apiReq(entry, 'POST', `/api/session/${r.sessionId}/submit`, {
+		values: { siteUrl: 'https://secure.example.com', ftpUrl: 'ftp://files.example.com', licenseKey: 'ABCD1234' },
+	})
+	assert.equal(goodRules.status, 200)
+	assert.equal((await r.done).code, 0)
+
 	// browser cancel path
 	const c = await openInteractive(root, 'values-form.canvas.json')
 	await apiReq(entry, 'POST', `/api/session/${c.sessionId}/cancel`, {})

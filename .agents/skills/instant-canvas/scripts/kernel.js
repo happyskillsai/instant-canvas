@@ -19,6 +19,7 @@ const { validate, collectBlocks, isInteractiveBlock, flattenFields } = require('
 const { Sessions } = require('./lib/session')
 const envfile = require('./lib/envfile')
 const jsonfile = require('./lib/jsonfile')
+const { DEFAULT_URL_PROTOCOLS } = require('./lib/schema')
 
 const WEB_DIR = path.join(__dirname, 'web')
 const VERSION = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'skill.json'), 'utf8')).version
@@ -252,11 +253,19 @@ function checkFieldValue(field, raw) {
 			if (v.pattern !== undefined) {
 				let re
 				try { re = new RegExp(`^(?:${v.pattern})$`) } catch { return err('has an invalid pattern rule') }
-				if (!re.test(raw)) return err('does not match the required pattern')
+				if (!re.test(raw))
+					return typeof v.patternMessage === 'string'
+						? { error: v.patternMessage, verbatim: true }
+						: err('does not match the required pattern')
 			}
 			if (field.type === 'email' && !/^[^\s@]+@[^\s@]+$/.test(raw)) return err('must be an email address')
 			if (field.type === 'url') {
-				try { new URL(raw) } catch { return err('must be a valid URL') }
+				let parsed
+				try { parsed = new URL(raw) } catch { return err('must be a valid URL') }
+				const allowed = (Array.isArray(v.protocols) && v.protocols.length ? v.protocols : DEFAULT_URL_PROTOCOLS)
+					.map((p) => String(p).toLowerCase().replace(/:$/, ''))
+				if (!allowed.includes(parsed.protocol.replace(/:$/, '')))
+					return err(`must use ${allowed.join(', ')} — got "${parsed.protocol.replace(/:$/, '')}"`)
 			}
 			if (field.type === 'date' && !/^\d{4}-\d{2}-\d{2}$/.test(raw)) return err('must be a date (YYYY-MM-DD)')
 			if (field.type === 'datetime' && Number.isNaN(Date.parse(raw))) return err('must be a date-time')
@@ -319,7 +328,7 @@ async function handleSubmit(session, body, res) {
 	for (const field of fields) {
 		const checked = checkFieldValue(field, values[field.name])
 		if (checked.error)
-			fieldErrors[field.name] = `${field.label || field.name} ${checked.error}`
+			fieldErrors[field.name] = checked.verbatim ? checked.error : `${field.label || field.name} ${checked.error}`
 		else
 			clean[field.name] = checked.value
 	}

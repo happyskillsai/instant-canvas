@@ -863,6 +863,54 @@ function collectValues(form, fields) {
 	return values
 }
 
+// Mirrors the kernel's checkFieldValue for instant on-blur feedback.
+// The kernel re-validates on submit regardless — this is UX, not the gate.
+const DEFAULT_URL_PROTOCOLS = ['http', 'https', 'ftp', 'ftps', 'sftp', 'ws', 'wss', 'file', 'mailto']
+
+function clientFieldError(field, raw) {
+	if (raw === undefined || raw === null || raw === '')
+		return '' // emptiness is judged at submit time (required)
+	const v = field.validation || {}
+	const label = field.label || field.name
+	if (field.type === 'number' || field.type === 'range') {
+		const num = Number(raw)
+		if (!Number.isFinite(num)) return `${label} must be a number.`
+		if (v.min !== undefined && num < v.min) return `${label} must be ≥ ${v.min}.`
+		if (v.max !== undefined && num > v.max) return `${label} must be ≤ ${v.max}.`
+		if (v.step !== undefined && v.step > 0) {
+			const base = v.min !== undefined ? v.min : 0
+			const steps = (num - base) / v.step
+			if (Math.abs(steps - Math.round(steps)) > 1e-9) return `${label} must be a multiple of ${v.step}${v.min !== undefined ? ' from ' + v.min : ''}.`
+		}
+		return ''
+	}
+	if (typeof raw !== 'string')
+		return ''
+	if (v.minLength !== undefined && raw.length < v.minLength) return `${label} must be at least ${v.minLength} characters.`
+	if (v.maxLength !== undefined && raw.length > v.maxLength) return `${label} must be at most ${v.maxLength} characters.`
+	if (v.pattern !== undefined) {
+		let re = null
+		try { re = new RegExp(`^(?:${v.pattern})$`) } catch { /* invalid rule — server will report */ }
+		if (re && !re.test(raw))
+			return v.patternMessage || `${label} does not match the required format.`
+	}
+	if (field.type === 'email' && !/^[^\s@]+@[^\s@]+$/.test(raw))
+		return `${label} must be a valid email address.`
+	if (field.type === 'url') {
+		let parsed = null
+		try { parsed = new URL(raw) } catch { return `${label} must be a valid URL (e.g. https://example.com).` }
+		const allowed = (Array.isArray(v.protocols) && v.protocols.length ? v.protocols : DEFAULT_URL_PROTOCOLS)
+			.map((p) => String(p).toLowerCase().replace(/:$/, ''))
+		if (!allowed.includes(parsed.protocol.replace(/:$/, '')))
+			return `${label} must use ${allowed.join(', ')} — got "${parsed.protocol.replace(/:$/, '')}".`
+	}
+	if (field.type === 'date' && !/^\d{4}-\d{2}-\d{2}$/.test(raw))
+		return `${label} must be a date (YYYY-MM-DD).`
+	if (field.type === 'datetime' && Number.isNaN(Date.parse(raw)))
+		return `${label} must be a date & time (YYYY-MM-DDTHH:MM).`
+	return ''
+}
+
 function setRangeFill(range) {
 	const min = Number(range.min) || 0
 	const max = Number(range.max) || 100
@@ -1090,6 +1138,21 @@ function wireInteractive(blocks) {
 			const slot = wrap.querySelector('[data-error-for]')
 			if (slot) slot.textContent = ''
 		}
+	})
+
+	// Live validation on blur: format errors surface inline immediately.
+	form.addEventListener('focusout', (e) => {
+		const el = e.target
+		if (!el.matches || !el.matches('input[data-field], textarea[data-field]'))
+			return
+		if (el.type === 'checkbox' || el.type === 'hidden' || el.disabled)
+			return
+		const f = fields.find((x) => x.name === el.dataset.field)
+		if (!f)
+			return
+		const slot = form.querySelector(`[data-error-for="${CSS.escape(f.name)}"]`)
+		if (slot)
+			slot.textContent = clientFieldError(f, el.value)
 	})
 
 	// The bespoke select's visible input is a trigger, not a free-text field.

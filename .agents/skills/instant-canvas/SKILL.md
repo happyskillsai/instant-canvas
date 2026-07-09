@@ -87,7 +87,9 @@ Run `$IC catalog` (or `catalog chart`, `catalog secret`, …) for the exact cont
   "confirmLabel": "Drop & recreate"}
 ```
 
-16 field types: `text textarea secret email url tel number date datetime select radio checkbox checkboxGroup range hidden readonly`. Common shape: `{name, label, type, required?, placeholder?, help?, default?, options?, validation?: {minLength, maxLength, pattern, min, max, step}, ui?, span?}`. Env destinations require names matching `^[A-Za-z_][A-Za-z0-9_]*$`. Email is syntax-checked only.
+16 field types: `text textarea secret email url tel number date datetime select radio checkbox checkboxGroup range hidden readonly`. Common shape: `{name, label, type, required?, placeholder?, help?, default?, options?, validation?, ui?, span?}` with `validation: {minLength, maxLength, pattern, patternMessage, min, max, step, protocols}`. Env destinations require names matching `^[A-Za-z_][A-Za-z0-9_]*$`.
+
+**Validation** runs live in the browser (inline error on blur) and is re-checked server-side on submit — never trust only the client. `email` is format-checked (no deliverability); `url` must parse and use an allowed scheme (default http/https/ftp/ftps/sftp/ws/wss/file/mailto — restrict with `"validation": {"protocols": ["https"]}`). For custom rules use `pattern` (whole-value regex) with a `patternMessage`, e.g. `{"pattern": "^[A-Z0-9]{8}$", "patternMessage": "Must be exactly 8 uppercase letters or digits."}`.
 
 **Form layout & variants** (see `catalog` → `fieldsetShape`):
 - Group related fields with a fieldset item inside `fields[]`: `{"type": "fieldset", "legend": "Contact", "columns": 2, "fields": [...]}` — `columns` (1–3) makes a grid; fields flow left-to-right. A field's `"span": 2` widens it across columns. Ungrouped fields stay full-width.

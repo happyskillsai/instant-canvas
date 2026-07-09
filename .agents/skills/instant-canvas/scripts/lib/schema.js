@@ -82,14 +82,16 @@ const SHAPES = {
 		},
 	},
 	fieldValidation: {
-		description: 'Constraint attributes mapped onto the native input.',
+		description: 'Constraint rules — enforced live in the browser (on blur) AND re-checked server-side on submit.',
 		properties: {
 			minLength: { type: 'number', description: 'Minimum string length.', example: 8 },
 			maxLength: { type: 'number', description: 'Maximum string length.', example: 64 },
-			pattern: { type: 'string', description: 'Regular expression the value must fully match.', example: '^[a-z0-9-]+$' },
+			pattern: { type: 'string', description: 'Regular expression the whole value must match. Use for custom rules, e.g. "^[A-Z0-9]{8}$" for an 8-char alphanumeric code.', example: '^[A-Z0-9]{8}$' },
+			patternMessage: { type: 'string', description: 'Friendly error shown when "pattern" fails (otherwise a generic message).', example: 'Must be exactly 8 uppercase letters or digits.' },
 			min: { type: 'number', description: 'Minimum numeric/range/date value.', example: 0 },
 			max: { type: 'number', description: 'Maximum numeric/range/date value.', example: 100 },
 			step: { type: 'number', description: 'Numeric/range step.', example: 5 },
+			protocols: { type: 'array', description: 'url fields only: allowed URL schemes, e.g. ["https"]. Default: http, https, ftp, ftps, sftp, ws, wss, file, mailto.', example: ['https'] },
 		},
 	},
 	fieldset: {
@@ -126,7 +128,7 @@ const FIELD_TYPES = {
 	textarea: { description: 'Multi-line text input.', serialization: 'string', aliases: ['multiline'] },
 	secret: { description: 'Password-masked input with an eye reveal. Never logged, never returned to the agent; written to the destination only.', serialization: 'string', aliases: ['password', 'apikey', 'token'] },
 	email: { description: 'Email input. Browser syntax validation only — format, not deliverability.', serialization: 'string' },
-	url: { description: 'URL input with browser syntax validation.', serialization: 'string', aliases: ['link'] },
+	url: { description: 'URL input, validated live on blur and server-side: must parse and use an allowed scheme (default: http, https, ftp, ftps, sftp, ws, wss, file, mailto; restrict via validation.protocols).', serialization: 'string', aliases: ['link', 'website'] },
 	tel: { description: 'Telephone input.', serialization: 'string', aliases: ['phone'] },
 	number: { description: 'Numeric input.', serialization: 'env: decimal string; json: number', aliases: ['integer', 'float', 'int'] },
 	date: { description: 'Date picker. ISO date string (YYYY-MM-DD).', serialization: 'string' },
@@ -254,4 +256,7 @@ const ENVELOPE = {
 
 const ENV_KEY_RE = /^[A-Za-z_][A-Za-z0-9_]*$/
 
-module.exports = { VERSION, ENVELOPE, BLOCKS, FIELD_TYPES, SHAPES, ENV_KEY_RE }
+// Accepted URL schemes for "url" fields unless validation.protocols narrows them.
+const DEFAULT_URL_PROTOCOLS = ['http', 'https', 'ftp', 'ftps', 'sftp', 'ws', 'wss', 'file', 'mailto']
+
+module.exports = { VERSION, ENVELOPE, BLOCKS, FIELD_TYPES, SHAPES, ENV_KEY_RE, DEFAULT_URL_PROTOCOLS }

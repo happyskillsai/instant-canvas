@@ -6,6 +6,7 @@
 	--c1:#6366f1; --c2:#10b981; --c3:#f59e0b; --c4:#ec4899; --c5:#06b6d4;
 	--inp-bg:#ffffff; --inp-border:#d3d8e0; --inp-border-hover:#b9c0cc;
 	--inp-shadow:0 1px 2px rgba(16,20,30,.05);
+	color-scheme:light;
 }
 :root[data-theme="dark"]{
 	--bg:#0e1014; --panel:#161922; --panel-2:#1b1f29; --text:#e7e9ee; --muted:#98a0ad;
@@ -14,6 +15,7 @@
 	--c1:#818cf8; --c2:#34d399; --c3:#fbbf24; --c4:#f472b6; --c5:#22d3ee;
 	--inp-bg:#1b1f29; --inp-border:#2d3442; --inp-border-hover:#3c4556;
 	--inp-shadow:none;
+	color-scheme:dark;
 }
 @media (prefers-color-scheme:dark){
 	:root:not([data-theme]){
@@ -23,6 +25,7 @@
 		--c1:#818cf8; --c2:#34d399; --c3:#fbbf24; --c4:#f472b6; --c5:#22d3ee;
 		--inp-bg:#1b1f29; --inp-border:#2d3442; --inp-border-hover:#3c4556;
 		--inp-shadow:none;
+		color-scheme:dark;
 	}
 }
 *{box-sizing:border-box}
@@ -194,7 +197,7 @@ select.inp{appearance:auto}
 .form-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:24px}
 
 /* fieldsets — CSP blocks style="" attributes, so grid geometry is class-based */
-.fset{border:1px solid var(--border-2);border-radius:12px;padding:6px 18px 16px;margin:22px 0;min-width:0}
+.fset{border:1px solid var(--border);border-radius:12px;padding:6px 18px 16px;margin:22px 0;min-width:0}
 .fset legend{font-weight:650;font-size:13px;padding:0 8px;margin-left:-8px;color:var(--text)}
 .fset-desc{color:var(--muted);font-size:12.5px;margin:2px 0 6px}
 .fset-grid{display:grid;gap:0 18px;grid-template-columns:minmax(0,1fr)}
