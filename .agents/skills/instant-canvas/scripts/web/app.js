@@ -55,11 +55,28 @@ const LUCIDE = {
 	'lock': '<rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>',
 	'octagon-alert': '<path d="M12 16h.01"/><path d="M12 8v4"/><path d="M15.312 2a2 2 0 0 1 1.414.586l4.688 4.688A2 2 0 0 1 22 8.688v6.624a2 2 0 0 1-.586 1.414l-4.688 4.688a2 2 0 0 1-1.414.586H8.688a2 2 0 0 1-1.414-.586l-4.688-4.688A2 2 0 0 1 2 15.312V8.688a2 2 0 0 1 .586-1.414l4.688-4.688A2 2 0 0 1 8.688 2z"/>',
 	'triangle-alert': '<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/>',
+	'x': '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
 }
 
 function icon(name, cls = '') {
 	return `<svg class="lucide${cls ? ' ' + cls : ''}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${LUCIDE[name]}</svg>`
 }
+
+/** Form "fields" items minus the grouping: fieldsets replaced by their inner fields. */
+function flattenFields(items) {
+	const out = []
+	for (const item of items || []) {
+		if (item && typeof item === 'object' && item.type === 'fieldset') {
+			if (Array.isArray(item.fields))
+				out.push(...item.fields.filter((f) => f && typeof f === 'object' && f.type !== 'fieldset'))
+		} else if (item && typeof item === 'object') {
+			out.push(item)
+		}
+	}
+	return out
+}
+
+const normOptions = (options = []) => options.map((o) => (typeof o === 'string' ? { label: o, value: o } : o))
 
 /** "…/parent/base" for long absolute paths; full path belongs in a title tooltip. */
 function shortenPath(p) {
@@ -181,7 +198,7 @@ function renderTree() {
 			</div>
 			<div class="items">${items}</div>
 		</div>`
-	}).join('') || '<div style="padding:16px;color:var(--muted)">(no canvases yet)</div>'
+	}).join('') || '<div class="tree-empty">(no canvases yet)</div>'
 
 	const n = state.tree.count, ng = state.tree.collections.length
 	$('wsStats').textContent = `${n} canvas${n === 1 ? '' : 'es'} · ${ng} group${ng === 1 ? '' : 's'}`
@@ -243,7 +260,7 @@ function renderTable(block) {
 		const shown = numeric(c) ? fmtValue(v, c.format, c.currency) : (v === undefined || v === null ? '' : String(v))
 		return `<td class="${alignClass(c)}">${esc(shown)}</td>`
 	}).join('')}</tr>`).join('')
-	const title = block.title ? `<div class="chart-title" style="margin-bottom:8px">${esc(block.title)}</div>` : ''
+	const title = block.title ? `<div class="chart-title tbl-title">${esc(block.title)}</div>` : ''
 	return `<div class="block card">${title}<table class="tbl"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>`
 }
 
@@ -332,7 +349,7 @@ function renderEmpty() {
 	const root = state.tree ? state.tree.root : ''
 	return `<div class="empty"><div class="big"></div><b>No canvas selected</b>
 		<div>Pick a canvas from the sidebar, or drop a <code>.json</code> file into this folder — it appears automatically.</div>
-		<div style="margin-top:6px">Watching <code>${esc(root)}</code></div></div>`
+		<div class="empty-note">Watching <code>${esc(root)}</code></div></div>`
 }
 
 async function renderCanvas() {
@@ -405,8 +422,22 @@ function controlHtml(field) {
 	if (v.step !== undefined) attrs.push(`step="${Number(v.step)}"`)
 	const name = `data-field="${esc(field.name)}"`
 	const def = field.default !== undefined ? String(field.default) : ''
-	const options = (field.options || []).map((o) => (typeof o === 'string' ? { label: o, value: o } : o))
+	const options = normOptions(field.options)
 	const a = attrs.join(' ')
+
+	// Presentation variants (values/serialization identical to the base type)
+	if (field.ui === 'buttons' && (field.type === 'select' || field.type === 'radio')) {
+		return `<div class="seg" data-seg>
+			${options.map((o) => `<button type="button" class="seg-btn ${String(o.value) === def ? 'on' : ''}" data-val="${esc(o.value)}">${esc(o.label)}</button>`).join('')}
+			<input type="hidden" ${name} value="${esc(def)}">
+		</div>`
+	}
+	if (field.ui === 'pills' && field.type === 'checkboxGroup') {
+		const defs = (Array.isArray(field.default) ? field.default : []).map(String)
+		return `<div class="pills" ${name} data-pills data-options="${esc(JSON.stringify(options))}">
+			${pillsInner(options, defs, field.placeholder)}
+		</div>`
+	}
 
 	switch (field.type) {
 		case 'textarea':
@@ -423,14 +454,23 @@ function controlHtml(field) {
 				<button type="button" class="dp-btn" data-dp-toggle title="Pick a date">${icon('calendar')}</button>
 			</div>`
 		case 'datetime':
-			return `<input class="inp" type="datetime-local" ${name} value="${esc(def)}" ${a}>`
+			// same bespoke picker as "date", extended with a time section
+			return `<div class="dp-wrap">
+				<input class="inp" type="text" ${name} data-datepicker data-dp-kind="datetime" value="${esc(def)}" ${a}
+					placeholder="${esc(field.placeholder || 'YYYY-MM-DDTHH:MM')}" pattern="\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}" autocomplete="off">
+				<button type="button" class="dp-btn" data-dp-toggle title="Pick a date & time">${icon('calendar')}</button>
+			</div>`
 		case 'number':
 			return `<input class="inp" type="number" ${name} value="${esc(def)}" ${a}>`
-		case 'select':
-			return `<select class="inp" ${name} ${field.required ? 'required' : ''}>
-				${field.required && field.default === undefined ? '<option value="" disabled selected>Choose…</option>' : ''}
-				${options.map((o) => `<option value="${esc(o.value)}" ${String(o.value) === def ? 'selected' : ''}>${esc(o.label)}</option>`).join('')}
-			</select>`
+		case 'select': {
+			const selectedOpt = options.find((o) => String(o.value) === def)
+			return `<div class="sel" data-sel data-options="${esc(JSON.stringify(options))}">
+				<input class="inp sel-display" data-sel-display ${field.required ? 'required' : ''} autocomplete="off"
+					placeholder="${esc(field.placeholder || 'Choose…')}" value="${selectedOpt ? esc(selectedOpt.label) : ''}">
+				<input type="hidden" ${name} value="${selectedOpt ? esc(selectedOpt.value) : ''}">
+				<span class="inp-icon">${icon('chevron-down')}</span>
+			</div>`
+		}
 		case 'radio':
 			return `<div class="radios" ${name}>${options.map((o) => `<label><input type="radio" name="f_${esc(field.name)}" value="${esc(o.value)}" ${String(o.value) === def ? 'checked' : ''} ${field.required ? 'required' : ''}> ${esc(o.label)}</label>`).join('')}</div>`
 		case 'checkbox':
@@ -455,7 +495,7 @@ function controlHtml(field) {
 
 // ---------------------------------------------------------------- date picker
 
-const DP = { el: null, input: null, view: null, mode: 'days' } // one popover at a time
+const DP = { el: null, input: null, view: null, mode: 'days', kind: 'date', date: null, time: null } // one popover at a time
 
 const isoOf = (y, m, d) => `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
@@ -474,7 +514,8 @@ const dpYearPage = (y) => y - ((y % 12) + 12) % 12 // first year of the 12-year 
 function renderDatePicker() {
 	const now = new Date()
 	const { y, m } = DP.view
-	const selected = /^\d{4}-\d{2}-\d{2}$/.test(DP.input.value) ? DP.input.value : null
+	// date kind selects straight from the input; datetime keeps a draft (DP.date/DP.time) until Done
+	const selected = DP.kind === 'datetime' ? DP.date : (/^\d{4}-\d{2}-\d{2}$/.test(DP.input.value) ? DP.input.value : null)
 	const selDate = selected ? new Date(selected + 'T00:00:00') : null
 
 	let title = ''
@@ -498,6 +539,15 @@ function renderDatePicker() {
 		}
 		body = `<div class="dp-week">${WEEKDAYS.map((w) => `<span>${w}</span>`).join('')}</div>
 			<div class="dp-grid">${cells}</div>`
+		if (DP.kind === 'datetime') {
+			const pad = (n) => String(n).padStart(2, '0')
+			body += `<div class="dp-time">
+				${icon('clock')}
+				<input type="number" class="dp-tin" data-dp-hours min="0" max="23" value="${pad(DP.time.h)}" aria-label="Hours">
+				<span class="dp-tsep">:</span>
+				<input type="number" class="dp-tin" data-dp-minutes min="0" max="59" value="${pad(DP.time.m)}" aria-label="Minutes">
+			</div>`
+		}
 	} else if (DP.mode === 'months') {
 		title = `<button type="button" data-dp-show="years">${y}</button>`
 		body = `<div class="dp-mgrid">${MONTHS.map((name, i) => {
@@ -522,6 +572,15 @@ function renderDatePicker() {
 		}).join('')}</div>`
 	}
 
+	const foot = DP.kind === 'datetime'
+		? `<button type="button" class="dp-link" data-dp-clear>Clear</button>
+			<span>
+				<button type="button" class="dp-link" data-dp-today>Now</button>
+				<button type="button" class="dp-done" data-dp-done>Done</button>
+			</span>`
+		: `<button type="button" class="dp-link" data-dp-clear>Clear</button>
+			<button type="button" class="dp-link" data-dp-today>Today</button>`
+
 	DP.el.innerHTML = `
 		<div class="dp-head">
 			<button type="button" class="dp-nav" data-dp-nav="-1">${icon('chevron-left')}</button>
@@ -529,26 +588,40 @@ function renderDatePicker() {
 			<button type="button" class="dp-nav" data-dp-nav="1">${icon('chevron-right')}</button>
 		</div>
 		${body}
-		<div class="dp-foot">
-			<button type="button" class="dp-link" data-dp-clear>Clear</button>
-			<button type="button" class="dp-link" data-dp-today>Today</button>
-		</div>`
+		<div class="dp-foot">${foot}</div>`
 }
 
 function openDatePicker(input) {
 	if (DP.input === input) { closeDatePicker(); return }
 	closeDatePicker()
-	const base = /^\d{4}-\d{2}-\d{2}$/.test(input.value) ? new Date(input.value + 'T00:00:00') : new Date()
+	DP.kind = input.dataset.dpKind || 'date'
+	const dateMatch = /^(\d{4}-\d{2}-\d{2})(?:T(\d{2}):(\d{2}))?/.exec(input.value)
+	const base = dateMatch ? new Date(dateMatch[1] + 'T00:00:00') : new Date()
 	DP.input = input
 	DP.view = { y: base.getFullYear(), m: base.getMonth() }
 	DP.mode = 'days'
+	DP.date = dateMatch ? dateMatch[1] : null
+	DP.time = dateMatch && dateMatch[2] !== undefined
+		? { h: Number(dateMatch[2]), m: Number(dateMatch[3]) }
+		: { h: 9, m: 0 }
 	DP.el = document.createElement('div')
 	DP.el.className = 'dp'
 	renderDatePicker()
 	input.closest('.dp-wrap').appendChild(DP.el)
 	requestAnimationFrame(() => DP.el && DP.el.classList.add('dp-open'))
 
-	DP.el.addEventListener('mousedown', (e) => e.preventDefault()) // keep input focus
+	// Keep the main input focused, EXCEPT when clicking into the time inputs.
+	DP.el.addEventListener('mousedown', (e) => {
+		if (e.target.tagName !== 'INPUT')
+			e.preventDefault()
+	})
+	DP.el.addEventListener('change', (e) => {
+		const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, Number(v) || 0))
+		if (e.target.matches('[data-dp-hours]'))
+			DP.time.h = clamp(e.target.value, 0, 23)
+		if (e.target.matches('[data-dp-minutes]'))
+			DP.time.m = clamp(e.target.value, 0, 59)
+	})
 	DP.el.addEventListener('click', (e) => {
 		// Re-renders detach the clicked node, so the document-level closer would
 		// see it as "outside" — never let picker clicks bubble that far.
@@ -588,16 +661,30 @@ function openDatePicker(input) {
 			renderDatePicker()
 			return
 		}
-		const day = e.target.closest('[data-dp-day]')
-		const pick = (iso) => {
-			DP.input.value = iso
+		const pad = (n) => String(n).padStart(2, '0')
+		const pick = (value) => {
+			DP.input.value = value
 			DP.input.dispatchEvent(new Event('input', { bubbles: true }))
 			closeDatePicker()
 		}
-		if (day && day.dataset.dpDay) return pick(day.dataset.dpDay)
+		const day = e.target.closest('[data-dp-day]')
+		if (day && day.dataset.dpDay) {
+			if (DP.kind === 'datetime') {
+				// keep the popover open: the user still sets the time, then hits Done
+				DP.date = day.dataset.dpDay
+				renderDatePicker()
+				return
+			}
+			return pick(day.dataset.dpDay)
+		}
+		if (e.target.closest('[data-dp-done]')) {
+			const date = DP.date || isoOf(new Date().getFullYear(), new Date().getMonth(), new Date().getDate())
+			return pick(`${date}T${pad(DP.time.h)}:${pad(DP.time.m)}`)
+		}
 		if (e.target.closest('[data-dp-today]')) {
 			const t = new Date()
-			return pick(isoOf(t.getFullYear(), t.getMonth(), t.getDate()))
+			const iso = isoOf(t.getFullYear(), t.getMonth(), t.getDate())
+			return pick(DP.kind === 'datetime' ? `${iso}T${pad(t.getHours())}:${pad(t.getMinutes())}` : iso)
 		}
 		if (e.target.closest('[data-dp-clear]')) {
 			DP.input.value = ''
@@ -612,8 +699,79 @@ document.addEventListener('click', (e) => {
 		closeDatePicker()
 })
 document.addEventListener('keydown', (e) => {
-	if (e.key === 'Escape')
+	if (e.key === 'Escape') {
 		closeDatePicker()
+		closeSelectMenu()
+	}
+})
+
+// ---------------------------------------------------------------- pills (checkboxGroup ui:"pills")
+
+function pillsInner(options, selectedValues, placeholder) {
+	const selected = options.filter((o) => selectedValues.includes(String(o.value)))
+	const available = options.filter((o) => !selectedValues.includes(String(o.value)))
+	return `<div class="pills-box inp">
+			${selected.map((o) => `<span class="pill" data-pill data-val="${esc(o.value)}">${esc(o.label)}<button type="button" class="pill-x" data-pill-remove title="Remove">${icon('x')}</button></span>`).join('')}
+			<input class="pills-filter" data-pills-filter placeholder="${selected.length ? '' : esc(placeholder || 'Type to filter, click to add…')}" autocomplete="off">
+		</div>
+		<div class="pills-opts">
+			${available.map((o) => `<button type="button" class="pill-opt" data-pill-add data-val="${esc(o.value)}">${esc(o.label)}</button>`).join('')
+				|| '<span class="pills-empty">All options selected</span>'}
+		</div>`
+}
+
+function rerenderPills(container) {
+	const options = normOptions(JSON.parse(container.dataset.options))
+	const selected = [...container.querySelectorAll('[data-pill]')].map((p) => p.dataset.val)
+	container.innerHTML = pillsInner(options, selected, null)
+}
+
+const pillValues = (container) => [...container.querySelectorAll('[data-pill]')].map((p) => p.dataset.val)
+
+// ---------------------------------------------------------------- bespoke select menu
+
+const SEL = { menu: null, wrap: null }
+
+function closeSelectMenu() {
+	if (SEL.menu) {
+		SEL.menu.remove()
+		SEL.menu = null
+		SEL.wrap = null
+	}
+}
+
+function openSelectMenu(wrap) {
+	if (SEL.wrap === wrap) { closeSelectMenu(); return }
+	closeSelectMenu()
+	const options = normOptions(JSON.parse(wrap.dataset.options))
+	const current = wrap.querySelector('input[type=hidden]').value
+	SEL.wrap = wrap
+	SEL.menu = document.createElement('div')
+	SEL.menu.className = 'menu'
+	SEL.menu.innerHTML = options.map((o) => `
+		<button type="button" class="menu-item ${String(o.value) === current ? 'on' : ''}" data-menu-val="${esc(o.value)}">
+			<span>${esc(o.label)}</span>${String(o.value) === current ? icon('check') : ''}
+		</button>`).join('')
+	wrap.appendChild(SEL.menu)
+	requestAnimationFrame(() => SEL.menu && SEL.menu.classList.add('menu-open'))
+	SEL.menu.addEventListener('mousedown', (e) => e.preventDefault())
+	SEL.menu.addEventListener('click', (e) => {
+		e.stopPropagation()
+		const item = e.target.closest('[data-menu-val]')
+		if (!item) return
+		const picked = options.find((o) => String(o.value) === item.dataset.menuVal)
+		wrap.querySelector('input[type=hidden]').value = picked.value
+		const display = wrap.querySelector('[data-sel-display]')
+		display.value = picked.label
+		display.setCustomValidity('')
+		display.dispatchEvent(new Event('input', { bubbles: true }))
+		closeSelectMenu()
+	})
+}
+
+document.addEventListener('click', (e) => {
+	if (SEL.menu && !e.target.closest('[data-sel]'))
+		closeSelectMenu()
 })
 
 function destinationLine(dest) {
@@ -622,28 +780,47 @@ function destinationLine(dest) {
 	return `<div class="dest">→ writes to <code>${esc(dest.path)}</code> &nbsp;(${esc(dest.mode || 'merge')})</div>`
 }
 
-function renderForm(block) {
-	const fieldsHtml = (block.fields || []).map((f) => {
-		if (f.type === 'hidden')
-			return controlHtml(f)
-		const label = f.type === 'checkbox'
-			? '' // the checkbox carries its own label line
-			: `<label>${esc(f.label || f.name)} ${f.required ? '<span class="req">*</span>' : ''}</label>`
-		return `<div class="field" data-field-wrap="${esc(f.name)}">
-			${label}
-			${controlHtml(f)}
-			${f.help ? `<div class="help">${esc(f.help)}</div>` : ''}
-			<div class="field-error" data-error-for="${esc(f.name)}"></div>
-		</div>`
+function renderFieldBlock(f, gridCols) {
+	if (f.type === 'hidden')
+		return controlHtml(f)
+	const label = f.type === 'checkbox'
+		? '' // the checkbox carries its own label line
+		: `<label>${esc(f.label || f.name)} ${f.required ? '<span class="req">*</span>' : ''}</label>`
+	const span = gridCols ? Math.min(gridCols, Math.max(1, Number(f.span) || 1)) : 0
+	return `<div class="field${span > 1 ? ` span-${span}` : ''}" data-field-wrap="${esc(f.name)}">
+		${label}
+		${controlHtml(f)}
+		${f.help ? `<div class="help">${esc(f.help)}</div>` : ''}
+		<div class="field-error" data-error-for="${esc(f.name)}"></div>
+	</div>`
+}
+
+function renderFormItems(items) {
+	return (items || []).map((item) => {
+		if (item && item.type === 'fieldset') {
+			const cols = Math.min(3, Math.max(1, Number(item.columns) || 1))
+			return `<fieldset class="fset">
+				${item.legend ? `<legend>${esc(item.legend)}</legend>` : ''}
+				${item.description ? `<div class="fset-desc">${esc(item.description)}</div>` : ''}
+				<div class="fset-grid ${cols > 1 ? `cols-${cols}` : ''}">
+					${(item.fields || []).map((f) => renderFieldBlock(f, cols)).join('')}
+				</div>
+			</fieldset>`
+		}
+		return renderFieldBlock(item, 0)
 	}).join('')
+}
+
+function renderForm(block) {
+	const fieldsHtml = renderFormItems(block.fields)
 	const noSession = !state.session
 	return `<div class="block">
-		${block.title ? `<h2 style="margin:6px 0 2px;font-size:17px">${esc(block.title)}</h2>` : ''}
-		${block.description ? `<p style="color:var(--muted);margin:4px 0 10px">${esc(block.description)}</p>` : ''}
+		${block.title ? `<h2 class="form-title">${esc(block.title)}</h2>` : ''}
+		${block.description ? `<p class="form-desc">${esc(block.description)}</p>` : ''}
 		<form id="theForm" novalidate>
 			${destinationLine(block.destination)}
 			<div class="secbanner">${icon('lock')} <div>These values are saved <b>locally</b> to the file above and are <b>not</b> sent back to the agent or into the chat context.</div></div>
-			${noSession ? '<div class="placeholder" style="margin-bottom:14px">No active agent session for this form — ask the agent to run <code>open</code> to start one.</div>' : ''}
+			${noSession ? '<div class="placeholder gap-b">No active agent session for this form — ask the agent to run <code>open</code> to start one.</div>' : ''}
 			${fieldsHtml}
 			<div class="form-actions">
 				<button type="button" class="btn ghost" data-cancel ${noSession ? 'disabled' : ''}>${esc(block.cancelLabel || 'Cancel')}</button>
@@ -661,9 +838,9 @@ function renderConfirm(block) {
 		<div class="confirm ${esc(severity)}" id="theConfirm">
 			<div class="confirm-head">${headIcon} ${esc(block.title)}</div>
 			<div class="confirm-body">
-				${block.description ? `<p style="margin-top:0;color:var(--muted)">${esc(block.description)}</p>` : ''}
+				${block.description ? `<p class="confirm-desc">${esc(block.description)}</p>` : ''}
 				${(block.details || []).map((d) => `<div class="confirm-detail"><span class="k">${esc(d.label)}</span><span>${esc(d.value)}</span></div>`).join('')}
-				${noSession ? '<div class="placeholder" style="margin-top:10px">No active agent session — ask the agent to run <code>open</code> to start one.</div>' : ''}
+				${noSession ? '<div class="placeholder gap-t">No active agent session — ask the agent to run <code>open</code> to start one.</div>' : ''}
 			</div>
 			<div class="confirm-actions">
 				<button class="btn ghost" data-confirm="no" ${noSession ? 'disabled' : ''}>${esc(block.cancelLabel || 'Cancel')}</button>
@@ -676,20 +853,29 @@ function renderConfirm(block) {
 function collectValues(form, fields) {
 	const values = {}
 	for (const f of fields) {
+		const el = form.querySelector(`[data-field="${CSS.escape(f.name)}"]`)
 		if (f.type === 'checkboxGroup') {
-			const group = form.querySelector(`[data-field="${CSS.escape(f.name)}"]`)
-			values[f.name] = [...group.querySelectorAll('input:checked')].map((i) => i.value)
-		} else if (f.type === 'radio') {
+			values[f.name] = el && el.hasAttribute('data-pills')
+				? pillValues(el)
+				: [...el.querySelectorAll('input:checked')].map((i) => i.value)
+		} else if (f.type === 'radio' && f.ui !== 'buttons') {
 			const hit = form.querySelector(`input[name="f_${CSS.escape(f.name)}"]:checked`)
 			values[f.name] = hit ? hit.value : ''
 		} else if (f.type === 'checkbox') {
-			values[f.name] = form.querySelector(`[data-field="${CSS.escape(f.name)}"]`).checked
+			values[f.name] = el.checked
 		} else {
-			const el = form.querySelector(`[data-field="${CSS.escape(f.name)}"]`)
+			// text-likes, custom select and segmented buttons (hidden inputs) all expose .value
 			values[f.name] = el ? el.value : ''
 		}
 	}
 	return values
+}
+
+function setRangeFill(range) {
+	const min = Number(range.min) || 0
+	const max = Number(range.max) || 100
+	const pct = ((Number(range.value) - min) / (max - min || 1)) * 100
+	range.style.setProperty('--fill', pct + '%')
 }
 
 function showFieldErrors(form, fieldErrors) {
@@ -728,8 +914,8 @@ function showSuccess(payload) {
 	const wroteFile = result.status === 'saved'
 	ov.innerHTML = `<div class="modal"><div class="modal-body center">
 		<div class="success-mark">${icon('check')}</div>
-		<h2 style="margin:0 0 6px">${wroteFile ? 'Saved successfully' : 'Submitted'}</h2>
-		<div style="color:var(--muted)">${wroteFile
+		<h2 class="modal-title">${wroteFile ? 'Saved successfully' : 'Submitted'}</h2>
+		<div class="modal-sub">${wroteFile
 			? `${fields.length} values written to <code>${esc(destination.path)}</code>`
 			: `${fields.length} values submitted`}</div>
 		<ul class="fieldlist">${fields.map((f) => `<li>${esc(f)}</li>`).join('')}</ul>
@@ -748,7 +934,7 @@ function showSuccess(payload) {
 }
 
 async function submitForm(form, block) {
-	const values = collectValues(form, block.fields || [])
+	const values = collectValues(form, flattenFields(block.fields))
 	const confirmations = {}
 	for (;;) {
 		const { status, json } = await api(`/api/session/${state.session.id}/submit`, {
@@ -802,7 +988,7 @@ async function submitForm(form, block) {
 function sessionExpiredView() {
 	const main = document.querySelector('#theForm, #theConfirm')
 	if (main)
-		main.outerHTML = `<div class="placeholder" style="margin:22px 0">${icon('clock')} This session has expired — the agent received <code>{"status":"timeout"}</code>. Ask it to run <code>open</code> again.</div>`
+		main.outerHTML = `<div class="placeholder block-gap">${icon('clock')} This session has expired — the agent received <code>{"status":"timeout"}</code>. Ask it to run <code>open</code> again.</div>`
 }
 
 function wireInteractive(blocks) {
@@ -836,6 +1022,8 @@ function wireInteractive(blocks) {
 
 	const form = document.getElementById('theForm')
 	if (!form) return
+	const fields = flattenFields(block.fields)
+	form.querySelectorAll('input[type=range]').forEach(setRangeFill)
 
 	form.addEventListener('click', (e) => {
 		const dpToggle = e.target.closest('[data-dp-toggle]')
@@ -845,6 +1033,34 @@ function wireInteractive(blocks) {
 		}
 		if (e.target.closest('[data-datepicker]') && !DP.el) {
 			openDatePicker(e.target.closest('[data-datepicker]'))
+			return
+		}
+		const selDisplay = e.target.closest('[data-sel-display]')
+		if (selDisplay) {
+			openSelectMenu(selDisplay.closest('[data-sel]'))
+			return
+		}
+		const segBtn = e.target.closest('.seg-btn')
+		if (segBtn) {
+			const seg = segBtn.closest('[data-seg]')
+			seg.querySelectorAll('.seg-btn').forEach((b) => b.classList.toggle('on', b === segBtn))
+			const hidden = seg.querySelector('input[type=hidden]')
+			hidden.value = segBtn.dataset.val
+			seg.dispatchEvent(new Event('input', { bubbles: true })) // clears the inline error
+			return
+		}
+		const pillAdd = e.target.closest('[data-pill-add]')
+		const pillRemove = e.target.closest('[data-pill-remove]')
+		if (pillAdd || pillRemove) {
+			const cont = (pillAdd || pillRemove).closest('[data-pills]')
+			const options = normOptions(JSON.parse(cont.dataset.options))
+			let selected = pillValues(cont)
+			if (pillAdd)
+				selected.push(pillAdd.dataset.val)
+			else
+				selected = selected.filter((v) => v !== pillRemove.closest('[data-pill]').dataset.val)
+			cont.innerHTML = pillsInner(options, selected, null)
+			cont.dispatchEvent(new Event('input', { bubbles: true }))
 			return
 		}
 		const eye = e.target.closest('[data-eye]')
@@ -869,6 +1085,13 @@ function wireInteractive(blocks) {
 		if (e.target.type === 'range') {
 			const out = e.target.parentElement.querySelector('.range-val')
 			if (out) out.textContent = e.target.value
+			setRangeFill(e.target)
+		}
+		if (e.target.matches('[data-pills-filter]')) {
+			const needle = e.target.value.toLowerCase()
+			e.target.closest('[data-pills]').querySelectorAll('.pill-opt').forEach((opt) => {
+				opt.style.display = opt.textContent.toLowerCase().includes(needle) ? '' : 'none'
+			})
 		}
 		const wrap = e.target.closest('[data-field-wrap]')
 		if (wrap) {
@@ -877,13 +1100,40 @@ function wireInteractive(blocks) {
 		}
 	})
 
+	// The bespoke select's visible input is a trigger, not a free-text field.
+	form.addEventListener('keydown', (e) => {
+		if (!e.target.matches || !e.target.matches('[data-sel-display]'))
+			return
+		if (e.key === 'Tab')
+			return
+		e.preventDefault()
+		if (e.key === 'Enter' || e.key === ' ' || e.key === 'ArrowDown')
+			openSelectMenu(e.target.closest('[data-sel]'))
+		if (e.key === 'Escape')
+			closeSelectMenu()
+	})
+
 	form.addEventListener('submit', async (e) => {
 		e.preventDefault()
 		if (!state.session)
 			return
-		// Constraint Validation API first (friendly messages), then server re-validates.
-		for (const f of block.fields || []) {
-			if (f.type !== 'checkboxGroup') continue
+		// Custom widgets first (they have no native constraint hooks)…
+		const customErrors = {}
+		for (const f of fields) {
+			if (!f.required) continue
+			const el = form.querySelector(`[data-field="${CSS.escape(f.name)}"]`)
+			if (f.ui === 'buttons' && el && !el.value)
+				customErrors[f.name] = `${f.label || f.name}: choose an option.`
+			if (f.ui === 'pills' && el && pillValues(el).length === 0)
+				customErrors[f.name] = `${f.label || f.name}: select at least one option.`
+		}
+		if (Object.keys(customErrors).length) {
+			showFieldErrors(form, customErrors)
+			return
+		}
+		// …then the Constraint Validation API (friendly messages), then the server re-validates.
+		for (const f of fields) {
+			if (f.type !== 'checkboxGroup' || f.ui === 'pills') continue
 			const group = form.querySelector(`[data-field="${CSS.escape(f.name)}"]`)
 			const first = group && group.querySelector('input[type=checkbox]')
 			if (first)
@@ -983,7 +1233,7 @@ async function openFolderModal() {
 		<div class="modal-body">
 			<div class="fb-crumb" id="fbCrumb"></div>
 			<div class="fb-list" id="fbList"></div>
-			<div style="color:var(--muted);font-size:12px">Folders that already contain canvases show a ✓ badge.</div>
+			<div class="fb-hint">Folders that already contain canvases show a ✓ badge.</div>
 		</div>
 		<div class="modal-foot">
 			<button class="btn ghost" data-close>Cancel</button>
@@ -1026,7 +1276,7 @@ async function openFolderModal() {
 		ov.querySelector('#fbList').innerHTML = up + json.entries.map((en) => `
 			<div class="fb-row ${selected === en.path ? 'sel' : ''}" data-path="${esc(en.path)}" data-count="${en.canvasCount}">
 				${icon('folder')} ${esc(en.name)} ${en.canvasCount > 0 ? `<span class="fb-badge">${icon('check')} workspace (${en.canvasCount} canvas${en.canvasCount === 1 ? '' : 'es'})</span>` : ''}
-			</div>`).join('') || (up + '<div class="fb-row" style="cursor:default;color:var(--muted)">(no subfolders)</div>')
+			</div>`).join('') || (up + '<div class="fb-row fb-none">(no subfolders)</div>')
 		ov.querySelectorAll('.fb-row[data-path]').forEach((row) => {
 			row.addEventListener('click', () => {
 				selected = row.dataset.path
@@ -1058,7 +1308,7 @@ $('stopBtn').addEventListener('click', async () => {
 	if (!window.confirm('Stop the InstantCanvas kernel for this workspace?'))
 		return
 	await api('/api/shutdown', { method: 'POST', body: '{}' })
-	document.body.innerHTML = '<div class="empty" style="height:100vh"><div class="big"></div><b>Kernel stopped</b><div>Run <code>instantcanvas open</code> again to restart it.</div></div>'
+	document.body.innerHTML = '<div class="empty full"><div class="big"></div><b>Kernel stopped</b><div>Run <code>instantcanvas open</code> again to restart it.</div></div>'
 })
 
 // ---------------------------------------------------------------- boot
@@ -1066,7 +1316,7 @@ $('stopBtn').addEventListener('click', async () => {
 async function boot() {
 	const { status, json } = await api('/api/workspace')
 	if (status !== 200 || !json || !json.ok) {
-		$('main').innerHTML = '<div class="empty" style="height:100%"><b>Cannot reach the kernel</b><div>Missing or invalid token?</div></div>'
+		$('main').innerHTML = '<div class="empty"><b>Cannot reach the kernel</b><div>Missing or invalid token?</div></div>'
 		return
 	}
 	state.tree = json

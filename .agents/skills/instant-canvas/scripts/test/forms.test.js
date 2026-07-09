@@ -191,13 +191,21 @@ test('destinations: json merge, kind none with includeValues (secrets always exc
 	const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'ic-dest-')))
 	const mkCanvas = (name, block) => fs.writeFileSync(path.join(root, name), JSON.stringify({ instantcanvas: 1, title: name, blocks: [block] }))
 
+	// fields grouped in a fieldset: the kernel must flatten before validating/writing
 	mkCanvas('json-form.canvas.json', {
 		type: 'form',
 		destination: { kind: 'json', path: 'config/settings.json', mode: 'merge' },
 		fields: [
-			{ name: 'apiUrl', label: 'API URL', type: 'url', required: true },
-			{ name: 'retries', label: 'Retries', type: 'number', validation: { min: 0, max: 10 } },
-			{ name: 'enabled', label: 'Enabled', type: 'checkbox' },
+			{
+				type: 'fieldset',
+				legend: 'Connection',
+				columns: 2,
+				fields: [
+					{ name: 'apiUrl', label: 'API URL', type: 'url', required: true, span: 2 },
+					{ name: 'retries', label: 'Retries', type: 'number', validation: { min: 0, max: 10 } },
+					{ name: 'enabled', label: 'Enabled', type: 'checkbox' },
+				],
+			},
 		],
 	})
 	mkCanvas('values-form.canvas.json', {

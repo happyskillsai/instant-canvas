@@ -15,7 +15,7 @@ const { normalizeRoot, insideRoot, stateDir } = require('./lib/paths')
 const registry = require('./lib/registry')
 const { registerSecret, redact, errorOut } = require('./lib/redact')
 const { scan, canvasCount, readCanvasFile, MAX_CANVAS_BYTES } = require('./lib/scan')
-const { validate, collectBlocks, isInteractiveBlock } = require('./lib/validate')
+const { validate, collectBlocks, isInteractiveBlock, flattenFields } = require('./lib/validate')
 const { Sessions } = require('./lib/session')
 const envfile = require('./lib/envfile')
 const jsonfile = require('./lib/jsonfile')
@@ -304,8 +304,8 @@ async function handleSubmit(session, body, res) {
 		return sendJson(res, 200, { ok: true, result })
 	}
 
-	// form
-	const fields = Array.isArray(block.fields) ? block.fields : []
+	// form (fieldset groups are layout only — flatten to the real fields)
+	const fields = flattenFields(block.fields)
 	const values = (body && typeof body.values === 'object' && body.values) || {}
 
 	// Secret hygiene FIRST: register every submitted secret before any

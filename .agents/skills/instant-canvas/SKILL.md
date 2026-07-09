@@ -87,7 +87,12 @@ Run `$IC catalog` (or `catalog chart`, `catalog secret`, …) for the exact cont
   "confirmLabel": "Drop & recreate"}
 ```
 
-16 field types: `text textarea secret email url tel number date datetime select radio checkbox checkboxGroup range hidden readonly`. Common shape: `{name, label, type, required?, placeholder?, help?, default?, options?, validation?: {minLength, maxLength, pattern, min, max, step}}`. Env destinations require names matching `^[A-Za-z_][A-Za-z0-9_]*$`. Email is syntax-checked only.
+16 field types: `text textarea secret email url tel number date datetime select radio checkbox checkboxGroup range hidden readonly`. Common shape: `{name, label, type, required?, placeholder?, help?, default?, options?, validation?: {minLength, maxLength, pattern, min, max, step}, ui?, span?}`. Env destinations require names matching `^[A-Za-z_][A-Za-z0-9_]*$`. Email is syntax-checked only.
+
+**Form layout & variants** (see `catalog` → `fieldsetShape`):
+- Group related fields with a fieldset item inside `fields[]`: `{"type": "fieldset", "legend": "Contact", "columns": 2, "fields": [...]}` — `columns` (1–3) makes a grid; fields flow left-to-right. A field's `"span": 2` widens it across columns. Ungrouped fields stay full-width.
+- `"ui": "buttons"` on a `select`/`radio` renders segmented buttons; `"ui": "pills"` on a `checkboxGroup` renders a searchable multi-select with removable pills. Values and serialization are unchanged.
+- `date` and `datetime` render a bespoke calendar (datetime adds a time section); `select` renders a styled menu. All values stay ISO/plain strings.
 
 ## Result handling
 

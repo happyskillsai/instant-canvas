@@ -11,7 +11,8 @@ InstantCanvas MVP — local, schema-driven interaction runtime for coding agents
 - **Per-workspace kernel**: 127.0.0.1-only, per-kernel token (timing-safe compare), Host-header check, CSP, hand-rolled RFC 6455 WebSocket hot reload, idle auto-shutdown, health-ping registry with stale-entry recovery.
 - **Secure forms**: values written directly to `.env` (parse-preserving merge) or JSON files; overwrite and outside-workspace writes require in-browser confirmation; server-side re-validation; secrets are registered with the redaction layer before any processing and appear in no result, log, or error.
 - **Frontend**: prototype-faithful shell (light/dark), markdown-it and ECharts 5.6.0 vendored (served, never required), hot-reload client, folder browser to open other workspaces on their own kernels.
-- **Tests**: 78 node:test tests (zero dependencies) covering the library, validator, kernel, CLI, form flows, and security regressions (403s, traversal, redaction sweep, loopback-only bind).
+- **Tests**: 79 node:test tests (zero dependencies) covering the library, validator, kernel, CLI, form flows, and security regressions (403s, traversal, redaction sweep, loopback-only bind).
+- **Form system**: fieldset grouping with 1–3-column grids (`{"type":"fieldset","legend","columns","fields"}` inside `fields[]`, per-field `span`), presentation variants (`ui: "buttons"` segmented select/radio, `ui: "pills"` searchable multi-select), bespoke widgets throughout — select menu, date and datetime calendar popover (month/year quick-nav, time section), custom radios/checkboxes/slider — all Lucide-iconed, CSP-strict (no inline styles), with values/serialization identical to the base types.
 
 ### Known limitations
 - Windows: implemented per spec (paths, detached spawn, `%LOCALAPPDATA%`), not yet verified on a Windows machine.

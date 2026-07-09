@@ -168,6 +168,52 @@ test('unknown properties are warnings, not errors, with hints', () => {
 	assert.match(w.hint, /Did you mean "description"/)
 })
 
+test('fieldsets: valid grouping passes; nesting, bad columns/span/ui rejected; dup names span fieldsets', () => {
+	const { flattenFields } = require('../lib/validate')
+	const form = (fields) => canvas([{ type: 'form', destination: { kind: 'none' }, fields }])
+
+	const good = validate(form([
+		{ type: 'fieldset', legend: 'Contact', columns: 2, fields: [
+			{ name: 'email', label: 'Email', type: 'email', required: true },
+			{ name: 'address', label: 'Address', type: 'textarea', span: 2 },
+		] },
+		{ name: 'bio', label: 'Bio', type: 'textarea' },
+	]))
+	assert.equal(good.ok, true, JSON.stringify(good.errors))
+
+	const nested = validate(form([
+		{ type: 'fieldset', legend: 'Outer', fields: [{ type: 'fieldset', legend: 'Inner', fields: [] }] },
+	]))
+	assert.ok(nested.errors.some((e) => e.code === 'INVALID_SPEC' && /nested/i.test(e.message)))
+
+	const badCols = validate(form([{ type: 'fieldset', columns: 5, fields: [{ name: 'a', label: 'A', type: 'text' }] }]))
+	assert.ok(badCols.errors.some((e) => e.code === 'INVALID_ENUM_VALUE' && e.path.endsWith('.columns')))
+
+	const badSpan = validate(form([{ name: 'a', label: 'A', type: 'text', span: 9 }]))
+	assert.ok(badSpan.errors.some((e) => e.code === 'INVALID_ENUM_VALUE' && e.path.endsWith('.span')))
+
+	const badUi = validate(form([{ name: 'a', label: 'A', type: 'text', ui: 'buttons' }]))
+	assert.ok(badUi.errors.some((e) => e.code === 'INVALID_ENUM_VALUE' && e.path.endsWith('.ui')))
+	const goodUi = validate(form([
+		{ name: 'size', label: 'Size', type: 'radio', ui: 'buttons', options: ['S', 'M'] },
+		{ name: 'tags', label: 'Tags', type: 'checkboxGroup', ui: 'pills', options: ['a', 'b'] },
+	]))
+	assert.equal(goodUi.ok, true, JSON.stringify(goodUi.errors))
+
+	const dup = validate(form([
+		{ type: 'fieldset', fields: [{ name: 'same', label: 'A', type: 'text' }] },
+		{ name: 'same', label: 'B', type: 'text' },
+	]))
+	assert.ok(dup.errors.some((e) => e.code === 'DUPLICATE_FIELD_NAME'))
+
+	assert.deepEqual(
+		flattenFields([
+			{ type: 'fieldset', fields: [{ name: 'a' }, { name: 'b' }] },
+			{ name: 'c' },
+		]).map((f) => f.name),
+		['a', 'b', 'c'])
+})
+
 test('renderHuman produces compact lines', () => {
 	const r = validate(fixture('broken.canvas.json'))
 	const text = renderHuman(r, 'broken.canvas.json')

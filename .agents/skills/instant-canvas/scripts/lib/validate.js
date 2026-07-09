@@ -124,6 +124,8 @@ function checkObject(obj, props, base, ctx, { skip = [] } = {}) {
 				if (spec.itemShape === 'block') return checkBlock(item, ip, ctx)
 				if (typeOf(item) !== 'object')
 					return ctx.error('INVALID_PROPERTY_TYPE', ip, `Items of "${key}" must be objects, got ${typeOf(item)}.`, { got: typeOf(item), expected: 'object' })
+				if (spec.itemShape === 'field' && item.type === 'fieldset')
+					return checkFieldset(item, ip, ctx, key)
 				checkShape(item, spec.itemShape, ip, ctx)
 			})
 		}
@@ -144,6 +146,36 @@ function checkShape(obj, shapeName, base, ctx) {
 }
 
 // ---------------------------------------------------------------- fields
+
+/** Form "fields" items minus the grouping: fieldsets are replaced by their inner fields. */
+function flattenFields(items) {
+	const out = []
+	for (const item of items || []) {
+		if (item && typeof item === 'object' && item.type === 'fieldset') {
+			if (Array.isArray(item.fields))
+				out.push(...item.fields.filter((f) => f && typeof f === 'object' && f.type !== 'fieldset'))
+		} else if (item && typeof item === 'object') {
+			out.push(item)
+		}
+	}
+	return out
+}
+
+function checkFieldset(item, base, ctx, parentKey) {
+	if (parentKey !== 'fields' || /fields\[\d+\]\.fields/.test(base)) {
+		// itemShape 'field' is reused by fieldset.fields — a fieldset there is nesting.
+		ctx.error('INVALID_SPEC', `${base}.type`, 'Fieldsets cannot be nested — put fields directly inside the fieldset.', {
+			example: { type: 'fieldset', legend: 'Contact', columns: 2, fields: [{ name: 'email', label: 'Email', type: 'email' }] },
+		})
+		return
+	}
+	checkObject(item, SHAPES.fieldset.properties, base, ctx)
+	if (item.columns !== undefined && ![1, 2, 3].includes(item.columns))
+		ctx.error('INVALID_ENUM_VALUE', `${base}.columns`, `A fieldset grid supports 1 to 3 columns, got ${JSON.stringify(item.columns)}.`, {
+			got: item.columns,
+			expected: [1, 2, 3],
+		})
+}
 
 function checkFieldRules(field, base, ctx) {
 	const def = FIELD_TYPES[field.type]
@@ -172,6 +204,21 @@ function checkFieldRules(field, base, ctx) {
 				example: minimalFieldExample(field.type),
 			})
 	}
+	if (field.ui === 'buttons' && field.type !== 'select' && field.type !== 'radio')
+		ctx.error('INVALID_ENUM_VALUE', `${base}.ui`, `ui "buttons" only applies to "select" and "radio" fields, not "${field.type}".`, {
+			got: field.ui,
+			expected: ['buttons (select|radio)', 'pills (checkboxGroup)'],
+		})
+	if (field.ui === 'pills' && field.type !== 'checkboxGroup')
+		ctx.error('INVALID_ENUM_VALUE', `${base}.ui`, `ui "pills" only applies to "checkboxGroup" fields, not "${field.type}".`, {
+			got: field.ui,
+			expected: ['buttons (select|radio)', 'pills (checkboxGroup)'],
+		})
+	if (field.span !== undefined && ![1, 2, 3].includes(field.span))
+		ctx.error('INVALID_ENUM_VALUE', `${base}.span`, `"span" must be 1, 2 or 3 fieldset grid columns, got ${JSON.stringify(field.span)}.`, {
+			got: field.span,
+			expected: [1, 2, 3],
+		})
 	if (Array.isArray(field.options)) {
 		field.options.forEach((o, i) => {
 			const ok = typeof o === 'string'
@@ -292,23 +339,33 @@ function checkForm(block, base, ctx) {
 	}
 	if (!Array.isArray(block.fields))
 		return
-	const seen = new Map()
-	block.fields.forEach((f, i) => {
-		if (typeOf(f) !== 'object' || typeof f.name !== 'string')
+	// Duplicate/env-key checks span the WHOLE form, across fieldset boundaries.
+	const located = []
+	block.fields.forEach((item, i) => {
+		if (typeOf(item) !== 'object')
 			return
+		if (item.type === 'fieldset' && Array.isArray(item.fields))
+			item.fields.forEach((f, j) => located.push({ f, path: `${base}.fields[${i}].fields[${j}]` }))
+		else
+			located.push({ f: item, path: `${base}.fields[${i}]` })
+	})
+	const seen = new Map()
+	for (const { f, path: fp } of located) {
+		if (typeOf(f) !== 'object' || typeof f.name !== 'string')
+			continue
 		if (seen.has(f.name))
-			ctx.error('DUPLICATE_FIELD_NAME', `${base}.fields[${i}].name`, `Field name "${f.name}" is already used by fields[${seen.get(f.name)}]. Names must be unique.`, {
+			ctx.error('DUPLICATE_FIELD_NAME', `${fp}.name`, `Field name "${f.name}" is already used at ${seen.get(f.name)}. Names must be unique across the whole form.`, {
 				got: f.name,
 			})
 		else
-			seen.set(f.name, i)
+			seen.set(f.name, fp)
 		if (typeOf(dest) === 'object' && dest.kind === 'env' && !ENV_KEY_RE.test(f.name))
-			ctx.error('INVALID_ENV_KEY', `${base}.fields[${i}].name`, `"${f.name}" is not a valid env key for an "env" destination.`, {
+			ctx.error('INVALID_ENV_KEY', `${fp}.name`, `"${f.name}" is not a valid env key for an "env" destination.`, {
 				got: f.name,
 				expected: 'a name matching ^[A-Za-z_][A-Za-z0-9_]*$',
 				example: { name: 'OPENAI_API_KEY' },
 			})
-	})
+	}
 }
 
 // ---------------------------------------------------------------- envelope
@@ -420,4 +477,4 @@ function renderHuman(result, fileLabel = 'canvas') {
 	return lines.join('\n')
 }
 
-module.exports = { validate, renderHuman, collectBlocks, isInteractiveBlock, levenshtein, closest }
+module.exports = { validate, renderHuman, collectBlocks, isInteractiveBlock, flattenFields, levenshtein, closest }

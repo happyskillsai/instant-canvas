@@ -92,6 +92,16 @@ const SHAPES = {
 			step: { type: 'number', description: 'Numeric/range step.', example: 5 },
 		},
 	},
+	fieldset: {
+		description: 'Groups related fields under a legend, optionally as a multi-column grid. Appears as an item of a form\'s "fields" array. Fieldsets cannot be nested.',
+		properties: {
+			type: { type: 'string', required: true, enum: ['fieldset'] },
+			legend: { type: 'string', description: 'Group heading shown above the fields.', example: 'Contact details' },
+			description: { type: 'string', description: 'Optional intro text under the legend.' },
+			columns: { type: 'number', default: 1, description: 'Grid columns for the grouped fields (1–3). Fields flow left-to-right, top-to-bottom; a field\'s "span" widens it.', example: 2 },
+			fields: { type: 'array', required: true, itemShape: 'field', description: 'The grouped fields (fields only — no nested fieldsets).' },
+		},
+	},
 	field: {
 		description: 'One form field. Exact rules per type: see fieldTypes in the catalog.',
 		properties: {
@@ -104,6 +114,8 @@ const SHAPES = {
 			default: { type: ['string', 'number', 'boolean', 'array'], description: 'Initial value. For hidden/readonly this IS the submitted value.' },
 			options: { type: 'array', description: 'select|radio|checkboxGroup choices: string[] or {label, value}[].', example: ['Development', 'Staging', 'Production'] },
 			validation: { type: 'object', itemShape: 'fieldValidation', description: 'Constraint rules (re-checked server-side on submit).' },
+			ui: { type: 'string', enum: ['buttons', 'pills'], description: 'Presentation variant: "buttons" renders select/radio as segmented buttons; "pills" renders checkboxGroup as a searchable multi-select with removable pills. Values/serialization are unchanged.' },
+			span: { type: 'number', default: 1, description: 'Grid columns this field spans inside its fieldset (1–3, capped at the fieldset\'s "columns"). Ignored outside fieldsets.', example: 2 },
 		},
 	},
 }
@@ -190,7 +202,7 @@ const BLOCKS = {
 			title: { type: 'string', description: 'Form heading.', example: 'Set up environment variables' },
 			description: { type: 'string', description: 'Intro text above the fields.' },
 			destination: { type: 'object', required: true, itemShape: 'destination', description: 'Where values are written.' },
-			fields: { type: 'array', required: true, itemShape: 'field', description: 'The form fields, in order. Field "name"s must be unique.' },
+			fields: { type: 'array', required: true, itemShape: 'field', description: 'The form items, in order: fields, or {"type": "fieldset", "legend", "columns": 1-3, "fields": [...]} groups for side-by-side grid layout (see the catalog "fieldsetShape"). Field "name"s must be unique across the whole form.' },
 			return: { type: 'object', itemShape: 'formReturn', description: 'Result options (secrets are always excluded).' },
 			submitLabel: { type: 'string', default: 'Save', description: 'Submit button label.', example: 'Save credentials' },
 			cancelLabel: { type: 'string', default: 'Cancel', description: 'Cancel button label.' },

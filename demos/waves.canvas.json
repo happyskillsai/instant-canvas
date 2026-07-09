@@ -1,0 +1,414 @@
+{
+  "instantcanvas": 1,
+  "title": "Sine & Cosine Waves",
+  "description": "Generated demo data — two full periods, 10° resolution.",
+  "blocks": [
+    {
+      "type": "markdown",
+      "text": "## Trigonometric waves\n**73 samples** over two full periods (0°–720°), 10° steps. Toggle a series in the legend to isolate it."
+    },
+    {
+      "type": "chart",
+      "kind": "line",
+      "title": "sin(x) vs cos(x)",
+      "description": "Both series share the same x axis",
+      "data": [
+        {
+          "angle": "0°",
+          "sine": 0,
+          "cosine": 1
+        },
+        {
+          "angle": "10°",
+          "sine": 0.174,
+          "cosine": 0.985
+        },
+        {
+          "angle": "20°",
+          "sine": 0.342,
+          "cosine": 0.94
+        },
+        {
+          "angle": "30°",
+          "sine": 0.5,
+          "cosine": 0.866
+        },
+        {
+          "angle": "40°",
+          "sine": 0.643,
+          "cosine": 0.766
+        },
+        {
+          "angle": "50°",
+          "sine": 0.766,
+          "cosine": 0.643
+        },
+        {
+          "angle": "60°",
+          "sine": 0.866,
+          "cosine": 0.5
+        },
+        {
+          "angle": "70°",
+          "sine": 0.94,
+          "cosine": 0.342
+        },
+        {
+          "angle": "80°",
+          "sine": 0.985,
+          "cosine": 0.174
+        },
+        {
+          "angle": "90°",
+          "sine": 1,
+          "cosine": 0
+        },
+        {
+          "angle": "100°",
+          "sine": 0.985,
+          "cosine": -0.174
+        },
+        {
+          "angle": "110°",
+          "sine": 0.94,
+          "cosine": -0.342
+        },
+        {
+          "angle": "120°",
+          "sine": 0.866,
+          "cosine": -0.5
+        },
+        {
+          "angle": "130°",
+          "sine": 0.766,
+          "cosine": -0.643
+        },
+        {
+          "angle": "140°",
+          "sine": 0.643,
+          "cosine": -0.766
+        },
+        {
+          "angle": "150°",
+          "sine": 0.5,
+          "cosine": -0.866
+        },
+        {
+          "angle": "160°",
+          "sine": 0.342,
+          "cosine": -0.94
+        },
+        {
+          "angle": "170°",
+          "sine": 0.174,
+          "cosine": -0.985
+        },
+        {
+          "angle": "180°",
+          "sine": 0,
+          "cosine": -1
+        },
+        {
+          "angle": "190°",
+          "sine": -0.174,
+          "cosine": -0.985
+        },
+        {
+          "angle": "200°",
+          "sine": -0.342,
+          "cosine": -0.94
+        },
+        {
+          "angle": "210°",
+          "sine": -0.5,
+          "cosine": -0.866
+        },
+        {
+          "angle": "220°",
+          "sine": -0.643,
+          "cosine": -0.766
+        },
+        {
+          "angle": "230°",
+          "sine": -0.766,
+          "cosine": -0.643
+        },
+        {
+          "angle": "240°",
+          "sine": -0.866,
+          "cosine": -0.5
+        },
+        {
+          "angle": "250°",
+          "sine": -0.94,
+          "cosine": -0.342
+        },
+        {
+          "angle": "260°",
+          "sine": -0.985,
+          "cosine": -0.174
+        },
+        {
+          "angle": "270°",
+          "sine": -1,
+          "cosine": 0
+        },
+        {
+          "angle": "280°",
+          "sine": -0.985,
+          "cosine": 0.174
+        },
+        {
+          "angle": "290°",
+          "sine": -0.94,
+          "cosine": 0.342
+        },
+        {
+          "angle": "300°",
+          "sine": -0.866,
+          "cosine": 0.5
+        },
+        {
+          "angle": "310°",
+          "sine": -0.766,
+          "cosine": 0.643
+        },
+        {
+          "angle": "320°",
+          "sine": -0.643,
+          "cosine": 0.766
+        },
+        {
+          "angle": "330°",
+          "sine": -0.5,
+          "cosine": 0.866
+        },
+        {
+          "angle": "340°",
+          "sine": -0.342,
+          "cosine": 0.94
+        },
+        {
+          "angle": "350°",
+          "sine": -0.174,
+          "cosine": 0.985
+        },
+        {
+          "angle": "360°",
+          "sine": 0,
+          "cosine": 1
+        },
+        {
+          "angle": "370°",
+          "sine": 0.174,
+          "cosine": 0.985
+        },
+        {
+          "angle": "380°",
+          "sine": 0.342,
+          "cosine": 0.94
+        },
+        {
+          "angle": "390°",
+          "sine": 0.5,
+          "cosine": 0.866
+        },
+        {
+          "angle": "400°",
+          "sine": 0.643,
+          "cosine": 0.766
+        },
+        {
+          "angle": "410°",
+          "sine": 0.766,
+          "cosine": 0.643
+        },
+        {
+          "angle": "420°",
+          "sine": 0.866,
+          "cosine": 0.5
+        },
+        {
+          "angle": "430°",
+          "sine": 0.94,
+          "cosine": 0.342
+        },
+        {
+          "angle": "440°",
+          "sine": 0.985,
+          "cosine": 0.174
+        },
+        {
+          "angle": "450°",
+          "sine": 1,
+          "cosine": 0
+        },
+        {
+          "angle": "460°",
+          "sine": 0.985,
+          "cosine": -0.174
+        },
+        {
+          "angle": "470°",
+          "sine": 0.94,
+          "cosine": -0.342
+        },
+        {
+          "angle": "480°",
+          "sine": 0.866,
+          "cosine": -0.5
+        },
+        {
+          "angle": "490°",
+          "sine": 0.766,
+          "cosine": -0.643
+        },
+        {
+          "angle": "500°",
+          "sine": 0.643,
+          "cosine": -0.766
+        },
+        {
+          "angle": "510°",
+          "sine": 0.5,
+          "cosine": -0.866
+        },
+        {
+          "angle": "520°",
+          "sine": 0.342,
+          "cosine": -0.94
+        },
+        {
+          "angle": "530°",
+          "sine": 0.174,
+          "cosine": -0.985
+        },
+        {
+          "angle": "540°",
+          "sine": 0,
+          "cosine": -1
+        },
+        {
+          "angle": "550°",
+          "sine": -0.174,
+          "cosine": -0.985
+        },
+        {
+          "angle": "560°",
+          "sine": -0.342,
+          "cosine": -0.94
+        },
+        {
+          "angle": "570°",
+          "sine": -0.5,
+          "cosine": -0.866
+        },
+        {
+          "angle": "580°",
+          "sine": -0.643,
+          "cosine": -0.766
+        },
+        {
+          "angle": "590°",
+          "sine": -0.766,
+          "cosine": -0.643
+        },
+        {
+          "angle": "600°",
+          "sine": -0.866,
+          "cosine": -0.5
+        },
+        {
+          "angle": "610°",
+          "sine": -0.94,
+          "cosine": -0.342
+        },
+        {
+          "angle": "620°",
+          "sine": -0.985,
+          "cosine": -0.174
+        },
+        {
+          "angle": "630°",
+          "sine": -1,
+          "cosine": 0
+        },
+        {
+          "angle": "640°",
+          "sine": -0.985,
+          "cosine": 0.174
+        },
+        {
+          "angle": "650°",
+          "sine": -0.94,
+          "cosine": 0.342
+        },
+        {
+          "angle": "660°",
+          "sine": -0.866,
+          "cosine": 0.5
+        },
+        {
+          "angle": "670°",
+          "sine": -0.766,
+          "cosine": 0.643
+        },
+        {
+          "angle": "680°",
+          "sine": -0.643,
+          "cosine": 0.766
+        },
+        {
+          "angle": "690°",
+          "sine": -0.5,
+          "cosine": 0.866
+        },
+        {
+          "angle": "700°",
+          "sine": -0.342,
+          "cosine": 0.94
+        },
+        {
+          "angle": "710°",
+          "sine": -0.174,
+          "cosine": 0.985
+        },
+        {
+          "angle": "720°",
+          "sine": 0,
+          "cosine": 1
+        }
+      ],
+      "encoding": {
+        "x": "angle",
+        "y": [
+          "sine",
+          "cosine"
+        ]
+      },
+      "format": {
+        "y": "number"
+      }
+    },
+    {
+      "type": "kpi",
+      "cards": [
+        {
+          "label": "Samples",
+          "value": 73,
+          "format": "number"
+        },
+        {
+          "label": "Peak sine",
+          "value": 1,
+          "format": "number"
+        },
+        {
+          "label": "Trough cosine",
+          "value": -1,
+          "format": "number"
+        }
+      ]
+    }
+  ]
+}

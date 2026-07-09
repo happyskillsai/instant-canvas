@@ -75,6 +75,19 @@ function catalog(name) {
 		blocks,
 		fieldTypes,
 		fieldCommonShape: renderShape(SHAPES.field),
+		fieldsetShape: {
+			...renderShape(SHAPES.fieldset),
+			example: {
+				type: 'fieldset',
+				legend: 'Contact details',
+				columns: 2,
+				fields: [
+					{ name: 'email', label: 'Email', type: 'email', required: true },
+					{ name: 'phone', label: 'Phone', type: 'tel' },
+					{ name: 'address', label: 'Address', type: 'textarea', span: 2 },
+				],
+			},
+		},
 	}
 }
 
