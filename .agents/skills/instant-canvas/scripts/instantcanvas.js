@@ -99,6 +99,7 @@ function apiRequest(entry, method, apiPath, body) {
 			port: entry.port,
 			method,
 			path: apiPath,
+			agent: false, // fresh connection per request — pooled sockets race the kernel's keep-alive timeout
 			headers: {
 				'X-IC-Token': entry.token,
 				...(data ? { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(data) } : {}),
@@ -236,13 +237,22 @@ async function cmdOpen(args) {
 
 	// Interactive: block until the human responds in the browser.
 	log(`waiting for the user in the browser (session ${sessionId}) ...`)
+	let pollFailures = 0
 	for (;;) {
 		await sleep(1000)
 		let polled
 		try {
 			polled = await apiRequest(entry, 'GET', `/api/session/${sessionId}`)
+			pollFailures = 0
 		} catch (err) {
-			internalError(Object.assign(new Error('Lost the kernel while waiting for the session.'), { code: 'KERNEL_UNREACHABLE' }))
+			// A single failed poll can be a transient socket blip — only give up
+			// once the health check agrees the kernel is gone.
+			pollFailures++
+			if (pollFailures >= 3 && !(await registry.readAlive(root)))
+				internalError(Object.assign(new Error('Lost the kernel while waiting for the session.'), { code: 'KERNEL_UNREACHABLE' }))
+			if (pollFailures >= 15)
+				internalError(Object.assign(new Error(`Session polling kept failing (${pollFailures} times): ${err.message}`), { code: 'KERNEL_UNREACHABLE' }))
+			continue
 		}
 		if (polled.status !== 200)
 			internalError(Object.assign(new Error(`Session poll failed (HTTP ${polled.status}).`), { code: 'KERNEL_UNREACHABLE' }))
