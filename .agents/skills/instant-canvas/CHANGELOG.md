@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.2.1] - 2026-07-09
+
+### Added
+- Explicit BSD 3-Clause licensing: `LICENSE` file shipped with the skill, `license` field in skill.json.
+- Publish metadata: `repository` (https://github.com/nicolasdao/instant-canvas.git) and `authors`.
+
 ## [0.2.0] - 2026-07-09
 
 ### Added
