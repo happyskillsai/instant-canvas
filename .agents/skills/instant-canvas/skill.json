@@ -1,6 +1,6 @@
 {
 	"name": "instant-canvas",
-	"version": "0.1.0",
+	"version": "0.2.0",
 	"description": "Local canvas runtime for coding agents: renders canvas JSON (markdown, KPIs, tables, 17 chart kinds, forms) via a per-workspace localhost kernel and collects input/secrets straight to local files.",
 	"type": "skill",
 	"keywords": [
