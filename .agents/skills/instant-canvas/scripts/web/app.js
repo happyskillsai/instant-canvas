@@ -108,17 +108,6 @@ function toast(msg) {
 	setTimeout(() => t.remove(), 2600)
 }
 
-function deepMerge(target, src) {
-	for (const key of Object.keys(src)) {
-		const s = src[key], t = target[key]
-		if (s && t && typeof s === 'object' && typeof t === 'object' && !Array.isArray(s) && !Array.isArray(t))
-			deepMerge(t, s)
-		else
-			target[key] = s
-	}
-	return target
-}
-
 const md = window.markdownit({ html: false, linkify: true })
 
 // ---------------------------------------------------------------- theming
@@ -301,8 +290,6 @@ function chartOption(block) {
 			})),
 		}
 	}
-	if (block.options && typeof block.options === 'object')
-		deepMerge(option, block.options) // escape hatch merges LAST
 	return option
 }
 
@@ -318,6 +305,11 @@ function mountCharts(blocks) {
 		const block = blocks[Number(box.dataset.chart)]
 		const chart = window.echarts.init(box, theme)
 		chart.setOption(chartOption(block))
+		// Escape hatch LAST, via a second setOption: ECharts merges natively
+		// (series by index), so {"series":[{"smooth":true}]} refines rather
+		// than replaces the generated series.
+		if (block.options && typeof block.options === 'object')
+			chart.setOption(block.options)
 		state.charts.push(chart)
 		const ro = new ResizeObserver(() => chart.resize())
 		ro.observe(box)
