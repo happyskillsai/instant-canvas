@@ -1,0 +1,24 @@
+{
+	"instantcanvas": 1,
+	"title": "Your profile",
+	"description": "Saved locally to profile.json — sensitive values never enter the chat.",
+	"blocks": [
+		{
+			"type": "markdown",
+			"text": "## Set up your profile\nEverything below is written to `profile.json` at the root of this project. The **password and passport number are secrets**: the agent only learns the field names, never the values."
+		},
+		{
+			"type": "form",
+			"title": "Profile details",
+			"destination": { "kind": "json", "path": "profile.json", "mode": "merge" },
+			"submitLabel": "Save profile",
+			"fields": [
+				{ "name": "username", "label": "Username", "type": "text", "required": true, "placeholder": "nicolasdao", "validation": { "minLength": 2, "maxLength": 40 } },
+				{ "name": "password", "label": "Password", "type": "secret", "required": true, "validation": { "minLength": 8 }, "help": "At least 8 characters. Stored in profile.json only." },
+				{ "name": "passportNumber", "label": "Passport number", "type": "secret", "required": true, "help": "Treated as a secret — masked in the browser, redacted from all agent output." },
+				{ "name": "dateOfBirth", "label": "Date of birth", "type": "date", "required": true },
+				{ "name": "bio", "label": "Quick bio", "type": "textarea", "placeholder": "A couple of sentences about you…", "validation": { "maxLength": 500 } }
+			]
+		}
+	]
+}
