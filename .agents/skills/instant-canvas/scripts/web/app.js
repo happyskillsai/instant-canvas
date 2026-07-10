@@ -1506,6 +1506,566 @@ function disposeCharts() {
 	state.observers = []
 }
 
+// ---------------------------------------------------------------- document mode (deck + packer)
+//
+// A document canvas renders as literal page-sized boxes: every sheet is one
+// printed page BY CONSTRUCTION (the print engine never chooses a break), so
+// the invariant that carries everything is: sheet.scrollHeight <= clientHeight.
+// A sheet even 3px too tall silently costs a blank sliver page in the PDF.
+//
+// The packer measures rendered elements inside a hidden replica sheet at the
+// exact content width, packs them into sheets (code splits by lines, tables by
+// rows with the header repeated, lists by items; paragraphs and charts are
+// atomic; a heading is never left last on a sheet), and only then mounts
+// charts into their placed boxes. All geometry is set through CSSOM — the CSP
+// drops style="" attributes in markup, but programmatic assignment is exempt.
+
+const MM_PX = 96 / 25.4
+const PAPER = { A4: { w: 210, h: 297 }, letter: { w: 215.9, h: 279.4 } }
+const SHEET_SLACK = 2 // px kept free per sheet; the invariant must never ride the boundary
+const SPLIT_MIN = { lines: 3, rows: 2, items: 2 }
+
+function docGeometry(doc) {
+	const page = (doc && doc.page) || {}
+	const paper = PAPER[page.size === 'letter' ? 'letter' : 'A4']
+	const land = page.orientation === 'landscape'
+	const wMm = land ? paper.h : paper.w
+	const hMm = land ? paper.w : paper.h
+	const marginMm = /^\d+(\.\d+)?mm$/.test(page.margin || '') ? parseFloat(page.margin) : 15
+	return { wMm, hMm, marginMm, wPx: wMm * MM_PX }
+}
+
+/** The @page rule must match the sheet geometry or the print dialog re-flows.
+ *  A constructed stylesheet is CSSOM, so the CSP's style-src does not apply;
+ *  the interpolated values are derived from validated enums and mm lengths. */
+let pageRuleSheet = null
+function setPageRule(geo) {
+	try {
+		if (!pageRuleSheet) {
+			pageRuleSheet = new CSSStyleSheet()
+			document.adoptedStyleSheets = [...document.adoptedStyleSheets, pageRuleSheet]
+		}
+		pageRuleSheet.replaceSync(`@page { size: ${geo.wMm}mm ${geo.hMm}mm; margin: 0 }`)
+	} catch { /* constructed stylesheets unavailable — the print dialog's paper choice rules */ }
+}
+
+function newSheet(geo, cls) {
+	const sheet = document.createElement('section')
+	sheet.className = 'sheet' + (cls ? ' ' + cls : '')
+	sheet.style.width = geo.wMm + 'mm'
+	sheet.style.height = geo.hMm + 'mm'
+	sheet.style.padding = geo.marginMm + 'mm'
+	return sheet
+}
+
+function stripEl(cls, spec) {
+	const el = document.createElement('div')
+	el.className = cls
+	for (const slot of ['left', 'center', 'right']) {
+		const s = document.createElement('span')
+		s.className = 'strip-' + slot
+		s.textContent = spec && typeof spec[slot] === 'string' ? spec[slot] : ''
+		el.appendChild(s)
+	}
+	return el
+}
+
+/** {{pageNumber}}/{{totalPages}} become text AFTER assembly — the packer knows
+ *  both. Substitution is textContent-only; unknown vars stay literal (warned). */
+function substitutePageVars(scaleEl, total) {
+	;[...scaleEl.querySelectorAll('.sheet')].forEach((sheet, i) => {
+		for (const s of sheet.querySelectorAll('.sheet-hdr span, .sheet-ftr span'))
+			s.textContent = s.textContent
+				.replace(/\{\{\s*pageNumber\s*\}\}/g, String(i + 1))
+				.replace(/\{\{\s*totalPages\s*\}\}/g, String(total))
+	})
+}
+
+// ---- fragment emitters ----
+// A fragment is one packable unit: {el, kind} where kind names how it may be
+// split ('lines' | 'rows' | 'items' | null = atomic), plus flags the packer
+// reads (brk = start a new sheet first, heading = orphan rule applies).
+
+let docAnchorSeq = 0
+
+function mdFragments(block, entries, depth) {
+	const tmp = document.createElement('div')
+	tmp.innerHTML = md.render(block.text || '')
+	const out = []
+	for (const child of [...tmp.children]) {
+		const wrap = document.createElement('div')
+		wrap.className = 'md doc-frag'
+		wrap.appendChild(child)
+		const tag = child.tagName
+		const frag = { el: wrap, kind: null }
+		if (tag === 'PRE') frag.kind = 'lines'
+		else if (tag === 'TABLE') frag.kind = 'rows'
+		else if (tag === 'UL' || tag === 'OL') frag.kind = 'items'
+		else if (/^H[1-6]$/.test(tag)) {
+			frag.heading = true
+			wrap.classList.add('doc-h')
+			const level = Number(tag[1])
+			if (level <= depth) {
+				const anchor = String(++docAnchorSeq)
+				wrap.dataset.docAnchor = anchor
+				entries.push({ text: child.textContent, level, anchor })
+			}
+		}
+		out.push(frag)
+	}
+	return out
+}
+
+function htmlFragment(html, entryTitle, entries) {
+	const tmp = document.createElement('div')
+	tmp.innerHTML = html
+	const el = tmp.firstElementChild
+	if (entryTitle) {
+		const anchor = String(++docAnchorSeq)
+		el.dataset.docAnchor = anchor
+		entries.push({ text: entryTitle, level: 'block', anchor })
+	}
+	return el
+}
+
+/** Flatten the canvas into fragments + TOC entries. Chapters (pages) force a
+ *  new sheet and contribute top-level entries. */
+function docFragments(canvas, doc) {
+	const depth = doc.toc && [1, 2, 3].includes(doc.toc.depth) ? doc.toc.depth : 2
+	const chapters = Array.isArray(canvas.pages)
+		? canvas.pages.map((p) => ({ name: p.name, blocks: p.blocks || [] }))
+		: [{ name: null, blocks: canvas.blocks || [] }]
+	const flatBlocks = []
+	const fragments = []
+	const entries = []
+	docAnchorSeq = 0
+	chapters.forEach((chapter, ci) => {
+		if (chapter.name) {
+			const head = document.createElement('div')
+			head.className = 'chapter-head'
+			const rule = document.createElement('div')
+			rule.className = 'ch-rule'
+			const name = document.createElement('div')
+			name.className = 'ch-name'
+			name.textContent = chapter.name
+			head.appendChild(rule)
+			head.appendChild(name)
+			const anchor = String(++docAnchorSeq)
+			head.dataset.docAnchor = anchor
+			entries.push({ text: chapter.name, level: 0, anchor })
+			fragments.push({ el: head, kind: null, brk: ci > 0 || undefined, heading: true })
+		}
+		for (const b of chapter.blocks) {
+			if (!b || typeof b !== 'object')
+				continue
+			if (b.type === 'markdown') {
+				fragments.push(...mdFragments(b, entries, depth))
+			} else if (b.type === 'chart') {
+				fragments.push({ el: htmlFragment(renderChartShell(b, 0), b.title, entries), kind: null, chart: b })
+			} else if (b.type === 'kpi') {
+				fragments.push({ el: htmlFragment(renderKpi(b), null, entries), kind: null })
+			} else if (b.type === 'table') {
+				const el = htmlFragment(renderTable(b), b.title, entries)
+				fragments.push({ el, kind: 'rows' })
+			}
+		}
+		flatBlocks.push(...chapter.blocks)
+	})
+	// Chart boxes index into the flattened block list; number them in order.
+	const chartFrags = fragments.filter((f) => f.chart)
+	chartFrags.forEach((f) => {
+		const box = f.el.querySelector('[data-chart]')
+		box.dataset.chart = String(flatBlocks.indexOf(f.chart))
+	})
+	return { fragments, entries, flatBlocks }
+}
+
+// ---- splitting ----
+
+function cloneChain(root, target) {
+	const path = []
+	let n = target
+	while (n && n !== root) {
+		path.unshift(n)
+		n = n.parentElement
+	}
+	const cloneRoot = root.cloneNode(false)
+	let parent = cloneRoot
+	for (const node of path) {
+		const c = node.cloneNode(false)
+		parent.appendChild(c)
+		parent = c
+	}
+	return { root: cloneRoot, target: parent }
+}
+
+function boundaryAfterLine(code, k) {
+	const walker = document.createTreeWalker(code, NodeFilter.SHOW_TEXT)
+	let seen = 0
+	for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+		const text = node.nodeValue
+		for (let i = 0; i < text.length; i++) {
+			if (text[i] === '\n' && ++seen === k)
+				return { node, offset: i + 1 }
+		}
+	}
+	return null
+}
+
+/** Truncate the fragment's <pre> to `keep` lines in place and return a new
+ *  fragment holding the rest. Range.extractContents splits any hljs span that
+ *  crosses the boundary — DOM surgery, never string surgery. */
+function splitPreAtLine(fragRoot, keep) {
+	const pre = fragRoot.querySelector('pre')
+	const code = pre.querySelector('code') || pre
+	const b = boundaryAfterLine(code, keep)
+	if (!b)
+		return null
+	const range = document.createRange()
+	range.setStart(b.node, b.offset)
+	range.setEnd(code, code.childNodes.length)
+	const restContent = range.extractContents()
+	const chain = cloneChain(fragRoot, code)
+	chain.target.appendChild(restContent)
+	return chain.root
+}
+
+/** Move trailing units (rows/items) out into a continuation fragment. Tables
+ *  repeat their <thead>; an <ol> continuation keeps its numbering. */
+function splitUnits(fragRoot, kind, keep) {
+	const target = kind === 'rows'
+		? (fragRoot.querySelector('table') && fragRoot.querySelector('table').tBodies[0])
+		: fragRoot.querySelector('ul, ol')
+	if (!target)
+		return null
+	const units = kind === 'rows' ? [...target.rows] : [...target.children].filter((n) => n.tagName === 'LI')
+	if (keep >= units.length)
+		return null
+	const chain = cloneChain(fragRoot, target)
+	if (kind === 'rows') {
+		const thead = fragRoot.querySelector('table').tHead
+		if (thead)
+			chain.target.parentElement.insertBefore(thead.cloneNode(true), chain.target)
+	} else if (target.tagName === 'OL') {
+		chain.target.setAttribute('start', String((Number(target.getAttribute('start')) || 1) + keep))
+	}
+	units.slice(keep).forEach((u) => chain.target.appendChild(u))
+	return chain.root
+}
+
+/**
+ * Split fragment `f` so its first part fits in `avail` px. Mutates f.el into
+ * the first part and returns the continuation fragment, or null when no split
+ * keeps the minimum chunk. `scratch` is a standalone measuring body at content
+ * width. Sizing is conservative (floor − slack) — a miss sends the whole first
+ * part to the next sheet, which is layout-valid, never an overflow.
+ */
+function trySplit(f, avail, scratch) {
+	scratch.textContent = ''
+	scratch.appendChild(f.el)
+	const totalH = f.el.getBoundingClientRect().height
+	let rest = null
+	if (f.kind === 'lines') {
+		const code = f.el.querySelector('pre code') || f.el.querySelector('pre')
+		const text = code.textContent
+		const lineCount = text.split('\n').length - (text.endsWith('\n') ? 1 : 0)
+		if (lineCount >= SPLIT_MIN.lines + 1) {
+			const lineH = totalH / Math.max(lineCount, 1) > 0 ? (code.getBoundingClientRect().height / lineCount) : 18
+			const overhead = totalH - code.getBoundingClientRect().height
+			let keep = Math.floor((avail - overhead - SHEET_SLACK) / lineH)
+			keep = Math.min(keep, lineCount - 1)
+			if (keep >= SPLIT_MIN.lines)
+				rest = splitPreAtLine(f.el, keep)
+		}
+	} else if (f.kind === 'rows' || f.kind === 'items') {
+		const min = SPLIT_MIN[f.kind]
+		const target = f.kind === 'rows'
+			? (f.el.querySelector('table') && f.el.querySelector('table').tBodies[0])
+			: f.el.querySelector('ul, ol')
+		const units = target ? (f.kind === 'rows' ? [...target.rows] : [...target.children].filter((n) => n.tagName === 'LI')) : []
+		if (units.length >= min + 1) {
+			const heights = units.map((u) => u.getBoundingClientRect().height)
+			const overhead = totalH - heights.reduce((a, b) => a + b, 0)
+			let used = overhead + SHEET_SLACK
+			let keep = 0
+			while (keep < units.length && used + heights[keep] <= avail) {
+				used += heights[keep]
+				keep++
+			}
+			keep = Math.min(keep, units.length - 1)
+			if (keep >= min)
+				rest = splitUnits(f.el, f.kind, keep)
+		}
+	}
+	f.el.remove()
+	return rest ? { el: rest, kind: f.kind } : null
+}
+
+// ---- the packer ----
+
+/**
+ * Pack fragments into sheets. The measuring body IS a real sheet body inside a
+ * hidden replica (same strips, same width), so `scrollHeight <= clientHeight`
+ * during packing is literally the invariant the printed page depends on.
+ */
+function packFragments(fragments, geo, doc, host) {
+	const measure = document.createElement('div')
+	measure.className = 'doc-measure'
+	// Budget probe: a real fixed-height sheet with the strips and an empty
+	// body — its body's clientHeight IS the per-sheet content budget.
+	const probe = newSheet(geo)
+	if (doc.header)
+		probe.appendChild(stripEl('sheet-hdr', doc.header))
+	const probeBody = document.createElement('div')
+	probeBody.className = 'sheet-body'
+	probe.appendChild(probeBody)
+	if (doc.footer)
+		probe.appendChild(stripEl('sheet-ftr', doc.footer))
+	measure.appendChild(probe)
+	// Measuring sheets grow with content (height:auto — scrollHeight of a
+	// fixed box is clamped to its clientHeight and would always "fit").
+	const makeGrowingBody = () => {
+		const sheet = newSheet(geo)
+		sheet.style.height = 'auto'
+		const body = document.createElement('div')
+		body.className = 'sheet-body'
+		sheet.appendChild(body)
+		measure.appendChild(sheet)
+		return body
+	}
+	const measBody = makeGrowingBody()
+	const scratch = makeGrowingBody()
+	host.appendChild(measure)
+
+	const budget = probeBody.clientHeight - SHEET_SLACK
+	const fits = () => measBody.scrollHeight <= budget
+
+	const sheets = []
+	const flush = (clipped) => {
+		if (!measBody.children.length)
+			return
+		const sheet = newSheet(geo)
+		if (doc.header)
+			sheet.appendChild(stripEl('sheet-hdr', doc.header))
+		const body = document.createElement('div')
+		body.className = 'sheet-body'
+		while (measBody.firstChild)
+			body.appendChild(measBody.firstChild)
+		sheet.appendChild(body)
+		if (doc.footer)
+			sheet.appendChild(stripEl('sheet-ftr', doc.footer))
+		if (clipped) {
+			sheet.classList.add('clipped')
+			const note = document.createElement('div')
+			note.className = 'clip-note'
+			note.textContent = 'Content clipped — this element is taller than one page. Split the source into smaller blocks.'
+			sheet.appendChild(note)
+		}
+		sheets.push(sheet)
+	}
+
+	const pending = fragments.slice()
+	while (pending.length) {
+		const f = pending.shift()
+		if (f.brk && measBody.children.length)
+			flush()
+		measBody.appendChild(f.el)
+		if (fits())
+			continue
+		f.el.remove()
+		const avail = budget - measBody.scrollHeight
+		if (f.kind) {
+			const restFrag = trySplit(f, avail, scratch)
+			if (restFrag) {
+				measBody.appendChild(f.el)
+				if (fits()) {
+					pending.unshift(restFrag)
+					flush()
+					continue
+				}
+				// Conservative sizing missed: both parts move on, still valid.
+				f.el.remove()
+				pending.unshift(restFrag)
+				pending.unshift({ el: f.el, kind: f.kind })
+				flush()
+				continue
+			}
+		}
+		if (!measBody.children.length) {
+			// Atomic and taller than a whole page: own sheet, clipped, said out loud.
+			measBody.appendChild(f.el)
+			flush(true)
+			continue
+		}
+		// Orphan rule: never leave a heading as the last element on a sheet.
+		const last = measBody.lastElementChild
+		pending.unshift(f)
+		if (last && (last.classList.contains('doc-h') || last.classList.contains('chapter-head'))) {
+			last.remove()
+			pending.unshift({ el: last, kind: null, heading: true })
+		}
+		flush()
+	}
+	flush()
+	measure.remove()
+	return sheets
+}
+
+// ---- special sheets ----
+
+function addLogo(parent, logo, cls) {
+	if (typeof logo !== 'string' || !/^data:image\//i.test(logo))
+		return
+	const img = document.createElement('img')
+	img.className = cls
+	img.alt = ''
+	img.setAttribute('src', logo)
+	parent.appendChild(img)
+}
+
+function buildCover(geo, cover) {
+	const sheet = newSheet(geo, 'sheet-cover')
+	addLogo(sheet, cover.logo, 'cover-logo')
+	const rule = document.createElement('div')
+	rule.className = 'cover-rule'
+	sheet.appendChild(rule)
+	const title = document.createElement('h1')
+	title.className = 'cover-title'
+	title.textContent = cover.title || ''
+	sheet.appendChild(title)
+	if (cover.subtitle) {
+		const sub = document.createElement('div')
+		sub.className = 'cover-sub'
+		sub.textContent = cover.subtitle
+		sheet.appendChild(sub)
+	}
+	const meta = document.createElement('div')
+	meta.className = 'cover-meta'
+	for (const part of [cover.author, cover.date]) {
+		if (!part)
+			continue
+		const s = document.createElement('span')
+		s.textContent = part
+		meta.appendChild(s)
+	}
+	sheet.appendChild(meta)
+	const band = document.createElement('div')
+	band.className = 'cover-band'
+	sheet.appendChild(band)
+	return sheet
+}
+
+function buildBackCover(geo, back) {
+	const sheet = newSheet(geo, 'sheet-back')
+	addLogo(sheet, back.logo, 'back-logo')
+	if (back.title) {
+		const t = document.createElement('div')
+		t.className = 'back-title'
+		t.textContent = back.title
+		sheet.appendChild(t)
+	}
+	if (back.text) {
+		const x = document.createElement('div')
+		x.className = 'back-text'
+		x.textContent = back.text
+		sheet.appendChild(x)
+	}
+	const band = document.createElement('div')
+	band.className = 'cover-band'
+	sheet.appendChild(band)
+	return sheet
+}
+
+/** TOC rows as fragments (packed like everything else — a long report's TOC
+ *  may span sheets). Entries only, dotted leaders, NO page numbers: the human
+ *  print dialog can change paper or scale, and printed numbers must not lie. */
+function tocFragments(doc, entries) {
+	const frags = []
+	const head = document.createElement('div')
+	head.className = 'toc-head doc-h'
+	const rule = document.createElement('div')
+	rule.className = 'ch-rule'
+	const t = document.createElement('div')
+	t.className = 'toc-title'
+	t.textContent = (doc.toc && doc.toc.title) || 'Contents'
+	head.appendChild(rule)
+	head.appendChild(t)
+	frags.push({ el: head, kind: null, heading: true })
+	for (const e of entries) {
+		const row = document.createElement('div')
+		row.className = 'toc-entry lvl' + (e.level === 'block' ? 'B' : e.level)
+		row.dataset.target = e.anchor
+		const label = document.createElement('span')
+		label.className = 'toc-label'
+		label.textContent = e.text
+		const dots = document.createElement('span')
+		dots.className = 'dots'
+		row.appendChild(label)
+		row.appendChild(dots)
+		frags.push({ el: row, kind: null })
+	}
+	return frags
+}
+
+// ---- assembly ----
+
+function fitDeck(main, deckEl, scaleEl, geo) {
+	const avail = Math.max(320, main.clientWidth - 64)
+	const scale = Math.min(1, avail / geo.wPx)
+	scaleEl.style.transform = scale < 1 ? `scale(${scale})` : ''
+	deckEl.style.height = Math.ceil(scaleEl.getBoundingClientRect().height) + 'px'
+}
+
+async function renderDocumentDeck(main, canvas) {
+	const doc = canvas.document
+	const geo = docGeometry(doc)
+	setPageRule(geo)
+	main.innerHTML = '<div class="canvas doc-mode"><div class="deck"><div class="deck-scale"></div></div></div>'
+	const rootEl = main.querySelector('.doc-mode')
+	applyDocumentTheme(rootEl, doc)
+	const deckEl = main.querySelector('.deck')
+	const scaleEl = main.querySelector('.deck-scale')
+
+	const { fragments, entries, flatBlocks } = docFragments(canvas, doc)
+	// Images must have their real size before measuring, or a sheet overflows
+	// the moment they decode. All srcs are data: URIs, so this is near-instant.
+	await Promise.all(fragments
+		.flatMap((f) => [...f.el.querySelectorAll('img')])
+		.map((img) => img.decode().catch(() => {})))
+
+	const sheets = []
+	if (doc.cover && typeof doc.cover === 'object')
+		sheets.push(buildCover(geo, doc.cover))
+	if (doc.toc && typeof doc.toc === 'object')
+		sheets.push(...packFragments(tocFragments(doc, entries), geo, doc, rootEl))
+	sheets.push(...packFragments(fragments, geo, doc, rootEl))
+	if (doc.backCover && typeof doc.backCover === 'object')
+		sheets.push(buildBackCover(geo, doc.backCover))
+	if (!sheets.length)
+		sheets.push(newSheet(geo))
+	for (const s of sheets)
+		scaleEl.appendChild(s)
+	substitutePageVars(scaleEl, sheets.length)
+
+	fitDeck(main, deckEl, scaleEl, geo)
+	const ro = new ResizeObserver(() => fitDeck(main, deckEl, scaleEl, geo))
+	ro.observe(main)
+	state.observers.push(ro)
+
+	scaleEl.addEventListener('click', (e) => {
+		const entry = e.target.closest('.toc-entry')
+		if (!entry)
+			return
+		const target = scaleEl.querySelector(`[data-doc-anchor="${entry.dataset.target}"]`)
+		const sheet = target && target.closest('.sheet')
+		if (sheet)
+			sheet.scrollIntoView({ behavior: 'smooth', block: 'start' })
+	})
+
+	mountCodeCopy(main)
+	mountCharts(flatBlocks)
+}
+
 // ---------------------------------------------------------------- canvas view
 
 function renderErrors(id, errors) {
@@ -1546,6 +2106,12 @@ async function renderCanvas() {
 	state.canvasDoc = canvas
 	state.session = json.session || null
 
+	// Document mode: the deck of paper sheets replaces the continuous view.
+	if (canvas.document && typeof canvas.document === 'object') {
+		await renderDocumentDeck(main, canvas)
+		return
+	}
+
 	const pages = Array.isArray(canvas.pages) ? canvas.pages : [{ name: '', blocks: canvas.blocks || [] }]
 	if (state.activePage >= pages.length) state.activePage = 0
 	const page = pages[state.activePage]
@@ -1565,13 +2131,10 @@ async function renderCanvas() {
 		return ''
 	}).join('')
 
-	const isDoc = canvas.document && typeof canvas.document === 'object'
-	main.innerHTML = `<div class="canvas${isDoc ? ' doc-mode' : ''}">
+	main.innerHTML = `<div class="canvas">
 		<div class="canvas-head"><h1>${esc(canvas.title)}</h1><div class="sub">${esc(state.activeId)}</div></div>
 		${tabs}${inner}
 	</div>`
-	if (isDoc)
-		applyDocumentTheme(main.querySelector('.doc-mode'), canvas.document)
 	mountCodeCopy(main)
 	mountCharts(blocks)
 	wireInteractive(blocks)

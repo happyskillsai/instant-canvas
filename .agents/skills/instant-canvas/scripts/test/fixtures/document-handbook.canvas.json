@@ -1,0 +1,14 @@
+{
+	"instantcanvas": 1,
+	"createdWith": "0.1.0",
+	"title": "Handbook as a document",
+	"description": "The markdown torture test rendered as paper sheets",
+	"document": {
+		"toc": { "depth": 2 },
+		"header": { "left": "Markdown Handbook" },
+		"footer": { "right": "Page {{pageNumber}} of {{totalPages}}" }
+	},
+	"blocks": [
+		{ "type": "markdown", "src": "handbook.md" }
+	]
+}

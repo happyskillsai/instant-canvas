@@ -553,3 +553,103 @@ select.inp{appearance:auto}
 /* body never scrolls (.app is 100vh) — .main is the real scroller, so lock that. */
 body.modal-open .main{overflow:hidden}
 .tree-empty{padding:16px;color:var(--muted)}
+
+/* ============================================================ document mode
+   Sheets are literal page-sized boxes: one sheet == one printed page, by
+   construction. Geometry (mm width/height/padding, the screen scale) is set
+   through CSSOM in app.js — the CSP drops style="" markup but exempts
+   programmatic assignment. EVERYTHING here must keep the invariant:
+   sheet.scrollHeight <= clientHeight (a 3px overflow prints a sliver page). */
+
+.doc-mode .deck{padding:8px 0 48px}
+.deck-scale{transform-origin:top center;display:flex;flex-direction:column;gap:28px;align-items:center}
+
+/* Paper is always light: the LIGHT token set is forced here so every block
+   rendered inside a sheet ignores the app theme (dark app, white paper).
+   Mirrors the :root light block above — keep in step with it. --accent maps
+   to the document's brand accent. */
+.sheet{
+	--bg:#f4f5f8; --panel:#ffffff; --panel-2:#fafbfc; --text:#1a1d24; --muted:#6b7280;
+	--border:#e6e8ec; --border-2:#eef0f3; --accent:var(--doc-accent); --accent-soft:#eef0fe;
+	--green:#10b981; --amber:#f59e0b; --red:#ef4444;
+	--code-kw:#6d28d9; --code-str:#047857; --code-num:#b45309; --code-fn:#0e7490;
+	--code-var:#be185d; --code-cmt:#6b7280; --code-meta:#4b5563; --code-add:#065f46; --code-del:#b91c1c;
+	color-scheme:light;
+	position:relative;box-sizing:border-box;overflow:hidden;
+	display:flex;flex-direction:column;flex-shrink:0;
+	background:#fff;color:var(--text);
+	box-shadow:0 2px 6px rgba(16,20,30,.14),0 18px 44px rgba(16,20,30,.18);
+}
+/* flow-root: edge margins stay INSIDE the body/fragment boxes, so cumulative
+   measurement in the packer sees exactly what the fixed sheet will contain. */
+.sheet-body{flex:1 1 auto;min-height:0;display:flow-root}
+.doc-frag{display:flow-root}
+.sheet .block.card{box-shadow:none;border:1px solid var(--border)}
+
+/* running header/footer — ordinary DOM inside each sheet, so they survive
+   Cmd+P exactly like they survive the print command */
+.sheet-hdr,.sheet-ftr{display:flex;align-items:baseline;gap:12px;font-size:11px;color:var(--muted);flex-shrink:0}
+.sheet-hdr{border-bottom:1px solid var(--border);padding-bottom:6px;margin-bottom:14px}
+.sheet-ftr{border-top:1px solid var(--border);padding-top:6px;margin-top:12px}
+.strip-left{flex:1;text-align:left}
+.strip-center{flex:1;text-align:center}
+.strip-right{flex:1;text-align:right}
+
+/* cover / back cover */
+.sheet-cover{justify-content:flex-end}
+.cover-logo{width:48px;height:48px;object-fit:contain;position:absolute;top:14mm;left:15mm}
+.cover-rule{width:76px;height:5px;border-radius:3px;background:var(--doc-accent);margin-bottom:20px}
+.cover-title{font-size:44px;font-weight:800;letter-spacing:-.02em;line-height:1.08;margin:0 0 12px}
+.cover-sub{font-size:18px;color:var(--muted);margin-bottom:34px}
+.cover-meta{display:flex;gap:22px;font-size:13px;color:var(--muted);margin-bottom:16mm}
+.cover-band{position:absolute;left:0;right:0;bottom:0;height:9mm;background:var(--doc-accent)}
+.sheet-back{align-items:center;justify-content:center;text-align:center}
+.back-logo{width:42px;height:42px;object-fit:contain;margin-bottom:20px}
+.back-title{font-size:30px;font-weight:750;margin-bottom:10px}
+.back-text{color:var(--muted);max-width:72%;line-height:1.6}
+
+/* table of contents — entries only, dotted leaders, NO page numbers */
+.toc-title{font-size:30px;font-weight:750;margin:0}
+.toc-head{margin-bottom:9mm}
+.toc-head .ch-rule{margin-bottom:14px}
+.toc-entry{display:flex;align-items:baseline;gap:10px;padding:5px 0;font-size:14px;cursor:pointer}
+.toc-entry .toc-label{flex-shrink:1;min-width:0}
+.toc-entry .dots{flex:1;border-bottom:2px dotted var(--border);min-width:24px;transform:translateY(-3px)}
+.toc-entry.lvl0{font-weight:700;font-size:15px;margin-top:12px}
+.toc-entry.lvl2,.toc-entry.lvlB{padding-left:20px}
+.toc-entry.lvl3{padding-left:40px}
+.toc-entry:hover .toc-label{color:var(--doc-accent)}
+
+/* chapters */
+.chapter-head{margin:2mm 0 8mm}
+.chapter-head .ch-rule,.toc-head .ch-rule{width:64px;height:4px;border-radius:2px;background:var(--doc-accent)}
+.chapter-head .ch-rule{margin-bottom:12px}
+.chapter-head .ch-name{font-size:32px;font-weight:750;letter-spacing:-.02em}
+
+/* oversized atomic content: clipped on its own sheet, said out loud */
+.clip-note{position:absolute;left:0;right:0;bottom:0;background:var(--amber);color:#38300a;
+	font-size:12px;font-weight:600;text-align:center;padding:6px 16px}
+
+/* hidden measuring replica — same geometry, same tokens, never visible */
+.doc-measure{position:absolute;left:-100000px;top:0;visibility:hidden;pointer-events:none}
+.doc-measure .sheet{box-shadow:none}
+
+/* ------------------------------------------------------------------- print
+   The sheets ARE the pages. Chrome hiding is gated on a deck being present so
+   printing a classic (non-document) canvas is untouched. The @page size rule
+   is injected per-canvas via a constructed stylesheet (CSSOM) in app.js. */
+@media print{
+	html{print-color-adjust:exact;-webkit-print-color-adjust:exact}
+	body:has(.deck) .topbar,
+	body:has(.deck) .sidebar,
+	body:has(.deck) .code-copy{display:none !important}
+	body:has(.deck) .app{display:block;height:auto}
+	body:has(.deck) .body{display:block}
+	body:has(.deck) .main{overflow:visible;padding:0;margin:0}
+	body:has(.deck) .canvas{padding:0;margin:0}
+	body:has(.deck){background:#fff}
+	.doc-mode .deck{padding:0;height:auto !important}
+	.deck-scale{transform:none !important;display:block}
+	.sheet{box-shadow:none;margin:0}
+	.sheet:not(:last-child){break-after:page;page-break-after:always}
+}

@@ -1,0 +1,18 @@
+{
+	"instantcanvas": 1,
+	"createdWith": "0.1.0",
+	"title": "Split fixture",
+	"description": "A code block taller than one sheet: must split by lines, no loss, no dupes",
+	"document": {
+		"footer": {
+			"left": "Split fixture",
+			"right": "Page {{pageNumber}} of {{totalPages}}"
+		}
+	},
+	"blocks": [
+		{
+			"type": "markdown",
+			"text": "# Long listing\n\nSPLIT-INTRO The fence below cannot fit one sheet.\n\n```js\nconst line_001 = 1 // marker\nconst line_002 = 2 // marker\nconst line_003 = 3 // marker\nconst line_004 = 4 // marker\nconst line_005 = 5 // marker\nconst line_006 = 6 // marker\nconst line_007 = 7 // marker\nconst line_008 = 8 // marker\nconst line_009 = 9 // marker\nconst line_010 = 10 // marker\nconst line_011 = 11 // marker\nconst line_012 = 12 // marker\nconst line_013 = 13 // marker\nconst line_014 = 14 // marker\nconst line_015 = 15 // marker\nconst line_016 = 16 // marker\nconst line_017 = 17 // marker\nconst line_018 = 18 // marker\nconst line_019 = 19 // marker\nconst line_020 = 20 // marker\nconst line_021 = 21 // marker\nconst line_022 = 22 // marker\nconst line_023 = 23 // marker\nconst line_024 = 24 // marker\nconst line_025 = 25 // marker\nconst line_026 = 26 // marker\nconst line_027 = 27 // marker\nconst line_028 = 28 // marker\nconst line_029 = 29 // marker\nconst line_030 = 30 // marker\nconst line_031 = 31 // marker\nconst line_032 = 32 // marker\nconst line_033 = 33 // marker\nconst line_034 = 34 // marker\nconst line_035 = 35 // marker\nconst line_036 = 36 // marker\nconst line_037 = 37 // marker\nconst line_038 = 38 // marker\nconst line_039 = 39 // marker\nconst line_040 = 40 // marker\nconst line_041 = 41 // marker\nconst line_042 = 42 // marker\nconst line_043 = 43 // marker\nconst line_044 = 44 // marker\nconst line_045 = 45 // marker\nconst line_046 = 46 // marker\nconst line_047 = 47 // marker\nconst line_048 = 48 // marker\nconst line_049 = 49 // marker\nconst line_050 = 50 // marker\nconst line_051 = 51 // marker\nconst line_052 = 52 // marker\nconst line_053 = 53 // marker\nconst line_054 = 54 // marker\nconst line_055 = 55 // marker\nconst line_056 = 56 // marker\nconst line_057 = 57 // marker\nconst line_058 = 58 // marker\nconst line_059 = 59 // marker\nconst line_060 = 60 // marker\nconst line_061 = 61 // marker\nconst line_062 = 62 // marker\nconst line_063 = 63 // marker\nconst line_064 = 64 // marker\nconst line_065 = 65 // marker\nconst line_066 = 66 // marker\nconst line_067 = 67 // marker\nconst line_068 = 68 // marker\nconst line_069 = 69 // marker\nconst line_070 = 70 // marker\nconst line_071 = 71 // marker\nconst line_072 = 72 // marker\nconst line_073 = 73 // marker\nconst line_074 = 74 // marker\nconst line_075 = 75 // marker\nconst line_076 = 76 // marker\nconst line_077 = 77 // marker\nconst line_078 = 78 // marker\nconst line_079 = 79 // marker\nconst line_080 = 80 // marker\nconst line_081 = 81 // marker\nconst line_082 = 82 // marker\nconst line_083 = 83 // marker\nconst line_084 = 84 // marker\nconst line_085 = 85 // marker\nconst line_086 = 86 // marker\nconst line_087 = 87 // marker\nconst line_088 = 88 // marker\nconst line_089 = 89 // marker\nconst line_090 = 90 // marker\n```\n\nSPLIT-OUTRO Text after the fence."
+		}
+	]
+}

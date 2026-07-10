@@ -13,7 +13,7 @@ const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
 const http = require('node:http')
-const { spawn } = require('node:child_process')
+const { spawn, execFileSync } = require('node:child_process')
 
 process.env.INSTANTCANVAS_STATE_DIR = process.env.INSTANTCANVAS_STATE_DIR || fs.mkdtempSync(path.join(os.tmpdir(), 'ic-doc-state-'))
 const STATE_DIR = process.env.INSTANTCANVAS_STATE_DIR
@@ -27,6 +27,12 @@ const KERNEL = path.join(__dirname, '..', 'kernel.js')
 const FIXTURES = path.join(__dirname, 'fixtures')
 const CHROME = findChrome()
 const browserSkip = CHROME ? false : 'Chrome not found — set CHROME_PATH to run the document browser tests'
+
+// PDF text assertions need poppler; they skip (with a message) without it.
+let hasPoppler = true
+try { execFileSync('pdftotext', ['-v'], { stdio: 'ignore' }) } catch { hasPoppler = false }
+const pdfPageText = (file, n) => execFileSync('pdftotext', ['-f', String(n), '-l', String(n), file, '-'], { encoding: 'utf8' })
+const pdfPageCount = (buf) => Math.max(...[...buf.toString('latin1').matchAll(/\/Count\s+(\d+)/g)].map((m) => Number(m[1])))
 
 const codes = (r) => r.errors.map((e) => e.code)
 const warns = (r) => r.warnings.map((w) => w.code)
@@ -255,6 +261,10 @@ test.before(async () => {
 			{ type: 'chart', kind: 'line', title: 'Trend', data: [{ x: 'a', y: 1, y2: 2 }, { x: 'b', y: 3, y2: 1 }], encoding: { x: 'x', y: ['y', 'y2'] } },
 		],
 	}))
+	fs.copyFileSync(path.join(FIXTURES, 'document-split.canvas.json'), path.join(root, 'split.canvas.json'))
+	fs.copyFileSync(path.join(FIXTURES, 'document-handbook.canvas.json'), path.join(root, 'handbook.canvas.json'))
+	fs.copyFileSync(path.join(FIXTURES, 'handbook.md'), path.join(root, 'handbook.md'))
+	fs.copyFileSync(path.join(FIXTURES, 'assets', 'diagram.svg'), path.join(root, 'assets', 'diagram.svg'))
 	K.root = root
 	K.child = spawn(process.execPath, [KERNEL, root], {
 		env: { ...process.env, INSTANTCANVAS_STATE_DIR: STATE_DIR },
@@ -274,8 +284,12 @@ test.before(async () => {
 		K.child.kill('SIGKILL')
 		throw new Error('kernel did not come up')
 	}
-	if (CHROME)
+	if (CHROME) {
 		themeSnap = await driveThemedCanvas()
+		deckDrive = await driveDeck('report.canvas.json', 4, 2)
+		splitDrive = await driveDeck('split.canvas.json', 2, 0)
+		handbookDrive = await driveDeck('handbook.canvas.json', 3, 0)
+	}
 })
 
 test.after(() => {
@@ -327,7 +341,8 @@ const SNAPSHOT_JS = `
 			csp: window.__csp || [],
 			styleEls: document.querySelectorAll('style').length,
 			offenders: [...document.querySelectorAll('.canvas [style]')]
-				.filter((el) => !el.closest('.chart-box')).map((el) => el.className).slice(0, 5),
+				.filter((el) => !el.closest('.chart-box') && !el.matches('.sheet,.deck,.deck-scale'))
+				.map((el) => el.className).slice(0, 5),
 		};
 	})()
 `
@@ -379,4 +394,183 @@ test('document theming adds zero CSP violations, zero <style>, zero style="" in 
 	assert.deepEqual(themeSnap.dark.csp, [], 'no violations after retheme')
 	assert.equal(themeSnap.light.styleEls, 0, 'no <style> element reached the document')
 	assert.deepEqual(themeSnap.light.offenders, [], 'no style="" attribute outside chart internals')
+})
+
+// ---------------------------------------------------------------- browser: deck + packer
+
+const DECK_SNAPSHOT_JS = `
+	(() => {
+		const sheets = [...document.querySelectorAll('.deck .sheet')];
+		const plots = [...document.querySelectorAll('.js-plotly-plot')];
+		return {
+			sheetCount: sheets.length,
+			// THE invariant: a sheet even 3px too tall prints a sliver page.
+			overflowing: sheets.map((s, i) => ({ i, sh: s.scrollHeight, ch: s.clientHeight }))
+				.filter((x) => x.sh > x.ch),
+			coverIdx: sheets.findIndex((s) => s.classList.contains('sheet-cover')),
+			coverText: (document.querySelector('.sheet-cover') || {}).textContent || '',
+			tocIdx: sheets.findIndex((s) => !!s.querySelector('.toc-title')),
+			tocEntries: [...document.querySelectorAll('.toc-entry .toc-label')].map((e) => e.textContent),
+			backIdx: sheets.findIndex((s) => s.classList.contains('sheet-back')),
+			chapterSheets: [...document.querySelectorAll('.chapter-head')].map((h) => sheets.indexOf(h.closest('.sheet'))),
+			markerOne: sheets.findIndex((s) => s.textContent.includes('MARKER-CHAPTER-ONE-BODY')),
+			markerTwo: sheets.findIndex((s) => s.textContent.includes('MARKER-CHAPTER-TWO-BODY')),
+			hdrSecond: sheets[1] && sheets[1].querySelector('.sheet-hdr') ? sheets[1].querySelector('.sheet-hdr').textContent : '',
+			ftrSample: sheets[2] && sheets[2].querySelector('.sheet-ftr') ? sheets[2].querySelector('.sheet-ftr').textContent : '',
+			unsubstituted: /\\{\\{/.test(document.querySelector('.deck').textContent),
+			logos: [...document.querySelectorAll('.cover-logo, .back-logo')].map((i) => (i.getAttribute('src') || '').slice(0, 22)),
+			boxes: document.querySelectorAll('.chart-box').length,
+			plots: plots.length,
+			drawn: plots.filter((p) => p.querySelector('.main-svg')).length,
+			pres: [...document.querySelectorAll('.deck pre')].map((p) => ({
+				sheet: sheets.indexOf(p.closest('.sheet')),
+				text: (p.querySelector('code') || p).textContent,
+				spans: p.querySelectorAll('[class^="hljs-"], [class*=" hljs-"]').length,
+			})),
+			outroSheet: sheets.findIndex((s) => s.textContent.includes('SPLIT-OUTRO')),
+			csp: window.__csp || [],
+			styleEls: document.querySelectorAll('style').length,
+			offenders: [...document.querySelectorAll('.canvas [style]')]
+				.filter((el) => !el.closest('.chart-box') && !el.matches('.sheet,.deck,.deck-scale'))
+				.map((el) => el.className).slice(0, 5),
+		};
+	})()
+`
+
+let deckDrive = null
+let splitDrive = null
+let handbookDrive = null
+
+async function driveDeck(canvasFile, minSheets, chartCount) {
+	const url = `http://127.0.0.1:${K.port}/?token=${encodeURIComponent(K.token)}#/c/${encodeURIComponent(canvasFile)}`
+	return withChrome(CHROME, url, { onNewDocument: PROBE }, async ({ evaluate, send }) => {
+		const deadline = Date.now() + 30_000
+		for (;;) {
+			const ready = await evaluate(`(() => {
+				const boxes = [...document.querySelectorAll('.chart-box')];
+				return !!(window.ic && window.ic.state.tree
+					&& document.querySelectorAll('.deck .sheet').length >= ${minSheets}
+					&& boxes.length === ${chartCount}
+					&& boxes.every((b) => b.querySelector('.main-svg')));
+			})()`).catch(() => false)
+			if (ready || Date.now() > deadline)
+				break
+			await cdpSleep(250)
+		}
+		await cdpSleep(1000)
+		const snap = await evaluate(DECK_SNAPSHOT_JS)
+		// The same Skia backend as Cmd+P; the sheets must BE the pages.
+		const pdf = await send('Page.printToPDF', {
+			printBackground: true,
+			preferCSSPageSize: true,
+			displayHeaderFooter: false,
+			marginTop: 0, marginBottom: 0, marginLeft: 0, marginRight: 0,
+		})
+		return { snap, pdf: Buffer.from(pdf.data, 'base64') }
+	})
+}
+
+test('the deck renders cover → TOC → chapters → back cover, in order', { skip: browserSkip, timeout: 120_000 }, () => {
+	const s = deckDrive.snap
+	assert.ok(s.sheetCount >= 5, `expected >= 5 sheets, got ${s.sheetCount}`)
+	assert.equal(s.coverIdx, 0, 'cover is the first sheet')
+	assert.match(s.coverText, /Aurora Quarterly Review/)
+	assert.match(s.coverText, /Finance team/)
+	assert.ok(!/Confidential/.test(s.coverText), 'no footer strip on the cover')
+	assert.equal(s.tocIdx, 1, 'TOC follows the cover')
+	assert.equal(s.backIdx, s.sheetCount - 1, 'back cover is the last sheet')
+	assert.equal(s.chapterSheets.length, 2, 'both pages became chapters')
+	assert.ok(s.chapterSheets[1] > s.chapterSheets[0], 'chapter 2 starts on a later sheet')
+	assert.ok(s.markerOne >= 2 && s.markerTwo > s.markerOne, `body markers in document order (${s.markerOne}, ${s.markerTwo})`)
+	assert.equal(s.markerTwo, s.chapterSheets[1], 'chapter 2 content starts on its chapter sheet')
+})
+
+test('every sheet obeys the invariant: scrollHeight <= clientHeight', { skip: browserSkip, timeout: 120_000 }, () => {
+	assert.deepEqual(deckDrive.snap.overflowing, [], 'no sheet overflows its page box')
+	assert.deepEqual(splitDrive.snap.overflowing, [], 'no split-fixture sheet overflows')
+	assert.deepEqual(handbookDrive.snap.overflowing, [], 'no handbook sheet overflows')
+})
+
+test('the markdown handbook packs into sheets: real tables, lists, fences, an inlined SVG', { skip: browserSkip, timeout: 120_000 }, () => {
+	const s = handbookDrive.snap
+	assert.ok(s.sheetCount >= 3, `150 lines of dense markdown need several sheets (got ${s.sheetCount})`)
+	assert.equal(s.tocIdx, 0, 'no cover: the TOC opens the deck')
+	for (const expected of ['The InstantCanvas Handbook', '2. Tables', '6. Headings all the way down'])
+		assert.ok(s.tocEntries.some((t) => t.includes(expected)), `TOC lists "${expected}"`)
+	assert.ok(s.pres.length >= 8, `all eight language fences packed (got ${s.pres.length})`)
+	assert.ok(s.pres.every((p) => p.sheet >= 0), 'every fence landed inside a sheet')
+	assert.equal(pdfPageCount(handbookDrive.pdf), s.sheetCount, 'handbook prints 1:1')
+})
+
+test('TOC lists chapters, headings and block titles — and never page numbers', { skip: browserSkip, timeout: 120_000 }, () => {
+	const entries = deckDrive.snap.tocEntries
+	for (const expected of ['Operations', 'Growth', 'Quarter at a glance', 'Cost detail', 'Cost by service', 'Signups trend', 'Cost per region'])
+		assert.ok(entries.includes(expected), `TOC lists "${expected}" (got: ${entries.join(' | ')})`)
+	assert.ok(entries.every((t) => !/\d\s*$/.test(t)), 'no entry ends in a page number — Cmd+P can repaginate, numbers would lie')
+})
+
+test('running strips substitute {{pageNumber}}/{{totalPages}} and skip the covers', { skip: browserSkip, timeout: 120_000 }, () => {
+	const s = deckDrive.snap
+	assert.match(s.hdrSecond, /Aurora Quarterly Review/, 'header text on the TOC sheet')
+	assert.match(s.hdrSecond, /2 \/ \d+/, 'pageNumber counts the cover as page 1')
+	assert.match(s.ftrSample, /Page \d+ of \d+/, 'footer substitution happened')
+	assert.equal(s.unsubstituted, false, 'no {{var}} left anywhere in the deck')
+})
+
+test('cover and back-cover logos arrive as data: URIs; charts draw inside sheets', { skip: browserSkip, timeout: 120_000 }, () => {
+	const s = deckDrive.snap
+	assert.deepEqual(s.logos, ['data:image/png;base64,', 'data:image/png;base64,'])
+	assert.equal(s.boxes, 2, 'both charts have boxes in the deck')
+	assert.equal(s.plots, 2, 'both mounted')
+	assert.equal(s.drawn, 2, 'both drew an SVG root')
+})
+
+test('the deck adds zero CSP violations, zero <style>, zero stray style=""', { skip: browserSkip, timeout: 120_000 }, () => {
+	for (const d of [deckDrive, splitDrive, handbookDrive]) {
+		assert.deepEqual(d.snap.csp, [], 'no CSP violations')
+		assert.equal(d.snap.styleEls, 0, 'no <style> element')
+		assert.deepEqual(d.snap.offenders, [], 'no style="" outside chart internals and CSSOM geometry')
+	}
+})
+
+test('printToPDF: the sheets ARE the pages — /Count equals the DOM sheet count', { skip: browserSkip, timeout: 120_000 }, () => {
+	assert.equal(pdfPageCount(deckDrive.pdf), deckDrive.snap.sheetCount, 'document-full page count')
+	assert.equal(pdfPageCount(splitDrive.pdf), splitDrive.snap.sheetCount, 'split fixture page count')
+})
+
+test('pdftotext: cover, TOC, body markers and back cover land on their sheets', { skip: browserSkip, timeout: 120_000 }, (t) => {
+	if (!hasPoppler) {
+		t.diagnostic('pdftotext (poppler) not found — PDF text assertions skipped')
+		return
+	}
+	const s = deckDrive.snap
+	const file = path.join(os.tmpdir(), `ic-doc-${process.pid}.pdf`)
+	fs.writeFileSync(file, deckDrive.pdf)
+	// pdftotext breaks large-type lines into separate runs; compare on
+	// whitespace-normalized text.
+	const norm = (t) => t.replace(/\s+/g, ' ')
+	try {
+		const page1 = norm(pdfPageText(file, 1))
+		assert.match(page1, /Aurora Quarterly Review/, 'cover title prints on page 1')
+		assert.ok(!/Confidential/.test(page1), 'no footer strip printed on the cover')
+		assert.match(norm(pdfPageText(file, 2)), /Contents/, 'TOC prints on page 2')
+		assert.match(norm(pdfPageText(file, s.markerOne + 1)), /MARKER-CHAPTER-ONE-BODY/, 'chapter 1 marker on its sheet')
+		assert.match(norm(pdfPageText(file, s.markerTwo + 1)), /MARKER-CHAPTER-TWO-BODY/, 'chapter 2 marker on its sheet')
+		assert.match(norm(pdfPageText(file, s.sheetCount)), /MARKER-BACK-COVER/, 'back cover prints last')
+	} finally {
+		fs.rmSync(file, { force: true })
+	}
+})
+
+test('a code block taller than a page splits across sheets with no lost or duplicated lines', { skip: browserSkip, timeout: 120_000 }, () => {
+	const s = splitDrive.snap
+	assert.ok(s.pres.length >= 2, `the 90-line fence split (${s.pres.length} fragments)`)
+	const sheetsUsed = [...new Set(s.pres.map((p) => p.sheet))]
+	assert.ok(sheetsUsed.length >= 2, 'fragments land on different sheets')
+	// Reconstruction: concatenating the fragments must yield the source exactly.
+	const fixture = JSON.parse(fs.readFileSync(path.join(FIXTURES, 'document-split.canvas.json'), 'utf8'))
+	const fence = /```js\n([\s\S]*?)```/.exec(fixture.blocks[0].text)[1]
+	assert.equal(s.pres.map((p) => p.text).join(''), fence, 'no lost, duplicated or reordered lines')
+	assert.ok(s.pres.every((p) => p.spans > 0), 'every fragment keeps its syntax highlighting (split spans survive)')
+	assert.ok(s.outroSheet >= s.pres[s.pres.length - 1].sheet, 'prose after the fence continues on the last fragment sheet or later')
 })
