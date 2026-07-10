@@ -138,7 +138,10 @@ function loadCanvas(rel) {
 	} catch {
 		return { status: 404, body: { ok: false, message: `Canvas not found: ${rel}` } }
 	}
-	const result = validate(raw, { root: ROOT })
+	// An absent provenance stamp is the agent's problem, never the reader's: it
+	// downgrades to a warning here so a human clicking an unstamped canvas still
+	// sees their data instead of a validation error page.
+	const result = validate(raw, { root: ROOT, provenance: 'warn' })
 	if (!result.ok)
 		return { status: 422, body: { ok: false, errors: result.errors, warnings: result.warnings } }
 	const canvas = JSON.parse(raw)

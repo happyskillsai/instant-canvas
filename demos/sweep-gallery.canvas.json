@@ -1,5 +1,6 @@
 {
  "instantcanvas": 1,
+ "createdWith": "0.2.1",
  "title": "Parameter sweeps",
  "description": "Sliders step through frames the agent precomputed. No code runs; nothing calls back into the agent.",
  "blocks": [

@@ -6,6 +6,7 @@ source:
   - .agents/skills/instant-canvas/scripts/lib/validate.js
   - .agents/skills/instant-canvas/scripts/lib/catalog.js
   - .agents/skills/instant-canvas/scripts/lib/markdownsrc.js
+  - .agents/skills/instant-canvas/scripts/lib/skillmeta.js
 ---
 
 # Canvas Schema, Validator, and Catalog
@@ -17,6 +18,7 @@ source:
 ```jsonc
 {
   "instantcanvas": 1,          // required marker; doubles as the workspace-scan discriminator
+  "createdWith": "0.2.1",      // required provenance stamp; written by `stamp`, never by the agent
   "title": "Q3 Report",        // required
   "description": "optional",
   "blocks": [ /* Block[] */ ]   // XOR "pages": [{"name": "Tab", "blocks": [...]}]
@@ -24,6 +26,20 @@ source:
 ```
 
 A canvas holds **at most one interactive block** (`form` or `confirm`) across all pages (`MULTIPLE_INTERACTIVE_BLOCKS`).
+
+### `createdWith`: provenance, not compatibility
+
+The two version-shaped fields mean different things. `instantcanvas: 1` is the **contract** version, pinned by `enum: [VERSION]` and reused by `lib/scan.js` as the discriminator that decides what is a canvas at all. `createdWith` is the **skill** version that authored the file, read from `skill.json` through `lib/skillmeta.js`.
+
+It exists because a canvas a user keeps outlives the skill that made it: when something looks wrong a year later, the stamp is how you find out what wrote it. That is its whole job.
+
+Three rules follow, and the last is the one that is easy to get wrong:
+
+1. **Only `stamp` writes it.** An agent cannot know the runtime's version, and a hallucinated stamp validates as cleanly as a real one — a field the model authors is a field nobody can trust. `lib/skillmeta.js` is the single reader of `skill.json`, so the stamp, `/healthz`, the CLI handshake and the footer cannot drift apart (`provenance.test.js` pins that nobody opens `skill.json` a second time).
+2. **It is never rewritten.** `stamp` on an already-stamped canvas is a no-op, because the birth version *is* the datum. `--retrofit` writes `"unknown"` for canvases created before stamping existed, rather than guessing.
+3. **Drift is not an error.** The validator checks presence and shape only, never equality with the running skill. A canvas stamped `0.1.0` under a `0.9.0` runtime is normal and valid — even across a major bump, where the schema may well still be backward-compatible. The stamp is a breadcrumb for diagnosing a problem *after* one appears, not a compatibility gate. Adding a match check would reject exactly the long-lived files the stamp exists to protect. Do not add one.
+
+Severity is the caller's, because the audiences differ. `validate(source, {provenance})` defaults to `'error'` — the CLI's agentic loop must repair a missing stamp — while the kernel passes `'warn'`, so a human clicking an unstamped canvas in the sidebar sees their data rather than a validation error page. The agent fixes it; the reader never learns there was anything to fix.
 
 ## Blocks
 
@@ -108,7 +124,7 @@ Common shape: `{name, label, type, required?, placeholder?, help?, default?, opt
 
 `validate(source, {root})` collects **all** errors in one pass — never fail-fast, never throws for spec problems. Every error carries `code`, `path` (e.g. `pages[1].blocks[0].encoding.y[1]`), `message`, and usually `got`, `expected`, a Levenshtein/alias-driven `hint` ("Did you mean \"range\"?"), and a correct `example`. Unknown properties are **warnings**, not errors. `INVALID_JSON` includes line/column. This is the deterministic half of the agentic loop: the agent writes, the validator names the exact defect and its fix, the agent retries until `{"ok": true}`.
 
-Error codes: `INVALID_JSON, INVALID_SPEC, UNSUPPORTED_VERSION, UNKNOWN_BLOCK_TYPE, UNKNOWN_FIELD_TYPE, UNKNOWN_PROPERTY(warn), MISSING_REQUIRED_PROPERTY, INVALID_PROPERTY_TYPE, INVALID_ENUM_VALUE, DUPLICATE_FIELD_NAME, MULTIPLE_INTERACTIVE_BLOCKS, ENCODING_KEY_NOT_IN_DATA, INVALID_ENV_KEY, PATH_OUTSIDE_WORKSPACE, MISSING_SOURCE, REMOTE_ASSET_BLOCKED, MDX_NOT_RENDERED(warn), RAW_HTML_NOT_RENDERED(warn)` — plus runtime codes surfaced by the CLI/kernel: `SECRET_RETURN_BLOCKED, WRITE_FAILED, SESSION_TIMEOUT, KERNEL_UNREACHABLE, BROWSER_OPEN_FAILED(warn), INTERNAL_ERROR`.
+Error codes: `INVALID_JSON, INVALID_SPEC, UNSUPPORTED_VERSION, MISSING_CREATED_WITH(warn in the kernel), INVALID_CREATED_WITH(warn in the kernel), UNKNOWN_BLOCK_TYPE, UNKNOWN_FIELD_TYPE, UNKNOWN_PROPERTY(warn), MISSING_REQUIRED_PROPERTY, INVALID_PROPERTY_TYPE, INVALID_ENUM_VALUE, DUPLICATE_FIELD_NAME, MULTIPLE_INTERACTIVE_BLOCKS, ENCODING_KEY_NOT_IN_DATA, INVALID_ENV_KEY, PATH_OUTSIDE_WORKSPACE, MISSING_SOURCE, REMOTE_ASSET_BLOCKED, MDX_NOT_RENDERED(warn), RAW_HTML_NOT_RENDERED(warn)` — plus runtime codes surfaced by the CLI/kernel: `SECRET_RETURN_BLOCKED, WRITE_FAILED, SESSION_TIMEOUT, KERNEL_UNREACHABLE, BROWSER_OPEN_FAILED(warn), INTERNAL_ERROR`.
 
 ## Catalog: progressive disclosure
 

@@ -29,14 +29,18 @@ Honest framing: this keeps secrets out of the conversation **during capture**. N
 1. **Browse lean**: `$IC catalog` prints a compact index — one-liners for every block, chart kind, and field type, plus when to use each. No schemas. Skip this step if you already know what you want.
 2. **Pull exact schemas, one at a time**: `$IC catalog <name>` where name is a block (`chart`, `form`, …), a **chart kind** (`sankey`, `heatmap`, `scatter`, …), a field type (`secret`, `range`, …), `fieldset`, or `envelope`. Each returns that thing's full contract: encoding/properties, data shape, and a complete working example. Do NOT use `catalog --full` unless you truly need everything.
 3. **Write** the canvas: `<name>.canvas.json` with `"instantcanvas": 1` at the top level, inside the user's workspace.
-4. **Validate deterministically**: `$IC validate <file>`. On exit 1, read `errors[]` — each has `code`, `path`, `message`, and usually a `hint` ("Did you mean …") and a correct `example`. Fix and re-validate until `{"ok": true}`. `open` also refuses invalid canvases with the same errors.
-5. **Open**: `$IC open <file> [--workspace <dir>]` — display canvases return immediately; form/confirm canvases **block** until the human responds in the browser.
-6. Parse the single JSON document on stdout (logs go to stderr) and continue from that metadata only.
+4. **Stamp it**: `$IC stamp <file>` writes `"createdWith"` — the version of this skill — into the file. Run it once on every canvas you create. Never type that value yourself: you cannot know the runtime's version, and a wrong stamp is worse than none. Stamping again is a safe no-op.
+5. **Validate deterministically**: `$IC validate <file>`. On exit 1, read `errors[]` — each has `code`, `path`, `message`, and usually a `hint` ("Did you mean …") and a correct `example`. Fix and re-validate until `{"ok": true}`. `open` also refuses invalid canvases with the same errors.
+6. **Open**: `$IC open <file> [--workspace <dir>]` — display canvases return immediately; form/confirm canvases **block** until the human responds in the browser.
+7. Parse the single JSON document on stdout (logs go to stderr) and continue from that metadata only.
+
+If `validate` or `open` reports `MISSING_CREATED_WITH`, just run `stamp` and carry on — it is a missing stamp, not a broken canvas, and it is yours to fix silently rather than something to raise with the user.
 
 ## Commands
 
 ```
 open <canvas.json> [--workspace <dir>] [--no-open] [--timeout <s>] [--result <file>]
+stamp <canvas.json> [--workspace <dir>] [--retrofit]
 validate <canvas.json>
 catalog [name]            # exact machine-readable schemas: all, or one block/field type
 status [--workspace <dir>]
@@ -52,12 +56,15 @@ stop [--workspace <dir>]
 
 ```jsonc
 {
-  "instantcanvas": 1,             // required marker + version
+  "instantcanvas": 1,             // required marker + contract version
+  "createdWith": "0.2.1",         // required; written by `stamp`, never by you
   "title": "Q3 Report",           // required
   "description": "optional",
   "blocks": [ /* Block[] */ ]      // XOR "pages": [{"name": "Tab", "blocks": [...]}]
 }
 ```
+
+`createdWith` records which skill version wrote the canvas, so a later release can reason about a file it did not author. It is expected to fall behind the running skill as the skill evolves — an old stamp is normal and is never an error. Only its **absence** is.
 
 ## Block quick reference
 

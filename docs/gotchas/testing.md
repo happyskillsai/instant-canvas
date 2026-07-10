@@ -31,6 +31,10 @@ When one driving step never happens, a helper that throws sinks the whole `test.
 
 The render smoke test was written, passed, and proved nothing until the bug it targets was deliberately reintroduced. It did not fail. That is how the real cause (the 2-dimension `splom`, not `newPlot` re-entrancy) was found. Before trusting any regression test, break the thing it guards and watch it go red.
 
+## A new required field makes every negative fixture pass for the wrong reason
+
+Adding a required envelope property (`createdWith`) instantly made `broken.canvas.json` fail *one more way*. Its tests kept passing — they assert `errorCount >= 3` and look for specific codes — so nothing went red, while the fixture had quietly stopped being a clean test of the six defects it was built around. A negative fixture must fail **only** on the defect it is named for; stamp it, or assert on the exact error-code set rather than a count. The same trap hits the positive direction harder: the four canvases in `examples/` were left unstamped when the field became required, so every shipped example failed `validate` and no test noticed, because nothing asserted that the examples validate. `provenance.test.js` now does.
+
 ## Subtests cannot reach parent-context servers (Node 24.0.x)
 
 Sockets opened inside a `t.test()` subtest get `ECONNRESET`/`ECONNREFUSED` against TCP/HTTP servers created in the parent test's async context — while `lsof` shows the listener alive and healthy. Reproduced with a minimal in-process `http.createServer`; it is not the sandbox and not the kernel. Structure integration tests as **`test.before` hook + sequential top-level `test()` calls** (that crossing works); never exercise a shared server from subtests. `kernel.test.js` carries the header comment explaining this.

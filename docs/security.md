@@ -6,7 +6,9 @@ source:
   - .agents/skills/instant-canvas/scripts/lib/envfile.js
   - .agents/skills/instant-canvas/scripts/lib/jsonfile.js
   - .agents/skills/instant-canvas/scripts/lib/markdownsrc.js
+  - .agents/skills/instant-canvas/scripts/lib/fsatomic.js
   - .agents/skills/instant-canvas/scripts/kernel.js
+  - .agents/skills/instant-canvas/scripts/instantcanvas.js
 ---
 
 # Security Model
@@ -29,6 +31,7 @@ InstantCanvas keeps secrets out of the agent conversation **during capture**: th
 - Destinations: `env` (parse-preserving merge via `lib/envfile.js` — comments, unrelated keys, and order survive; values quoted only when needed), `json` (shallow merge via `lib/jsonfile.js`, typed values), or `none`. All writes are atomic (temp + rename) and new files are created `0o600`.
 - **Confirmation handshakes** (HTTP 409 → in-browser dialog → resubmit with `confirmations`): writing **outside the workspace root** requires the human to approve the absolute path; an env merge that would **overwrite existing keys** requires approval of the listed keys. Inside-root, non-overwriting writes have no friction.
 - Server-side re-validation of every field rule runs on submit — the browser's checks are UX, never the gate.
+- **`stamp` is the only other writer**, and the only one that writes a *canvas* rather than a destination. It refuses a path outside the workspace root (realpath'd, so a symlink out is caught), refuses any JSON whose top level lacks the `"instantcanvas": 1` marker — so it can never rewrite `package.json` or a stray file — and writes through the same atomic temp+rename. It adds exactly one property, `createdWith`, and proves it by re-parsing its own output and diffing it against the original before the write lands.
 
 ## Network perimeter
 

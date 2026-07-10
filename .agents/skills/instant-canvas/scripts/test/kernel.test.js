@@ -213,6 +213,20 @@ test('kernel: GET /api/canvas returns parsed canvas or validation errors', async
 	assert.equal(out.json.errors[0].code, 'PATH_OUTSIDE_WORKSPACE')
 })
 
+test('kernel: an unstamped canvas still renders for the human — the missing stamp is a warning, not an error page', async () => {
+	// A 422 renders a wall of red in the browser. A human who clicks a canvas in
+	// the sidebar must never be shown one because a maintainer's provenance field
+	// is absent: the agent gets the error from `validate`/`open`, the reader gets
+	// their data. Only the CLI enforces the stamp.
+	fs.writeFileSync(path.join(K.root, 'unstamped.canvas.json'), '{"instantcanvas":1,"title":"unstamped","blocks":[{"type":"markdown","text":"hi"}]}')
+	const res = await httpReq({ port: K.port, path: '/api/canvas?path=unstamped.canvas.json', headers: K.auth })
+
+	assert.equal(res.status, 200, 'the canvas renders')
+	assert.equal(res.json.ok, true)
+	assert.equal(res.json.canvas.title, 'unstamped')
+	assert.ok(res.json.warnings.some((w) => w.code === 'MISSING_CREATED_WITH'), 'the absence is still surfaced, as a warning')
+})
+
 test('kernel: WS navigate broadcast on /api/open; canvas broadcast on file change within 2 s', async () => {
 	const ws = await wsConnect(K.port, K.token)
 	const opened = await httpReq({ port: K.port, method: 'POST', path: '/api/open', headers: K.auth, body: { path: 'report.canvas.json' } })

@@ -12,13 +12,13 @@ Ordered — when two conflict, the higher one wins.
 
 1. **Separation of concerns over convenience** — the LLM wrangles data into a strict JSON contract; the skill owns all rendering. The two never mix. An agent that styles pixels is doing the wrong job; a renderer that guesses at data is too.
 2. **Lean context over completeness** — the skill is large (a full runtime, 26 chart kinds, 16 field types), but the agent's context window is sacred. Progressive disclosure everywhere: a ~6 KB lean index first, one exact schema on demand, never the full contract unless explicitly requested.
-3. **Deterministic validation over model judgment** — a program, not a prompt, decides whether a canvas is correct, and its errors teach the fix (code, path, message, hint, example). The agent loops against the validator until the canvas is perfect.
+3. **Deterministic validation over model judgment** — a program, not a prompt, decides whether a canvas is correct, and its errors teach the fix (code, path, message, hint, example). The agent loops against the validator until the canvas is perfect. The same rule governs facts the agent cannot know: the skill's own version is written into each canvas by the skill, never typed by the model, because a value a model can hallucinate is a value nobody can later trust.
 4. **Secrets on disk over secrets in chat** — captured values are written to local files and redacted from every result, log, and error. The agent learns field names, never values.
 5. **Zero dependencies over feature velocity** — plain Node ≥ 20, four vendored browser files, no build step, no npm install. Every feature must earn its place without a dependency.
 
 ## Non-goals
 
-- **Not an admin panel builder.** No saved dashboards, no widget designers, no user management. Canvases are disposable answers, not durable products.
+- **Not an admin panel builder.** No saved dashboards, no widget designers, no user management. Canvases are answers, not products. They are disposable **by default** — but a user may choose to keep one, and that is supported rather than merely tolerated: every canvas records the skill version that wrote it (`createdWith`), so a report kept for a year can be reasoned about, and migrated, by a skill that did not author it. What stays a non-goal is the *warehouse*: building views nobody asked for and maintaining them forever.
 - **Not a hosted or multi-user service.** One kernel per workspace on 127.0.0.1, one human at the browser. No network mode, no HTTPS, no auth tiers.
 - **Not a BI warehouse.** No data storage, no query engine, no connectors — the agent brings the data already wrangled.
 - **Not a general web framework.** The rendering surface is the fixed block vocabulary; agents extend expressiveness through data and the schema, never through custom code.

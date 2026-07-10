@@ -17,6 +17,7 @@ Entry point: `node scripts/instantcanvas.js <command>` from the skill root (`.ag
 
 ```
 open <canvas.json> [--workspace <dir>] [--no-open] [--timeout <s>] [--result <file>]
+stamp <canvas.json> [--workspace <dir>] [--retrofit]
 validate <canvas.json>
 catalog [name] [--full]
 status [--workspace <dir>]
@@ -31,6 +32,12 @@ stop [--workspace <dir>]
 4. `POST /api/open`, then open the browser (unless `--no-open`; a failed browser launch is a stderr warning `BROWSER_OPEN_FAILED` with the URL, never an error).
 5. **Display canvas** → print `{"status": "opened", "url", ...}`, exit 0 immediately. **Interactive canvas** → block, polling the session every second until the human resolves it. Polling tolerates transient socket blips: fresh connection per request (`agent: false`) and up to 3 consecutive failures cross-checked against the registry health ping before declaring the kernel lost.
 6. `--result <file>` mirrors the stdout JSON to a file. `--timeout <s>` overrides the session expiry (default 600).
+
+### stamp
+
+The only writer of `createdWith` (see [canvas-schema.md](canvas-schema.md)). It parses the file, refuses anything whose top level lacks `"instantcanvas": 1` — a canvas marker, not arbitrary JSON — and confines the target to the workspace root, because unlike `validate` it *writes*.
+
+Two properties are load-bearing. It is **idempotent**: an existing stamp is returned as `{"changed": false}` and the file is not touched, so a canvas keeps the version that bore it forever. And it **splices the field in as text**, mirroring the file's own indentation and colon spacing, rather than re-serializing the parsed object — a canvas belongs to the user, and re-serializing turned a one-line addition into a 148-line reformat (a minified canvas stays minified). The splice is re-parsed and diffed against the original before it is written; anything unexpected falls back to a full re-serialize. `--retrofit` writes `"unknown"` instead of the running version, for files created before stamping existed.
 
 ### validate / catalog / status / stop
 
@@ -57,7 +64,10 @@ Secret values appear in **no** variant — see [security.md](security.md).
 1. `catalog` → lean index → pick components.
 2. `catalog <name>` → exact schema + example for each pick.
 3. Write `<name>.canvas.json` inside the workspace.
-4. `validate` → fix from `errors[]` → repeat until `{"ok": true}`.
-5. `open` → parse the one-line result → continue from metadata only.
+4. `stamp` → the skill writes `createdWith` from its own manifest.
+5. `validate` → fix from `errors[]` → repeat until `{"ok": true}`.
+6. `open` → parse the one-line result → continue from metadata only.
+
+Step 4 is the one step the agent cannot fake, and skipping it is self-correcting rather than silent: `validate` and `open` both refuse an unstamped canvas with `MISSING_CREATED_WITH`, whose `hint` is the `stamp` command itself. The agent repairs it inside its own loop; the user never sees it.
 
 Convention: use the project root as the workspace for a whole session and subfolders as sidebar sections; separate workspaces only when the user genuinely wants isolation.

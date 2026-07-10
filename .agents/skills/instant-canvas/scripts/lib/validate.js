@@ -78,6 +78,8 @@ class Ctx {
 		this.errors = []
 		this.warnings = []
 		this.root = opts.root || null
+		// 'error' for the agent's loop, 'warn' for the browser. See checkCreatedWith.
+		this.provenance = opts.provenance || 'error'
 	}
 
 	error(code, p, message, extra = {}) {
@@ -574,49 +576,61 @@ function isInteractiveBlock(b) {
 	return typeOf(b) === 'object' && (b.type === 'form' || b.type === 'confirm')
 }
 
-/**
- * Validate a canvas. `source` is raw JSON text or an already-parsed object.
- * opts.root enables workspace-confinement checks (markdown src).
- * Collects ALL errors in one pass; never throws for spec problems.
- * Returns {ok, errorCount, errors, warnings} (+ canvas summary when ok).
- */
+const STAMP_FIX = 'Run `node scripts/instantcanvas.js stamp <canvas.json>` — the skill fills the version in from its own manifest. Never write this value by hand.'
+
 /**
  * The provenance stamp is the one property no agent may author: it must come
  * from `stamp`, which reads the running skill's version. Validating it here
  * (rather than through the generic walker) buys an error that names its own fix.
  *
- * Only presence and shape are checked — never equality with the running
- * version. A canvas born under 0.3.0 keeps that stamp forever, which is the
- * whole point; demanding a match would make every older canvas unopenable and
- * destroy the migration signal it exists to carry.
+ * Presence and shape ONLY — never equality with the running skill version.
+ * A stamp that differs from the runtime is the normal, expected case: a canvas
+ * born under 0.1.0 keeps that stamp forever, and old canvases are not suspect.
+ * The stamp is a breadcrumb for diagnosing a problem after one appears, not a
+ * compatibility check. Do not add one: it would reject every canvas a user kept.
+ *
+ * Severity is the caller's choice, because the audiences differ. For the agent
+ * (`validate`, `open`) an absent stamp is an error, so the deterministic loop
+ * makes it run `stamp`. For the browser (`loadCanvas`) it is a warning: a human
+ * who clicks a canvas in the sidebar must never be shown a wall of red because
+ * a maintainer's provenance field is missing. The canvas renders; the agent fixes.
  */
 function checkCreatedWith(canvas, ctx) {
+	const flag = ctx.provenance === 'warn' ? ctx.warn.bind(ctx) : ctx.error.bind(ctx)
 	const value = canvas.createdWith
 	if (value === undefined) {
-		ctx.error('MISSING_CREATED_WITH', 'createdWith',
-			'This canvas carries no "createdWith" provenance stamp, so a future release could not migrate it.', {
+		flag('MISSING_CREATED_WITH', 'createdWith',
+			'This canvas has no "createdWith" stamp recording which skill version wrote it.', {
 				expected: 'string — the skill version that created this canvas',
-				hint: 'Do not write this by hand: run `node scripts/instantcanvas.js stamp <canvas.json>` and the skill will fill it in. Use --retrofit for a canvas created before stamping existed.',
+				hint: `${STAMP_FIX} Use --retrofit for a canvas created before stamping existed.`,
 				example: { createdWith: SKILL_VERSION },
 			})
 		return
 	}
 	if (typeOf(value) !== 'string') {
-		ctx.error('INVALID_CREATED_WITH', 'createdWith', `"createdWith" must be of type string, got ${typeOf(value)}.`, {
+		flag('INVALID_CREATED_WITH', 'createdWith', `"createdWith" must be of type string, got ${typeOf(value)}.`, {
 			got: typeOf(value),
 			expected: 'string',
-			hint: 'Run `node scripts/instantcanvas.js stamp <canvas.json>` rather than editing the stamp.',
+			hint: STAMP_FIX,
 		})
 		return
 	}
 	if (!CREATED_WITH_RE.test(value))
-		ctx.error('INVALID_CREATED_WITH', 'createdWith', `${JSON.stringify(value)} is not a valid provenance stamp.`, {
+		flag('INVALID_CREATED_WITH', 'createdWith', `${JSON.stringify(value)} is not a version string.`, {
 			got: value,
-			expected: 'a semver version (e.g. "0.3.0") or "unknown"',
-			hint: 'Run `node scripts/instantcanvas.js stamp <canvas.json>` rather than editing the stamp.',
+			expected: `a semver version (e.g. "${SKILL_VERSION}") or "unknown"`,
+			hint: STAMP_FIX,
 		})
 }
 
+/**
+ * Validate a canvas. `source` is raw JSON text or an already-parsed object.
+ * opts.root enables workspace-confinement checks (markdown src).
+ * opts.provenance ('error' | 'warn', default 'error') sets the severity of a
+ * missing/malformed createdWith stamp.
+ * Collects ALL errors in one pass; never throws for spec problems.
+ * Returns {ok, errorCount, errors, warnings} (+ canvas summary when ok).
+ */
 function validate(source, opts = {}) {
 	const ctx = new Ctx(opts)
 	let canvas = source

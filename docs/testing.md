@@ -14,7 +14,7 @@ cd .agents/skills/instant-canvas
 node --test scripts/test/
 ```
 
-122 tests at last count, twenty-two of which drive a real browser and skip when Chrome is absent. `scripts/test/index.js` exists because `node --test <dir>` does not expand a directory on the pinned Node version — the directory resolves to `index.js`, which requires every `*.test.js` (see [gotchas/testing.md](gotchas/testing.md)).
+139 tests at last count, twenty-three of which drive a real browser and skip when Chrome is absent. `scripts/test/index.js` exists because `node --test <dir>` does not expand a directory on the pinned Node version — the directory resolves to `index.js`, which requires every `*.test.js` (see [gotchas/testing.md](gotchas/testing.md)).
 
 ## Suite layout
 
@@ -26,6 +26,7 @@ node --test scripts/test/
 | `registry.test.js` | Health-ping liveness, stale-entry cleanup, spawn-lock contention and stale-lock breaking. |
 | `validate.test.js` / `catalog.test.js` | Every validator error code; per-kind chart rules; fieldset/ui/span rules; lean-vs-full catalog; the registry-tweak drift test. |
 | `markdownsrc.test.js` | The markdown `src` extension allowlist and the kernel-side read guard (`src: ".env"` is never read), frontmatter stripping, and `data:`-URI image inlining with its confinement, size-cap, and fenced-code exclusions. |
+| `provenance.test.js` | The `createdWith` stamp: only `stamp` writes it and only from `skill.json`; idempotent, byte-preserving (pretty *and* minified), refuses non-canvas JSON; drift validates cleanly and absence does not; the browser still renders an unstamped canvas; every shipped example is stamped and valid. |
 | `scan.test.js` | Marker discrimination, 2-level depth, ordering; session lifecycle. |
 | `kernel.test.js` | A real spawned kernel: healthz, 403s (token, Host), asset traversal, tree, WS round-trip, sessions, collection delete, shutdown. |
 | `cli.test.js` | Usage/exit codes, validate/catalog output, the full open lifecycle including kill -9 recovery and `--result`. |

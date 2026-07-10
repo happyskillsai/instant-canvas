@@ -270,10 +270,47 @@ async function cmdOpen(args) {
 	}
 }
 
-/** Reuse the file's own indentation so stamping produces a minimal diff. */
+/** Reuse the file's own indentation when a rewrite is unavoidable. */
 function detectIndent(raw) {
 	const m = /\n([ \t]+)\S/.exec(raw)
 	return m ? m[1] : '\t'
+}
+
+/**
+ * Splice the stamp in as text, right after the marker line, so the rest of the
+ * file survives byte for byte. Re-serializing the parsed object instead would
+ * reformat a canvas the user owns — a one-line change became a 148-line diff.
+ *
+ * Returns null when the shape is not the expected multi-line one (the marker is
+ * the last key, or the file is on one line), leaving the caller to re-serialize.
+ * The result is verified by re-parsing before it is written: a splice that
+ * changed anything but `createdWith` is discarded rather than trusted.
+ */
+function spliceStamp(raw, canvas, createdWith) {
+	const m = /"instantcanvas"([ \t]*):([ \t]*)1[ \t]*,/.exec(raw)
+	if (!m)
+		return null
+	const at = m.index + m[0].length
+	const after = raw.slice(at)
+
+	// Mirror the file's own style: its colon spacing, and whether keys sit on
+	// their own indented line (pretty-printed) or run together (minified).
+	const onNewLine = /^[ \t]*\r?\n([ \t]*)/.exec(after)
+	const lead = onNewLine ? `\n${onNewLine[1]}` : after.startsWith(' ') ? ' ' : ''
+	const candidate = raw.slice(0, at) + `${lead}"createdWith"${m[1]}:${m[2]}${JSON.stringify(createdWith)},` + after
+
+	// Trust nothing: re-parse and prove the splice added the stamp and touched
+	// nothing else (it could have landed inside a nested object or a string).
+	let reparsed
+	try {
+		reparsed = JSON.parse(candidate)
+	} catch {
+		return null
+	}
+	if (reparsed.createdWith !== createdWith)
+		return null
+	delete reparsed.createdWith
+	return JSON.stringify(reparsed) === JSON.stringify(canvas) ? candidate : null
 }
 
 /**
@@ -314,14 +351,18 @@ function cmdStamp(args) {
 	}
 
 	const createdWith = args.retrofit ? UNKNOWN_VERSION : VERSION
-	// Rebuild so the stamp sits next to the marker rather than at the end.
-	const stamped = {}
-	for (const key of Object.keys(canvas)) {
-		stamped[key] = canvas[key]
-		if (key === 'instantcanvas')
-			stamped.createdWith = createdWith
+	let next = spliceStamp(raw, canvas, createdWith)
+	if (next === null) {
+		// Rebuild so the stamp sits next to the marker rather than at the end.
+		const stamped = {}
+		for (const key of Object.keys(canvas)) {
+			stamped[key] = canvas[key]
+			if (key === 'instantcanvas')
+				stamped.createdWith = createdWith
+		}
+		next = JSON.stringify(stamped, null, detectIndent(raw)) + '\n'
 	}
-	writeAtomic(abs, JSON.stringify(stamped, null, detectIndent(raw)) + '\n')
+	writeAtomic(abs, next)
 	log(`${rel} stamped createdWith=${createdWith}`)
 	out({ status: 'stamped', canvas: rel, createdWith, changed: true, timestamp: now() }, 0)
 }

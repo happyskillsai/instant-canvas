@@ -33,6 +33,14 @@ A PID can be recycled, and a live PID says nothing about *which* server owns the
 
 An interactive `open` backgrounded with `&` dies when its shell is cleaned up, but the **kernel and the session live on** — the browser form still works; only the stdout consumer is gone. Conversely, stopping a kernel kills every blocked `open` against it with `KERNEL_UNREACHABLE` (exit 2). When testing interactive flows from scripts, hold the CLI process handle rather than shell-backgrounding it.
 
+## Adding one field by re-serializing rewrites the whole file
+
+`stamp` injects a single `createdWith` line. The obvious implementation — `JSON.parse`, add the key, `JSON.stringify(obj, null, indent)` — turned a one-line change into a **148-line diff** on `report.canvas.json`, and flattened a deliberately minified 33 000-line demo into something unrecognisable. A canvas belongs to the user; a tool that reformats it on touch is a tool they stop trusting. `spliceStamp()` therefore inserts the field as *text* after the marker, mirroring the file's own colon spacing and deciding newline-vs-inline from what follows the marker, then **re-parses the result and diffs it against the original** before writing — a splice that changed anything but `createdWith` is discarded in favour of the re-serialize fallback. Any future "just add a property" command should do the same.
+
+## A validator error is a wall of red in someone's browser
+
+`loadCanvas` turns any validation failure into a 422, and `renderCanvas()` paints the `errors[]` array across the pane. That is right for a malformed chart and wrong for a missing provenance stamp: the reader did not write the canvas and cannot fix it. `validate(source, {provenance})` takes the severity from its caller — `'error'` for the CLI, so the agent's loop repairs it; `'warn'` for the kernel, so the canvas renders. Before making any validator rule an error, ask which of the two audiences will actually see it. Warnings are never rendered in the browser at all.
+
 ## Deleting collections is not `rm -rf`
 
 `POST /api/collection/delete` removes only marker-verified canvas files directly inside a depth-1 folder, keeps everything else, and removes the folder only if it ends up empty. `(root)`, dot-names, and traversal names are refused outright. Preserve those semantics if you extend deletion — the sidebar maps to a real folder the user may keep unrelated files in.

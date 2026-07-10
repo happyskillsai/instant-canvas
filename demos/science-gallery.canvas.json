@@ -1,5 +1,6 @@
 {
  "instantcanvas": 1,
+ "createdWith": "0.2.1",
  "title": "Scientific gallery — the 9 ML kinds",
  "description": "PCA, clustering and model-evaluation charts. Every chart is real data computed in the demo generator.",
  "pages": [

@@ -170,6 +170,7 @@ test.before(async () => {
 					stub: !!document.getElementById('plotly.js-style-global'),
 					csp: window.__csp || [],
 					pageErrors: window.__pageErrors || [],
+					footerVer: (document.querySelector('.side-foot .ver') || {}).textContent || '',
 					mdInlineStyled: document.querySelectorAll('.md [style]').length,
 					mdTasks: document.querySelectorAll('.md li.task').length,
 					mdChecked: document.querySelectorAll('.md li.task input[type=checkbox]:checked').length,
@@ -258,6 +259,14 @@ test('every code block carries an always-visible copy button that really copies'
 	assert.ok(snapshot.clipboard.clicked, 'the copy button was clickable')
 	assert.equal(snapshot.clipboard.text, 'const x = 1; // hi', 'the fence source landed on the clipboard verbatim')
 	assert.ok(snapshot.clipboard.copiedClass, 'the button confirmed the copy to the reader')
+})
+
+test('the sidebar footer shows the running skill version', { skip, timeout: 120_000 }, () => {
+	// The version reaches the page as an __IC_VERSION__ placeholder substituted
+	// server-side, because the CSP forbids the inline <script> that would
+	// otherwise carry it. An unsubstituted placeholder only shows up in a browser.
+	assert.equal(snapshot.footerVer, `InstantCanvas v${SKILL_VERSION}`)
+	assert.ok(!snapshot.footerVer.includes('__IC_'), 'the placeholder was substituted')
 })
 
 test('the kernel CSP is never violated, and Plotly injects no stylesheet', { skip, timeout: 120_000 }, () => {

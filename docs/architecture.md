@@ -87,4 +87,8 @@ The WebSocket server is hand-rolled RFC 6455 inside `kernel.js` (~100 lines: acc
 
 ## Version handshake
 
+`lib/skillmeta.js` is the **one place** `skill.json` is read. The CLI, the kernel's `/healthz`, the schema's envelope example, the `stamp` command and the browser footer all pull the version from it, so they cannot disagree; `provenance.test.js` fails if anything else opens `skill.json`.
+
+This process-level handshake is unrelated to a canvas's `createdWith` stamp: the handshake keeps two *running processes* in step, while the stamp records what wrote a *file* and is expected to fall behind it (see [canvas-schema.md](canvas-schema.md)).
+
 The CLI compares `/healthz` `version` against its own. On mismatch with no pending sessions it restarts the kernel; with pending sessions it warns on stderr. **Same-version code changes do not trigger a restart** — after editing kernel/validator code in development, run `stop` yourself (see [gotchas/runtime.md](gotchas/runtime.md)).

@@ -44,6 +44,7 @@ node scripts/instantcanvas.js catalog sankey
 node scripts/instantcanvas.js open examples/report.canvas.json
 
 # the agentic loop
+node scripts/instantcanvas.js stamp my.canvas.json      # the skill writes "createdWith", never the agent
 node scripts/instantcanvas.js validate my.canvas.json   # exit 1 → fix from errors[] → repeat
 node scripts/instantcanvas.js open my.canvas.json       # one JSON result on stdout
 
@@ -51,7 +52,7 @@ node scripts/instantcanvas.js open my.canvas.json       # one JSON result on std
 node scripts/instantcanvas.js status
 node scripts/instantcanvas.js stop
 
-# tests (122, zero deps; the browser tests skip without Chrome)
+# tests (139, zero deps; the browser tests skip without Chrome)
 node --test scripts/test/
 ```
 

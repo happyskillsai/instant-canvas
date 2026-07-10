@@ -22,7 +22,7 @@
         "Project Structure",
         "Documentation"
       ],
-      "line_count": 94,
+      "line_count": 95,
       "links_to": [
         "docs/architecture.md",
         "docs/canvas-schema.md",
@@ -60,8 +60,9 @@
         "Hot reload",
         "Version handshake"
       ],
-      "line_count": 90,
+      "line_count": 94,
       "links_to": [
+        "docs/canvas-schema.md",
         "docs/gotchas/frontend.md",
         "docs/gotchas/runtime.md",
         "docs/security.md"
@@ -99,6 +100,7 @@
       "headings": [
         "Canvas Schema, Validator, and Catalog",
         "Envelope",
+        "`createdWith`: provenance, not compatibility",
         "Blocks",
         "The markdown block",
         "Chart kinds (26)",
@@ -107,7 +109,7 @@
         "Validator behavior",
         "Catalog: progressive disclosure"
       ],
-      "line_count": 121,
+      "line_count": 137,
       "links_to": [
         "docs/frontend.md",
         "docs/security.md"
@@ -119,7 +121,8 @@
         ".agents/skills/instant-canvas/scripts/lib/schema.js",
         ".agents/skills/instant-canvas/scripts/lib/validate.js",
         ".agents/skills/instant-canvas/scripts/lib/catalog.js",
-        ".agents/skills/instant-canvas/scripts/lib/markdownsrc.js"
+        ".agents/skills/instant-canvas/scripts/lib/markdownsrc.js",
+        ".agents/skills/instant-canvas/scripts/lib/skillmeta.js"
       ],
       "source_unresolved": [],
       "tags": [
@@ -144,11 +147,12 @@
         "Output discipline",
         "Commands",
         "open",
+        "stamp",
         "validate / catalog / status / stop",
         "Result contract (stdout of `open`)",
         "The agent workflow"
       ],
-      "line_count": 63,
+      "line_count": 73,
       "links_to": [
         "docs/canvas-schema.md",
         "docs/security.md"
@@ -187,7 +191,7 @@
         "CSP shim",
         "Icons and vendored assets"
       ],
-      "line_count": 73,
+      "line_count": 74,
       "links_to": [
         "docs/gotchas/frontend.md"
       ],
@@ -342,9 +346,11 @@
         "Liveness must be health-ping, never PID",
         "macOS `/tmp` is a symlink",
         "Background `open` outliving its shell",
+        "Adding one field by re-serializing rewrites the whole file",
+        "A validator error is a wall of red in someone's browser",
         "Deleting collections is not `rm -rf`"
       ],
-      "line_count": 38,
+      "line_count": 46,
       "links_to": [],
       "over_size": false,
       "parse_error": null,
@@ -378,13 +384,14 @@
         "Waiting for an element does not mean the app is listening",
         "A throwing `waitFor` in a `before` hook reports the wrong failure",
         "A new test that cannot fail is worse than no test",
+        "A new required field makes every negative fixture pass for the wrong reason",
         "Subtests cannot reach parent-context servers (Node 24.0.x)",
         "`node --test <dir>` does not expand the directory",
         "Set the state dir with `||=`, before requiring the registry",
         "A security scan can trip over its own test file",
         "Fake registry entries in shared state dirs look like leaks"
       ],
-      "line_count": 52,
+      "line_count": 56,
       "links_to": [],
       "over_size": false,
       "parse_error": null,
@@ -444,7 +451,7 @@
         "Network perimeter",
         "What this does NOT protect against"
       ],
-      "line_count": 46,
+      "line_count": 49,
       "links_to": [],
       "over_size": false,
       "parse_error": null,
@@ -454,7 +461,9 @@
         ".agents/skills/instant-canvas/scripts/lib/envfile.js",
         ".agents/skills/instant-canvas/scripts/lib/jsonfile.js",
         ".agents/skills/instant-canvas/scripts/lib/markdownsrc.js",
-        ".agents/skills/instant-canvas/scripts/kernel.js"
+        ".agents/skills/instant-canvas/scripts/lib/fsatomic.js",
+        ".agents/skills/instant-canvas/scripts/kernel.js",
+        ".agents/skills/instant-canvas/scripts/instantcanvas.js"
       ],
       "source_unresolved": [],
       "tags": [
@@ -480,7 +489,7 @@
         "Security regressions",
         "Browser verification"
       ],
-      "line_count": 61,
+      "line_count": 62,
       "links_to": [
         "docs/gotchas/testing.md"
       ],

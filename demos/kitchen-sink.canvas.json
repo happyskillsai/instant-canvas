@@ -1,5 +1,6 @@
 {
 	"instantcanvas": 1,
+	"createdWith": "0.2.1",
 	"title": "Form kitchen sink",
 	"description": "Every field type, plus fieldset grids, segmented buttons and pill multi-select.",
 	"blocks": [
