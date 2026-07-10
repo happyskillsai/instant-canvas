@@ -162,6 +162,70 @@ test('MISSING_SOURCE when a markdown src does not resolve to a readable file', (
 	assert.equal(validate(canvas([{ type: 'markdown', src: 'nope.md' }])).ok, true)
 })
 
+const warns = (r) => r.warnings.map((w) => w.code)
+
+test('REMOTE_ASSET_BLOCKED: the runtime never fetches an off-origin asset', () => {
+	const md = validate(canvas([{ type: 'markdown', text: 'a\n\n![alt](https://cdn.example.com/a.png)\n' }]))
+	assert.deepEqual(codes(md), ['REMOTE_ASSET_BLOCKED'])
+	assert.match(md.errors[0].message, /line 3/)
+	assert.match(md.errors[0].hint, /data:/)
+	assert.equal(md.errors[0].got, 'https://cdn.example.com/a.png')
+
+	// A raw <img> is the same hole through a different syntax.
+	const raw = validate(canvas([{ type: 'markdown', text: '<img src="http://x.test/a.png">' }]))
+	assert.deepEqual(codes(raw), ['REMOTE_ASSET_BLOCKED'])
+	assert.deepEqual(warns(raw), [], 'a remote <img> is one error, not also a raw-HTML warning')
+
+	// Local images are the whole point of the rule; links are not assets.
+	assert.equal(validate(canvas([{ type: 'markdown', text: '![a](assets/a.png)' }])).ok, true)
+	assert.equal(validate(canvas([{ type: 'markdown', text: '[docs](https://example.com)' }])).ok, true)
+})
+
+test('MDX and raw HTML warn — they never fail a canvas', () => {
+	const mdx = validate(canvas([{ type: 'markdown', text: 'import C from "./c"\n\n# Hi\n\n<Chart data={x} />\n' }]))
+	assert.equal(mdx.ok, true, 'MDX is a warning, not an error')
+	assert.deepEqual(warns(mdx), ['MDX_NOT_RENDERED'])
+	assert.match(mdx.warnings[0].message, /line 1, line 5/)
+	assert.match(mdx.warnings[0].hint, /chart, kpi, or table blocks/)
+
+	const html = validate(canvas([{ type: 'markdown', text: '# Hi\n\n<table><tr><td>x</td></tr></table>\n' }]))
+	assert.equal(html.ok, true)
+	assert.deepEqual(warns(html), ['RAW_HTML_NOT_RENDERED'])
+	assert.match(html.warnings[0].message, /<table>/)
+	assert.match(html.warnings[0].message, /line 3/)
+	assert.ok(!/line 3, line 3/.test(html.warnings[0].message), 'repeated lines are deduplicated')
+})
+
+test('the source scan reads prose, not the code it quotes', () => {
+	// A README documenting HTML or JSX in a fence must not warn about it.
+	const fenced = validate(canvas([{ type: 'markdown', text: '# Doc\n\n```html\n<table><Foo /></table>\n```\n' }]))
+	assert.equal(fenced.ok, true)
+	assert.deepEqual(warns(fenced), [], 'fenced code is prose about code, not code')
+
+	const inline = validate(canvas([{ type: 'markdown', text: 'Use `<table>` and `import x` here.' }]))
+	assert.deepEqual(warns(inline), [])
+
+	// …and a remote URL inside a fence is documentation, not a fetch.
+	const quoted = validate(canvas([{ type: 'markdown', text: '```md\n![a](https://example.com/a.png)\n```\n' }]))
+	assert.equal(quoted.ok, true)
+})
+
+test('an .mdx src is read as markdown, with its frontmatter stripped', () => {
+	const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ic-mdx-'))
+	fs.writeFileSync(path.join(root, 'doc.mdx'), '---\ntitle: Report\n---\n\n# Body\n\n<Chart />\n')
+	const r = validate(canvas([{ type: 'markdown', src: 'doc.mdx' }]), { root })
+	assert.equal(r.ok, true, 'the prose renders; the JSX only warns')
+	assert.deepEqual(warns(r), ['MDX_NOT_RENDERED'])
+	// The line number proves the strip: <Chart /> is line 7 of the file, line 4 once
+	// the three frontmatter lines are gone.
+	assert.match(r.warnings[0].message, /line 4/)
+	assert.equal(r.warnings[0].path, 'blocks[0].src')
+
+	// A remote asset inside a src file is still an error.
+	fs.writeFileSync(path.join(root, 'bad.md'), '![x](https://cdn.example.com/a.png)')
+	assert.deepEqual(codes(validate(canvas([{ type: 'markdown', src: 'bad.md' }]), { root })), ['REMOTE_ASSET_BLOCKED'])
+})
+
 test('markdown XOR text/src', () => {
 	const both = validate(canvas([{ type: 'markdown', text: 'a', src: 'b.md' }]))
 	assert.ok(codes(both).includes('INVALID_SPEC'))

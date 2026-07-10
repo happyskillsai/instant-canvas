@@ -5,7 +5,7 @@ const path = require('node:path')
 const { ENVELOPE, BLOCKS, FIELD_TYPES, CHART_KINDS, UNSUPPORTED_CHARTS, SHAPES, ENV_KEY_RE, VERSION } = require('./schema')
 const { SKILL_VERSION, CREATED_WITH_RE } = require('./skillmeta')
 const { insideRoot } = require('./paths')
-const { MARKDOWN_EXTENSIONS, hasMarkdownExtension } = require('./markdownsrc')
+const { MARKDOWN_EXTENSIONS, hasMarkdownExtension, isMdx, stripFrontmatter, readMarkdownText, scanMarkdownSource } = require('./markdownsrc')
 
 // ---------------------------------------------------------------- helpers
 
@@ -277,9 +277,49 @@ function checkMarkdown(block, base, ctx) {
 			example: BLOCKS.markdown.example,
 		})
 	if (typeof block.src === 'string') checkMarkdownSrc(block.src, `${base}.src`, ctx)
+
+	// Scan whatever markdown we can actually see: the inline text, or the file
+	// behind `src` when the root is known and the file passed the checks above.
+	if (typeof block.text === 'string')
+		checkMarkdownContent(block.text, `${base}.text`, ctx)
+	else if (typeof block.src === 'string' && ctx.root) {
+		const text = readMarkdownText(ctx.root, block.src)
+		if (text !== null)
+			checkMarkdownContent(isMdx(block.src) ? stripFrontmatter(text) : text, `${base}.src`, ctx)
+	}
 }
 
 const SRC_EXAMPLE = { type: 'markdown', src: 'notes/summary.md' }
+
+const at = (lines) => [...new Set(lines)].sort((a, b) => a - b).map((n) => `line ${n}`).join(', ')
+
+/**
+ * The three things a markdown source can carry that this runtime will not render.
+ * Two are warnings (the prose still renders around them); a remote asset is an
+ * error, because the CSP will block the request and leave a broken image.
+ */
+function checkMarkdownContent(text, p, ctx) {
+	const { jsx, esm, html, remote } = scanMarkdownSource(text)
+
+	for (const { url, line } of remote)
+		ctx.error('REMOTE_ASSET_BLOCKED', p, `Remote asset ${JSON.stringify(url)} (line ${line}) is not fetched — the canvas forbids off-origin requests by design.`, {
+			got: url,
+			hint: 'Download the asset yourself, then either inline it as a `data:` URI (disposable canvas) or save it beside the canvas and reference the local path (durable report). A path outside the workspace cannot be referenced.',
+			example: { type: 'markdown', text: '![chart](assets/chart.png)' },
+		})
+
+	if (jsx.length || esm.length)
+		ctx.warn('MDX_NOT_RENDERED', p, `MDX components, imports and exports are not rendered (${at([...esm, ...jsx.map((j) => j.line)])}); the prose around them still is.`, {
+			hint: 'The canvas renders static markdown only. Evaluate the component yourself and translate its output into chart, kpi, or table blocks.',
+		})
+
+	if (html.length) {
+		const tags = [...new Set(html.map((h) => `<${h.name}>`))].join(', ')
+		ctx.warn('RAW_HTML_NOT_RENDERED', p, `Raw HTML is not rendered and will be dropped (${tags}, ${at(html.map((h) => h.line))}).`, {
+			hint: 'Convert it to markdown, or to a native block — a raw <table> becomes a table block, a raw <img> an image reference.',
+		})
+	}
+}
 
 /** One defect, one error: extension, then confinement, then existence. */
 function checkMarkdownSrc(src, p, ctx) {

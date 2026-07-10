@@ -10,7 +10,7 @@ const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
 
-const { hasMarkdownExtension, readMarkdownSrc } = require('../lib/markdownsrc')
+const { hasMarkdownExtension, readMarkdownSrc, stripFrontmatter } = require('../lib/markdownsrc')
 
 const MAX = 2 * 1024 * 1024
 const SECRET = 'SECRET=hunter2'
@@ -54,6 +54,24 @@ test('readMarkdownSrc never reads outside the root', () => {
 	// Symlink escape: insideRoot realpaths, so the link is not a way around it.
 	fs.symlinkSync(path.join(outside, 'leak.md'), path.join(root, 'link.md'))
 	assert.equal(readMarkdownSrc(root, 'link.md', MAX), '*(markdown source unavailable)*')
+})
+
+test('stripFrontmatter removes a leading YAML block and nothing else', () => {
+	assert.equal(stripFrontmatter('---\ntitle: x\n---\n# Body\n'), '# Body\n')
+	assert.equal(stripFrontmatter('---\r\ntitle: x\r\n---\r\n# Body\n'), '# Body\n')
+	// A thematic break is not frontmatter, and neither is an unterminated fence.
+	assert.equal(stripFrontmatter('# Hi\n\n---\n\nrule above\n'), '# Hi\n\n---\n\nrule above\n')
+	assert.equal(stripFrontmatter('---\nunterminated\n# body\n'), '---\nunterminated\n# body\n')
+	assert.equal(stripFrontmatter('no frontmatter'), 'no frontmatter')
+})
+
+test('readMarkdownSrc strips frontmatter for .mdx, and leaves .md alone', () => {
+	const root = workspace()
+	const doc = '---\ntitle: Report\n---\n# Body\n'
+	fs.writeFileSync(path.join(root, 'a.mdx'), doc)
+	fs.writeFileSync(path.join(root, 'a.md'), doc)
+	assert.equal(readMarkdownSrc(root, 'a.mdx', MAX), '# Body\n', 'MDX frontmatter is not prose')
+	assert.equal(readMarkdownSrc(root, 'a.md', MAX), doc, 'a .md file is passed through verbatim')
 })
 
 test('readMarkdownSrc degrades to a labeled fallback, never a throw', () => {
