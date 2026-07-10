@@ -127,6 +127,68 @@ const SHAPES = {
 			span: { type: 'number', default: 1, description: 'Grid columns this field spans inside its fieldset (1–3, capped at the fieldset\'s "columns"). Ignored outside fieldsets.', example: 2 },
 		},
 	},
+
+	// --- document mode (envelope-level) --------------------------------------
+	documentCover: {
+		description: 'Front cover, rendered as its own sheet. Only "title" is required.',
+		properties: {
+			title: { type: 'string', required: true, description: 'Cover title.', example: 'Q3 Report' },
+			subtitle: { type: 'string', description: 'Line under the title.', example: 'Revenue and growth' },
+			author: { type: 'string', description: 'Author line.', example: 'Finance team' },
+			date: { type: 'string', description: 'Freeform date line, written by the agent.', example: 'July 2026' },
+			logo: { type: 'string', description: 'Workspace-local image path (inlined server-side) or a data:image/ URI. Remote URLs are refused.', example: 'assets/logo.png' },
+		},
+	},
+	documentToc: {
+		description: 'Table of contents sheet: markdown headings plus chart/table/kpi titles, in document order. Entries only — never page numbers, because the browser print dialog can repaginate (paper size, scale) and printed numbers must not lie.',
+		properties: {
+			title: { type: 'string', default: 'Contents', description: 'TOC heading.' },
+			depth: { type: 'number', enum: [1, 2, 3], default: 2, description: 'Markdown heading levels listed (h1..h{depth}). Chart, table and kpi titles are always listed.' },
+		},
+	},
+	documentStrip: {
+		description: 'Running line on every content sheet (never on the cover or back cover). {{pageNumber}} and {{totalPages}} are substituted; other {{vars}} render literally.',
+		properties: {
+			left: { type: 'string', description: 'Left-aligned text.', example: 'Q3 Report' },
+			center: { type: 'string', description: 'Centered text.' },
+			right: { type: 'string', description: 'Right-aligned text.', example: 'Page {{pageNumber}} of {{totalPages}}' },
+		},
+	},
+	documentBackCover: {
+		description: 'Closing sheet, mirroring the front cover.',
+		properties: {
+			title: { type: 'string', description: 'Closing headline.', example: 'Thank you' },
+			text: { type: 'string', description: 'Closing message.', example: 'Prepared by the finance team.' },
+			logo: { type: 'string', description: 'Workspace-local image path (inlined server-side) or a data:image/ URI. Remote URLs are refused.', example: 'assets/logo.png' },
+		},
+	},
+	documentTheme: {
+		description: 'Brand colors, strict hex only (#rgb or #rrggbb) — the values are injected into live CSS and chart templates, so nothing looser validates.',
+		properties: {
+			accent: { type: 'string', description: 'Accent color for headings, rules and the cover.', example: '#0054fe' },
+			palette: { type: 'array', description: '1–8 hex colors used for chart series inside the document.', example: ['#0054fe', '#00b4d8'] },
+		},
+	},
+	documentPage: {
+		description: 'Paper geometry. The on-screen sheets ARE the printed pages.',
+		properties: {
+			size: { type: 'string', enum: ['A4', 'letter'], default: 'A4', description: 'Paper size.' },
+			orientation: { type: 'string', enum: ['portrait', 'landscape'], default: 'portrait', description: 'Paper orientation.' },
+			margin: { type: 'string', default: '15mm', description: 'Sheet margin, a millimeter length.', example: '15mm' },
+		},
+	},
+	document: {
+		description: 'Document mode. Presence renders the canvas as paper sheets that print 1:1 (browser print dialog or `instantcanvas print`). Every key is optional — a key\'s presence enables its feature. With "pages", each page becomes a chapter starting on a new sheet. Interactive blocks (form, confirm) and chart sweeps are refused: paper cannot submit or drag.',
+		properties: {
+			cover: { type: 'object', itemShape: 'documentCover', description: 'Front cover sheet.' },
+			toc: { type: 'object', itemShape: 'documentToc', description: 'Table of contents (entries only, no page numbers).' },
+			header: { type: 'object', itemShape: 'documentStrip', description: 'Running header on every content sheet.' },
+			footer: { type: 'object', itemShape: 'documentStrip', description: 'Running footer on every content sheet.' },
+			backCover: { type: 'object', itemShape: 'documentBackCover', description: 'Closing sheet.' },
+			theme: { type: 'object', itemShape: 'documentTheme', description: 'Brand colors (strict hex).' },
+			page: { type: 'object', itemShape: 'documentPage', description: 'Paper size, orientation and margin.' },
+		},
+	},
 }
 
 // ---------------------------------------------------------------------------
@@ -607,8 +669,9 @@ const ENVELOPE = {
 		},
 		title: { type: 'string', required: true, description: 'Canvas title (shown as the page heading and in the sidebar).', example: 'Q3 Campaign Analysis' },
 		description: { type: 'string', description: 'Optional subtitle.' },
+		document: { type: 'object', itemShape: 'document', description: 'Print-ready document mode: renders the canvas as paper sheets (cover, contents, running header/footer, back cover, brand theme) that print 1:1. Display blocks only. See `catalog document`.' },
 		blocks: { type: 'array', itemShape: 'block', description: 'Ordered blocks (single-page canvas). XOR with "pages".' },
-		pages: { type: 'array', itemShape: 'page', description: 'Named tabs, each with its own blocks. XOR with "blocks".' },
+		pages: { type: 'array', itemShape: 'page', description: 'Named tabs, each with its own blocks. XOR with "blocks". In document mode each page becomes a chapter.' },
 	},
 	example: {
 		instantcanvas: 1,

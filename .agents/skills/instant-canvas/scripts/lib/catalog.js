@@ -8,6 +8,7 @@
 //   catalog --full     → everything at once (large; avoid unless needed)
 
 const { VERSION, ENVELOPE, BLOCKS, FIELD_TYPES, CHART_KINDS, UNSUPPORTED_CHARTS, SHAPES } = require('./schema')
+const { SKILL_VERSION } = require('./skillmeta')
 
 function renderProperty(spec) {
 	const out = { type: Array.isArray(spec.type) ? spec.type.join(' | ') : spec.type }
@@ -108,6 +109,7 @@ function leanIndex() {
 		unsupportedChartKinds: UNSUPPORTED_CHARTS,
 		fieldTypes: oneLiners(FIELD_TYPES, (f) => f.description.split('.')[0] + '.'),
 		chartSweep: 'Any chart kind becomes a parameter sweep with {"sweep":{"label"?,"frames":[{"label","data"}]}} instead of "data": a slider steps through frames you precompute — `catalog sweep`',
+		documentMode: 'Envelope "document":{...} renders the canvas as print-ready paper sheets (cover, contents, header/footer, back cover, brand theme; display blocks only) that print 1:1 — `catalog document`',
 		formLayout: 'Group fields with {"type":"fieldset","legend","columns":1-3,"fields":[...]} inside fields[]; per-field "span" widens, "ui":"buttons"|"pills" restyles select/radio/checkboxGroup — `catalog fieldset`',
 		validation: 'Per-field validation: {minLength,maxLength,pattern,patternMessage,min,max,step,protocols} — enforced live and server-side.',
 	}
@@ -150,6 +152,33 @@ function catalog(name) {
 		return { envelope: true, description: ENVELOPE.description, properties: renderProperties(ENVELOPE.properties), example: ENVELOPE.example }
 	if (name === 'fieldset')
 		return { fieldset: true, ...renderFieldsetShape() }
+	if (name === 'document')
+		return {
+			document: true,
+			...renderShape(SHAPES.document),
+			notes: [
+				'Documents are display-only: form and confirm blocks and chart "sweep" are refused — paper cannot submit or drag. Ship the frame you want as plain "data".',
+				'The sheets on screen ARE the PDF pages: the human prints via the browser dialog, or the agent runs `instantcanvas print <canvas.json> --out <file.pdf>` (requires a local Chrome).',
+				'cover.logo / backCover.logo must be a workspace-local image file (inlined server-side) or a data:image/ URI — remote URLs are never fetched.',
+				'The table of contents lists entries without page numbers: the browser print dialog can change paper size or scale, and printed numbers must not lie.',
+			],
+			example: {
+				instantcanvas: 1,
+				createdWith: SKILL_VERSION,
+				title: 'Q3 Report',
+				document: {
+					cover: { title: 'Q3 Report', subtitle: 'Revenue and growth', author: 'Finance team', date: 'July 2026' },
+					toc: { depth: 2 },
+					footer: { left: 'Q3 Report', right: 'Page {{pageNumber}} of {{totalPages}}' },
+					theme: { accent: '#0054fe' },
+					page: { size: 'A4' },
+				},
+				blocks: [
+					{ type: 'markdown', text: '# Summary\n\nRevenue was up **12% QoQ**.' },
+					{ type: 'chart', kind: 'line', title: 'Signups', data: [{ month: 'Apr', signups: 2000 }, { month: 'May', signups: 2600 }], encoding: { x: 'month', y: 'signups' } },
+				],
+			},
+		}
 	if (name === 'sweep')
 		return {
 			sweep: true,
@@ -182,7 +211,7 @@ function catalog(name) {
 		err.code = 'INVALID_SPEC'
 		throw err
 	}
-	const err = new Error(`Unknown catalog entry "${name}". Blocks: ${Object.keys(BLOCKS).join(', ')}. Chart kinds: ${Object.keys(CHART_KINDS).join(', ')}. Field types: ${Object.keys(FIELD_TYPES).join(', ')}. Also: envelope, fieldset, --full.`)
+	const err = new Error(`Unknown catalog entry "${name}". Blocks: ${Object.keys(BLOCKS).join(', ')}. Chart kinds: ${Object.keys(CHART_KINDS).join(', ')}. Field types: ${Object.keys(FIELD_TYPES).join(', ')}. Also: envelope, fieldset, sweep, document, --full.`)
 	err.code = 'INVALID_SPEC'
 	throw err
 }

@@ -1,0 +1,55 @@
+{
+	"instantcanvas": 1,
+	"createdWith": "0.1.0",
+	"title": "Aurora Quarterly Review",
+	"description": "Document-mode fixture: every document key, chapters, charts, table, kpi",
+	"document": {
+		"cover": {
+			"title": "Aurora Quarterly Review",
+			"subtitle": "Q3 operations and growth",
+			"author": "Finance team",
+			"date": "July 2026",
+			"logo": "assets/logo.png"
+		},
+		"toc": { "title": "Contents", "depth": 2 },
+		"header": { "left": "Aurora Quarterly Review", "right": "{{pageNumber}} / {{totalPages}}" },
+		"footer": { "left": "Confidential", "right": "Page {{pageNumber}} of {{totalPages}}" },
+		"backCover": { "title": "Thank you", "text": "MARKER-BACK-COVER Prepared by the finance team.", "logo": "assets/logo.png" },
+		"theme": { "accent": "#0054fe", "palette": ["#0054fe", "#00b4d8", "#7209b7", "#f72585"] },
+		"page": { "size": "A4", "orientation": "portrait", "margin": "15mm" }
+	},
+	"pages": [
+		{
+			"name": "Operations",
+			"blocks": [
+				{ "type": "markdown", "text": "# Quarter at a glance\n\nMARKER-CHAPTER-ONE-BODY Throughput held steady while unit costs fell.\n\n## Cost detail\n\nInfra spend fell 8% on reserved capacity." },
+				{ "type": "kpi", "cards": [
+					{ "label": "Revenue", "value": 128000, "format": "currency", "delta": { "value": 0.12, "label": "QoQ" } },
+					{ "label": "Uptime", "value": "99.99%", "format": "none" }
+				] },
+				{ "type": "table", "title": "Cost by service", "columns": [
+					{ "key": "svc", "label": "Service" },
+					{ "key": "cost", "label": "Cost", "format": "currency" }
+				], "rows": [
+					{ "svc": "api", "cost": 42000 },
+					{ "svc": "web", "cost": 18000 }
+				] }
+			]
+		},
+		{
+			"name": "Growth",
+			"blocks": [
+				{ "type": "markdown", "text": "# Signups\n\nMARKER-CHAPTER-TWO-BODY Growth accelerated after the June launch." },
+				{ "type": "chart", "kind": "line", "title": "Signups trend", "data": [
+					{ "month": "Apr", "signups": 2000, "target": 2200 },
+					{ "month": "May", "signups": 2600, "target": 2400 },
+					{ "month": "Jun", "signups": 3400, "target": 2600 }
+				], "encoding": { "x": "month", "y": ["signups", "target"] } },
+				{ "type": "chart", "kind": "bar", "title": "Cost per region", "data": [
+					{ "region": "APAC", "infra": 42000, "people": 118000 },
+					{ "region": "EMEA", "infra": 38000, "people": 94000 }
+				], "encoding": { "x": "region", "y": ["infra", "people"] } }
+			]
+		}
+	]
+}

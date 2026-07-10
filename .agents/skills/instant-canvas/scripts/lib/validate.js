@@ -5,7 +5,7 @@ const path = require('node:path')
 const { ENVELOPE, BLOCKS, FIELD_TYPES, CHART_KINDS, UNSUPPORTED_CHARTS, SHAPES, ENV_KEY_RE, VERSION } = require('./schema')
 const { SKILL_VERSION, CREATED_WITH_RE } = require('./skillmeta')
 const { insideRoot } = require('./paths')
-const { MARKDOWN_EXTENSIONS, hasMarkdownExtension, stripFrontmatter, readMarkdownText, scanMarkdownSource } = require('./markdownsrc')
+const { MARKDOWN_EXTENSIONS, IMAGE_MIME, NOT_A_FILE_RE, hasMarkdownExtension, stripFrontmatter, readMarkdownText, scanMarkdownSource } = require('./markdownsrc')
 
 // ---------------------------------------------------------------- helpers
 
@@ -556,6 +556,141 @@ function checkForm(block, base, ctx) {
 	}
 }
 
+// ---------------------------------------------------------------- document
+
+const HEX_COLOR_RE = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/
+const MARGIN_MM_RE = /^\d+(\.\d+)?mm$/
+const TEMPLATE_VARS = ['pageNumber', 'totalPages']
+const TEMPLATE_RE = /\{\{\s*([^{}]*?)\s*\}\}/g
+
+/**
+ * Value rules the registry's vocabulary cannot express. The shapes themselves
+ * (types, enums, required, unknown-property warnings) come from SHAPES via
+ * checkObject; this adds the document-only semantics:
+ *   - D7: paper cannot submit or drag — form/confirm blocks and chart sweeps
+ *     are refused with a teaching error, never rendered inert.
+ *   - Theme colors are strict hex ONLY: they are assigned into live CSS via
+ *     CSSOM, which happily accepts strings like "javascript:alert(1)".
+ *   - Unknown {{vars}} in header/footer render literally, so they warn.
+ */
+function checkDocument(canvas, ctx) {
+	const doc = canvas.document
+
+	for (const { block, path: p } of collectBlocks(canvas)) {
+		if (typeOf(block) !== 'object')
+			continue
+		if (block.type === 'form' || block.type === 'confirm')
+			ctx.error('DOCUMENT_INTERACTIVE_BLOCK', p, `A document canvas cannot contain a "${block.type}" block — paper cannot submit or confirm.`, {
+				got: block.type,
+				hint: 'Drop the block, or remove "document" from the envelope to render this canvas as an interactive page.',
+			})
+		else if (block.type === 'chart' && block.sweep !== undefined)
+			ctx.error('DOCUMENT_INTERACTIVE_BLOCK', `${p}.sweep`, 'A chart sweep cannot render in a document canvas — paper cannot drag a slider.', {
+				hint: 'Ship the one frame you want as plain "data" (drop "sweep"), or remove "document" from the envelope.',
+			})
+	}
+
+	const theme = doc.theme
+	if (typeOf(theme) === 'object') {
+		const checkColor = (value, p) => {
+			if (typeof value === 'string' && !HEX_COLOR_RE.test(value))
+				ctx.error('INVALID_COLOR', p, `${JSON.stringify(value)} is not a hex color.`, {
+					got: value,
+					expected: '#rgb or #rrggbb',
+					hint: 'Theme colors are injected into live CSS and chart templates; only strict hex passes. Named colors, rgb(), and anything else are refused.',
+					example: { theme: { accent: '#0054fe' } },
+				})
+		}
+		checkColor(theme.accent, 'document.theme.accent')
+		if (Array.isArray(theme.palette)) {
+			if (theme.palette.length < 1 || theme.palette.length > 8)
+				ctx.error('INVALID_SPEC', 'document.theme.palette', `A palette holds 1 to 8 colors, got ${theme.palette.length}.`, {
+					got: theme.palette.length,
+					expected: '1–8 hex colors',
+					example: { theme: { palette: ['#0054fe', '#00b4d8'] } },
+				})
+			theme.palette.forEach((c, i) => {
+				if (typeof c !== 'string')
+					ctx.error('INVALID_PROPERTY_TYPE', `document.theme.palette[${i}]`, `Palette entries must be strings, got ${typeOf(c)}.`, { got: typeOf(c), expected: 'string' })
+				else
+					checkColor(c, `document.theme.palette[${i}]`)
+			})
+		}
+	}
+
+	for (const strip of ['header', 'footer']) {
+		if (typeOf(doc[strip]) !== 'object')
+			continue
+		for (const slot of ['left', 'center', 'right']) {
+			const text = doc[strip][slot]
+			if (typeof text !== 'string')
+				continue
+			for (const m of text.matchAll(TEMPLATE_RE)) {
+				if (!TEMPLATE_VARS.includes(m[1]))
+					ctx.warn('UNKNOWN_TEMPLATE_VAR', `document.${strip}.${slot}`, `Unknown template variable {{${m[1]}}} — it will render literally.`, {
+						hint: 'Available variables: {{pageNumber}}, {{totalPages}}.',
+					})
+			}
+		}
+	}
+
+	if (typeOf(doc.page) === 'object' && typeof doc.page.margin === 'string' && !MARGIN_MM_RE.test(doc.page.margin))
+		ctx.error('INVALID_SPEC', 'document.page.margin', `${JSON.stringify(doc.page.margin)} is not a millimeter length.`, {
+			got: doc.page.margin,
+			expected: 'a value like "15mm" or "12.5mm" — sheet geometry is computed in millimeters',
+			example: { page: { margin: '15mm' } },
+		})
+
+	for (const key of ['cover', 'backCover']) {
+		const section = doc[key]
+		if (typeOf(section) === 'object' && typeof section.logo === 'string')
+			checkDocumentLogo(section.logo, `document.${key}.logo`, ctx)
+	}
+}
+
+const LOGO_EXAMPLE = { cover: { title: 'Q3 Report', logo: 'assets/logo.png' } }
+
+/** Same ladder as checkMarkdownSrc: one defect, one error — scheme, then extension, then confinement, then existence. */
+function checkDocumentLogo(src, p, ctx) {
+	if (/^data:/i.test(src)) {
+		if (!/^data:image\//i.test(src))
+			ctx.error('INVALID_SPEC', p, 'A data: logo must be a data:image/ URI.', {
+				got: src.slice(0, 40),
+				expected: 'data:image/<type>;base64,…',
+				example: LOGO_EXAMPLE,
+			})
+		return
+	}
+	if (NOT_A_FILE_RE.test(src))
+		return ctx.error('REMOTE_ASSET_BLOCKED', p, `Remote asset ${JSON.stringify(src)} is not fetched — the canvas forbids off-origin requests by design.`, {
+			got: src,
+			hint: 'Download the asset yourself, then either inline it as a `data:` URI (disposable canvas) or save it beside the canvas and reference the local path (durable report). A path outside the workspace cannot be referenced.',
+			example: LOGO_EXAMPLE,
+		})
+	if (!IMAGE_MIME[path.extname(src).toLowerCase()])
+		return ctx.error('INVALID_SPEC', p, `"${src}" is not an image file — a logo must end in ${Object.keys(IMAGE_MIME).join(', ')}.`, {
+			got: src,
+			expected: Object.keys(IMAGE_MIME),
+			example: LOGO_EXAMPLE,
+		})
+	if (!ctx.root)
+		return
+	if (!insideRoot(ctx.root, src))
+		return ctx.error('PATH_OUTSIDE_WORKSPACE', p, `"${src}" resolves outside the workspace root — logos must live inside it.`, {
+			got: src,
+		})
+	let stat = null
+	try {
+		stat = fs.statSync(path.resolve(ctx.root, src))
+	} catch { /* missing or unreadable — reported below */ }
+	if (!stat || !stat.isFile())
+		ctx.error('MISSING_SOURCE', p, `"${src}" does not exist or is not a readable file.`, {
+			got: src,
+			hint: 'Write the file before opening the canvas, or inline the logo as a data:image/ URI.',
+			example: LOGO_EXAMPLE,
+		})
+}
+
 // ---------------------------------------------------------------- envelope
 
 function collectBlocks(canvas) {
@@ -682,6 +817,9 @@ function validate(source, opts = {}) {
 			ctx.error('MULTIPLE_INTERACTIVE_BLOCKS', p, `Only ONE interactive block (form or confirm) is allowed per canvas; the first is at ${interactive[0].path}.`, {})
 		})
 	}
+
+	if (typeOf(canvas.document) === 'object')
+		checkDocument(canvas, ctx)
 
 	return finish(ctx, canvas)
 }

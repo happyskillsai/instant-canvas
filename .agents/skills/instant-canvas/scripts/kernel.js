@@ -16,7 +16,7 @@ const registry = require('./lib/registry')
 const { registerSecret, redact, errorOut } = require('./lib/redact')
 const { scan, canvasCount, readCanvasFile, MAX_CANVAS_BYTES } = require('./lib/scan')
 const { validate, collectBlocks, isInteractiveBlock, flattenFields } = require('./lib/validate')
-const { readMarkdownSrc, inlineLocalImages } = require('./lib/markdownsrc')
+const { readMarkdownSrc, inlineLocalImages, inlineImageFile } = require('./lib/markdownsrc')
 const { Sessions } = require('./lib/session')
 const envfile = require('./lib/envfile')
 const jsonfile = require('./lib/jsonfile')
@@ -146,6 +146,7 @@ function loadCanvas(rel) {
 		return { status: 422, body: { ok: false, errors: result.errors, warnings: result.warnings } }
 	const canvas = JSON.parse(raw)
 	resolveMarkdownSrc(canvas)
+	resolveDocumentAssets(canvas)
 	return { status: 200, body: { ok: true, path: rel, canvas, warnings: result.warnings }, canvas }
 }
 
@@ -168,6 +169,28 @@ function resolveMarkdownSrc(canvas) {
 		}
 		if (typeof block.text === 'string')
 			block.text = inlineLocalImages(block.text, ROOT, baseDir, MAX_CANVAS_BYTES)
+	}
+}
+
+/**
+ * Inline document cover/backCover logos as `data:` URIs, same policy as
+ * markdown images: the browser never issues a request for them. A logo that
+ * cannot be inlined (deleted since validation, unreadable) is dropped —
+ * no logo beats a broken image.
+ */
+function resolveDocumentAssets(canvas) {
+	const doc = canvas && canvas.document
+	if (!doc || typeof doc !== 'object')
+		return
+	for (const key of ['cover', 'backCover']) {
+		const section = doc[key]
+		if (!section || typeof section !== 'object' || typeof section.logo !== 'string' || /^data:/i.test(section.logo))
+			continue
+		const uri = inlineImageFile(ROOT, section.logo, ROOT, MAX_CANVAS_BYTES)
+		if (uri)
+			section.logo = uri
+		else
+			delete section.logo
 	}
 }
 

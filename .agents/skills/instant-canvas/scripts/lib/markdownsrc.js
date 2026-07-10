@@ -172,21 +172,30 @@ function inlineLocalImages(text, root, baseDir = root, maxBytes = MAX_MARKDOWN_B
 }
 
 function inlineOne(alt, target, title, root, baseDir, maxBytes) {
-	const unavailable = `*(image unavailable: ${target})*`
-	const mime = IMAGE_MIME[path.extname(decodeURIComponent(target)).toLowerCase()]
+	const uri = inlineImageFile(root, target, baseDir, maxBytes)
+	return uri ? `![${alt}](${uri}${title})` : `*(image unavailable: ${target})*`
+}
+
+/**
+ * A workspace-local image file as a `data:` URI, or null when it cannot be
+ * inlined (unknown type, outside the root, oversized, unreadable). Shared by
+ * markdown image references and document cover/backCover logos.
+ */
+function inlineImageFile(root, target, baseDir = root, maxBytes = MAX_MARKDOWN_BYTES) {
+	const decoded = decodeURIComponent(String(target))
+	const mime = IMAGE_MIME[path.extname(decoded).toLowerCase()]
 	if (!mime)
-		return unavailable
-	const abs = path.resolve(baseDir, decodeURIComponent(target))
+		return null
+	const abs = path.resolve(baseDir, decoded)
 	if (!insideRoot(root, abs))
-		return unavailable
+		return null
 	try {
 		const stat = fs.statSync(abs)
 		if (!stat.isFile() || stat.size > maxBytes)
-			return unavailable
-		const data = fs.readFileSync(abs).toString('base64')
-		return `![${alt}](data:${mime};base64,${data}${title})`
+			return null
+		return `data:${mime};base64,${fs.readFileSync(abs).toString('base64')}`
 	} catch {
-		return unavailable
+		return null
 	}
 }
 
@@ -194,10 +203,12 @@ module.exports = {
 	MARKDOWN_EXTENSIONS,
 	MAX_MARKDOWN_BYTES,
 	IMAGE_MIME,
+	NOT_A_FILE_RE,
 	hasMarkdownExtension,
 	stripFrontmatter,
 	readMarkdownText,
 	readMarkdownSrc,
 	scanMarkdownSource,
 	inlineLocalImages,
+	inlineImageFile,
 }
