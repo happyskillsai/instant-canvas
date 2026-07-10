@@ -8,8 +8,48 @@ They are **never** `require()`d by Node. Do not edit them.
 | `plotly.min.js` | Plotly.js — **custom strict build** (see recipe) | 3.7.0 | https://github.com/plotly/plotly.js @ `v3.7.0` | `211735ddd425ea73dc910c713b74d4f80621988a217b61832b2aaf27c85814e0` | 2026-07-09 |
 | `plotly.css` | Plotly.js `build/plotcss.js`, expanded to a real stylesheet | 3.7.0 | same tag, see recipe | `429a3d6830103153ba1663049d695c7825842740930d55ebfbd98944343e51df` | 2026-07-09 |
 | `markdown-it.min.js` | markdown-it (UMD, minified) | 14.3.0 | https://cdn.jsdelivr.net/npm/markdown-it@14.3.0/dist/markdown-it.min.js | `70fe17bd06c7fa819f03a1ed10957904318103624198845dc893b309bf495e28` | 2026-07-08 |
+| `highlight.min.js` | highlight.js — **full build, assembled** (see recipe) | 11.11.1 | https://registry.npmjs.org/@highlightjs/cdn-assets/-/cdn-assets-11.11.1.tgz | `a2efeb71d4c44ada979696f851491589cc9a37bb8d12df93484003df667ea360` | 2026-07-10 |
 
-Licenses: Plotly.js — MIT; markdown-it — MIT.
+Licenses: Plotly.js — MIT; markdown-it — MIT; highlight.js — BSD-3-Clause.
+
+## Why highlight.js, and why a full build
+
+highlight.js emits **class names** (`hljs-keyword`, `hljs-string`, …), so it renders under
+`style-src 'self'`. **Shiki was rejected**: it writes an inline `style=` on every token, and the
+CSP drops style attributes *silently* — the code would render unstyled with no error. The theme is
+therefore ours (`../styles.css`, `--code-*` tokens); we do **not** ship an hljs stylesheet, and
+nothing may inject a `<style>` element (`scripts/test/render.test.js` asserts zero of them).
+
+No published single file carries all 192 grammars: `@highlightjs/cdn-assets` ships a *common*
+core (36 languages) plus each grammar as its own file, and the GitHub release has no attached
+bundle. The vendored file is the two concatenated, which is what a `-t cdn` source build produces.
+The bundle contains no `eval(`, no `Function(`, no `WebAssembly.`, and no worker — verified after
+assembly; re-verify after any rebuild.
+
+## Rebuild recipe for `highlight.min.js` (maintainer-only)
+
+Core first, then every grammar the core does not already carry, in sorted order (deterministic, so
+the SHA-256 above reproduces):
+
+```sh
+curl -sL https://registry.npmjs.org/@highlightjs/cdn-assets/-/cdn-assets-11.11.1.tgz | tar xz
+node -e '
+const fs=require("fs"), path=require("path");
+const core=fs.readFileSync("package/highlight.min.js","utf8");
+const builtIn=new Set(require("./package/highlight.min.js").listLanguages());
+const extra=fs.readdirSync("package/languages").filter(f=>f.endsWith(".min.js"))
+  .map(f=>f.replace(".min.js","")).filter(l=>!builtIn.has(l)).sort();
+const out=["/*! highlight.js 11.11.1 — full build: cdn-assets core (36 common languages) + "+extra.length+" additional language grammars, concatenated. BSD-3-Clause. */\n",
+  core.trimEnd(),"\n"];
+for(const l of extra) out.push(fs.readFileSync(path.join("package/languages",l+".min.js"),"utf8").trimEnd(),"\n");
+fs.writeFileSync("highlight.min.js", out.join(""));
+'
+cp highlight.min.js <skill>/scripts/web/vendor/highlight.min.js
+```
+
+Each grammar file is an IIFE that calls `hljs.registerLanguage(…)` against the global the core
+declares, so concatenation is the whole build; registration order does not matter, because
+`subLanguage` resolves at highlight time. Verify with `hljs.listLanguages().length === 192`.
 
 ## Why a custom Plotly build (do not swap in a stock dist)
 

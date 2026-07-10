@@ -40,6 +40,8 @@ const DOC = [
 	'# Doc', '', 'Prose.', '',
 	'- [x] done', '- [ ] todo', '',
 	'| a | b |', '|---|---:|', '| 1 | 2 |', '',
+	'```js', 'const x = 1; // hi', '```', '',
+	'```', 'no language declared', '```', '',
 ].join('\n')
 
 const CANVAS = {
@@ -142,6 +144,11 @@ test.before(async () => {
 					mdTasks: document.querySelectorAll('.md li.task').length,
 					mdChecked: document.querySelectorAll('.md li.task input[type=checkbox]:checked').length,
 					mdRightAligned: document.querySelectorAll('.md table .ta-right').length,
+					hljsSpans: document.querySelectorAll('.md pre.hljs code [class^="hljs-"]').length,
+					hljsKeyword: document.querySelectorAll('.md .hljs-keyword').length,
+					hljsBlocks: document.querySelectorAll('.md pre.hljs').length,
+					plainBlocks: document.querySelectorAll('.md pre:not(.hljs)').length,
+					hljsLoaded: typeof window.hljs === 'object' && window.hljs.listLanguages().length,
 				};
 			})()
 		`)
@@ -173,6 +180,14 @@ test('markdown renders as a document, with no inline styles for the CSP to drop'
 	assert.equal(snapshot.mdRightAligned, 2, 'the `|---:|` column is right-aligned by class (th + td)')
 	assert.equal(snapshot.mdTasks, 2, 'both task-list items rendered as tasks')
 	assert.equal(snapshot.mdChecked, 1, 'only the [x] item is checked')
+})
+
+test('fenced code is syntax-highlighted with classes, never inline styles', { skip, timeout: 120_000 }, () => {
+	assert.equal(snapshot.hljsLoaded, 192, 'the vendored full build registered all 192 grammars')
+	assert.equal(snapshot.hljsBlocks, 1, 'only the ```js block is highlighted')
+	assert.equal(snapshot.plainBlocks, 1, 'the fence with no language stays plain, not auto-detected')
+	assert.ok(snapshot.hljsSpans >= 2, `the js fence emitted hljs token spans (got ${snapshot.hljsSpans})`)
+	assert.ok(snapshot.hljsKeyword >= 1, '`const` was tokenized as a keyword')
 })
 
 test('the kernel CSP is never violated, and Plotly injects no stylesheet', { skip, timeout: 120_000 }, () => {

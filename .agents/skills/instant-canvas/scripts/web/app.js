@@ -103,7 +103,24 @@ function toast(msg) {
 	setTimeout(() => t.remove(), 2600)
 }
 
-const md = window.markdownit({ html: false, linkify: true })
+// Syntax highlighting is the skill's job (presentation of local data), and hljs emits
+// CLASSES, so it survives `style-src 'self'`. Shiki was rejected for the opposite
+// reason: it writes an inline style= on every token, which the CSP drops silently.
+// Only a declared language is highlighted — auto-detection over 192 grammars
+// routinely mislabels a short snippet, and a wrong grammar looks worse than none.
+function highlightCode(code, lang) {
+	const hljs = window.hljs
+	if (!hljs || !lang || !hljs.getLanguage(lang))
+		return '' // let markdown-it escape and wrap it plainly
+	try {
+		const { value } = hljs.highlight(code, { language: lang, ignoreIllegals: true })
+		return `<pre class="hljs"><code class="language-${esc(lang)}">${value}</code></pre>`
+	} catch {
+		return ''
+	}
+}
+
+const md = window.markdownit({ html: false, linkify: true, highlight: highlightCode })
 
 // GFM task lists. markdown-it has no rule for them and a plugin would be another
 // vendored file, so rewrite the tokens here: "[ ] " / "[x] " at the head of a list

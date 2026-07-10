@@ -9,6 +9,8 @@
 	--inp-shadow:0 1px 2px rgba(16,20,30,.05);
 	--fset-border:#c3cad5;
 	--logo-base:#00184d; --logo-accent:#0054fe;
+	--code-kw:#6d28d9; --code-str:#047857; --code-num:#b45309; --code-fn:#0e7490;
+	--code-var:#be185d; --code-cmt:#6b7280; --code-meta:#4b5563; --code-add:#065f46; --code-del:#b91c1c;
 	color-scheme:light;
 }
 :root[data-theme="dark"]{
@@ -21,6 +23,8 @@
 	--inp-shadow:none;
 	--fset-border:#2d3442;
 	--logo-base:#2a3a6b; --logo-accent:#2f6bff;
+	--code-kw:#c4b5fd; --code-str:#6ee7b7; --code-num:#fcd34d; --code-fn:#67e8f9;
+	--code-var:#f9a8d4; --code-cmt:#8b93a1; --code-meta:#9aa3b0; --code-add:#6ee7b7; --code-del:#fca5a5;
 	color-scheme:dark;
 }
 @media (prefers-color-scheme:dark){
@@ -34,6 +38,8 @@
 		--inp-shadow:none;
 		--fset-border:#2d3442;
 		--logo-base:#2a3a6b; --logo-accent:#2f6bff;
+		--code-kw:#c4b5fd; --code-str:#6ee7b7; --code-num:#fcd34d; --code-fn:#67e8f9;
+		--code-var:#f9a8d4; --code-cmt:#8b93a1; --code-meta:#9aa3b0; --code-add:#6ee7b7; --code-del:#fca5a5;
 		color-scheme:dark;
 	}
 }
@@ -115,6 +121,8 @@ button{font:inherit;cursor:pointer}
 .side-foot .watch #watchState{flex:0 0 auto}
 .side-foot .watch #watchPath{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
 	font-family:ui-monospace,SFMono-Regular,Menlo,monospace;cursor:default}
+.side-foot .ver{margin-top:8px;padding-top:8px;border-top:1px solid var(--border);opacity:.75;font-size:11px;
+	white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:default}
 .pulse{width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 0 0 var(--green);
 	animation:pulse 2s infinite}
 .pulse.off{background:var(--red);animation:none}
@@ -179,6 +187,27 @@ button{font:inherit;cursor:pointer}
 .md li.task input[type=checkbox]{width:16px;height:16px;margin:0 8px 0 0;vertical-align:-3px}
 .md li.task input[type=checkbox]:disabled{cursor:default}
 .md li.task input[type=checkbox]:disabled:not(:checked){background:var(--panel-2)}
+
+/* highlight.js theme. hljs emits classes (never inline styles), so it survives
+   `style-src 'self'`; these rules replace the vendored hljs stylesheet, which we
+   deliberately do not ship — one theme, driven by the same tokens as everything else. */
+.md .hljs{color:var(--text)}
+.md .hljs-comment,.md .hljs-quote{color:var(--code-cmt);font-style:italic}
+.md .hljs-keyword,.md .hljs-selector-tag,.md .hljs-literal,.md .hljs-section,
+.md .hljs-doctag,.md .hljs-name,.md .hljs-tag,.md .hljs-operator{color:var(--code-kw)}
+.md .hljs-string,.md .hljs-regexp,.md .hljs-symbol,.md .hljs-bullet,
+.md .hljs-link,.md .hljs-char.escape_,.md .hljs-meta .hljs-string{color:var(--code-str)}
+.md .hljs-number,.md .hljs-type,.md .hljs-params,.md .hljs-selector-attr,
+.md .hljs-selector-pseudo,.md .hljs-template-variable{color:var(--code-num)}
+.md .hljs-title,.md .hljs-title.class_,.md .hljs-title.function_,.md .hljs-built_in,
+.md .hljs-attr,.md .hljs-attribute,.md .hljs-property,.md .hljs-selector-class,
+.md .hljs-selector-id{color:var(--code-fn)}
+.md .hljs-variable,.md .hljs-subst,.md .hljs-formula{color:var(--code-var)}
+.md .hljs-meta,.md .hljs-meta .hljs-keyword,.md .hljs-comment .hljs-doctag{color:var(--code-meta)}
+.md .hljs-addition{color:var(--code-add)}
+.md .hljs-deletion{color:var(--code-del)}
+.md .hljs-emphasis{font-style:italic}
+.md .hljs-strong{font-weight:650}
 
 .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px}
 .kpi{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:14px 16px;box-shadow:var(--shadow)}
