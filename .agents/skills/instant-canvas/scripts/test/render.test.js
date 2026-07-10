@@ -43,6 +43,7 @@ const DOC = [
 	'```js', 'const x = 1; // hi', '```', '',
 	'```', 'no language declared', '```', '',
 	'![local](logo.png)', '',   // inlined server-side as a data: URI
+	'![vector](logo.svg)', '',  // markdown-it's validateLink refuses data:image/svg+xml by default
 	'![huge](huge.png)', '',    // over the cap → labeled fallback, never a broken image
 ].join('\n')
 
@@ -112,6 +113,7 @@ test.before(async () => {
 	root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'ic-render-')))
 	fs.writeFileSync(path.join(root, 'smoke.canvas.json'), JSON.stringify(CANVAS))
 	fs.writeFileSync(path.join(root, 'logo.png'), PNG)
+	fs.writeFileSync(path.join(root, 'logo.svg'), '<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"><rect width="8" height="8" fill="#6366f1"/></svg>')
 	fs.writeFileSync(path.join(root, 'huge.png'), Buffer.alloc(3 * 1024 * 1024, 7)) // over the 2 MB cap
 	const out = execFileSync(process.execPath, [CLI, 'open', path.join(root, 'smoke.canvas.json'), '--workspace', root, '--no-open'], { encoding: 'utf8' })
 	url = JSON.parse(out).url
@@ -156,7 +158,7 @@ test.before(async () => {
 					hljsBlocks: document.querySelectorAll('.md pre.hljs').length,
 					plainBlocks: document.querySelectorAll('.md pre:not(.hljs)').length,
 					hljsLoaded: typeof window.hljs === 'object' && window.hljs.listLanguages().length,
-					mdImgs: [...document.querySelectorAll('.md img')].map((i) => i.getAttribute('src').slice(0, 24)),
+					mdImgs: [...document.querySelectorAll('.md img')].map((i) => i.getAttribute('src').slice(0, 26)),
 					mdImgsLoaded: [...document.querySelectorAll('.md img')].filter((i) => i.complete && i.naturalWidth > 0).length,
 					mdImgFallback: /image unavailable: huge\.png/.test(document.querySelector('.md').textContent),
 				};
@@ -201,10 +203,13 @@ test('fenced code is syntax-highlighted with classes, never inline styles', { sk
 })
 
 test('a workspace image is inlined as a data: URI, and an oversize one degrades', { skip, timeout: 120_000 }, () => {
-	// Exactly one <img>: the oversize one became a text label, not a broken image.
-	assert.equal(snapshot.mdImgs.length, 1, 'the over-cap image is not an <img> at all')
-	assert.ok(snapshot.mdImgs[0].startsWith('data:image/png;base64,'), `inlined server-side, got ${snapshot.mdImgs[0]}`)
-	assert.equal(snapshot.mdImgsLoaded, 1, 'the data: URI actually decoded and painted')
+	// Two <img>: the oversize one became a text label, not a broken image.
+	assert.equal(snapshot.mdImgs.length, 2, 'the over-cap image is not an <img> at all')
+	assert.ok(snapshot.mdImgs[0].startsWith('data:image/png;base64,'), `png inlined server-side, got ${snapshot.mdImgs[0]}`)
+	// markdown-it's default validateLink allows only png/jpeg/gif/webp data: URIs and
+	// throws the rest away as literal text — silently. An SVG diagram is the common case.
+	assert.ok(snapshot.mdImgs[1].startsWith('data:image/svg+xml;base'), `svg survives validateLink, got ${snapshot.mdImgs[1]}`)
+	assert.equal(snapshot.mdImgsLoaded, 2, 'both data: URIs actually decoded and painted')
 	assert.ok(snapshot.mdImgFallback, 'the oversize image left a labeled fallback')
 })
 

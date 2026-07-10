@@ -309,13 +309,13 @@ function checkMarkdownContent(text, p, ctx) {
 		})
 
 	if (jsx.length || esm.length)
-		ctx.warn('MDX_NOT_RENDERED', p, `MDX components, imports and exports are not rendered (${at([...esm, ...jsx.map((j) => j.line)])}); the prose around them still is.`, {
-			hint: 'The canvas renders static markdown only. Evaluate the component yourself and translate its output into chart, kpi, or table blocks.',
+		ctx.warn('MDX_NOT_RENDERED', p, `MDX components, imports and exports are never evaluated; they appear as literal text in the document (${at([...esm, ...jsx.map((j) => j.line)])}).`, {
+			hint: 'Delete these lines. Evaluate the component yourself and translate its output into chart, kpi, or table blocks — the prose around them renders normally.',
 		})
 
 	if (html.length) {
 		const tags = [...new Set(html.map((h) => `<${h.name}>`))].join(', ')
-		ctx.warn('RAW_HTML_NOT_RENDERED', p, `Raw HTML is not rendered and will be dropped (${tags}, ${at(html.map((h) => h.line))}).`, {
+		ctx.warn('RAW_HTML_NOT_RENDERED', p, `Raw HTML is not rendered; the tags appear as literal text in the document (${tags}, ${at(html.map((h) => h.line))}).`, {
 			hint: 'Convert it to markdown, or to a native block — a raw <table> becomes a table block, a raw <img> an image reference.',
 		})
 	}

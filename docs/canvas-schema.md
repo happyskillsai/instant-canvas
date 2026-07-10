@@ -40,7 +40,9 @@ A canvas holds **at most one interactive block** (`form` or `confirm`) across al
 
 A document renderer, not a caption renderer. `src` is restricted to a **`.md` / `.mdx` / `.markdown`** allowlist (case-insensitive), enforced in **both** `validate.js` and `kernel.js` — a canvas can reach the kernel without ever passing the CLI, so both surfaces guard. Before this, `src` accepted any workspace file and rendered it, so `{"type":"markdown","src":".env"}` displayed the workspace's secrets. A `src` that does not resolve to a readable file is a `MISSING_SOURCE` error at validate time, never a render-time `*(not found)*`.
 
-`.mdx` is **read, never evaluated**. Its YAML frontmatter is stripped and the static prose renders; `import`/`export`/`<Component/>` produce a `MDX_NOT_RENDERED` warning naming the lines. Raw HTML stays dropped (`html:false`) and warns via `RAW_HTML_NOT_RENDERED`. Both are warnings because the prose around them still renders.
+`.mdx` is **read, never evaluated**. Its YAML frontmatter is stripped and the static prose renders; `import`/`export`/`<Component/>` produce a `MDX_NOT_RENDERED` warning naming the lines. Raw HTML is never rendered (`html:false`) and warns via `RAW_HTML_NOT_RENDERED`. Both are warnings because the prose around them still renders — but note that `html:false` **escapes** rather than deletes, so an unremoved tag or `import` line shows up as literal text in the document. The warnings say so, and tell the agent to delete the lines.
+
+Frontmatter is stripped for `.mdx` **only**. A `.md` file that opens with a `---` YAML block renders that block as a horizontal rule and a heading, because in plain markdown that is exactly what it is.
 
 **The asset rule** — the line every asset decision follows:
 

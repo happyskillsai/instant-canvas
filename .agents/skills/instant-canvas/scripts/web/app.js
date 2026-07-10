@@ -122,6 +122,16 @@ function highlightCode(code, lang) {
 
 const md = window.markdownit({ html: false, linkify: true, highlight: highlightCode })
 
+// markdown-it's default validateLink rejects every `data:` URI except png/jpeg/gif/webp,
+// so the SVG, AVIF, BMP and ICO images the kernel inlines were silently dropped to
+// literal text — no <img>, no error. Accept exactly the base64 image types the kernel
+// emits (see IMAGE_MIME in lib/markdownsrc.js); javascript:, vbscript: and file: stay
+// refused by the default. An SVG inside <img> cannot run script or fetch anything, and
+// `default-src 'none'` holds regardless.
+const DATA_IMAGE_RE = /^data:image\/(png|jpe?g|gif|webp|avif|bmp|x-icon|svg\+xml);base64,/i
+const defaultValidateLink = md.validateLink
+md.validateLink = (url) => DATA_IMAGE_RE.test(String(url).trim()) || defaultValidateLink.call(md, url)
+
 // GFM task lists. markdown-it has no rule for them and a plugin would be another
 // vendored file, so rewrite the tokens here: "[ ] " / "[x] " at the head of a list
 // item becomes a disabled checkbox. The emitted markup carries classes only — a
