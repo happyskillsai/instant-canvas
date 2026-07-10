@@ -1,7 +1,10 @@
 'use strict'
 
+const fs = require('node:fs')
+const path = require('node:path')
 const { ENVELOPE, BLOCKS, FIELD_TYPES, CHART_KINDS, UNSUPPORTED_CHARTS, SHAPES, ENV_KEY_RE, VERSION } = require('./schema')
 const { insideRoot } = require('./paths')
+const { MARKDOWN_EXTENSIONS, hasMarkdownExtension } = require('./markdownsrc')
 
 // ---------------------------------------------------------------- helpers
 
@@ -272,9 +275,35 @@ function checkMarkdown(block, base, ctx) {
 			expected: 'string',
 			example: BLOCKS.markdown.example,
 		})
-	if (typeof block.src === 'string' && ctx.root && !insideRoot(ctx.root, block.src))
-		ctx.error('PATH_OUTSIDE_WORKSPACE', `${base}.src`, `"${block.src}" resolves outside the workspace root — markdown sources must live inside it.`, {
-			got: block.src,
+	if (typeof block.src === 'string') checkMarkdownSrc(block.src, `${base}.src`, ctx)
+}
+
+const SRC_EXAMPLE = { type: 'markdown', src: 'notes/summary.md' }
+
+/** One defect, one error: extension, then confinement, then existence. */
+function checkMarkdownSrc(src, p, ctx) {
+	if (!hasMarkdownExtension(src))
+		return ctx.error('INVALID_SPEC', p, `"${src}" is not a markdown file — "src" must end in ${MARKDOWN_EXTENSIONS.join(', ')}.`, {
+			got: src,
+			expected: MARKDOWN_EXTENSIONS,
+			hint: 'A markdown block only reads markdown. To show another file, read it yourself and pass its content as "text", or lower it into a table or chart block.',
+			example: SRC_EXAMPLE,
+		})
+	if (!ctx.root) return
+	if (!insideRoot(ctx.root, src))
+		return ctx.error('PATH_OUTSIDE_WORKSPACE', p, `"${src}" resolves outside the workspace root — markdown sources must live inside it.`, {
+			got: src,
+		})
+	const abs = path.resolve(ctx.root, src)
+	let stat = null
+	try {
+		stat = fs.statSync(abs)
+	} catch { /* missing or unreadable — reported below */ }
+	if (!stat || !stat.isFile())
+		return ctx.error('MISSING_SOURCE', p, `"${src}" does not exist or is not a readable file (resolved to ${abs}).`, {
+			got: src,
+			hint: 'Write the file before opening the canvas, or inline the content as "text".',
+			example: SRC_EXAMPLE,
 		})
 }
 

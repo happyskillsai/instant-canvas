@@ -16,6 +16,7 @@ const registry = require('./lib/registry')
 const { registerSecret, redact, errorOut } = require('./lib/redact')
 const { scan, canvasCount, readCanvasFile, MAX_CANVAS_BYTES } = require('./lib/scan')
 const { validate, collectBlocks, isInteractiveBlock, flattenFields } = require('./lib/validate')
+const { readMarkdownSrc } = require('./lib/markdownsrc')
 const { Sessions } = require('./lib/session')
 const envfile = require('./lib/envfile')
 const jsonfile = require('./lib/jsonfile')
@@ -147,17 +148,8 @@ function loadCanvas(rel) {
 /** Inline markdown "src" files server-side (the browser has no raw file route). */
 function resolveMarkdownSrc(canvas) {
 	for (const { block } of collectBlocks(canvas)) {
-		if (block && block.type === 'markdown' && typeof block.src === 'string' && block.text === undefined) {
-			try {
-				const abs = path.resolve(ROOT, block.src)
-				if (insideRoot(ROOT, abs) && fs.statSync(abs).size <= MAX_CANVAS_BYTES)
-					block.text = fs.readFileSync(abs, 'utf8')
-				else
-					block.text = '*(markdown source unavailable)*'
-			} catch {
-				block.text = `*(markdown source not found: ${block.src})*`
-			}
-		}
+		if (block && block.type === 'markdown' && typeof block.src === 'string' && block.text === undefined)
+			block.text = readMarkdownSrc(ROOT, block.src, MAX_CANVAS_BYTES)
 	}
 }
 

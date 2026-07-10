@@ -119,8 +119,46 @@ test('PATH_OUTSIDE_WORKSPACE for markdown src escaping the root', () => {
 	const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ic-val-'))
 	const bad = validate(canvas([{ type: 'markdown', src: '../outside.md' }]), { root })
 	assert.deepEqual(codes(bad), ['PATH_OUTSIDE_WORKSPACE'])
+	fs.mkdirSync(path.join(root, 'notes'))
+	fs.writeFileSync(path.join(root, 'notes', 'inside.md'), '# hi')
 	const good = validate(canvas([{ type: 'markdown', src: 'notes/inside.md' }]), { root })
 	assert.equal(good.ok, true)
+})
+
+test('markdown src is restricted to a markdown extension, with or without a root', () => {
+	const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ic-val-'))
+	fs.writeFileSync(path.join(root, '.env'), 'SECRET=hunter2')
+
+	// The hole this closes: a readable, inside-root, non-markdown file.
+	const rooted = validate(canvas([{ type: 'markdown', src: '.env' }]), { root })
+	assert.deepEqual(codes(rooted), ['INVALID_SPEC'])
+	assert.match(rooted.errors[0].hint, /read it yourself/)
+	assert.deepEqual(rooted.errors[0].expected, ['.md', '.mdx', '.markdown'])
+
+	// The extension check does not depend on `root` being known.
+	assert.deepEqual(codes(validate(canvas([{ type: 'markdown', src: '.env' }]))), ['INVALID_SPEC'])
+	assert.deepEqual(codes(validate(canvas([{ type: 'markdown', src: 'id_rsa' }]))), ['INVALID_SPEC'])
+
+	// All three extensions pass, case-insensitively.
+	for (const name of ['a.md', 'b.MDX', 'c.Markdown']) {
+		fs.writeFileSync(path.join(root, name), '# ok')
+		assert.equal(validate(canvas([{ type: 'markdown', src: name }]), { root }).ok, true, name)
+	}
+})
+
+test('MISSING_SOURCE when a markdown src does not resolve to a readable file', () => {
+	const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ic-val-'))
+	const gone = validate(canvas([{ type: 'markdown', src: 'nope.md' }]), { root })
+	assert.deepEqual(codes(gone), ['MISSING_SOURCE'])
+	assert.match(gone.errors[0].message, /nope\.md/)
+	assert.ok(gone.errors[0].hint, 'teaching error carries a hint')
+
+	// A directory named like a markdown file is not a source.
+	fs.mkdirSync(path.join(root, 'dir.md'))
+	assert.deepEqual(codes(validate(canvas([{ type: 'markdown', src: 'dir.md' }]), { root })), ['MISSING_SOURCE'])
+
+	// Without a root there is nothing to resolve against, so existence is not checked.
+	assert.equal(validate(canvas([{ type: 'markdown', src: 'nope.md' }])).ok, true)
 })
 
 test('markdown XOR text/src', () => {
