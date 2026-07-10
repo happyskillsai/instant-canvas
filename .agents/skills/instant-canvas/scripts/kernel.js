@@ -16,7 +16,7 @@ const registry = require('./lib/registry')
 const { registerSecret, redact, errorOut } = require('./lib/redact')
 const { scan, canvasCount, readCanvasFile, MAX_CANVAS_BYTES } = require('./lib/scan')
 const { validate, collectBlocks, isInteractiveBlock, flattenFields } = require('./lib/validate')
-const { readMarkdownSrc } = require('./lib/markdownsrc')
+const { readMarkdownSrc, inlineLocalImages } = require('./lib/markdownsrc')
 const { Sessions } = require('./lib/session')
 const envfile = require('./lib/envfile')
 const jsonfile = require('./lib/jsonfile')
@@ -146,11 +146,25 @@ function loadCanvas(rel) {
 	return { status: 200, body: { ok: true, path: rel, canvas, warnings: result.warnings }, canvas }
 }
 
-/** Inline markdown "src" files server-side (the browser has no raw file route). */
+/**
+ * Inline markdown "src" files and their local images server-side — the browser
+ * has no raw file route, and the CSP lets it fetch neither. It only ever sees
+ * markdown text and `data:` URIs.
+ */
 function resolveMarkdownSrc(canvas) {
 	for (const { block } of collectBlocks(canvas)) {
-		if (block && block.type === 'markdown' && typeof block.src === 'string' && block.text === undefined)
+		if (!block || block.type !== 'markdown')
+			continue
+		// An image path inside a src file is relative to that file, not to the root.
+		let baseDir = ROOT
+		if (typeof block.src === 'string' && block.text === undefined) {
 			block.text = readMarkdownSrc(ROOT, block.src, MAX_CANVAS_BYTES)
+			const abs = path.resolve(ROOT, block.src)
+			if (insideRoot(ROOT, abs))
+				baseDir = path.dirname(abs)
+		}
+		if (typeof block.text === 'string')
+			block.text = inlineLocalImages(block.text, ROOT, baseDir, MAX_CANVAS_BYTES)
 	}
 }
 

@@ -42,7 +42,12 @@ const DOC = [
 	'| a | b |', '|---|---:|', '| 1 | 2 |', '',
 	'```js', 'const x = 1; // hi', '```', '',
 	'```', 'no language declared', '```', '',
+	'![local](logo.png)', '',   // inlined server-side as a data: URI
+	'![huge](huge.png)', '',    // over the cap → labeled fallback, never a broken image
 ].join('\n')
+
+// The smallest valid PNG: 1x1, transparent.
+const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64')
 
 const CANVAS = {
 	instantcanvas: 1,
@@ -106,6 +111,8 @@ test.before(async () => {
 		return
 	root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'ic-render-')))
 	fs.writeFileSync(path.join(root, 'smoke.canvas.json'), JSON.stringify(CANVAS))
+	fs.writeFileSync(path.join(root, 'logo.png'), PNG)
+	fs.writeFileSync(path.join(root, 'huge.png'), Buffer.alloc(3 * 1024 * 1024, 7)) // over the 2 MB cap
 	const out = execFileSync(process.execPath, [CLI, 'open', path.join(root, 'smoke.canvas.json'), '--workspace', root, '--no-open'], { encoding: 'utf8' })
 	url = JSON.parse(out).url
 
@@ -149,6 +156,9 @@ test.before(async () => {
 					hljsBlocks: document.querySelectorAll('.md pre.hljs').length,
 					plainBlocks: document.querySelectorAll('.md pre:not(.hljs)').length,
 					hljsLoaded: typeof window.hljs === 'object' && window.hljs.listLanguages().length,
+					mdImgs: [...document.querySelectorAll('.md img')].map((i) => i.getAttribute('src').slice(0, 24)),
+					mdImgsLoaded: [...document.querySelectorAll('.md img')].filter((i) => i.complete && i.naturalWidth > 0).length,
+					mdImgFallback: /image unavailable: huge\.png/.test(document.querySelector('.md').textContent),
 				};
 			})()
 		`)
@@ -188,6 +198,14 @@ test('fenced code is syntax-highlighted with classes, never inline styles', { sk
 	assert.equal(snapshot.plainBlocks, 1, 'the fence with no language stays plain, not auto-detected')
 	assert.ok(snapshot.hljsSpans >= 2, `the js fence emitted hljs token spans (got ${snapshot.hljsSpans})`)
 	assert.ok(snapshot.hljsKeyword >= 1, '`const` was tokenized as a keyword')
+})
+
+test('a workspace image is inlined as a data: URI, and an oversize one degrades', { skip, timeout: 120_000 }, () => {
+	// Exactly one <img>: the oversize one became a text label, not a broken image.
+	assert.equal(snapshot.mdImgs.length, 1, 'the over-cap image is not an <img> at all')
+	assert.ok(snapshot.mdImgs[0].startsWith('data:image/png;base64,'), `inlined server-side, got ${snapshot.mdImgs[0]}`)
+	assert.equal(snapshot.mdImgsLoaded, 1, 'the data: URI actually decoded and painted')
+	assert.ok(snapshot.mdImgFallback, 'the oversize image left a labeled fallback')
 })
 
 test('the kernel CSP is never violated, and Plotly injects no stylesheet', { skip, timeout: 120_000 }, () => {

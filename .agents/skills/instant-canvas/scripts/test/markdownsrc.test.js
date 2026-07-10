@@ -10,7 +10,10 @@ const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
 
-const { hasMarkdownExtension, readMarkdownSrc, stripFrontmatter } = require('../lib/markdownsrc')
+const { hasMarkdownExtension, readMarkdownSrc, stripFrontmatter, inlineLocalImages } = require('../lib/markdownsrc')
+
+// The smallest valid PNG: 1x1, transparent.
+const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64')
 
 const MAX = 2 * 1024 * 1024
 const SECRET = 'SECRET=hunter2'
@@ -72,6 +75,58 @@ test('readMarkdownSrc strips frontmatter for .mdx, and leaves .md alone', () => 
 	fs.writeFileSync(path.join(root, 'a.md'), doc)
 	assert.equal(readMarkdownSrc(root, 'a.mdx', MAX), '# Body\n', 'MDX frontmatter is not prose')
 	assert.equal(readMarkdownSrc(root, 'a.md', MAX), doc, 'a .md file is passed through verbatim')
+})
+
+test('inlineLocalImages turns a workspace image into a data: URI', () => {
+	const root = workspace()
+	fs.writeFileSync(path.join(root, 'logo.png'), PNG)
+	fs.mkdirSync(path.join(root, 'assets'))
+	fs.writeFileSync(path.join(root, 'assets', 'deep.svg'), '<svg xmlns="http://www.w3.org/2000/svg"/>')
+
+	const out = inlineLocalImages('![a](logo.png)', root, root, MAX)
+	assert.match(out, /^!\[a\]\(data:image\/png;base64,[A-Za-z0-9+/=]+\)$/)
+	assert.ok(out.includes(PNG.toString('base64')), 'the bytes are the file\'s bytes')
+
+	// MIME comes from the extension; a title survives the rewrite.
+	assert.match(inlineLocalImages('![](assets/deep.svg "cap")', root, root, MAX), /data:image\/svg\+xml;base64,.* "cap"\)/)
+
+	// A src file's images resolve relative to that file's directory.
+	assert.match(inlineLocalImages('![](deep.svg)', root, path.join(root, 'assets'), MAX), /data:image\/svg\+xml/)
+})
+
+test('inlineLocalImages degrades to a label, never a broken image', () => {
+	const root = workspace()
+	const outside = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'ic-out-')))
+	fs.writeFileSync(path.join(outside, 'leak.png'), PNG)
+	fs.writeFileSync(path.join(root, 'big.png'), PNG)
+	fs.writeFileSync(path.join(root, 'notes.txt'), 'x')
+
+	assert.equal(inlineLocalImages('![](gone.png)', root, root, MAX), '*(image unavailable: gone.png)*')
+	assert.equal(inlineLocalImages('![](big.png)', root, root, 4), '*(image unavailable: big.png)*')
+	assert.equal(inlineLocalImages('![](notes.txt)', root, root, MAX), '*(image unavailable: notes.txt)*')
+	assert.equal(inlineLocalImages('![](../oops.png)', root, root, MAX), '*(image unavailable: ../oops.png)*')
+
+	// Confinement holds through an absolute path and a symlink.
+	fs.symlinkSync(path.join(outside, 'leak.png'), path.join(root, 'link.png'))
+	assert.doesNotMatch(inlineLocalImages('![](link.png)', root, root, MAX), /data:/)
+	assert.doesNotMatch(inlineLocalImages(`![](${path.join(outside, 'leak.png')})`, root, root, MAX), /data:/)
+})
+
+test('inlineLocalImages leaves remote, data:, and quoted references alone', () => {
+	const root = workspace()
+	fs.writeFileSync(path.join(root, 'logo.png'), PNG)
+
+	// Remote is the validator's job (REMOTE_ASSET_BLOCKED); do not rewrite it here.
+	const remote = '![a](https://cdn.example.com/a.png)'
+	assert.equal(inlineLocalImages(remote, root, root, MAX), remote)
+
+	const already = '![a](data:image/png;base64,AAAA)'
+	assert.equal(inlineLocalImages(already, root, root, MAX), already)
+
+	// A fenced example documents the syntax; it is not an image to inline.
+	const fenced = '```md\n![a](logo.png)\n```\n'
+	assert.equal(inlineLocalImages(fenced, root, root, MAX), fenced)
+	assert.equal(inlineLocalImages('Use `![a](logo.png)` inline.', root, root, MAX), 'Use `![a](logo.png)` inline.')
 })
 
 test('readMarkdownSrc degrades to a labeled fallback, never a throw', () => {

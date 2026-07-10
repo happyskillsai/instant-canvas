@@ -124,13 +124,78 @@ function scanMarkdownSource(text) {
 	return { jsx, esm, html, remote }
 }
 
+// ---------------------------------------------------------------- image inlining
+
+const IMAGE_MIME = {
+	'.png': 'image/png',
+	'.jpg': 'image/jpeg',
+	'.jpeg': 'image/jpeg',
+	'.gif': 'image/gif',
+	'.webp': 'image/webp',
+	'.avif': 'image/avif',
+	'.bmp': 'image/bmp',
+	'.ico': 'image/x-icon',
+	'.svg': 'image/svg+xml',
+}
+
+// ![alt](target "optional title")
+const IMAGE_REF_RE = /!\[([^\]]*)\]\(\s*<?([^)\s>]+)>?(\s+"[^"]*")?\s*\)/g
+const NOT_A_FILE_RE = /^(?:[a-z][a-z0-9+.-]*:|\/\/|#)/i
+
+/**
+ * Replace every workspace-local image reference with a `data:` URI, server-side,
+ * so the browser never issues a request for it — `img-src 'self' data:` already
+ * permits the result and no new route is needed.
+ *
+ * An image that is too large, unreadable, of an unknown type, or outside the
+ * workspace degrades to a labeled fallback. It never becomes a broken image.
+ *
+ * Remote targets are left untouched: the validator rejects them with
+ * REMOTE_ASSET_BLOCKED long before a canvas gets here.
+ */
+function inlineLocalImages(text, root, baseDir = root, maxBytes = MAX_MARKDOWN_BYTES) {
+	// Matching against the code-blanked twin (same length, same offsets) keeps a
+	// fenced ![](x.png) example from being rewritten into a data: URI.
+	const masked = blankCode(text)
+	let out = '', last = 0
+
+	for (const m of masked.matchAll(IMAGE_REF_RE)) {
+		const [full, alt, target, title = ''] = m
+		out += text.slice(last, m.index)
+		last = m.index + full.length
+		out += NOT_A_FILE_RE.test(target) ? full : inlineOne(alt, target, title, root, baseDir, maxBytes)
+	}
+	return out + text.slice(last)
+}
+
+function inlineOne(alt, target, title, root, baseDir, maxBytes) {
+	const unavailable = `*(image unavailable: ${target})*`
+	const mime = IMAGE_MIME[path.extname(decodeURIComponent(target)).toLowerCase()]
+	if (!mime)
+		return unavailable
+	const abs = path.resolve(baseDir, decodeURIComponent(target))
+	if (!insideRoot(root, abs))
+		return unavailable
+	try {
+		const stat = fs.statSync(abs)
+		if (!stat.isFile() || stat.size > maxBytes)
+			return unavailable
+		const data = fs.readFileSync(abs).toString('base64')
+		return `![${alt}](data:${mime};base64,${data}${title})`
+	} catch {
+		return unavailable
+	}
+}
+
 module.exports = {
 	MARKDOWN_EXTENSIONS,
 	MAX_MARKDOWN_BYTES,
+	IMAGE_MIME,
 	hasMarkdownExtension,
 	isMdx,
 	stripFrontmatter,
 	readMarkdownText,
 	readMarkdownSrc,
 	scanMarkdownSource,
+	inlineLocalImages,
 }
