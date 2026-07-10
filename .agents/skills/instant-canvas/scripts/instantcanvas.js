@@ -22,6 +22,8 @@ const { validate, renderHuman } = require('./lib/validate')
 const { catalog } = require('./lib/catalog')
 const { openUrl } = require('./lib/browser')
 const { writeAtomic } = require('./lib/fsatomic')
+const { insideRoot } = require('./lib/paths')
+const { withChrome, findChrome } = require('./lib/cdp')
 const { SKILL_VERSION, UNKNOWN_VERSION } = require('./lib/skillmeta')
 
 const VERSION = SKILL_VERSION
@@ -39,6 +41,10 @@ Commands:
       Write this skill's version into the canvas as "createdWith". Idempotent:
       an existing stamp is never rewritten. --retrofit stamps "unknown" for a
       canvas created before stamping existed. Every canvas needs this once.
+  print <canvas.json> --out <file.pdf> [--workspace <dir>]
+      Print a document canvas to PDF via a local headless Chrome. The sheets
+      on screen ARE the PDF pages. Requires Chrome (CHROME_PATH overrides
+      discovery) and an envelope-level "document" object.
   validate <canvas.json>       Validate a canvas file, print JSON verdict.
   catalog [name] [--full]      Lean index; <name> = block | chart kind | field
                                type | fieldset | envelope for ONE full schema.
@@ -92,6 +98,7 @@ function parseArgs(argv) {
 		else if (a === '--workspace') args.workspace = argv[++i]
 		else if (a === '--timeout') args.timeout = Number(argv[++i])
 		else if (a === '--result') args.result = argv[++i]
+		else if (a === '--out') args.out = argv[++i]
 		else if (a.startsWith('--')) return { error: `Unknown flag "${a}".` }
 		else args._.push(a)
 	}
@@ -270,6 +277,110 @@ async function cmdOpen(args) {
 	}
 }
 
+// D9 evidence: gl3d (scatter3d/surface) blanks in printToPDF output ONLY under
+// swiftshader flags; with --enable-gpu it prints correctly. NEVER add
+// --disable-gpu or --use-angle=swiftshader here — the output would silently
+// lose every 3D chart while looking fine on screen.
+const PRINT_CHROME_ARGS = ['--headless=new', '--no-sandbox', '--enable-gpu']
+
+/**
+ * Print a document canvas to PDF through the browser's native print engine
+ * (Page.printToPDF is the same Skia backend as Cmd+P). The deck's sheets are
+ * literal page boxes, so the PDF page count equals the on-screen sheet count
+ * by construction.
+ */
+async function cmdPrint(args) {
+	const canvasArg = args._[0]
+	if (!canvasArg)
+		specError('INVALID_SPEC', 'print requires a canvas file argument.')
+	if (!args.out)
+		specError('INVALID_SPEC', 'print requires --out <file.pdf> — where to write the PDF (inside the workspace).')
+	const root = resolveWorkspace(args)
+	const canvasAbs = path.resolve(canvasArg)
+	if (!fs.existsSync(canvasAbs))
+		specError('INVALID_SPEC', `Canvas file not found: ${canvasAbs}`)
+	const rel = path.relative(root, fs.realpathSync(canvasAbs)).split(path.sep).join('/')
+	if (rel.startsWith('..') || path.isAbsolute(rel))
+		specError('PATH_OUTSIDE_WORKSPACE',
+			`${canvasAbs} is outside the workspace root ${root}. Pass --workspace <dir> pointing at the folder that contains the canvas.`)
+
+	// The CLI has no confirmation handshake (that flow is browser-only), so an
+	// out-of-workspace destination is refused outright.
+	const outAbs = path.resolve(args.out)
+	if (!insideRoot(root, outAbs))
+		specError('PATH_OUTSIDE_WORKSPACE',
+			`--out ${outAbs} resolves outside the workspace root ${root}. Write the PDF inside the workspace (or pass a matching --workspace).`)
+
+	const raw = fs.readFileSync(canvasAbs, 'utf8')
+	const verdict = validate(raw, { root })
+	log(renderHuman(verdict, rel))
+	if (!verdict.ok)
+		out({
+			status: 'error',
+			error: { code: 'INVALID_SPEC', message: `Canvas failed validation with ${verdict.errorCount} error(s).`, errors: verdict.errors },
+			timestamp: now(),
+		}, 1)
+	if (!JSON.parse(raw).document)
+		specError('INVALID_SPEC',
+			`${rel} is not a document canvas — print renders the paper deck, which needs an envelope-level "document" object. Add "document": {} (see \`catalog document\`), or use \`open\` for the continuous view.`)
+
+	// An explicit CHROME_PATH is authoritative: pointing it at a missing binary
+	// is an error to surface, never something to silently fall back from.
+	const envChrome = process.env.CHROME_PATH
+	const chrome = envChrome
+		? (fs.existsSync(envChrome) && fs.statSync(envChrome).isFile() ? envChrome : null)
+		: findChrome()
+	if (!chrome)
+		out({
+			status: 'error',
+			error: {
+				code: 'CHROME_REQUIRED',
+				message: envChrome
+					? `CHROME_PATH points at a non-existent binary: ${envChrome}`
+					: 'The print command drives a local Chrome/Chromium and none was found. Install Chrome, or set CHROME_PATH to the binary. (Cmd+P from the browser needs no Chrome install beyond the one already showing the canvas.)',
+			},
+			timestamp: now(),
+		}, 2)
+
+	const entry = await ensureKernel(root)
+	const url = `http://127.0.0.1:${entry.port}/?token=${entry.token}#/c/${encodeURIComponent(rel)}`
+	log(`printing ${rel} via headless Chrome ...`)
+
+	const printed = await withChrome(chrome, url, { args: PRINT_CHROME_ARGS, timeoutMs: 60_000 }, async ({ evaluate, send, sleep: pause }) => {
+		// Wait for the deck AND every chart (SVG root or WebGL canvas — never
+		// "ink": a blank chart and a drawn one measure the same gray).
+		const deadline = Date.now() + 60_000
+		let ready = false
+		while (!ready && Date.now() < deadline) {
+			ready = await evaluate(`(() => {
+				if (!window.ic || !window.ic.state.tree) return false;
+				if (!document.querySelectorAll('.deck .sheet').length) return false;
+				const boxes = [...document.querySelectorAll('.chart-box')];
+				return boxes.every((b) => b.querySelector('.main-svg') || b.querySelector('canvas'));
+			})()`).catch(() => false)
+			if (!ready)
+				await pause(250)
+		}
+		if (!ready)
+			throw new Error('The document never finished rendering (sheets or charts missing after 60 s).')
+		await pause(1200) // let the last chart settle its SVG/WebGL
+		const pages = await evaluate('document.querySelectorAll(\'.deck .sheet\').length')
+		const pdf = await send('Page.printToPDF', {
+			printBackground: true,
+			preferCSSPageSize: true,
+			displayHeaderFooter: false,
+			marginTop: 0, marginBottom: 0, marginLeft: 0, marginRight: 0,
+		})
+		return { pages, data: pdf.data }
+	})
+
+	const buf = Buffer.from(printed.data, 'base64')
+	writeAtomic(outAbs, buf)
+	const outRel = path.relative(root, outAbs).split(path.sep).join('/')
+	log(`wrote ${outRel} (${printed.pages} pages, ${buf.length} bytes)`)
+	out({ status: 'printed', path: outRel, pages: printed.pages, bytes: buf.length, timestamp: now() }, 0)
+}
+
 /** Reuse the file's own indentation when a rewrite is unavoidable. */
 function detectIndent(raw) {
 	const m = /\n([ \t]+)\S/.exec(raw)
@@ -433,6 +544,7 @@ async function main() {
 
 	switch (command) {
 		case 'open': return cmdOpen(args)
+		case 'print': return cmdPrint(args)
 		case 'stamp': return cmdStamp(args)
 		case 'validate': return cmdValidate(args)
 		case 'catalog': return cmdCatalog(args)
