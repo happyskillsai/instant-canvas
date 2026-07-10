@@ -51,7 +51,11 @@ Everything the user touches is custom — native browser chrome never appears mi
 
 ## Layout
 
+`.canvas` has **no max-width**. It is a fixed gutter (`--gutter`, 40px, narrowing to 16px under 720px) and everything else is content — markdown, tables and charts all fill the pane. Tune `--gutter`; do not reintroduce a measure cap.
+
 Fieldsets render as bordered groups (`--fset-border` token) with 1–3-column grids. **CSP blocks `style=""` attributes**, so all geometry is class-based: `.cols-2/.cols-3` on the grid, `.span-2/.span-3` on fields, utility classes elsewhere. JS may set `el.style.*` (CSSOM is allowed); markup may not carry style attributes.
+
+Every rendered code block gets a copy-to-clipboard button. `mountCodeCopy()` runs after mount and wraps each `<pre>` in a `.code-block` positioning context, because the button is chrome rather than document content and must not travel with the markdown. It is **always visible, never hover-gated** (see [gotchas/frontend.md](gotchas/frontend.md)). `copyText()` prefers `navigator.clipboard` — `127.0.0.1` is a secure context — and falls back to an off-screen `<textarea>` plus `execCommand`, positioned by the `.offscreen` class rather than a style attribute.
 
 ## Theming
 

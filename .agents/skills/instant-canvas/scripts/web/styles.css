@@ -9,6 +9,7 @@
 	--inp-shadow:0 1px 2px rgba(16,20,30,.05);
 	--fset-border:#c3cad5;
 	--logo-base:#00184d; --logo-accent:#0054fe;
+	--gutter:40px;
 	--code-kw:#6d28d9; --code-str:#047857; --code-num:#b45309; --code-fn:#0e7490;
 	--code-var:#be185d; --code-cmt:#6b7280; --code-meta:#4b5563; --code-add:#065f46; --code-del:#b91c1c;
 	color-scheme:light;
@@ -43,6 +44,7 @@
 		color-scheme:dark;
 	}
 }
+@media (max-width:720px){ :root{ --gutter:16px } }
 *{box-sizing:border-box}
 
 /* Lucide icons: inline SVG, stroke = currentColor, sized by context */
@@ -130,7 +132,9 @@ button{font:inherit;cursor:pointer}
 
 /* main */
 .main{flex:1;overflow:auto;min-width:0}
-.canvas{max-width:860px;margin:0 auto;padding:28px 32px 80px}
+/* Fixed gutters, everything else is content — markdown and charts alike.
+   Tune --gutter, not the max-width; there deliberately isn't one. */
+.canvas{max-width:none;margin:0;padding:28px var(--gutter) 80px}
 .canvas-head h1{margin:0 0 4px;font-size:22px;letter-spacing:-.02em}
 .canvas-head .sub{color:var(--muted);font-size:12.5px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
 .tabs{display:flex;gap:2px;margin:18px 0 6px;border-bottom:1px solid var(--border)}
@@ -144,7 +148,7 @@ button{font:inherit;cursor:pointer}
 /* markdown — a document renderer, not a caption renderer. Measure is capped for
    readability; the heading scale descends (h3 used to render smaller and fainter
    than body text). Nothing here may use an inline style — the CSP drops them. */
-.md{max-width:68ch;line-height:1.65}
+.md{line-height:1.65}
 .md>:first-child{margin-top:0}
 .md>:last-child{margin-bottom:0}
 .md h1,.md h2,.md h3,.md h4,.md h5,.md h6{color:var(--text);line-height:1.3;font-weight:650}
@@ -163,6 +167,23 @@ button{font:inherit;cursor:pointer}
 .md pre{background:var(--panel-2);border:1px solid var(--border-2);border-radius:8px;padding:14px 16px;
 	margin:16px 0;overflow:auto;line-height:1.55}
 .md pre code{background:none;border:none;padding:0;font-size:12.5px}
+
+/* Copy-to-clipboard. Always visible, never hover-gated: a phone has no hover,
+   and a control you cannot reveal is a control you do not have. */
+.code-block{position:relative}
+.code-block pre{padding-right:52px}
+.code-copy{position:absolute;top:9px;right:9px;z-index:1;
+	display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;padding:0;
+	border:1px solid var(--border);border-radius:7px;background:var(--panel);color:var(--muted);
+	opacity:.8;transition:opacity .12s,color .12s,border-color .12s}
+.code-copy:hover{opacity:1;color:var(--text);border-color:var(--inp-border-hover)}
+.code-copy:focus-visible{outline:none;opacity:1;box-shadow:0 0 0 3px var(--accent-soft)}
+.code-copy .lucide{width:14px;height:14px;display:block}
+.code-copy.copied{opacity:1;color:var(--green);border-color:var(--green)}
+.code-copy.failed{opacity:1;color:var(--red);border-color:var(--red)}
+/* The execCommand fallback needs a real, selectable node off-screen. Class-based:
+   a style="" attribute here would be dropped by the CSP and the textarea would show. */
+.offscreen{position:fixed;left:-9999px;top:0;opacity:0;pointer-events:none}
 .md ul,.md ol{margin:12px 0;padding-left:24px}
 .md li{margin:4px 0}
 .md li>ul,.md li>ol{margin:4px 0}

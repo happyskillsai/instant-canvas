@@ -82,6 +82,10 @@ Wrapping matched terms in `<mark>` inside an HTML string needs the text escaped 
 
 The frosted-glass recipe says `document.body.style.overflow = 'hidden'` on open. In this app `.app` is `height:100vh` and `.main` is the only scroller, so that line is a no-op — the page behind the modal keeps scrolling. Lock the real scroller instead: a `body.modal-open` class plus `body.modal-open .main{overflow:hidden}` (class-based, because CSP drops `style=""` attributes and JS-set `el.style` on `body` would not reach `.main` anyway).
 
+## A hover-revealed control does not exist on a touch screen
+
+The tidy way to put a copy button on a code block is `opacity:0` plus `.code-block:hover .code-copy{opacity:1}`. On a phone there is no hover, so the button is unreachable — and on desktop it is undiscoverable until the pointer happens to land on it. The copy button is therefore painted at rest (`opacity:.8`), brightening on hover rather than appearing. `render.test.js` asserts the resting `opacity`, `display` and `visibility` of every copy button, so the hover-gated version fails the suite. The sidebar's hover-revealed collection delete predates this rule and is a deliberate exception: it is destructive, and the sidebar is not a touch surface.
+
 ## Native widget chrome ignores your dark theme
 
 Number-input spinners, scrollbars, and picker internals render for the *browser's* color scheme, not your CSS variables — light spinners on dark inputs. Declare `color-scheme: light`/`dark` alongside each theme's variables; that one property is the fix. Plotly's modebar is the same class of problem: it is disabled outright (`displayModeBar: false`).

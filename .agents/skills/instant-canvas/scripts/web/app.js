@@ -42,6 +42,7 @@ const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&
 const LUCIDE = {
 	'calendar': '<path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/>',
 	'check': '<path d="M20 6 9 17l-5-5"/>',
+	'copy': '<rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>',
 	'chevron-down': '<path d="m6 9 6 6 6-6"/>',
 	'chevron-left': '<path d="m15 18-6-6 6-6"/>',
 	'chevron-right': '<path d="m9 18 6-6-6-6"/>',
@@ -375,6 +376,64 @@ $('tree').addEventListener('click', (e) => {
 
 function renderMarkdown(block) {
 	return `<div class="block md">${md.render(block.text || '')}</div>`
+}
+
+/**
+ * Give every rendered code block a copy button. Built on DOM nodes after mount
+ * rather than inside the markdown-it output: the button is chrome, not document
+ * content, so it must not travel with the markdown, and building it here keeps
+ * the markup free of the style attributes the CSP would drop anyway.
+ */
+function mountCodeCopy(scope) {
+	for (const pre of scope.querySelectorAll('.md pre')) {
+		if (pre.parentElement.classList.contains('code-block'))
+			continue
+		const wrap = document.createElement('div')
+		wrap.className = 'code-block'
+		pre.parentNode.insertBefore(wrap, pre)
+		wrap.appendChild(pre)
+
+		const btn = document.createElement('button')
+		btn.type = 'button'
+		btn.className = 'code-copy'
+		btn.title = 'Copy to clipboard'
+		btn.setAttribute('aria-label', 'Copy code')
+		btn.innerHTML = icon('copy')
+		wrap.appendChild(btn)
+	}
+}
+
+/** navigator.clipboard needs a secure context; 127.0.0.1 is one, but be resilient. */
+async function copyText(text) {
+	try {
+		if (navigator.clipboard && window.isSecureContext) {
+			await navigator.clipboard.writeText(text)
+			return true
+		}
+	} catch { /* fall through to the execCommand path */ }
+	const ta = document.createElement('textarea')
+	ta.value = text
+	ta.setAttribute('readonly', '')
+	ta.className = 'offscreen'
+	document.body.appendChild(ta)
+	ta.select()
+	let ok = false
+	try { ok = document.execCommand('copy') } catch { ok = false }
+	ta.remove()
+	return ok
+}
+
+function flashCopied(btn, ok) {
+	clearTimeout(btn._copyTimer)
+	btn.classList.remove('copied', 'failed')
+	btn.classList.add(ok ? 'copied' : 'failed')
+	btn.innerHTML = icon(ok ? 'check' : 'x')
+	btn.setAttribute('aria-label', ok ? 'Copied' : 'Copy failed')
+	btn._copyTimer = setTimeout(() => {
+		btn.classList.remove('copied', 'failed')
+		btn.innerHTML = icon('copy')
+		btn.setAttribute('aria-label', 'Copy code')
+	}, 1600)
 }
 
 function renderKpi(block) {
@@ -1479,9 +1538,19 @@ async function renderCanvas() {
 		<div class="canvas-head"><h1>${esc(canvas.title)}</h1><div class="sub">${esc(state.activeId)}</div></div>
 		${tabs}${inner}
 	</div>`
+	mountCodeCopy(main)
 	mountCharts(blocks)
 	wireInteractive(blocks)
 }
+
+$('main').addEventListener('click', async (e) => {
+	const btn = e.target.closest('.code-copy')
+	if (!btn)
+		return
+	const pre = btn.parentElement.querySelector('pre')
+	const source = pre ? (pre.querySelector('code') || pre).textContent.replace(/\n$/, '') : ''
+	flashCopied(btn, await copyText(source))
+})
 
 $('main').addEventListener('click', (e) => {
 	const tab = e.target.closest('[data-page]')

@@ -187,7 +187,7 @@
         "CSP shim",
         "Icons and vendored assets"
       ],
-      "line_count": 69,
+      "line_count": 73,
       "links_to": [
         "docs/gotchas/frontend.md"
       ],
@@ -265,11 +265,12 @@
         "Highlighting search matches by string-building is two bugs, not one",
         "A modal opened by keyboard has nowhere to restore focus to",
         "Body scroll lock does nothing here",
+        "A hover-revealed control does not exist on a touch screen",
         "Native widget chrome ignores your dark theme",
         "themeRiver needs real dates",
         "Constraint API quirks around custom widgets"
       ],
-      "line_count": 95,
+      "line_count": 99,
       "links_to": [],
       "over_size": false,
       "parse_error": null,

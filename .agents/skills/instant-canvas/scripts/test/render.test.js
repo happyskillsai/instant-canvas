@@ -119,7 +119,7 @@ test.before(async () => {
 	url = JSON.parse(out).url
 
 	// One browser session; every test reads from the same snapshot.
-	snapshot = await withChrome(CHROME, url, { onNewDocument: PROBE }, async ({ evaluate }) => {
+	snapshot = await withChrome(CHROME, url, { onNewDocument: PROBE }, async ({ evaluate, send }) => {
 		const deadline = Date.now() + 30_000
 		for (;;) {
 			const done = await evaluate(`
@@ -134,6 +134,27 @@ test.before(async () => {
 			await sleep(250)
 		}
 		await sleep(1200) // let the last chart settle its SVG/WebGL
+
+		// Drive the copy button for real: grant the permission, click, read it back.
+		// readText() refuses on an unfocused document, and a headless tab is unfocused.
+		await send('Browser.grantPermissions', {
+			origin: new URL(url).origin,
+			permissions: ['clipboardReadWrite', 'clipboardSanitizedWrite'],
+		}).catch(() => {})
+		await send('Emulation.setFocusEmulationEnabled', { enabled: true }).catch(() => {})
+		await send('Page.bringToFront', {}).catch(() => {})
+		const clipboard = await evaluate(`
+			(async () => {
+				const btn = document.querySelector('.md .code-block .code-copy');
+				if (!btn) return { clicked: false };
+				btn.click();
+				await new Promise((r) => setTimeout(r, 250));
+				let text = null;
+				try { text = await navigator.clipboard.readText() } catch (e) { text = 'READ_FAILED: ' + e.message }
+				return { clicked: true, text, copiedClass: btn.classList.contains('copied') };
+			})()
+		`).catch((e) => ({ clicked: false, error: String(e) }))
+
 		return evaluate(`
 			(() => {
 				const boxes = [...document.querySelectorAll('.chart-box')];
@@ -161,6 +182,14 @@ test.before(async () => {
 					mdImgs: [...document.querySelectorAll('.md img')].map((i) => i.getAttribute('src').slice(0, 26)),
 					mdImgsLoaded: [...document.querySelectorAll('.md img')].filter((i) => i.complete && i.naturalWidth > 0).length,
 					mdImgFallback: /image unavailable: huge\.png/.test(document.querySelector('.md').textContent),
+					preCount: document.querySelectorAll('.md pre').length,
+					copyButtons: document.querySelectorAll('.md .code-block .code-copy').length,
+					// Always visible: a phone has no hover, so a hover-gated control is unreachable.
+					copyVisibility: [...document.querySelectorAll('.md .code-copy')].map((b) => {
+						const cs = getComputedStyle(b);
+						return { display: cs.display, visibility: cs.visibility, opacity: Number(cs.opacity) };
+					}),
+					clipboard: ${JSON.stringify(clipboard)},
 				};
 			})()
 		`)
@@ -211,6 +240,24 @@ test('a workspace image is inlined as a data: URI, and an oversize one degrades'
 	assert.ok(snapshot.mdImgs[1].startsWith('data:image/svg+xml;base'), `svg survives validateLink, got ${snapshot.mdImgs[1]}`)
 	assert.equal(snapshot.mdImgsLoaded, 2, 'both data: URIs actually decoded and painted')
 	assert.ok(snapshot.mdImgFallback, 'the oversize image left a labeled fallback')
+})
+
+test('every code block carries an always-visible copy button that really copies', { skip, timeout: 120_000 }, () => {
+	assert.ok(snapshot.preCount >= 2, `the document has code blocks (${snapshot.preCount})`)
+	assert.equal(snapshot.copyButtons, snapshot.preCount, 'one copy button per code block, highlighted or not')
+
+	// The point of the requirement: a phone cannot hover, so the button must never
+	// be revealed only on :hover. Assert it is painted at rest.
+	for (const v of snapshot.copyVisibility) {
+		assert.notEqual(v.display, 'none', 'copy button is displayed at rest')
+		assert.equal(v.visibility, 'visible', 'copy button is visible at rest')
+		assert.ok(v.opacity > 0.3, `copy button is opaque at rest (got ${v.opacity})`)
+	}
+
+	// A button that looks right but copies nothing is worse than no button.
+	assert.ok(snapshot.clipboard.clicked, 'the copy button was clickable')
+	assert.equal(snapshot.clipboard.text, 'const x = 1; // hi', 'the fence source landed on the clipboard verbatim')
+	assert.ok(snapshot.clipboard.copiedClass, 'the button confirmed the copy to the reader')
 })
 
 test('the kernel CSP is never violated, and Plotly injects no stylesheet', { skip, timeout: 120_000 }, () => {
