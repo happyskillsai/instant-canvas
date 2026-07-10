@@ -73,7 +73,7 @@ function renderChartKind(name, def) {
 		whenToUse: def.whenToUse,
 		data: def.data,
 		encoding,
-		blockShape: 'Wrap in a chart block: {"type":"chart","kind":"' + name + '","title"?,"description"?,"data":[...],"encoding":{...},"format"?:{"y":"number|currency|percent","currency"?},"options"?:{raw ECharts, applied last}}',
+		blockShape: 'Wrap in a chart block: {"type":"chart","kind":"' + name + '","title"?,"description"?,"data":[...],"encoding":{...},"format"?:{"y":"number|currency|percent","currency"?},"options"?:{raw Plotly {data,layout}, applied last}}',
 		example: def.example,
 	}
 }
@@ -100,12 +100,13 @@ const oneLiners = (obj, pick) => Object.fromEntries(Object.entries(obj).map(([k,
 function leanIndex() {
 	return {
 		version: VERSION,
-		usage: 'This is the lean index. Pull ONE full schema at a time with `catalog <name>` (a block, a chart kind, a field type, "fieldset", or "envelope"). `catalog --full` dumps everything (large).',
+		usage: 'This is the lean index. Pull ONE full schema at a time with `catalog <name>` (a block, a chart kind, a field type, "fieldset", "sweep", or "envelope"). `catalog --full` dumps everything (large).',
 		envelope: 'Every canvas: {"instantcanvas":1,"title":...,then "blocks":[...] XOR "pages":[{"name","blocks"}]} — `catalog envelope`',
 		blocks: oneLiners(BLOCKS, (b) => b.description.split('.')[0] + '.'),
 		chartKinds: oneLiners(CHART_KINDS, (k) => `${k.summary} ${k.whenToUse}`),
 		unsupportedChartKinds: UNSUPPORTED_CHARTS,
 		fieldTypes: oneLiners(FIELD_TYPES, (f) => f.description.split('.')[0] + '.'),
+		chartSweep: 'Any chart kind becomes a parameter sweep with {"sweep":{"label"?,"frames":[{"label","data"}]}} instead of "data": a slider steps through frames you precompute — `catalog sweep`',
 		formLayout: 'Group fields with {"type":"fieldset","legend","columns":1-3,"fields":[...]} inside fields[]; per-field "span" widens, "ui":"buttons"|"pills" restyles select/radio/checkboxGroup — `catalog fieldset`',
 		validation: 'Per-field validation: {minLength,maxLength,pattern,patternMessage,min,max,step,protocols} — enforced live and server-side.',
 	}
@@ -148,6 +149,23 @@ function catalog(name) {
 		return { envelope: true, description: ENVELOPE.description, properties: renderProperties(ENVELOPE.properties), example: ENVELOPE.example }
 	if (name === 'fieldset')
 		return { fieldset: true, ...renderFieldsetShape() }
+	if (name === 'sweep')
+		return {
+			sweep: true,
+			...renderShape(SHAPES.sweep),
+			frameShape: renderShape(SHAPES.sweepFrame),
+			example: {
+				type: 'chart', kind: 'scatter', title: 'Clusters by k',
+				encoding: { x: 'x', y: 'y', series: 'cluster' },
+				sweep: {
+					label: 'clusters',
+					frames: [
+						{ label: 'k=2', data: [{ x: 1, y: 2, cluster: 'a' }, { x: 4, y: 3, cluster: 'b' }] },
+						{ label: 'k=3', data: [{ x: 1, y: 2, cluster: 'a' }, { x: 4, y: 3, cluster: 'c' }] },
+					],
+				},
+			},
+		}
 	if (BLOCKS[name]) {
 		const out = { block: name, ...renderBlock(name, BLOCKS[name]) }
 		if (name === 'chart')

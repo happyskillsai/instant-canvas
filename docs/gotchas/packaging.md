@@ -12,9 +12,20 @@ source:
 
 `release`/`publish` bundles the **entire** `.agents/skills/instant-canvas/` folder; whatever you drop in there reaches every consumer and competes for their agents' context. That is why this repo splits **product** (the skill folder: SKILL.md, scripts, examples, vendored assets) from **workbench** (repo-level `docs/`, `specs/`, `prototype/`, `demos/`, tooling). Never add design notes, specs, test tooling, or dev docs inside the skill folder — put them at the repo level. The inverse also holds: anything a consumer needs must live *inside* the skill folder, because the published bundle is all they get.
 
-## The 1 MB bundle cap vs vendored ECharts
+Note that `scripts/test/` (~88 KB, and growing — the browser smoke test and its CDP client landed there) currently ships, because the walker in `file_size_rules.js` skips only dotfiles and `node_modules`.
 
-`npx happyskills validate` enforces a 1 MB total bundle size; the full `echarts.min.js` alone is 1.03 MB, so the bundle check fails (~1.3 MB total) while every other check passes. This is accepted: the full build is required (the simple build lacks legend/tooltip — see [frontend.md](frontend.md)), and the cap only matters if the skill is ever **published**. Revisit with a custom ECharts build before publishing; do not "fix" it by swapping builds.
+## Two size caps, and the per-file one is the sharp edge
+
+`npx happyskills validate` enforces both, from `cli/src/config/limits.js`:
+
+- `MAX_TOTAL_SIZE` — the whole bundle
+- `MAX_FILE_SIZE` — **each individual file**
+
+They are bumped independently. The vendored Plotly build is ~2.64 MB in one file, so **both** caps must clear it; a total-cap raise alone is not enough. Confirm the current constants before assuming a build will publish — the historical 1 MB per-file cap would reject `plotly.min.js` outright.
+
+## The vendored Plotly build is not interchangeable with a published dist
+
+See `scripts/web/vendor/VENDORED.md`. It must be built `--strict` (or `regl`-backed traces call the `Function` constructor and die under `script-src 'self'`) and without map traces (or maplibre drags in a `blob:` Worker and remote tile hosts). Swapping in `plotly.js-dist-min` looks fine until someone renders a `splom`.
 
 ## Description validators are strict and double-layered
 

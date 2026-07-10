@@ -29,7 +29,7 @@ const state = {
 	activeId: null,
 	activePage: 0,
 	collapsed: new Set(),
-	charts: [], // live ECharts instances of the current view
+	charts: [], // {el, block} for every mounted Plotly graph in the current view
 	observers: [],
 	canvasDoc: null,
 	session: null, // {id, expiresAt} for the active interactive canvas
@@ -107,42 +107,54 @@ const md = window.markdownit({ html: false, linkify: true })
 
 // ---------------------------------------------------------------- theming
 
-// ECharts cannot read CSS var() — two concrete themes matching the prototype palette.
+// Plotly paints to canvas/SVG and never reads CSS var(), so the palette is
+// duplicated here as two concrete templates matching the prototype.
+const FONT = '-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif'
+const TRANSPARENT = 'rgba(0,0,0,0)'
+
 const LIGHT = {
 	color: ['#6366f1', '#10b981', '#f59e0b', '#ec4899', '#06b6d4'],
 	text: '#1a1d24', muted: '#6b7280', border: '#e6e8ec', panel: '#ffffff',
+	ramp: '#eef0fe', down: '#ef4444',
 }
 const DARK = {
 	color: ['#818cf8', '#34d399', '#fbbf24', '#f472b6', '#22d3ee'],
 	text: '#e7e9ee', muted: '#98a0ad', border: '#242a35', panel: '#161922',
+	ramp: '#20233a', down: '#f87171',
 }
 
-function echartsTheme(p) {
+function plotlyTemplate(p) {
+	const axis = {
+		color: p.muted, gridcolor: p.border, linecolor: p.border, zerolinecolor: p.border,
+		tickfont: { color: p.muted, size: 11 }, ticks: '', automargin: true,
+	}
+	// 3D axes ignore the cartesian axis template; they need their own keys.
+	const axis3d = {
+		color: p.muted, gridcolor: p.border, zerolinecolor: p.border,
+		showbackground: false, backgroundcolor: TRANSPARENT,
+		tickfont: { color: p.muted, size: 10 },
+	}
 	return {
-		color: p.color,
-		backgroundColor: 'transparent',
-		textStyle: { color: p.text },
-		legend: { textStyle: { color: p.muted }, inactiveColor: p.border, icon: 'roundRect', itemWidth: 12, itemHeight: 8 },
-		categoryAxis: {
-			axisLine: { lineStyle: { color: p.border } },
-			axisTick: { show: false },
-			axisLabel: { color: p.muted },
-			splitLine: { show: false },
-		},
-		valueAxis: {
-			axisLine: { show: false },
-			axisLabel: { color: p.muted },
-			splitLine: { lineStyle: { color: p.border } },
-		},
-		tooltip: {
-			backgroundColor: p.panel,
-			borderColor: p.border,
-			textStyle: { color: p.text },
+		layout: {
+			colorway: p.color,
+			paper_bgcolor: TRANSPARENT,
+			plot_bgcolor: TRANSPARENT,
+			font: { family: FONT, color: p.text, size: 12 },
+			xaxis: axis,
+			yaxis: axis,
+			legend: { orientation: 'h', x: 0.5, xanchor: 'center', y: -0.16, yanchor: 'top', font: { color: p.muted, size: 11 } },
+			hoverlabel: { bgcolor: p.panel, bordercolor: p.border, font: { family: FONT, color: p.text, size: 12 } },
+			margin: { l: 56, r: 18, t: 10, b: 44 },
+			colorscale: { sequential: [[0, p.ramp], [1, p.color[0]]] },
+			scene: { xaxis: axis3d, yaxis: axis3d, zaxis: axis3d },
+			polar: {
+				bgcolor: TRANSPARENT,
+				angularaxis: { color: p.muted, gridcolor: p.border, linecolor: p.border },
+				radialaxis: { color: p.muted, gridcolor: p.border, linecolor: p.border, tickfont: { size: 10 } },
+			},
 		},
 	}
 }
-window.echarts.registerTheme('ic-light', echartsTheme(LIGHT))
-window.echarts.registerTheme('ic-dark', echartsTheme(DARK))
 
 function currentTheme() {
 	const forced = document.documentElement.getAttribute('data-theme')
@@ -150,10 +162,16 @@ function currentTheme() {
 	return matchMedia('(prefers-color-scheme:dark)').matches ? 'dark' : 'light'
 }
 
+const palette = () => (currentTheme() === 'dark' ? DARK : LIGHT)
+
 $('themeBtn').addEventListener('click', () => {
 	const next = currentTheme() === 'dark' ? 'light' : 'dark'
 	document.documentElement.setAttribute('data-theme', next)
-	renderCanvas() // charts dispose + re-init on the other theme
+	// Retheme in place. Tearing charts down and rebuilding them would allocate a
+	// fresh WebGL context per 3D chart and never release the old one (Plotly
+	// never calls loseContext), so repeated toggles would exhaust the browser's
+	// context ceiling. Everything else follows the CSS variables for free.
+	rethemeCharts()
 })
 
 // ---------------------------------------------------------------- sidebar
@@ -308,15 +326,199 @@ function renderTable(block) {
 }
 
 
-function chartOption(block) {
+// ---------------------------------------------------------------- charts (Plotly)
+
+const PLOTLY_CONFIG = { displayModeBar: false, displaylogo: false, responsive: false, doubleClick: 'reset' }
+
+/** Deep merge for the `options` escape hatch. Arrays in the patch REPLACE. */
+function deepMerge(base, patch) {
+	if (Array.isArray(patch))
+		return patch.slice()
+	if (patch && typeof patch === 'object') {
+		const out = base && typeof base === 'object' && !Array.isArray(base) ? { ...base } : {}
+		for (const k of Object.keys(patch))
+			out[k] = deepMerge(out[k], patch[k])
+		return out
+	}
+	return patch
+}
+
+/** `options` is a raw Plotly figure fragment: {data?: Trace[], layout?: {}}.
+ *  Traces merge BY INDEX so a patch refines the generated trace instead of
+ *  replacing it (and its data) wholesale. */
+function applyOptions(fig, options) {
+	if (!options || typeof options !== 'object')
+		return fig
+	const layout = options.layout ? deepMerge(fig.layout, options.layout) : fig.layout
+	let data = fig.data
+	if (Array.isArray(options.data)) {
+		data = fig.data.map((tr, i) => (options.data[i] ? deepMerge(tr, options.data[i]) : tr))
+		for (let i = fig.data.length; i < options.data.length; i++)
+			data.push(options.data[i])
+	}
+	return { data, layout }
+}
+
+/** Fruchterman-Reingold on a unit square. Deterministic: a hot reload must not
+ *  reshuffle the graph under the reader. Plotly has no network trace, so the
+ *  skill owns the layout — the agent still ships only links. */
+function forceLayout(names, edges, iterations = 320) {
+	const n = names.length
+	if (n === 0) return []
+	if (n === 1) return [{ x: 0, y: 0 }]
+	const at = new Map(names.map((name, i) => [name, i]))
+	let seed = 20260709
+	const rnd = () => ((seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff)
+	const pos = names.map((_, i) => {
+		const a = (2 * Math.PI * i) / n
+		return { x: Math.cos(a) * 0.4 + (rnd() - 0.5) * 0.02, y: Math.sin(a) * 0.4 + (rnd() - 0.5) * 0.02 }
+	})
+	const links = edges.map((e) => [at.get(e[0]), at.get(e[1])]).filter((e) => e[0] !== undefined && e[1] !== undefined)
+	const k = Math.sqrt(1 / n)
+	let temp = 0.2
+	for (let it = 0; it < iterations; it++) {
+		const dx = new Float64Array(n), dy = new Float64Array(n)
+		for (let i = 0; i < n; i++) {
+			for (let j = i + 1; j < n; j++) {
+				let ex = pos[i].x - pos[j].x, ey = pos[i].y - pos[j].y
+				let d2 = ex * ex + ey * ey
+				if (d2 < 1e-9) { ex = (rnd() - 0.5) * 1e-3; ey = (rnd() - 0.5) * 1e-3; d2 = ex * ex + ey * ey }
+				const rep = (k * k) / d2
+				dx[i] += ex * rep; dy[i] += ey * rep
+				dx[j] -= ex * rep; dy[j] -= ey * rep
+			}
+		}
+		for (const [a, b] of links) {
+			const ex = pos[a].x - pos[b].x, ey = pos[a].y - pos[b].y
+			const d = Math.sqrt(ex * ex + ey * ey) || 1e-6
+			const att = d / k
+			dx[a] -= ex * att; dy[a] -= ey * att
+			dx[b] += ex * att; dy[b] += ey * att
+		}
+		for (let i = 0; i < n; i++) {
+			const d = Math.hypot(dx[i], dy[i]) || 1e-9
+			pos[i].x += (dx[i] / d) * Math.min(d, temp) - pos[i].x * 0.012 // mild gravity
+			pos[i].y += (dy[i] / d) * Math.min(d, temp) - pos[i].y * 0.012
+		}
+		temp = Math.max(temp * 0.975, 0.002)
+	}
+	return pos
+}
+
+/** Hierarchical {name,value,children} -> the flat ids/labels/parents/values
+ *  arrays treemap and sunburst want. Parents carry 0 so their size is exactly
+ *  the sum of their children (Plotly's default "remainder" branchvalues). */
+function flattenHierarchy(nodes, nk, vk, ck) {
+	const ids = [], labels = [], parents = [], values = []
+	const walk = (list, parentId) => {
+		(list || []).forEach((node, i) => {
+			const id = `${parentId ? parentId + '/' : ''}${String(node[nk])}#${i}`
+			const kids = Array.isArray(node[ck]) ? node[ck] : null
+			ids.push(id)
+			labels.push(String(node[nk]))
+			parents.push(parentId)
+			values.push(kids && kids.length ? 0 : Number(node[vk]) || 0)
+			if (kids && kids.length) walk(kids, id)
+		})
+	}
+	walk(nodes, '')
+	return { ids, labels, parents, values }
+}
+
+/** Long-format {x, y, z} rows -> the (xs, ys, z-matrix) grid surface/contour want. */
+function pivotGrid(rows, xk, yk, zk) {
+	const xs = [...new Set(rows.map((r) => Number(r[xk])))].sort((a, b) => a - b)
+	const ys = [...new Set(rows.map((r) => Number(r[yk])))].sort((a, b) => a - b)
+	const at = new Map()
+	rows.forEach((r) => at.set(JSON.stringify([Number(r[xk]), Number(r[yk])]), Number(r[zk])))
+	const z = ys.map((yv) => xs.map((xv) => {
+		const v = at.get(JSON.stringify([xv, yv]))
+		return v === undefined ? null : v
+	}))
+	return { xs, ys, z }
+}
+
+/** Merge rows -> the U-bracket polyline of a dendrogram, plus the leaf order.
+ *  left/right hold a leaf label or "#i" pointing at an earlier merge, which is
+ *  exactly scipy's linkage matrix once the agent has named its leaves. */
+function dendrogramPath(rows, enc) {
+	const merges = rows.map((r) => ({ l: String(r[enc.left]), r: String(r[enc.right]), h: Number(r[enc.height]) }))
+	const isRef = (s) => /^#\d+$/.test(s)
+	const refIdx = (s) => Number(s.slice(1))
+
+	const referenced = new Set()
+	for (const m of merges) {
+		if (isRef(m.l)) referenced.add(refIdx(m.l))
+		if (isRef(m.r)) referenced.add(refIdx(m.r))
+	}
+	const roots = merges.map((_, i) => i).filter((i) => !referenced.has(i))
+
+	const leaves = []
+	const seen = new Set()
+	const collect = (node) => {
+		if (isRef(node)) {
+			const m = merges[refIdx(node)]
+			if (!m || seen.has(node)) return
+			seen.add(node)
+			collect(m.l)
+			collect(m.r)
+		} else if (!leaves.includes(node)) {
+			leaves.push(node)
+		}
+	}
+	roots.forEach((i) => collect('#' + i))
+
+	const leafX = new Map(leaves.map((n, i) => [n, i]))
+	const cache = new Map()
+	const posOf = (node) => {
+		if (!isRef(node))
+			return { x: leafX.has(node) ? leafX.get(node) : 0, y: 0 }
+		if (cache.has(node)) return cache.get(node)
+		const m = merges[refIdx(node)]
+		if (!m) return { x: 0, y: 0 }
+		const a = posOf(m.l), b = posOf(m.r)
+		const q = { x: (a.x + b.x) / 2, y: m.h }
+		cache.set(node, q)
+		return q
+	}
+
+	const xs = [], ys = []
+	merges.forEach((m, i) => {
+		const a = posOf(m.l), b = posOf(m.r)
+		posOf('#' + i)
+		xs.push(a.x, a.x, b.x, b.x, null)
+		ys.push(a.y, m.h, m.h, b.y, null)
+	})
+	return { xs, ys, leaves }
+}
+
+/** '#6366f1' -> 'rgba(99,102,241,a)'. Plotly fills default to the opaque trace
+ *  colour, which would bury whatever a series overlaps. */
+function withAlpha(hex, a) {
+	const n = parseInt(hex.slice(1), 16)
+	return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`
+}
+
+function chartFigure(block) {
 	const fmt = block.format || {}
 	const yFmt = (v) => fmtValue(v, fmt.y || 'number', fmt.currency)
 	const rows = block.data || []
 	const enc = block.encoding || {}
-	const palette = currentTheme() === 'dark' ? DARK : LIGHT
+	const p = palette()
 	const uniq = (key) => [...new Set(rows.map((r) => r[key]))]
-	const bottomLegend = { bottom: 0, type: 'scroll' }
-	const grid = (legend) => ({ left: 8, right: 16, top: 18, bottom: legend ? 42 : 16, containLabel: true })
+	// Hover strings are rendered by Plotly's own mini-HTML parser; escape them.
+	const hs = (v) => esc(String(v === undefined || v === null ? '' : v))
+	const base = () => ({ template: plotlyTemplate(p), showlegend: false })
+	// The horizontal legend sits below the plot in paper coordinates, so it lands
+	// on top of an x-axis title unless pushed further down. `titled` says the
+	// caller sets one.
+	const legend = (show, titled) => ({
+		showlegend: show,
+		...(show ? { legend: { y: titled ? -0.3 : -0.18 } } : {}),
+		margin: { l: 56, r: 18, t: 10, b: show ? (titled ? 78 : 56) : titled ? 58 : 40 },
+	})
+	const colorbar = { outlinewidth: 0, thickness: 10, len: 0.82, tickfont: { color: p.muted, size: 10 } }
+	const seqScale = [[0, p.ramp], [1, p.color[0]]]
 
 	switch (block.kind) {
 		case 'line':
@@ -324,273 +526,803 @@ function chartOption(block) {
 		case 'bar': {
 			const ys = Array.isArray(enc.y) ? enc.y : [enc.y]
 			const multi = ys.length > 1
-			return {
-				tooltip: { trigger: 'axis', valueFormatter: yFmt },
-				legend: multi ? bottomLegend : { show: false },
-				grid: grid(multi),
-				xAxis: { type: 'category', data: rows.map((r) => r[enc.x]), boundaryGap: block.kind === 'bar' },
-				yAxis: { type: 'value', axisLabel: { formatter: yFmt } },
-				series: ys.map((key) => ({
+			const x = rows.map((r) => r[enc.x])
+			const data = ys.map((key, i) => {
+				const trace = {
 					name: key,
-					type: block.kind === 'bar' ? 'bar' : 'line',
-					data: rows.map((r) => r[key]),
-					...(enc.stack ? { stack: 'total' } : {}),
-					...(block.kind === 'bar'
-						? { barMaxWidth: 46, itemStyle: { borderRadius: enc.stack ? 0 : [3, 3, 0, 0] } }
-						: { symbolSize: 7, lineStyle: { width: 2.5 }, ...(block.kind === 'area' ? { areaStyle: { opacity: 0.25 }, symbolSize: 5 } : {}) }),
-				})),
+					x,
+					y: rows.map((r) => Number(r[key])),
+					customdata: rows.map((r) => hs(yFmt(r[key]))),
+					hovertemplate: `%{x}<br>${hs(key)}: %{customdata}<extra></extra>`,
+				}
+				if (block.kind === 'bar')
+					return { ...trace, type: 'bar' }
+				const line = { type: 'scatter', mode: 'lines+markers', line: { width: 2.5 }, marker: { size: 7 } }
+				if (block.kind === 'area')
+					return {
+						...trace, ...line,
+						marker: { size: 5 },
+						fill: enc.stack ? 'tonexty' : 'tozeroy',
+						// Unstacked areas overlap: a solid fill hides the series behind.
+						fillcolor: withAlpha(p.color[i % p.color.length], 0.25),
+						...(enc.stack ? { stackgroup: 'one' } : {}),
+					}
+				return { ...trace, ...line, ...(enc.stack ? { stackgroup: 'one', fill: 'none' } : {}) }
+			})
+			return {
+				data,
+				layout: {
+					...base(), ...legend(multi),
+					barmode: enc.stack ? 'stack' : 'group',
+					bargap: 0.35,
+					xaxis: { type: 'category' },
+					yaxis: { title: '' },
+					hovermode: 'x unified',
+				},
 			}
 		}
-		case 'pie':
+
+		case 'pie': {
+			const labels = rows.map((r) => String(r[enc.category]))
+			const values = rows.map((r) => Number(r[enc.value]))
 			return {
-				tooltip: { trigger: 'item', formatter: (p) => `${esc(p.name)}: ${yFmt(p.value)} (${p.percent}%)` },
-				legend: bottomLegend,
-				series: [{
+				data: [{
 					type: 'pie',
-					radius: block.donut ? ['45%', '70%'] : '70%',
-					center: ['50%', '46%'],
-					data: rows.map((r) => ({ name: r[enc.category], value: r[enc.value] })),
-					label: { show: false },
-					emphasis: { label: { show: true, formatter: '{b}' } },
-					itemStyle: { borderRadius: 4, borderWidth: 2, borderColor: 'transparent' },
+					labels,
+					values,
+					hole: block.donut ? 0.45 : 0,
+					textinfo: 'none',
+					customdata: rows.map((r) => hs(yFmt(r[enc.value]))),
+					hovertemplate: '%{label}: %{customdata} (%{percent})<extra></extra>',
+					marker: { line: { width: 2, color: TRANSPARENT } },
+					sort: false,
 				}],
+				layout: { ...base(), ...legend(true) },
 			}
+		}
+
 		case 'scatter': {
 			const groups = enc.series ? uniq(enc.series) : [null]
-			let sizeScale = null
+			let sizeOf = null
 			if (enc.size) {
 				const sizes = rows.map((r) => Number(r[enc.size])).filter(Number.isFinite)
 				const lo = Math.min(...sizes), hi = Math.max(...sizes)
-				sizeScale = (v) => 8 + (hi > lo ? ((v - lo) / (hi - lo)) * 30 : 10)
+				sizeOf = (v) => 8 + (hi > lo ? ((v - lo) / (hi - lo)) * 30 : 10)
 			}
-			return {
-				tooltip: {
-					trigger: 'item',
-					formatter: (p) => `${p.data.name ? esc(p.data.name) + '<br>' : ''}${esc(enc.x)}: ${p.value[0]} · ${esc(enc.y)}: ${p.value[1]}${enc.size ? ' · ' + esc(enc.size) + ': ' + p.data.sizeValue : ''}`,
-				},
-				legend: groups[0] !== null ? bottomLegend : { show: false },
-				grid: grid(groups[0] !== null),
-				xAxis: { type: 'value', scale: true, name: enc.x },
-				yAxis: { type: 'value', scale: true, name: enc.y },
-				series: groups.map((g) => ({
-					name: g === null ? enc.y : String(g),
+			const data = groups.map((g) => {
+				const rs = rows.filter((r) => g === null || r[enc.series] === g)
+				return {
 					type: 'scatter',
-					data: rows.filter((r) => g === null || r[enc.series] === g).map((r) => ({
-						value: [r[enc.x], r[enc.y]],
-						...(enc.label ? { name: r[enc.label] } : {}),
-						...(enc.size ? { sizeValue: r[enc.size], symbolSize: sizeScale(Number(r[enc.size])) } : {}),
-					})),
-					...(enc.size ? {} : { symbolSize: 11 }),
-				})),
+					mode: 'markers',
+					name: g === null ? enc.y : String(g),
+					x: rs.map((r) => Number(r[enc.x])),
+					y: rs.map((r) => Number(r[enc.y])),
+					marker: { size: enc.size ? rs.map((r) => sizeOf(Number(r[enc.size]))) : 11, opacity: 0.9 },
+					customdata: rs.map((r) => [
+						enc.label ? hs(r[enc.label]) : '',
+						enc.size ? hs(r[enc.size]) : '',
+					]),
+					hovertemplate:
+						(enc.label ? '%{customdata[0]}<br>' : '') +
+						`${hs(enc.x)}: %{x}<br>${hs(enc.y)}: %{y}` +
+						(enc.size ? `<br>${hs(enc.size)}: %{customdata[1]}` : '') +
+						'<extra></extra>',
+				}
+			})
+			return {
+				data,
+				layout: {
+					...base(), ...legend(groups[0] !== null, true),
+					xaxis: { title: { text: enc.x } },
+					yaxis: { title: { text: enc.y } },
+					hovermode: 'closest',
+				},
 			}
 		}
+
 		case 'heatmap': {
 			const xs = uniq(enc.x), ys = uniq(enc.y)
-			const values = rows.map((r) => Number(r[enc.value])).filter(Number.isFinite)
+			const at = new Map()
+			rows.forEach((r) => at.set(JSON.stringify([r[enc.x], r[enc.y]]), Number(r[enc.value])))
+			const z = ys.map((yv) => xs.map((xv) => {
+				const v = at.get(JSON.stringify([xv, yv]))
+				return v === undefined ? null : v
+			}))
+			const labelled = rows.length <= 120
 			return {
-				tooltip: { formatter: (p) => `${esc(String(ys[p.value[1]]))} · ${esc(String(xs[p.value[0]]))}: ${yFmt(p.value[2])}` },
-				grid: { left: 8, right: 16, top: 18, bottom: 64, containLabel: true },
-				xAxis: { type: 'category', data: xs },
-				yAxis: { type: 'category', data: ys },
-				visualMap: {
-					min: Math.min(...values), max: Math.max(...values),
-					orient: 'horizontal', left: 'center', bottom: 0, itemWidth: 12, itemHeight: 90,
-					inRange: { color: [currentTheme() === 'dark' ? '#20233a' : '#eef0fe', palette.color[0]] },
-				},
-				series: [{
+				data: [{
 					type: 'heatmap',
-					data: rows.map((r) => [xs.indexOf(r[enc.x]), ys.indexOf(r[enc.y]), r[enc.value]]),
-					label: { show: rows.length <= 120, formatter: (p) => yFmt(p.value[2]) },
-					itemStyle: { borderRadius: 3, borderWidth: 2, borderColor: 'transparent' },
+					x: xs.map(String),
+					y: ys.map(String),
+					z,
+					colorscale: seqScale,
+					colorbar,
+					xgap: 2,
+					ygap: 2,
+					text: z.map((row) => row.map((v) => hs(yFmt(v)))),
+					...(labelled ? { texttemplate: '%{text}', textfont: { size: 10 } } : {}),
+					hovertemplate: '%{y} · %{x}: %{text}<extra></extra>',
 				}],
+				layout: { ...base(), xaxis: { type: 'category' }, yaxis: { type: 'category' } },
 			}
 		}
+
 		case 'radar': {
 			const dims = Array.isArray(enc.dimensions) ? enc.dimensions : [enc.dimensions]
+			const theta = [...dims, dims[0]].map(String)
+			const max = Math.max(...rows.flatMap((r) => dims.map((d) => Number(r[d]) || 0)))
 			return {
-				tooltip: { trigger: 'item' },
-				legend: enc.name ? bottomLegend : { show: false },
-				radar: {
-					indicator: dims.map((d) => ({ name: d, max: Math.max(...rows.map((r) => Number(r[d]) || 0)) * 1.15 || 1 })),
-					radius: '62%',
+				data: rows.map((r) => {
+					const vals = dims.map((d) => Number(r[d]) || 0)
+					return {
+						type: 'scatterpolar',
+						r: [...vals, vals[0]],
+						theta,
+						fill: 'toself',
+						fillcolor: undefined,
+						opacity: 0.85,
+						name: enc.name ? String(r[enc.name]) : '',
+						marker: { size: 5 },
+						hovertemplate: '%{theta}: %{r}<extra>%{fullData.name}</extra>',
+					}
+				}),
+				layout: {
+					...base(), ...legend(!!enc.name),
+					polar: { radialaxis: { range: [0, (max || 1) * 1.15] } },
 				},
-				series: [{
-					type: 'radar',
-					data: rows.map((r) => ({ value: dims.map((d) => r[d]), name: enc.name ? String(r[enc.name]) : '' })),
-					areaStyle: { opacity: 0.15 },
-					symbolSize: 5,
-				}],
 			}
 		}
+
 		case 'funnel':
 			return {
-				tooltip: { trigger: 'item', formatter: (p) => `${esc(p.name)}: ${yFmt(p.value)}` },
-				legend: bottomLegend,
-				series: [{
+				data: [{
 					type: 'funnel',
-					top: 8, bottom: 36, left: '12%', width: '76%',
-					sort: 'descending', gap: 3,
-					label: { show: true, position: 'inside', formatter: '{b}' },
-					data: rows.map((r) => ({ name: r[enc.category], value: r[enc.value] })),
+					y: rows.map((r) => String(r[enc.category])),
+					x: rows.map((r) => Number(r[enc.value])),
+					textinfo: 'label',
+					textposition: 'inside',
+					customdata: rows.map((r) => hs(yFmt(r[enc.value]))),
+					hovertemplate: '%{y}: %{customdata}<extra></extra>',
+					marker: { line: { width: 1, color: TRANSPARENT } },
 				}],
+				layout: { ...base(), yaxis: { visible: false }, margin: { l: 20, r: 20, t: 10, b: 20 } },
 			}
+
 		case 'gauge': {
 			const row = rows[0] || {}
 			const min = typeof enc.min === 'number' ? enc.min : 0
 			const max = typeof enc.max === 'number' ? enc.max : 100
+			const number = fmt.y === 'percent'
+				? { valueformat: ',.1%' }
+				: fmt.y === 'currency'
+					? { prefix: currencySymbol(fmt.currency), valueformat: ',' }
+					: { valueformat: ',' }
 			return {
-				series: [{
-					type: 'gauge',
-					min, max,
-					startAngle: 210, endAngle: -30,
-					progress: { show: true, width: 14 },
-					axisLine: { lineStyle: { width: 14 } },
-					axisTick: { show: false },
-					splitLine: { length: 8 },
-					pointer: { length: '60%', width: 5 },
-					title: { fontSize: 13, offsetCenter: [0, '68%'] },
-					detail: { valueAnimation: true, fontSize: 22, offsetCenter: [0, '40%'], formatter: (v) => yFmt(v) },
-					data: [{ value: row[enc.value], name: enc.name ? String(row[enc.name] ?? '') : '' }],
+				data: [{
+					type: 'indicator',
+					mode: 'gauge+number',
+					value: Number(row[enc.value]),
+					title: { text: enc.name ? String(row[enc.name] ?? '') : '', font: { size: 13, color: p.muted } },
+					number: { ...number, font: { size: 24, color: p.text } },
+					gauge: {
+						axis: { range: [min, max], tickcolor: p.border, tickfont: { color: p.muted, size: 10 } },
+						bar: { color: p.color[0], thickness: 0.28 },
+						bgcolor: p.ramp,
+						borderwidth: 0,
+					},
 				}],
+				layout: { ...base(), margin: { l: 24, r: 24, t: 24, b: 12 } },
 			}
 		}
+
 		case 'candlestick':
 			return {
-				tooltip: { trigger: 'axis' },
-				grid: grid(false),
-				xAxis: { type: 'category', data: rows.map((r) => r[enc.x]) },
-				yAxis: { type: 'value', scale: true, axisLabel: { formatter: yFmt } },
-				series: [{
+				data: [{
 					type: 'candlestick',
-					data: rows.map((r) => [r[enc.open], r[enc.close], r[enc.low], r[enc.high]]),
+					x: rows.map((r) => r[enc.x]),
+					open: rows.map((r) => Number(r[enc.open])),
+					high: rows.map((r) => Number(r[enc.high])),
+					low: rows.map((r) => Number(r[enc.low])),
+					close: rows.map((r) => Number(r[enc.close])),
+					increasing: { line: { color: p.color[1] }, fillcolor: p.color[1] },
+					decreasing: { line: { color: p.down }, fillcolor: p.down },
 				}],
+				layout: { ...base(), xaxis: { type: 'category', rangeslider: { visible: false } } },
 			}
+
 		case 'boxplot':
+			// Statistics are precomputed by the agent, so feed Plotly the fences
+			// directly rather than raw samples it would have to re-derive.
 			return {
-				tooltip: {
-					formatter: (p) => `${esc(p.name)}<br>max: ${yFmt(p.value[5])}<br>q3: ${yFmt(p.value[4])}<br>median: ${yFmt(p.value[3])}<br>q1: ${yFmt(p.value[2])}<br>min: ${yFmt(p.value[1])}`,
-				},
-				grid: grid(false),
-				xAxis: { type: 'category', data: rows.map((r) => r[enc.x]) },
-				yAxis: { type: 'value', scale: true, axisLabel: { formatter: yFmt } },
-				series: [{
-					type: 'boxplot',
-					itemStyle: { borderWidth: 1.5 },
-					data: rows.map((r) => [r[enc.min], r[enc.q1], r[enc.median], r[enc.q3], r[enc.max]]),
+				data: [{
+					type: 'box',
+					x: rows.map((r) => String(r[enc.x])),
+					lowerfence: rows.map((r) => Number(r[enc.min])),
+					q1: rows.map((r) => Number(r[enc.q1])),
+					median: rows.map((r) => Number(r[enc.median])),
+					q3: rows.map((r) => Number(r[enc.q3])),
+					upperfence: rows.map((r) => Number(r[enc.max])),
+					boxpoints: false,
+					line: { width: 1.5 },
+					fillcolor: p.ramp,
+					marker: { color: p.color[0] },
 				}],
+				layout: { ...base(), xaxis: { type: 'category' } },
 			}
+
 		case 'sankey': {
-			const names = [...new Set(rows.flatMap((r) => [r[enc.source], r[enc.target]]))]
+			const names = [...new Set(rows.flatMap((r) => [String(r[enc.source]), String(r[enc.target])]))]
+			const at = new Map(names.map((n, i) => [n, i]))
 			return {
-				tooltip: { trigger: 'item', formatter: (p) => p.dataType === 'edge' ? `${esc(p.data.source)} → ${esc(p.data.target)}: ${yFmt(p.data.value)}` : esc(p.name) },
-				series: [{
+				data: [{
 					type: 'sankey',
-					top: 10, bottom: 14, left: 4, right: 90,
-					data: names.map((n) => ({ name: String(n) })),
-					links: rows.map((r) => ({ source: String(r[enc.source]), target: String(r[enc.target]), value: r[enc.value] })),
-					lineStyle: { color: 'gradient', opacity: 0.35, curveness: 0.5 },
-					itemStyle: { borderRadius: 3 },
+					orientation: 'h',
+					node: {
+						label: names,
+						pad: 14,
+						thickness: 14,
+						color: names.map((_, i) => p.color[i % p.color.length]),
+						line: { width: 0 },
+					},
+					link: {
+						source: rows.map((r) => at.get(String(r[enc.source]))),
+						target: rows.map((r) => at.get(String(r[enc.target]))),
+						value: rows.map((r) => Number(r[enc.value]) || 1),
+						// Tint each ribbon by its source node so flows stay readable.
+						color: rows.map((r) => withAlpha(p.color[at.get(String(r[enc.source])) % p.color.length], 0.3)),
+					},
 				}],
+				layout: { ...base(), margin: { l: 8, r: 8, t: 10, b: 10 } },
 			}
 		}
+
 		case 'graph': {
 			const degree = {}
 			rows.forEach((r) => {
 				degree[r[enc.source]] = (degree[r[enc.source]] || 0) + 1
 				degree[r[enc.target]] = (degree[r[enc.target]] || 0) + 1
 			})
+			const names = Object.keys(degree)
+			const edges = rows.map((r) => [String(r[enc.source]), String(r[enc.target])])
+			const pos = forceLayout(names.map(String), edges)
+			const at = new Map(names.map((n, i) => [String(n), i]))
+			const ex = [], ey = []
+			for (const [a, b] of edges) {
+				const pa = pos[at.get(a)], pb = pos[at.get(b)]
+				if (!pa || !pb) continue
+				ex.push(pa.x, pb.x, null)
+				ey.push(pa.y, pb.y, null)
+			}
+			const hidden = { visible: false, fixedrange: false }
 			return {
-				tooltip: { trigger: 'item' },
-				series: [{
-					type: 'graph',
-					layout: 'force',
-					roam: true,
-					force: { repulsion: 220, edgeLength: 90, gravity: 0.12 },
-					label: { show: true, fontSize: 11 },
-					data: Object.keys(degree).map((n) => ({ name: String(n), symbolSize: Math.min(40, 12 + degree[n] * 5) })),
-					links: rows.map((r) => ({
-						source: String(r[enc.source]), target: String(r[enc.target]),
-						...(enc.value !== undefined && r[enc.value] !== undefined ? { value: r[enc.value], lineStyle: { width: 1 + Math.log(1 + Number(r[enc.value])) } } : {}),
-					})),
-					lineStyle: { opacity: 0.5, curveness: 0.1 },
-				}],
+				data: [
+					{ type: 'scatter', mode: 'lines', x: ex, y: ey, line: { width: 1, color: p.border }, hoverinfo: 'skip' },
+					{
+						type: 'scatter',
+						mode: 'markers+text',
+						x: pos.map((q) => q.x),
+						y: pos.map((q) => q.y),
+						text: names.map(String),
+						textposition: 'top center',
+						textfont: { size: 11, color: p.muted },
+						marker: {
+							size: names.map((n) => Math.min(40, 12 + degree[n] * 5)),
+							color: p.color[0],
+							line: { width: 1.5, color: p.panel },
+						},
+						customdata: names.map((n) => degree[n]),
+						hovertemplate: '%{text}<br>links: %{customdata}<extra></extra>',
+					},
+				],
+				layout: {
+					...base(),
+					xaxis: hidden,
+					yaxis: { ...hidden, scaleanchor: 'x' },
+					hovermode: 'closest',
+					dragmode: 'pan',
+					margin: { l: 8, r: 8, t: 10, b: 10 },
+				},
 			}
 		}
+
 		case 'treemap':
 		case 'sunburst': {
 			const nk = enc.name || 'name', vk = enc.value || 'value', ck = enc.children || 'children'
-			const mapTree = (nodes) => (nodes || []).map((n) => ({
-				name: n[nk], value: n[vk],
-				...(Array.isArray(n[ck]) && n[ck].length ? { children: mapTree(n[ck]) } : {}),
-			}))
-			const data = mapTree(rows)
-			return block.kind === 'treemap'
-				? {
-					tooltip: { formatter: (p) => `${esc(p.name)}: ${yFmt(p.value)}` },
-					series: [{ type: 'treemap', data, top: 6, bottom: 26, left: 4, right: 4, roam: false, breadcrumb: { bottom: 0 }, label: { fontSize: 12 }, itemStyle: { borderRadius: 3, gapWidth: 2 } }],
-				}
-				: {
-					tooltip: { formatter: (p) => `${esc(p.name)}: ${yFmt(p.value)}` },
-					series: [{ type: 'sunburst', data, radius: ['14%', '82%'], label: { rotate: 'radial', fontSize: 11, minAngle: 8 }, itemStyle: { borderRadius: 4, borderWidth: 1.5 } }],
-				}
+			const h = flattenHierarchy(rows, nk, vk, ck)
+			return {
+				data: [{
+					type: block.kind,
+					ids: h.ids,
+					labels: h.labels,
+					parents: h.parents,
+					values: h.values,
+					hovertemplate: '%{label}: %{value}<extra></extra>',
+					marker: { line: { width: 1.5, color: p.panel } },
+					...(block.kind === 'treemap' ? { tiling: { pad: 2 } } : {}),
+				}],
+				layout: { ...base(), margin: { l: 6, r: 6, t: 10, b: 6 } },
+			}
 		}
+
 		case 'parallel': {
 			const dims = Array.isArray(enc.dimensions) ? enc.dimensions : [enc.dimensions]
 			return {
-				tooltip: { trigger: 'item', formatter: (p) => `${p.data.name ? esc(p.data.name) + '<br>' : ''}${dims.map((d, i) => `${esc(d)}: ${p.value[i]}`).join('<br>')}` },
-				parallel: { top: 34, bottom: 18, left: 40, right: 40 },
-				parallelAxis: dims.map((d, i) => ({ dim: i, name: d })),
-				series: [{
-					type: 'parallel',
-					lineStyle: { width: 2.5, opacity: 0.65 },
-					emphasis: { lineStyle: { width: 4, opacity: 1 } },
-					data: rows.map((r) => ({ value: dims.map((d) => r[d]), ...(enc.name ? { name: String(r[enc.name]) } : {}) })),
+				data: [{
+					type: 'parcoords',
+					dimensions: dims.map((d) => ({ label: String(d), values: rows.map((r) => Number(r[d])) })),
+					line: {
+						color: rows.map((_, i) => i),
+						colorscale: [[0, p.color[0]], [1, p.color[3]]],
+						showscale: false,
+					},
+					labelfont: { color: p.muted, size: 11 },
+					tickfont: { color: p.muted, size: 10 },
+					rangefont: { color: TRANSPARENT },
 				}],
+				layout: { ...base(), margin: { l: 60, r: 60, t: 40, b: 20 } },
 			}
 		}
-		case 'themeRiver':
+
+		case 'themeRiver': {
+			// Plotly has no streamgraph. Compute the symmetric (ThemeRiver)
+			// baseline here and draw each band as a closed polygon.
+			const xs = [...new Set(rows.map((r) => r[enc.x]))].sort()
+			const series = [...new Set(rows.map((r) => String(r[enc.series])))]
+			const at = new Map()
+			rows.forEach((r) => at.set(JSON.stringify([r[enc.x], String(r[enc.series])]), Number(r[enc.value]) || 0))
+			const vals = series.map((s) => xs.map((x) => at.get(JSON.stringify([x, s])) || 0))
+			const totals = xs.map((_, i) => series.reduce((sum, _s, si) => sum + vals[si][i], 0))
+			const lower = xs.map((_, i) => -totals[i] / 2)
+			const rev = [...xs].reverse()
+			const data = series.map((name, si) => {
+				const lo = xs.map((_, i) => lower[i])
+				const hi = xs.map((_, i) => lower[i] + vals[si][i])
+				xs.forEach((_, i) => { lower[i] = hi[i] })
+				return {
+					type: 'scatter',
+					name,
+					x: [...xs, ...rev],
+					y: [...hi, ...[...lo].reverse()],
+					fill: 'toself',
+					mode: 'lines',
+					line: { width: 1, color: TRANSPARENT },
+					fillcolor: p.color[si % p.color.length],
+					opacity: 0.85,
+					hoveron: 'fills',
+					hoverinfo: 'name',
+				}
+			})
 			return {
-				tooltip: { trigger: 'axis', axisPointer: { type: 'line' } },
-				legend: bottomLegend,
-				singleAxis: { type: 'time', top: 20, bottom: 60 },
-				series: [{
-					type: 'themeRiver',
-					top: 20, bottom: 60,
-					data: rows.map((r) => [r[enc.x], r[enc.value], String(r[enc.series])]),
-					label: { show: false },
-				}],
+				data,
+				layout: {
+					...base(), ...legend(true),
+					xaxis: { type: 'date' },
+					yaxis: { visible: false, zeroline: false },
+				},
 			}
+		}
+
+		// --- scientific / ML kinds -----------------------------------------
+
+		case 'scatter3d': {
+			const groups = enc.series ? uniq(enc.series) : [null]
+			let sizeOf = null
+			if (enc.size) {
+				const sizes = rows.map((r) => Number(r[enc.size])).filter(Number.isFinite)
+				const lo = Math.min(...sizes), hi = Math.max(...sizes)
+				sizeOf = (v) => 3 + (hi > lo ? ((v - lo) / (hi - lo)) * 11 : 3)
+			}
+			return {
+				data: groups.map((g) => {
+					const rs = rows.filter((r) => g === null || r[enc.series] === g)
+					return {
+						type: 'scatter3d',
+						mode: 'markers',
+						name: g === null ? enc.z : String(g),
+						x: rs.map((r) => Number(r[enc.x])),
+						y: rs.map((r) => Number(r[enc.y])),
+						z: rs.map((r) => Number(r[enc.z])),
+						marker: { size: enc.size ? rs.map((r) => sizeOf(Number(r[enc.size]))) : 4, opacity: 0.85, line: { width: 0 } },
+						...(enc.label ? { text: rs.map((r) => hs(r[enc.label])) } : {}),
+						hovertemplate:
+							(enc.label ? '%{text}<br>' : '') +
+							`${hs(enc.x)}: %{x}<br>${hs(enc.y)}: %{y}<br>${hs(enc.z)}: %{z}<extra></extra>`,
+					}
+				}),
+				layout: {
+					...base(), ...legend(groups[0] !== null),
+					scene: {
+						xaxis: { title: { text: enc.x } },
+						yaxis: { title: { text: enc.y } },
+						zaxis: { title: { text: enc.z } },
+					},
+					margin: { l: 0, r: 0, t: 0, b: groups[0] !== null ? 30 : 0 },
+				},
+			}
+		}
+
+		case 'surface': {
+			const grid = pivotGrid(rows, enc.x, enc.y, enc.z)
+			return {
+				data: [{
+					type: 'surface',
+					x: grid.xs, y: grid.ys, z: grid.z,
+					colorscale: seqScale,
+					colorbar,
+					contours: { z: { show: false } },
+					hovertemplate: `${hs(enc.x)}: %{x}<br>${hs(enc.y)}: %{y}<br>${hs(enc.z)}: %{z}<extra></extra>`,
+				}],
+				layout: {
+					...base(),
+					scene: {
+						xaxis: { title: { text: enc.x } },
+						yaxis: { title: { text: enc.y } },
+						zaxis: { title: { text: enc.z } },
+					},
+					margin: { l: 0, r: 0, t: 0, b: 0 },
+				},
+			}
+		}
+
+		case 'contour': {
+			const grid = pivotGrid(rows, enc.x, enc.y, enc.z)
+			return {
+				data: [{
+					type: 'contour',
+					x: grid.xs, y: grid.ys, z: grid.z,
+					colorscale: seqScale,
+					colorbar,
+					contours: { coloring: 'fill' },
+					line: { width: 0.6, color: withAlpha(p.text, 0.18) },
+					hovertemplate: `${hs(enc.x)}: %{x}<br>${hs(enc.y)}: %{y}<br>${hs(enc.z)}: %{z}<extra></extra>`,
+				}],
+				layout: { ...base(), ...legend(false, true), xaxis: { title: { text: enc.x } }, yaxis: { title: { text: enc.y } } },
+			}
+		}
+
+		case 'density': {
+			const x = rows.map((r) => Number(r[enc.x]))
+			const y = rows.map((r) => Number(r[enc.y]))
+			const data = [{
+				type: 'histogram2dcontour',
+				x, y,
+				colorscale: seqScale,
+				colorbar,
+				ncontours: 14,
+				contours: { coloring: 'fill' },
+				line: { width: 0 },
+				hoverinfo: 'skip',
+			}]
+			if (enc.points)
+				data.push({
+					type: 'scatter', mode: 'markers', x, y,
+					marker: { size: 4, color: withAlpha(p.text, 0.45) },
+					hovertemplate: `${hs(enc.x)}: %{x}<br>${hs(enc.y)}: %{y}<extra></extra>`,
+				})
+			return {
+				data,
+				layout: { ...base(), ...legend(false, true), xaxis: { title: { text: enc.x } }, yaxis: { title: { text: enc.y } }, hovermode: 'closest' },
+			}
+		}
+
+		case 'violin': {
+			const groups = enc.x ? uniq(enc.x) : [null]
+			return {
+				data: groups.map((g, i) => {
+					const rs = rows.filter((r) => g === null || r[enc.x] === g)
+					const col = p.color[i % p.color.length]
+					return {
+						type: 'violin',
+						name: g === null ? String(enc.y) : String(g),
+						y: rs.map((r) => Number(r[enc.y])),
+						box: { visible: true, width: 0.25 },
+						meanline: { visible: true },
+						points: false,
+						fillcolor: withAlpha(col, 0.35),
+						line: { color: col, width: 1.5 },
+						hovertemplate: '%{y}<extra>%{fullData.name}</extra>',
+					}
+				}),
+				layout: { ...base(), ...legend(false, true), violinmode: 'group', yaxis: { title: { text: enc.y } } },
+			}
+		}
+
+		case 'errorBars': {
+			const groups = enc.series ? uniq(enc.series) : [null]
+			const data = []
+			groups.forEach((g, i) => {
+				const rs = rows.filter((r) => g === null || r[enc.series] === g)
+				const x = rs.map((r) => r[enc.x])
+				const y = rs.map((r) => Number(r[enc.y]))
+				const e = rs.map((r) => Number(r[enc.error]) || 0)
+				const col = p.color[i % p.color.length]
+				const name = g === null ? String(enc.y) : String(g)
+				if (enc.band) {
+					const rev = [...x].reverse()
+					data.push({
+						type: 'scatter', mode: 'lines', name, showlegend: false, hoverinfo: 'skip',
+						x: [...x, ...rev],
+						y: [...y.map((v, j) => v + e[j]), ...y.map((v, j) => v - e[j]).reverse()],
+						fill: 'toself', fillcolor: withAlpha(col, 0.18), line: { width: 0 },
+					})
+				}
+				data.push({
+					type: 'scatter', mode: 'lines+markers', name, x, y,
+					line: { color: col, width: 2.5 },
+					marker: { size: 6, color: col },
+					...(enc.band ? {} : { error_y: { type: 'data', array: e, visible: true, color: col, thickness: 1.5, width: 4 } }),
+					customdata: e.map((v) => hs(yFmt(v))),
+					hovertemplate: `%{x}<br>${hs(enc.y)}: %{y} ± %{customdata}<extra>${hs(name)}</extra>`,
+				})
+			})
+			return {
+				data,
+				layout: {
+					...base(), ...legend(groups[0] !== null, true),
+					xaxis: { title: { text: enc.x } },
+					yaxis: { title: { text: enc.y } },
+					hovermode: 'closest',
+				},
+			}
+		}
+
+		case 'dendrogram': {
+			const path = dendrogramPath(rows, enc)
+			return {
+				data: [{
+					type: 'scatter', mode: 'lines',
+					x: path.xs, y: path.ys,
+					line: { color: p.color[0], width: 1.5, shape: 'linear' },
+					hoverinfo: 'skip',
+				}],
+				layout: {
+					...base(), ...legend(false, true),
+					xaxis: {
+						tickmode: 'array',
+						tickvals: path.leaves.map((_, i) => i),
+						ticktext: path.leaves.map(String),
+						zeroline: false,
+						showgrid: false,
+					},
+					yaxis: { title: { text: 'distance' }, zeroline: false, rangemode: 'tozero' },
+				},
+			}
+		}
+
+		case 'silhouette': {
+			const clusters = uniq(enc.cluster)
+			const all = rows.map((r) => Number(r[enc.value])).filter(Number.isFinite)
+			const mean = all.length ? all.reduce((a, b) => a + b, 0) / all.length : 0
+			const GAP = 2
+			const data = [], tickvals = [], ticktext = []
+			let cursor = 0
+			clusters.forEach((c, i) => {
+				// Within a cluster the bars must climb: the blade shape IS the signal.
+				// Sorted descending because the y axis is reversed, which puts the
+				// smallest (and any negative) values at the foot of each blade —
+				// the orientation sklearn's silhouette plot established.
+				const vals = rows.filter((r) => r[enc.cluster] === c).map((r) => Number(r[enc.value])).sort((a, b) => b - a)
+				data.push({
+					type: 'bar', orientation: 'h', name: String(c),
+					y: vals.map((_, j) => cursor + j),
+					x: vals,
+					width: 1,
+					marker: { color: withAlpha(p.color[i % p.color.length], 0.85), line: { width: 0 } },
+					hovertemplate: `${hs(String(c))}: %{x:.3f}<extra></extra>`,
+				})
+				tickvals.push(cursor + (vals.length - 1) / 2)
+				ticktext.push(String(c))
+				cursor += vals.length + GAP
+			})
+			return {
+				data,
+				layout: {
+					...base(), ...legend(false, true),
+					bargap: 0,
+					xaxis: { title: { text: 'silhouette' }, zeroline: true, zerolinecolor: p.border },
+					yaxis: { tickmode: 'array', tickvals, ticktext, autorange: 'reversed', showgrid: false },
+					shapes: [{ type: 'line', x0: mean, x1: mean, yref: 'paper', y0: 0, y1: 1, line: { color: p.down, width: 1.5, dash: 'dash' } }],
+					annotations: [{
+						x: mean, y: 1, yref: 'paper', yanchor: 'bottom', showarrow: false,
+						text: `mean ${mean.toFixed(2)}`, font: { size: 10, color: p.muted },
+					}],
+				},
+			}
+		}
+
+		case 'splom': {
+			const dims = Array.isArray(enc.dimensions) ? enc.dimensions : [enc.dimensions]
+			const groups = enc.series ? uniq(enc.series) : [null]
+			// With only two dimensions, hiding the diagonal AND the upper half
+			// leaves Plotly no cells to draw and it renders nothing at all.
+			const triangular = dims.length >= 3
+			return {
+				data: groups.map((g) => {
+					const rs = rows.filter((r) => g === null || r[enc.series] === g)
+					return {
+						type: 'splom',
+						name: g === null ? '' : String(g),
+						dimensions: dims.map((d) => ({ label: String(d), values: rs.map((r) => Number(r[d])) })),
+						marker: { size: 4, opacity: 0.8, line: { width: 0 } },
+						diagonal: { visible: !triangular },
+						showupperhalf: !triangular,
+					}
+				}),
+				layout: { ...base(), ...legend(groups[0] !== null), hovermode: 'closest', dragmode: 'select' },
+			}
+		}
+
 		default:
-			return { title: { text: `Unsupported chart kind: ${String(block.kind)}`, left: 'center', top: 'middle', textStyle: { fontSize: 13 } } }
+			return {
+				data: [],
+				layout: {
+					...base(),
+					xaxis: { visible: false },
+					yaxis: { visible: false },
+					annotations: [{
+						text: `Unsupported chart kind: ${esc(String(block.kind))}`,
+						showarrow: false, xref: 'paper', yref: 'paper', x: 0.5, y: 0.5,
+						font: { size: 13, color: p.muted },
+					}],
+				},
+			}
 	}
 }
+
+function currencySymbol(code) {
+	try {
+		return new Intl.NumberFormat(undefined, { style: 'currency', currency: code || 'USD' })
+			.formatToParts(0).find((part) => part.type === 'currency').value
+	} catch {
+		return '$'
+	}
+}
+
+/** The generated figure, then the raw-Plotly escape hatch on top. */
+function chartFigureWithOptions(block) {
+	return applyOptions(chartFigure(block), block.options)
+}
+
+// ---------------------------------------------------------------- sweeps
+
+const isSwept = (block) =>
+	block.sweep && Array.isArray(block.sweep.frames) && block.sweep.frames.length >= 2
+
+/** One figure per slider step. The agent precomputed every frame; nothing here
+ *  calls back into it. */
+const sweepFigures = (block) =>
+	block.sweep.frames.map((frame) => chartFigureWithOptions({ ...block, data: frame.data }))
+
+/** Plotly's own slider, themed, with `method: "skip"` — the step change is a
+ *  DOM event we handle, not a Plotly API call, so it works for every kind
+ *  (including scatter3d, where `method: "animate"` is broken upstream). */
+function sweepLayout(block, layout, active) {
+	const p = palette()
+	const bottom = (layout.margin && layout.margin.b) || 40
+	// The slider stacks under whatever is already below the plot. With a legend
+	// there, its tick labels would land on top of the legend entries.
+	const legend = layout.showlegend === true
+	return {
+		...layout,
+		margin: { ...(layout.margin || {}), b: bottom + (legend ? 96 : 58) },
+		sliders: [{
+			active,
+			// Inset slightly: 3D layouts run a zero left margin and would clip the
+			// current-value label.
+			x: 0.02,
+			len: 0.96,
+			pad: { t: legend ? 74 : 34, b: 4 },
+			currentvalue: {
+				prefix: block.sweep.label ? `${block.sweep.label}: ` : '',
+				font: { size: 12, color: p.text },
+				xanchor: 'left',
+			},
+			font: { size: 11, color: p.muted },
+			bgcolor: p.border,
+			activebgcolor: p.color[0],
+			bordercolor: TRANSPARENT,
+			borderwidth: 0,
+			tickcolor: p.border,
+			ticklen: 4,
+			steps: block.sweep.frames.map((frame) => ({ label: frame.label, method: 'skip', args: [] })),
+		}],
+	}
+}
+
+/** Swap the whole figure on a step change. `react` reuses the WebGL context, so
+ *  dragging a slider across a 3D sweep does not accumulate contexts. */
+function attachSweep(entry) {
+	entry.el.on('plotly_sliderchange', (ev) => {
+		const label = ev && ev.step && ev.step.label
+		const next = entry.block.sweep.frames.findIndex((frame) => frame.label === label)
+		if (next < 0 || next === entry.active)
+			return
+		entry.active = next
+		const fig = entry.figs[next]
+		window.Plotly.react(entry.el, fig.data, sweepLayout(entry.block, fig.layout, next), PLOTLY_CONFIG)
+	})
+}
+
+// Rotating a 3D scene or reading a k×k matrix needs more than the 320 px default.
+const TALL_KINDS = new Set(['scatter3d', 'surface', 'splom'])
 
 function renderChartShell(block, idx) {
 	const title = block.title ? `<div class="chart-title">${esc(block.title)}</div>` : ''
 	const desc = block.description ? `<div class="chart-desc">${esc(block.description)}</div>` : ''
-	return `<div class="block card">${title}${desc}<div class="chart-box" data-chart="${idx}"></div></div>`
+	const cls = (TALL_KINDS.has(block.kind) ? ' tall' : '') + (isSwept(block) ? ' swept' : '')
+	return `<div class="block card">${title}${desc}<div class="chart-box${cls}" data-chart="${idx}"></div></div>`
 }
 
+// Mount one chart at a time.
+//
+// Firing every newPlot at once once cost us a chart: a two-dimension `splom`
+// (which drew nothing — see its case above) sat beside a `violin`, and the violin
+// died with "Cannot read properties of undefined (reading 'makeCalcdata')" while
+// the splom looked fine. The canvas came up short with no visible error. After
+// fixing the splom, concurrency alone no longer reproduces it, so "newPlot is not
+// re-entrant" is NOT established — don't repeat that claim. What sequential
+// mounting buys is deterministic order and a try/catch that contains a failing
+// chart instead of letting it take a neighbour down. Cost: a slightly slower
+// first paint on chart-heavy canvases.
+//
+// The generation counter lets a re-render abandon an in-flight mount loop.
+let mountGeneration = 0
+
 function mountCharts(blocks) {
-	const theme = currentTheme() === 'dark' ? 'ic-dark' : 'ic-light'
-	document.querySelectorAll('[data-chart]').forEach((box) => {
-		const block = blocks[Number(box.dataset.chart)]
-		const chart = window.echarts.init(box, theme)
-		chart.setOption(chartOption(block))
-		// Escape hatch LAST, via a second setOption: ECharts merges natively
-		// (series by index), so {"series":[{"smooth":true}]} refines rather
-		// than replaces the generated series.
-		if (block.options && typeof block.options === 'object')
-			chart.setOption(block.options)
-		state.charts.push(chart)
-		const ro = new ResizeObserver(() => chart.resize())
-		ro.observe(box)
-		state.observers.push(ro)
-	})
+	const generation = ++mountGeneration
+	const boxes = [...document.querySelectorAll('[data-chart]')]
+	;(async () => {
+		for (const box of boxes) {
+			if (generation !== mountGeneration || !box.isConnected)
+				return
+			const block = blocks[Number(box.dataset.chart)]
+			const swept = isSwept(block)
+			const entry = { el: box, block, active: 0 }
+			try {
+				if (swept) {
+					entry.figs = sweepFigures(block)
+					await window.Plotly.newPlot(box, entry.figs[0].data, sweepLayout(block, entry.figs[0].layout, 0), PLOTLY_CONFIG)
+					attachSweep(entry)
+				} else {
+					const fig = chartFigureWithOptions(block)
+					await window.Plotly.newPlot(box, fig.data, fig.layout, PLOTLY_CONFIG)
+				}
+			} catch (err) {
+				box.textContent = `Could not render this ${block.kind} chart.`
+				continue
+			}
+			if (generation !== mountGeneration)
+				return
+			state.charts.push(entry)
+			const ro = new ResizeObserver(() => window.Plotly.Plots.resize(box))
+			ro.observe(box)
+			state.observers.push(ro)
+		}
+	})()
+}
+
+/** Re-render every chart in place on the other theme. Never purge: a purged 3D
+ *  chart's WebGL context is not released, and the browser caps live contexts.
+ *  Sequential for the same containment reason as mountCharts. */
+async function rethemeCharts() {
+	for (const entry of [...state.charts]) {
+		if (!entry.el.isConnected)
+			continue
+		if (entry.figs) {
+			// Rebuild every frame on the new palette; hold the reader's step.
+			entry.figs = sweepFigures(entry.block)
+			const fig = entry.figs[entry.active]
+			await window.Plotly.react(entry.el, fig.data, sweepLayout(entry.block, fig.layout, entry.active), PLOTLY_CONFIG)
+		} else {
+			const fig = chartFigureWithOptions(entry.block)
+			await window.Plotly.react(entry.el, fig.data, fig.layout, PLOTLY_CONFIG)
+		}
+	}
 }
 
 function disposeCharts() {
-	state.charts.forEach((c) => c.dispose())
+	mountGeneration++ // abandon any mount loop still in flight
+	state.charts.forEach(({ el }) => window.Plotly.purge(el))
 	state.observers.forEach((o) => o.disconnect())
 	state.charts = []
 	state.observers = []

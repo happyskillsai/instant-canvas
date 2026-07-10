@@ -89,7 +89,7 @@ test('INVALID_PROPERTY_TYPE and INVALID_ENUM_VALUE', () => {
 	assert.ok(codes(r).includes('INVALID_PROPERTY_TYPE'))
 	const en = r.errors.find((x) => x.code === 'INVALID_ENUM_VALUE')
 	assert.equal(en.path, 'blocks[1].kind')
-	assert.equal(en.expected.length, 17)
+	assert.equal(en.expected.length, 26)
 	assert.ok(en.expected.includes('sankey'))
 })
 
@@ -138,7 +138,7 @@ test('chart structural rules: per-kind encoding + pie donut', () => {
 	assert.equal(ok.ok, true)
 })
 
-test('chart kinds: registry-driven validation across the 17 kinds', () => {
+test('chart kinds: registry-driven validation across the 26 kinds', () => {
 	// missing required channel
 	const scatter = validate(canvas([{ type: 'chart', kind: 'scatter', data: [{ px: 1, rating: 2 }], encoding: { x: 'px' } }]))
 	assert.ok(scatter.errors.some((e) => e.code === 'MISSING_REQUIRED_PROPERTY' && e.path.endsWith('encoding.y')))
@@ -163,7 +163,7 @@ test('chart kinds: registry-driven validation across the 17 kinds', () => {
 	const treemapRenamed = validate(canvas([{ type: 'chart', kind: 'treemap', data: [{ label: 'src', size: 10 }], encoding: { name: 'label', value: 'size' } }]))
 	assert.equal(treemapRenamed.ok, true)
 
-	// unsupported ECharts kind gets an explanatory error; alias gets a redirect hint
+	// unsupported chart kind gets an explanatory error; alias gets a redirect hint
 	const map = validate(canvas([{ type: 'chart', kind: 'map', data: [{ a: 1 }] }]))
 	const mapErr = map.errors.find((e) => e.code === 'INVALID_ENUM_VALUE' && e.path.endsWith('.kind'))
 	assert.match(mapErr.message, /GeoJSON/)

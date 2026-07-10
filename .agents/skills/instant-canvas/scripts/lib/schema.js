@@ -85,6 +85,20 @@ const SHAPES = {
 			protocols: { type: 'array', description: 'url fields only: allowed URL schemes, e.g. ["https"]. Default: http, https, ftp, ftps, sftp, ws, wss, file, mailto.', example: ['https'] },
 		},
 	},
+	sweepFrame: {
+		description: 'One slider step of a chart sweep: a label and the rows to show at that step.',
+		properties: {
+			label: { type: 'string', required: true, description: 'Tick label for this step.', example: 'k=3' },
+			data: { type: 'array', required: true, description: 'The chart\'s data rows at this step — same shape as the kind\'s normal "data".', example: [{ x: 1, y: 2 }] },
+		},
+	},
+	sweep: {
+		description: 'Turns a chart into a parameter sweep: a slider under the chart steps through precomputed frames. The agent computes every frame up front and ships the rows; no code runs and nothing calls back into the agent. Replaces the chart\'s "data" — do not send both.',
+		properties: {
+			label: { type: 'string', description: 'Prefix shown before the current step label (e.g. "clusters").', example: 'clusters' },
+			frames: { type: 'array', required: true, itemShape: 'sweepFrame', description: 'Two or more steps, in slider order. Each carries its own data rows.' },
+		},
+	},
 	fieldset: {
 		description: 'Groups related fields under a legend, optionally as a multi-column grid. Appears as an item of a form\'s "fields" array. Fieldsets cannot be nested.',
 		properties: {
@@ -327,15 +341,129 @@ const CHART_KINDS = {
 		},
 		example: { type: 'chart', kind: 'themeRiver', title: 'Topics', data: [{ day: '2026-07-01', topic: 'bugs', n: 12 }, { day: '2026-07-01', topic: 'features', n: 6 }, { day: '2026-07-02', topic: 'bugs', n: 8 }, { day: '2026-07-02', topic: 'features', n: 14 }], encoding: { x: 'day', series: 'topic', value: 'n' } },
 	},
+
+	// --- scientific / ML kinds -------------------------------------------------
+	scatter3d: {
+		summary: 'Rotatable 3D points on numeric x/y/z.',
+		whenToUse: 'PCA/t-SNE/UMAP with three components; colour clusters via encoding.series.',
+		data: 'One row per point; x, y and z numeric.',
+		aliases: ['3d', 'scatter3D', 'pca3d', 'umap3d'],
+		encoding: {
+			x: { type: 'key', required: true, description: 'Key for numeric x values.' },
+			y: { type: 'key', required: true, description: 'Key for numeric y values.' },
+			z: { type: 'key', required: true, description: 'Key for numeric z values.' },
+			series: { type: 'key', description: 'Optional key: groups points into coloured series (the cluster label).' },
+			size: { type: 'key', description: 'Optional key: marker size.' },
+			label: { type: 'key', description: 'Optional key: point name shown on hover.' },
+		},
+		example: { type: 'chart', kind: 'scatter3d', title: 'PCA', data: [{ pc1: 1.2, pc2: -0.4, pc3: 0.8, cluster: 'a' }, { pc1: -0.9, pc2: 1.1, pc3: -0.3, cluster: 'b' }], encoding: { x: 'pc1', y: 'pc2', z: 'pc3', series: 'cluster' } },
+	},
+	surface: {
+		summary: 'Rotatable 3D surface over a regular x/y grid.',
+		whenToUse: 'z = f(x, y): loss landscapes, response surfaces, kernels.',
+		data: 'One row per grid cell; x and y are the grid axes, z the height.',
+		aliases: ['surface3d', 'landscape', 'mesh'],
+		encoding: {
+			x: { type: 'key', required: true, description: 'Key for the x grid axis.' },
+			y: { type: 'key', required: true, description: 'Key for the y grid axis.' },
+			z: { type: 'key', required: true, description: 'Key for the height at each (x, y).' },
+		},
+		example: { type: 'chart', kind: 'surface', title: 'Loss', data: [{ lr: 0.1, wd: 0.0, loss: 0.9 }, { lr: 0.1, wd: 0.1, loss: 0.6 }, { lr: 0.2, wd: 0.0, loss: 0.7 }, { lr: 0.2, wd: 0.1, loss: 0.4 }], encoding: { x: 'lr', y: 'wd', z: 'loss' } },
+	},
+	contour: {
+		summary: 'Filled iso-contours of z over an x/y grid.',
+		whenToUse: 'Decision boundaries, likelihood surfaces, any 2D scalar field.',
+		data: 'One row per grid cell; x and y are the grid axes, z the value.',
+		aliases: ['isolines', 'contours', 'decisionBoundary'],
+		encoding: {
+			x: { type: 'key', required: true, description: 'Key for the x grid axis.' },
+			y: { type: 'key', required: true, description: 'Key for the y grid axis.' },
+			z: { type: 'key', required: true, description: 'Key for the value at each (x, y).' },
+		},
+		example: { type: 'chart', kind: 'contour', title: 'Boundary', data: [{ x: 0, y: 0, p: 0.1 }, { x: 0, y: 1, p: 0.4 }, { x: 1, y: 0, p: 0.6 }, { x: 1, y: 1, p: 0.9 }], encoding: { x: 'x', y: 'y', z: 'p' } },
+	},
+	density: {
+		summary: '2D kernel-density contours of a point cloud.',
+		whenToUse: 'Where an embedding concentrates; set encoding.points to overlay the raw points.',
+		data: 'One row per point; x and y numeric.',
+		aliases: ['kde', 'density2d', 'histogram2dcontour'],
+		encoding: {
+			x: { type: 'key', required: true, description: 'Key for numeric x values.' },
+			y: { type: 'key', required: true, description: 'Key for numeric y values.' },
+			points: { type: 'boolean', checkInData: false, description: 'true overlays the individual points on the density.' },
+		},
+		example: { type: 'chart', kind: 'density', title: 'Embedding', data: [{ u1: 0.2, u2: 1.1 }, { u1: 0.4, u2: 0.9 }, { u1: 1.6, u2: -0.2 }], encoding: { x: 'u1', y: 'u2', points: true } },
+	},
+	violin: {
+		summary: 'Kernel-density distribution per group, with an inner box.',
+		whenToUse: 'Compare per-cluster or per-class distributions; richer than boxplot.',
+		data: 'One row per observation.',
+		aliases: ['distribution', 'violinplot'],
+		encoding: {
+			y: { type: 'key', required: true, description: 'Key for the numeric observation.' },
+			x: { type: 'key', description: 'Optional key: the group each observation belongs to.' },
+		},
+		example: { type: 'chart', kind: 'violin', title: 'Latency', data: [{ svc: 'api', ms: 120 }, { svc: 'api', ms: 138 }, { svc: 'web', ms: 90 }, { svc: 'web', ms: 104 }], encoding: { x: 'svc', y: 'ms' } },
+	},
+	errorBars: {
+		summary: 'Line with symmetric error bars, or a shaded uncertainty band.',
+		whenToUse: 'Learning and validation curves with ±std; any mean ± error series.',
+		data: 'One row per x; y is the mean and error the half-width.',
+		aliases: ['errorbar', 'uncertainty', 'learningCurve', 'confidence'],
+		encoding: {
+			x: { type: 'key', required: true, description: 'Key for the x values.' },
+			y: { type: 'key', required: true, description: 'Key for the mean.' },
+			error: { type: 'key', required: true, description: 'Key for the half-width of the error (e.g. one standard deviation).' },
+			series: { type: 'key', description: 'Optional key: one line per group (e.g. train vs validation).' },
+			band: { type: 'boolean', checkInData: false, description: 'true draws a shaded band instead of discrete error bars.' },
+		},
+		example: { type: 'chart', kind: 'errorBars', title: 'Learning curve', data: [{ n: 100, acc: 0.62, std: 0.05, split: 'train' }, { n: 500, acc: 0.79, std: 0.03, split: 'train' }], encoding: { x: 'n', y: 'acc', error: 'std', series: 'split', band: true } },
+	},
+	dendrogram: {
+		summary: 'Hierarchical clustering tree; bracket height is merge distance.',
+		whenToUse: 'Agglomerative clustering; pair with a heatmap to build a clustermap.',
+		data: 'One row per merge, in order. left/right hold a leaf label, or "#i" referencing merge i.',
+		aliases: ['linkage', 'hclust', 'tree'],
+		encoding: {
+			left: { type: 'key', required: true, description: 'Key holding the left child: a leaf label, or "#i" for merge i.' },
+			right: { type: 'key', required: true, description: 'Key holding the right child: a leaf label, or "#i" for merge i.' },
+			height: { type: 'key', required: true, description: 'Key for the distance at which the two children merge.' },
+		},
+		example: { type: 'chart', kind: 'dendrogram', title: 'Clusters', data: [{ a: 'A', b: 'B', h: 1 }, { a: 'C', b: 'D', h: 1.4 }, { a: '#0', b: '#1', h: 2.6 }], encoding: { left: 'a', right: 'b', height: 'h' } },
+	},
+	silhouette: {
+		summary: 'Per-sample silhouette widths, grouped and sorted by cluster.',
+		whenToUse: 'Cluster quality beside the elbow plot; negative bars mark misassigned samples.',
+		data: 'One row per sample.',
+		aliases: ['silhouettePlot', 'clusterQuality'],
+		encoding: {
+			cluster: { type: 'key', required: true, description: 'Key for the cluster each sample was assigned to.' },
+			value: { type: 'key', required: true, description: 'Key for the sample silhouette coefficient (-1..1).' },
+		},
+		example: { type: 'chart', kind: 'silhouette', title: 'Silhouette', data: [{ k: 'c0', s: 0.71 }, { k: 'c0', s: 0.62 }, { k: 'c1', s: 0.44 }, { k: 'c1', s: -0.08 }], encoding: { cluster: 'k', value: 's' } },
+	},
+	splom: {
+		summary: 'Scatter-plot matrix of every pair of dimensions.',
+		whenToUse: 'Pairwise structure across the top principal components or features.',
+		data: 'One row per point.',
+		aliases: ['pairplot', 'scattermatrix', 'spm'],
+		encoding: {
+			dimensions: { type: 'keys', required: true, description: 'Key or list of keys — one row/column of the matrix per key.' },
+			series: { type: 'key', description: 'Optional key: groups points into coloured series.' },
+		},
+		example: { type: 'chart', kind: 'splom', title: 'Components', data: [{ pc1: 1.2, pc2: -0.4, pc3: 0.8, cluster: 'a' }, { pc1: -0.9, pc2: 1.1, pc3: -0.3, cluster: 'b' }], encoding: { dimensions: ['pc1', 'pc2', 'pc3'], series: 'cluster' } },
+	},
 }
 
-// ECharts kinds deliberately NOT supported (documented so agents don't guess):
+// Chart kinds deliberately NOT supported (documented so agents don't guess):
 const UNSUPPORTED_CHARTS = {
-	map: 'Needs GeoJSON map registration (external asset) — not available in the vendored runtime.',
-	lines: 'Geo trajectory chart — needs coordinate systems/maps.',
+	map: 'Geographic maps need GeoJSON/topojson and map tiles fetched from external hosts. The canvas CSP blocks every outbound request, so geo traces are excluded from the vendored build.',
+	choropleth: 'Geographic map — see "map".',
+	scattergeo: 'Geographic scatter — see "map".',
+	scattergl: 'WebGL point cloud for very large scatters — not in the vendored build. Use kind "scatter".',
 	effectScatter: 'Visual variant of scatter — use kind "scatter" and refine via the raw "options" escape hatch.',
 	pictorialBar: 'Symbol-based bars — use kind "bar" and refine via the raw "options" escape hatch.',
-	custom: 'Requires JavaScript renderItem functions; canvases are pure JSON.',
+	custom: 'Requires JavaScript render callbacks; canvases are pure JSON. Refine a supported kind through the raw "options" escape hatch instead.',
 }
 
 // The 16 field types. aliases feed "Did you mean" hints for unknown types.
@@ -384,18 +512,21 @@ const BLOCKS = {
 	},
 	chart: {
 		kind: 'display',
-		description: 'ECharts chart. 17 kinds (see the catalog "chartKinds" index; `catalog <kind>` gives each kind\'s exact encoding schema + example). Data is inline JSON; "encoding" maps data keys to visual channels per kind; "options" is a raw ECharts option applied last (escape hatch).',
+		description: 'Chart. 26 kinds — 17 general plus 9 scientific/ML (see the catalog "chartKinds" index; `catalog <kind>` gives each kind\'s exact encoding schema + example). Data is inline JSON; "encoding" maps data keys to visual channels per kind; "options" is a raw Plotly figure fragment applied last (escape hatch).',
 		aliases: ['graph', 'plot', 'diagram', 'visualization'],
 		properties: {
 			type: { type: 'string', required: true, enum: ['chart'] },
 			kind: { type: 'string', required: true, enum: [], description: 'Chart kind — run `catalog` for the one-line index, `catalog <kind>` for its schema.' }, // enum filled below
 			title: { type: 'string', description: 'Card title.', example: 'Signups' },
 			description: { type: 'string', description: 'Caption under the title.', example: 'Actual vs. target, last 4 months' },
-			data: { type: 'array', required: true, description: 'Inline data rows. Shape depends on kind: flat objects for most; {name, value, children} trees for treemap/sunburst; link rows for sankey/graph.', example: [{ month: 'Apr', signups: 2000, target: 2200 }] },
+			data: { type: 'array', required: true, description: 'Inline data rows. Shape depends on kind: flat objects for most; {name, value, children} trees for treemap/sunburst; link rows for sankey/graph. Omit when "sweep" is present — its frames carry the rows.', example: [{ month: 'Apr', signups: 2000, target: 2200 }] },
+			// No itemShape: checkSweep() owns the nested errors, and recursing here
+			// would report every defect twice. Its schema is `catalog sweep`.
+			sweep: { type: 'object', description: 'Parameter sweep: a slider steps through precomputed frames. Replaces "data". See `catalog sweep`.' },
 			encoding: { type: 'object', description: 'Maps data keys to the kind\'s channels — exact schema via `catalog <kind>`. Optional only for treemap/sunburst (default name/value/children keys).' },
 			format: { type: 'object', itemShape: 'chartFormat', description: 'Value/axis/tooltip formatting.' },
 			donut: { type: 'boolean', default: false, description: 'Pie only: render as a donut.' },
-			options: { type: 'object', description: 'Raw ECharts option applied LAST with native merge semantics (escape hatch). JSON only.', example: {} },
+			options: { type: 'object', description: 'Raw Plotly figure fragment applied LAST as {"data":[...perTraceOverrides],"layout":{...}} — traces merge by index, so a patch refines the generated trace instead of replacing it. JSON only.', example: {} },
 		},
 		example: { type: 'chart', kind: 'line', title: 'Signups', data: [{ month: 'Apr', signups: 2000, target: 2200 }], encoding: { x: 'month', y: ['signups', 'target'] }, format: { y: 'number' } },
 	},

@@ -252,7 +252,9 @@ function checkBlock(block, base, ctx) {
 			...(h ? { hint: h.hint, example: BLOCKS[h.suggestion].example } : {}),
 		})
 	}
-	checkObject(block, def.properties, base, ctx)
+	// A swept chart carries its rows inside sweep.frames, so "data" is not required.
+	const swept = block.type === 'chart' && typeOf(block.sweep) === 'object'
+	checkObject(block, def.properties, base, ctx, swept ? { skip: ['data'] } : {})
 	if (block.type === 'markdown') checkMarkdown(block, base, ctx)
 	if (block.type === 'chart') checkChart(block, base, ctx)
 	if (block.type === 'table') checkTable(block, base, ctx)
@@ -276,6 +278,69 @@ function checkMarkdown(block, base, ctx) {
 		})
 }
 
+const SWEEP_EXAMPLE = {
+	type: 'chart', kind: 'scatter', title: 'Clusters by k',
+	encoding: { x: 'x', y: 'y', series: 'cluster' },
+	sweep: {
+		label: 'clusters',
+		frames: [
+			{ label: 'k=2', data: [{ x: 1, y: 2, cluster: 'a' }, { x: 4, y: 3, cluster: 'b' }] },
+			{ label: 'k=3', data: [{ x: 1, y: 2, cluster: 'a' }, { x: 4, y: 3, cluster: 'c' }] },
+		],
+	},
+}
+
+/** Validates block.sweep and returns the first frame's rows (the sample the
+ *  encoding is checked against), or null when there is no usable sweep. */
+function checkSweep(block, base, ctx) {
+	const sweep = block.sweep
+	if (sweep === undefined)
+		return null
+	if (typeOf(sweep) !== 'object')
+		return null // reported by checkObject
+
+	if (Array.isArray(block.data))
+		ctx.warn('UNKNOWN_PROPERTY', `${base}.data`, 'A swept chart takes its rows from sweep.frames[].data; the block\'s own "data" is ignored.', {
+			hint: 'Remove "data", or remove "sweep" if you did not want a slider.',
+		})
+
+	const frames = sweep.frames
+	if (!Array.isArray(frames)) {
+		ctx.error('MISSING_REQUIRED_PROPERTY', `${base}.sweep.frames`, 'A sweep requires "frames": one entry per slider step.', {
+			expected: 'array of {label, data}',
+			example: SWEEP_EXAMPLE,
+		})
+		return null
+	}
+	if (frames.length < 2) {
+		ctx.error('INVALID_SPEC', `${base}.sweep.frames`, `A sweep needs at least two frames — a slider with ${frames.length} step is not a sweep.`, {
+			got: frames.length,
+			expected: '>= 2 frames',
+			example: SWEEP_EXAMPLE,
+		})
+		return null
+	}
+
+	frames.forEach((frame, i) => {
+		const p = `${base}.sweep.frames[${i}]`
+		if (typeOf(frame) !== 'object') {
+			ctx.error('INVALID_PROPERTY_TYPE', p, `Each sweep frame must be an object {label, data}, got ${typeOf(frame)}.`, { got: typeOf(frame), expected: 'object' })
+			return
+		}
+		if (typeof frame.label !== 'string' || !frame.label)
+			ctx.error('MISSING_REQUIRED_PROPERTY', `${p}.label`, 'Each sweep frame needs a "label" — it becomes the slider tick.', {
+				expected: 'string', example: SWEEP_EXAMPLE.sweep.frames[0],
+			})
+		if (!Array.isArray(frame.data) || !frame.data.length)
+			ctx.error('MISSING_REQUIRED_PROPERTY', `${p}.data`, 'Each sweep frame needs non-empty "data" — the rows shown at that step.', {
+				expected: 'array of rows', example: SWEEP_EXAMPLE.sweep.frames[0],
+			})
+	})
+
+	const first = frames[0]
+	return typeOf(first) === 'object' && Array.isArray(first.data) ? first.data : null
+}
+
 function checkChart(block, base, ctx) {
 	const def = CHART_KINDS[block.kind]
 	if (!def) {
@@ -286,7 +351,7 @@ function checkChart(block, base, ctx) {
 			const lower = block.kind.toLowerCase()
 			const reason = UNSUPPORTED_CHARTS[block.kind] || UNSUPPORTED_CHARTS[lower]
 			if (reason) {
-				existing.message = `"${block.kind}" is a real ECharts kind but is not supported here: ${reason}`
+				existing.message = `"${block.kind}" is a real chart kind but is not supported here: ${reason}`
 			} else {
 				for (const [name, kd] of Object.entries(CHART_KINDS)) {
 					if ((kd.aliases || []).some((a) => a.toLowerCase() === lower)) {
@@ -304,11 +369,15 @@ function checkChart(block, base, ctx) {
 	if (block.encoding !== undefined && typeOf(block.encoding) !== 'object')
 		return // reported by checkObject
 
+	// A sweep supplies the rows per frame; its first frame is what encoding is checked against.
+	const sweepRows = checkSweep(block, base, ctx)
+
 	// Rows must be objects (all kinds — trees and links are objects too).
-	const rows = Array.isArray(block.data) ? block.data : []
+	const rows = Array.isArray(block.data) ? block.data : sweepRows || []
+	const rowsPath = Array.isArray(block.data) ? `${base}.data` : `${base}.sweep.frames[0].data`
 	rows.forEach((row, i) => {
 		if (typeOf(row) !== 'object')
-			ctx.error('INVALID_PROPERTY_TYPE', `${base}.data[${i}]`, `Chart data items must be objects, got ${typeOf(row)}.`, { got: typeOf(row), expected: 'object' })
+			ctx.error('INVALID_PROPERTY_TYPE', `${rowsPath}[${i}]`, `Chart data items must be objects, got ${typeOf(row)}.`, { got: typeOf(row), expected: 'object' })
 	})
 	const sample = rows.length && typeOf(rows[0]) === 'object' ? rows[0] : null
 

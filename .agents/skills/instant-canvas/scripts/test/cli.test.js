@@ -52,14 +52,14 @@ test('cli: catalog — lean index by default, one schema per name, --full for ev
 	const lean = run(['catalog'])
 	assert.equal(lean.code, 0)
 	assert.equal(Object.keys(lean.json.blocks).length, 6)
-	assert.equal(Object.keys(lean.json.chartKinds).length, 17)
+	assert.equal(Object.keys(lean.json.chartKinds).length, 26)
 	assert.equal(Object.keys(lean.json.fieldTypes).length, 16)
 	assert.ok(!lean.stdout.includes('"properties"'), 'lean index carries no schemas')
 
 	const chart = run(['catalog', 'chart'])
 	assert.equal(chart.code, 0)
 	assert.equal(chart.json.block, 'chart')
-	assert.equal(Object.keys(chart.json.kinds).length, 17)
+	assert.equal(Object.keys(chart.json.kinds).length, 26)
 
 	const scatter = run(['catalog', 'scatter'])
 	assert.equal(scatter.code, 0)

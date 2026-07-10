@@ -94,18 +94,19 @@
     },
     {
       "dangling": false,
-      "description": "The canvas JSON contract — envelope, six block types, 17 chart kinds, 16 field types, fieldset layout, validation rules, and the progressive-disclosure catalog.",
+      "description": "The canvas JSON contract — envelope, six block types, 26 chart kinds, 16 field types, fieldset layout, validation rules, and the progressive-disclosure catalog.",
       "has_frontmatter": true,
       "headings": [
         "Canvas Schema, Validator, and Catalog",
         "Envelope",
         "Blocks",
-        "Chart kinds (17)",
+        "Chart kinds (26)",
+        "Sweeps: a slider over precomputed frames",
         "Form fields (16 types)",
         "Validator behavior",
         "Catalog: progressive disclosure"
       ],
-      "line_count": 78,
+      "line_count": 104,
       "links_to": [
         "docs/security.md"
       ],
@@ -169,35 +170,42 @@
     },
     {
       "dangling": false,
-      "description": "The browser app — shell, block renderers, bespoke form widgets, chart mapping, theming, icons, and the CSP constraints that shape the code.",
+      "description": "The browser app — shell, block renderers, bespoke form widgets, chart mapping, sweeps, theming, icons, and the CSP constraints that shape the code.",
       "has_frontmatter": true,
       "headings": [
         "Frontend",
         "Shell",
         "Display renderers",
+        "Mounting",
+        "Sweeps",
         "Bespoke form widgets",
         "Layout",
         "Theming",
+        "CSP shim",
         "Icons and vendored assets"
       ],
-      "line_count": 51,
-      "links_to": [],
+      "line_count": 66,
+      "links_to": [
+        "docs/gotchas/frontend.md"
+      ],
       "over_size": false,
       "parse_error": null,
       "path": "docs/frontend.md",
       "source": [
         ".agents/skills/instant-canvas/scripts/web/index.html",
         ".agents/skills/instant-canvas/scripts/web/app.js",
+        ".agents/skills/instant-canvas/scripts/web/csp-shim.js",
         ".agents/skills/instant-canvas/scripts/web/styles.css",
-        ".agents/skills/instant-canvas/scripts/web/vendor/VENDORED.md"
+        ".agents/skills/instant-canvas/scripts/web/vendor/**"
       ],
       "source_unresolved": [],
       "tags": [
         "frontend",
         "ui",
-        "echarts",
+        "plotly",
         "widgets",
-        "theming"
+        "theming",
+        "sweeps"
       ],
       "toc": {
         "linked": false,
@@ -233,26 +241,33 @@
     },
     {
       "dangling": false,
-      "description": "Browser-side gotchas — CSP surprises, ECharts constraints, and popover event traps discovered while building the UI.",
+      "description": "Browser-side gotchas — CSP surprises, Plotly constraints, WebGL context limits, and popover event traps discovered while building the UI.",
       "has_frontmatter": true,
       "headings": [
         "Gotchas — Frontend",
         "CSP silently drops `style=\"\"` attributes",
-        "ECharts cannot read CSS variables",
-        "The `options` escape hatch must merge via a second `setOption`",
+        "Plotly injects a `<style>` element unless you claim its id",
+        "Plotly cannot read CSS variables",
+        "Retheme with `Plotly.react`, never purge + newPlot",
+        "A chart can vanish from a canvas with no error anywhere",
+        "`splom` with two dimensions draws nothing",
+        "Fills default to opaque",
+        "Plotly has no network or streamgraph trace",
+        "The `options` escape hatch is a Plotly figure fragment, merged by index",
+        "Never write a literal NUL into `app.js`",
         "Re-rendering a popover detaches the clicked element",
-        "`echarts.simple.min.js` is not a drop-in slimming",
         "Native widget chrome ignores your dark theme",
         "themeRiver needs real dates",
         "Constraint API quirks around custom widgets"
       ],
-      "line_count": 42,
+      "line_count": 71,
       "links_to": [],
       "over_size": false,
       "parse_error": null,
       "path": "docs/gotchas/frontend.md",
       "source": [
         ".agents/skills/instant-canvas/scripts/web/app.js",
+        ".agents/skills/instant-canvas/scripts/web/csp-shim.js",
         ".agents/skills/instant-canvas/scripts/web/styles.css",
         ".agents/skills/instant-canvas/scripts/web/index.html"
       ],
@@ -261,7 +276,8 @@
         "gotchas",
         "frontend",
         "csp",
-        "echarts"
+        "plotly",
+        "webgl"
       ],
       "toc": {
         "linked": false,
@@ -276,15 +292,14 @@
       "headings": [
         "Gotchas — Skill Packaging (HappySkills)",
         "Everything inside the skill folder ships — keep maintainer material out",
-        "The 1 MB bundle cap vs vendored ECharts",
+        "Two size caps, and the per-file one is the sharp edge",
+        "The vendored Plotly build is not interchangeable with a published dist",
         "Description validators are strict and double-layered",
         "Never scaffold a skill by hand",
         "The skill loads from a mirror path"
       ],
-      "line_count": 29,
-      "links_to": [
-        "docs/gotchas/frontend.md"
-      ],
+      "line_count": 40,
+      "links_to": [],
       "over_size": false,
       "parse_error": null,
       "path": "docs/gotchas/packaging.md",
@@ -342,17 +357,21 @@
     },
     {
       "dangling": false,
-      "description": "node:test runner traps on Node 24 — subtest socket isolation, directory entries, and shared-state-dir coordination.",
+      "description": "node:test runner traps on Node 24, plus the browser-driving traps that make the render smoke test trustworthy.",
       "has_frontmatter": true,
       "headings": [
         "Gotchas — Testing",
+        "A green suite does not mean the charts drew",
+        "`--dump-dom --virtual-time-budget` hides concurrency bugs",
+        "Never set a `Host` header on Chrome's `/json/list`",
+        "A new test that cannot fail is worse than no test",
         "Subtests cannot reach parent-context servers (Node 24.0.x)",
         "`node --test <dir>` does not expand the directory",
         "Set the state dir with `||=`, before requiring the registry",
         "A security scan can trip over its own test file",
         "Fake registry entries in shared state dirs look like leaks"
       ],
-      "line_count": 28,
+      "line_count": 44,
       "links_to": [],
       "over_size": false,
       "parse_error": null,
@@ -364,7 +383,8 @@
       "tags": [
         "gotchas",
         "testing",
-        "node24"
+        "node24",
+        "cdp"
       ],
       "toc": {
         "linked": false,
@@ -444,9 +464,9 @@
         "Suite layout",
         "Isolation patterns",
         "Security regressions",
-        "Browser verification (development practice, not in the suite)"
+        "Browser verification"
       ],
-      "line_count": 46,
+      "line_count": 54,
       "links_to": [
         "docs/gotchas/testing.md"
       ],

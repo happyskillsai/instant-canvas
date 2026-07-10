@@ -151,6 +151,9 @@ button{font:inherit;cursor:pointer}
 .chart-title{font-weight:650;font-size:14px;margin:0 0 2px}
 .chart-desc{color:var(--muted);font-size:12px;margin:0 0 10px}
 .chart-box{width:100%;height:320px}
+.chart-box.tall{height:460px}
+.chart-box.swept{height:400px}
+.chart-box.tall.swept{height:540px}
 
 table.tbl{width:100%;border-collapse:collapse;font-size:13px}
 table.tbl th{text-align:left;color:var(--muted);font-weight:600;font-size:11.5px;letter-spacing:.03em;

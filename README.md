@@ -26,8 +26,8 @@ Instead of maintaining an answers *warehouse* (pre-built admin panels), agents d
 
 Two design commitments run through everything:
 
-- **Progressive disclosure.** The skill is large (17 chart kinds, 16 field types, a full form-layout system), but agents never load it wholesale: `catalog` returns a ~4 KB lean index; `catalog <name>` returns exactly one schema; the deterministic validator turns mistakes into self-explanatory fixes.
-- **Zero dependencies.** Plain Node ≥ 20, built-in `http`, a hand-rolled WebSocket server, two vendored browser files (ECharts, markdown-it). No build step, no npm install.
+- **Progressive disclosure.** The skill is large (26 chart kinds, 16 field types, a full form-layout system), but agents never load it wholesale: `catalog` returns a ~6 KB lean index; `catalog <name>` returns exactly one schema; the deterministic validator turns mistakes into self-explanatory fixes.
+- **Zero dependencies.** Plain Node ≥ 20, built-in `http`, a hand-rolled WebSocket server, vendored browser files (a custom strict Plotly.js build, its stylesheet, markdown-it). No build step, no npm install — rebuilding the Plotly bundle is a maintainer-only task, documented in `scripts/web/vendor/VENDORED.md`.
 
 ## Getting Started
 
@@ -51,11 +51,11 @@ node scripts/instantcanvas.js open my.canvas.json       # one JSON result on std
 node scripts/instantcanvas.js status
 node scripts/instantcanvas.js stop
 
-# tests (83, zero deps)
+# tests (86, zero deps; the browser test skips without Chrome)
 node --test scripts/test/
 ```
 
-`examples/` contains four ready canvases (visual report, secrets → `.env` form, danger confirm, mixed); `demos/` at the repo root holds larger showcases (all 17 chart kinds, the form kitchen sink).
+`examples/` contains four ready canvases (visual report, secrets → `.env` form, danger confirm, mixed); `demos/` at the repo root holds larger showcases (all 17 general chart kinds, the 9 scientific ones, slider-driven sweeps, the form kitchen sink).
 
 ## Project Structure
 
@@ -68,9 +68,9 @@ node --test scripts/test/
     instantcanvas.js             CLI: open | validate | catalog | status | stop
     kernel.js                    Per-workspace localhost server (HTTP + hand-rolled WS)
     lib/                         schema/validate/catalog, registry, redact, envfile, …
-    web/                         Browser app (no framework) + vendored ECharts/markdown-it
-    test/                        node:test suite + fixtures
-demos/                           WORKBENCH — showcase canvases (chart gallery, form kitchen sink, …)
+    web/                         Browser app (no framework) + csp-shim + vendored Plotly/markdown-it
+    test/                        node:test suite + fixtures + a zero-dep CDP client
+demos/                           WORKBENCH — showcase canvases (chart gallery, science gallery, sweep gallery, form kitchen sink, …)
 prototype/index.html             WORKBENCH — original user-approved UI reference (read-only)
 specs/                           WORKBENCH — implementation specs (user-owned)
 docs/                            WORKBENCH — maintainer documentation (never shipped with the skill)
@@ -82,9 +82,9 @@ Start with the mission — it is the decision-making compass for this project, a
 
 <!-- BEGIN doc-index -->
 - [Architecture](docs/architecture.md) — How the CLI, per-workspace kernel, and browser fit together — process model, registry, sessions, hot reload, and the security perimeter.
-- [Canvas Schema, Validator, and Catalog](docs/canvas-schema.md) — The canvas JSON contract — envelope, six block types, 17 chart kinds, 16 field types, fieldset layout, validation rules, and the progressive-disclosure catalog.
+- [Canvas Schema, Validator, and Catalog](docs/canvas-schema.md) — The canvas JSON contract — envelope, six block types, 26 chart kinds, 16 field types, fieldset layout, validation rules, and the progressive-disclosure catalog.
 - [CLI](docs/cli.md) — The instantcanvas CLI — commands, flags, exit codes, stdout discipline, the result contract, and the agent workflow it enables.
-- [Frontend](docs/frontend.md) — The browser app — shell, block renderers, bespoke form widgets, chart mapping, theming, icons, and the CSP constraints that shape the code.
+- [Frontend](docs/frontend.md) — The browser app — shell, block renderers, bespoke form widgets, chart mapping, sweeps, theming, icons, and the CSP constraints that shape the code.
 - [Gotchas](docs/gotchas.md)
 - [InstantCanvas — Mission](docs/mission.md)
 - [Security Model](docs/security.md) — The secret-handling model — what InstantCanvas guarantees, how redaction and workspace confinement work, and what it deliberately does not protect against.

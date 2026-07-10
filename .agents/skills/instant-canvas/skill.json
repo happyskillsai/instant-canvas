@@ -1,7 +1,7 @@
 {
 	"name": "instant-canvas",
 	"version": "0.2.1",
-	"description": "Local canvas runtime for coding agents: renders canvas JSON (markdown, KPIs, tables, 17 chart kinds, forms) via a per-workspace localhost kernel and collects input/secrets straight to local files.",
+	"description": "Local canvas runtime for coding agents: renders canvas JSON (markdown, KPIs, tables, 26 chart kinds incl. 3D and ML plots, forms) via a per-workspace localhost kernel and collects input/secrets straight to local files.",
 	"type": "skill",
 	"license": "BSD-3-Clause",
 	"repository": "https://github.com/nicolasdao/instant-canvas.git",

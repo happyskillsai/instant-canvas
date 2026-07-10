@@ -69,11 +69,11 @@ Any canvas may contain **at most one** interactive block (`form` or `confirm`). 
 {"type": "kpi", "cards": [{"label": "Revenue", "value": 128000, "format": "currency",
   "delta": {"value": 0.12, "label": "QoQ", "positiveIs": "up"}}]}
 
-{"type": "chart", "kind": "line",                                   // 17 kinds — see below
+{"type": "chart", "kind": "line",                                   // 26 kinds — see below
   "data": [{"month": "Apr", "signups": 2000, "target": 2200}],
   "encoding": {"x": "month", "y": ["signups", "target"]},           // channels differ per kind
   "format": {"y": "number"},                                        // number | currency | percent
-  "options": {}}                                                     // raw ECharts option, applied last
+  "options": {}}                                                     // raw Plotly {data,layout}, applied last
 
 {"type": "table", "columns": [{"key": "customer", "label": "Customer"},
   {"key": "rev", "label": "Revenue", "format": "currency"}],
@@ -89,11 +89,15 @@ Any canvas may contain **at most one** interactive block (`form` or `confirm`). 
   "confirmLabel": "Drop & recreate"}
 ```
 
-## Charts — 17 kinds
+## Charts — 26 kinds
 
-`line area bar pie(+donut) scatter heatmap radar funnel gauge candlestick boxplot sankey graph treemap sunburst parallel themeRiver`
+General: `line area bar pie(+donut) scatter heatmap radar funnel gauge candlestick boxplot sankey graph treemap sunburst parallel themeRiver`
 
-Pick from the one-line index (`$IC catalog` → `chartKinds`, with when-to-use guidance), then pull the winner's exact schema: `$IC catalog sankey` returns its encoding channels, expected data shape, and a complete example. Each kind validates deterministically — wrong or missing encoding keys come back as `ENCODING_KEY_NOT_IN_DATA` / `MISSING_REQUIRED_PROPERTY` with hints. ECharts kinds that need external assets or JS functions (`map`, `custom`, …) are intentionally unsupported and listed with reasons under `unsupportedChartKinds`; the raw `options` escape hatch refines any supported kind.
+Scientific/ML: `scatter3d surface contour density violin errorBars dendrogram silhouette splom`
+
+**Sweeps.** Any kind becomes a slider-driven parameter sweep: replace `data` with `"sweep": {"label"?, "frames": [{"label", "data"}]}` — you precompute every frame, the slider steps through them. No code runs, nothing calls back to you. `$IC catalog sweep`.
+
+Pick from the one-line index (`$IC catalog` → `chartKinds`, with when-to-use guidance), then pull the winner's exact schema: `$IC catalog sankey` returns its encoding channels, expected data shape, and a complete example. Each kind validates deterministically — wrong or missing encoding keys come back as `ENCODING_KEY_NOT_IN_DATA` / `MISSING_REQUIRED_PROPERTY` with hints. Kinds that need external assets or JS callbacks (`map`, `custom`, …) are intentionally unsupported and listed with reasons under `unsupportedChartKinds`; the raw `options` escape hatch refines any supported kind.
 
 16 field types: `text textarea secret email url tel number date datetime select radio checkbox checkboxGroup range hidden readonly`. Common shape: `{name, label, type, required?, placeholder?, help?, default?, options?, validation?, ui?, span?}` with `validation: {minLength, maxLength, pattern, patternMessage, min, max, step, protocols}`. Env destinations require names matching `^[A-Za-z_][A-Za-z0-9_]*$`.
 

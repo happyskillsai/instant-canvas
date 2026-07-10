@@ -1,11 +1,27 @@
 ---
-description: node:test runner traps on Node 24 — subtest socket isolation, directory entries, and shared-state-dir coordination.
-tags: [gotchas, testing, node24]
+description: node:test runner traps on Node 24, plus the browser-driving traps that make the render smoke test trustworthy.
+tags: [gotchas, testing, node24, cdp]
 source:
   - .agents/skills/instant-canvas/scripts/test/**
 ---
 
 # Gotchas — Testing
+
+## A green suite does not mean the charts drew
+
+Everything up to HTTP/WS can pass while a chart silently fails to render. It happened: a two-dimension `splom` drew nothing and took a neighbouring `violin` down with it, and the canvas came up one chart short with no error anywhere. `render.test.js` exists for exactly this. Two rules it encodes: assert on **`.main-svg`**, not on the `.js-plotly-plot` class (a chart that draws nothing still gets the class), and assert `plots === chart-boxes` so a missing chart is a failure rather than a smaller number nobody reads.
+
+## `--dump-dom --virtual-time-budget` hides concurrency bugs
+
+It is the tempting way to inspect a rendered page without a WebSocket client, and it is the wrong tool: virtual time runs the event loop to quiescence between steps, so races never manifest. It reported every chart present on a build where a real browser dropped one. Drive a real event loop through the hand-rolled CDP client in `scripts/test/helpers/cdp.js` instead.
+
+## Never set a `Host` header on Chrome's `/json/list`
+
+Chrome echoes the request's `Host` back when it builds `webSocketDebuggerUrl`. Send `Host: localhost` and you get `ws://localhost/devtools/page/…` — no port — which then connects to port 80 and fails with `ECONNREFUSED`. Omit the header, and trust only the URL's *path*: rebuild host and port from the port you discovered in `DevToolsActivePort`.
+
+## A new test that cannot fail is worse than no test
+
+The render smoke test was written, passed, and proved nothing until the bug it targets was deliberately reintroduced. It did not fail. That is how the real cause (the 2-dimension `splom`, not `newPlot` re-entrancy) was found. Before trusting any regression test, break the thing it guards and watch it go red.
 
 ## Subtests cannot reach parent-context servers (Node 24.0.x)
 

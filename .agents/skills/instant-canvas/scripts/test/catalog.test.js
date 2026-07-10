@@ -11,7 +11,7 @@ test('bare catalog is the LEAN index: one-liners for everything, no schemas (pro
 	assert.equal(lean.version, 1)
 	assert.match(lean.usage, /catalog <name>/)
 	assert.deepEqual(Object.keys(lean.blocks).sort(), ['chart', 'confirm', 'form', 'kpi', 'markdown', 'table'])
-	assert.equal(Object.keys(lean.chartKinds).length, 17)
+	assert.equal(Object.keys(lean.chartKinds).length, 26)
 	assert.equal(Object.keys(lean.fieldTypes).length, 16)
 	assert.ok(lean.unsupportedChartKinds.map, 'unsupported kinds documented with reasons')
 	// lean means lean: values are strings, no property schemas anywhere
@@ -19,13 +19,16 @@ test('bare catalog is the LEAN index: one-liners for everything, no schemas (pro
 	for (const v of Object.values(lean.chartKinds)) assert.equal(typeof v, 'string')
 	for (const v of Object.values(lean.fieldTypes)) assert.equal(typeof v, 'string')
 	assert.ok(!JSON.stringify(lean).includes('"properties"'))
-	assert.ok(JSON.stringify(lean).length < 6000, 'index stays small: ' + JSON.stringify(lean).length)
+	// The cap is the teeth behind "lean context over completeness". It was 6000 for
+	// 17 kinds; 26 kinds plus the sweep pointer need more room. Raise it only with
+	// a reason — never to let a bloated one-liner through.
+	assert.ok(JSON.stringify(lean).length < 6500, 'index stays small: ' + JSON.stringify(lean).length)
 })
 
 test('catalog --full still exposes the complete contract', () => {
 	const full = catalog('--full')
 	assert.equal(Object.keys(full.blocks).length, 6)
-	assert.equal(Object.keys(full.chartKinds).length, 17)
+	assert.equal(Object.keys(full.chartKinds).length, 26)
 	assert.equal(Object.keys(full.fieldTypes).length, 16)
 	assert.ok(full.blocks.form.properties.destination)
 	assert.ok(full.fieldCommonShape.properties.name.required)
@@ -35,7 +38,7 @@ test('catalog --full still exposes the complete contract', () => {
 test('catalog(name) returns exactly one schema: block, chart kind, field type, fieldset, envelope', () => {
 	const chart = catalog('chart')
 	assert.equal(chart.block, 'chart')
-	assert.equal(Object.keys(chart.kinds).length, 17, 'chart block lists kinds as one-liners')
+	assert.equal(Object.keys(chart.kinds).length, 26, 'chart block lists kinds as one-liners')
 	assert.equal(typeof chart.kinds.sankey, 'string')
 
 	const sankey = catalog('sankey')
@@ -52,7 +55,7 @@ test('catalog(name) returns exactly one schema: block, chart kind, field type, f
 	assert.ok(catalog('envelope').properties.instantcanvas.required)
 
 	assert.throws(() => catalog('nope'), (e) => e.code === 'INVALID_SPEC' && /chart kinds/i.test(e.message))
-	assert.throws(() => catalog('custom'), (e) => e.code === 'INVALID_SPEC' && /renderItem/.test(e.message), 'unsupported kinds explain why')
+	assert.throws(() => catalog('custom'), (e) => e.code === 'INVALID_SPEC' && /JavaScript render callbacks/.test(e.message), 'unsupported kinds explain why')
 })
 
 test('every chart kind example validates cleanly (registry cannot drift from validator)', () => {

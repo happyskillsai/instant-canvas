@@ -1,5 +1,5 @@
 ---
-description: The canvas JSON contract — envelope, six block types, 17 chart kinds, 16 field types, fieldset layout, validation rules, and the progressive-disclosure catalog.
+description: The canvas JSON contract — envelope, six block types, 26 chart kinds, 16 field types, fieldset layout, validation rules, and the progressive-disclosure catalog.
 tags: [schema, validation, catalog, charts, forms]
 source:
   - .agents/skills/instant-canvas/scripts/lib/schema.js
@@ -9,7 +9,7 @@ source:
 
 # Canvas Schema, Validator, and Catalog
 
-`lib/schema.js` is the **single source of truth**. It declares the envelope, the six block types, the 17 chart kinds (`CHART_KINDS`), the 16 field types (`FIELD_TYPES`), the reusable shapes (`SHAPES`), and the documented-unsupported chart kinds (`UNSUPPORTED_CHARTS`). `lib/validate.js` *interprets* that registry; `lib/catalog.js` *renders* it. They cannot drift — a test proves that one registry tweak changes both.
+`lib/schema.js` is the **single source of truth**. It declares the envelope, the six block types, the 26 chart kinds (`CHART_KINDS`), the 16 field types (`FIELD_TYPES`), the reusable shapes (`SHAPES`), and the documented-unsupported chart kinds (`UNSUPPORTED_CHARTS`). `lib/validate.js` *interprets* that registry; `lib/catalog.js` *renders* it. They cannot drift — a test proves that one registry tweak changes both.
 
 ## Envelope
 
@@ -35,9 +35,11 @@ A canvas holds **at most one interactive block** (`form` or `confirm`) across al
 | `form` | interactive | Fields + destination + optional fieldset layout. See [security.md](security.md) for the write path. |
 | `confirm` | interactive | Severity-styled card (`info`/`warning`/`danger`); resolves `confirmed: true/false`. |
 
-## Chart kinds (17)
+## Chart kinds (26)
 
-`line area bar pie(+donut) scatter heatmap radar funnel gauge candlestick boxplot sankey graph treemap sunburst parallel themeRiver`
+General (17): `line area bar pie(+donut) scatter heatmap radar funnel gauge candlestick boxplot sankey graph treemap sunburst parallel themeRiver`
+
+Scientific/ML (9): `scatter3d surface contour density violin errorBars dendrogram silhouette splom`
 
 Each `CHART_KINDS` entry declares: `summary`, `whenToUse`, `data` (expected row shape), typed `encoding` channels, `aliases` (hint fuel), and a validated `example`. Channel types: `key` (a data-object property name, existence-checked against `data[0]` unless `checkInData: false`), `keys` (one or a list), `number`, `boolean`. Notable shapes:
 
@@ -47,8 +49,32 @@ Each `CHART_KINDS` entry declares: `summary`, `whenToUse`, `data` (expected row 
 - **sankey/graph** — rows are *links* (`source`/`target`[/`value`]); nodes are derived.
 - **gauge** — `min`/`max` are numbers in the encoding, not data keys.
 - **themeRiver** — `x` must be a real date string; the stream axis is time-typed.
+- **surface/contour** — long-format `{x, y, z}` rows, one per grid cell; the renderer pivots them into a matrix.
+- **errorBars** — `error` is the half-width; `band: true` draws a shaded band instead of whiskers (learning curves).
+- **dendrogram** — one row per merge, in order. `left`/`right` hold a leaf label **or** `"#i"` referencing merge `i` — i.e. a scipy linkage matrix once the leaves are named. The renderer derives leaf order and bracket geometry.
+- **silhouette** — one row per sample; the renderer sorts within each cluster, gaps the groups, and draws the mean reference line.
+- **splom/scatter3d/surface** — mount taller (460 px) than the 320 px default.
 
-ECharts kinds requiring external assets or JS functions are **documented as unsupported with reasons** (`map` needs GeoJSON; `custom` needs `renderItem` functions; `effectScatter`/`pictorialBar` route through the `options` escape hatch on their base kind). `options` is a raw ECharts object applied *last* via a second `setOption`, so it refines the generated option with native merge semantics.
+Kinds requiring external assets or JS callbacks are **documented as unsupported with reasons** (`map`/`choropleth`/`scattergeo` need topojson and tiles from external hosts, which the CSP blocks; `custom` needs render functions; `scattergl`/`effectScatter`/`pictorialBar` route through the `options` escape hatch on their base kind). `options` is a raw Plotly figure fragment `{data: [...perTraceOverrides], layout: {...}}` applied *last*; traces merge **by index**, so a patch refines the generated trace rather than replacing its data.
+
+Two kinds have no Plotly trace and are rendered by the skill itself — `graph` (deterministic force layout, drawn as scatter edges + degree-sized nodes) and `themeRiver` (symmetric streamgraph baseline, drawn as closed polygons). Their contract is unchanged: the agent still ships plain rows.
+
+## Sweeps: a slider over precomputed frames
+
+Any chart kind becomes a parameter sweep by replacing `data` with `sweep` (`catalog sweep`):
+
+```jsonc
+{"type": "chart", "kind": "scatter", "encoding": {"x": "x", "y": "y", "series": "cluster"},
+ "sweep": {"label": "clusters",
+           "frames": [{"label": "k=2", "data": [/* rows */]},
+                      {"label": "k=3", "data": [/* rows */]}]}}
+```
+
+The agent computes **every frame up front** and ships literal rows; the browser renders one figure per frame and a slider swaps between them. Nothing evaluates an expression, nothing calls back into the agent, and no session is created — a sweep is a property of a display block, so the one-interactive-block rule (`MULTIPLE_INTERACTIVE_BLOCKS`) is untouched.
+
+This is the honest limit of declarative interactivity under the canvas CSP: a slider can *select among precomputed states*, but it cannot drive a live recomputation. Only an expression language could do that, and evaluating one needs `unsafe-eval`, which the kernel does not grant. For parameter sweeps — `k = 2…10`, epochs, a temperature grid — precomputing is the natural contract anyway, because the agent already has the data.
+
+Validation: `data` becomes optional (and is warned about if sent anyway); `frames` needs ≥ 2 entries; each frame needs a `label` and non-empty `data`. Encoding keys are checked against `frames[0].data[0]`.
 
 ## Form fields (16 types)
 
@@ -71,7 +97,7 @@ Error codes: `INVALID_JSON, INVALID_SPEC, UNSUPPORTED_VERSION, UNKNOWN_BLOCK_TYP
 
 The catalog is designed so an agent pulls **only the information it needs, when it needs it**:
 
-1. `catalog` (bare) — a **~4 KB lean index**: one-liners for every block, every chart kind (with when-to-use), every field type, plus layout/validation pointers. No schemas — a test asserts no `"properties"` key appears and caps the payload size.
+1. `catalog` (bare) — a **~6 KB lean index**: one-liners for every block, every chart kind (with when-to-use), every field type, plus layout/validation pointers. No schemas — a test asserts no `"properties"` key appears and caps the payload size.
 2. `catalog <name>` — ONE full contract: a block, a chart kind, a field type, `fieldset`, or `envelope`. Chart kinds return summary, when-to-use, data shape, typed encoding, and a working example.
 3. `catalog --full` — the everything dump, for the rare case it is genuinely needed.
 
