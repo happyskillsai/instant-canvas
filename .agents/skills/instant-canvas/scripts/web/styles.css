@@ -572,6 +572,9 @@ body.modal-open .main{overflow:hidden}
 .vt-btn+.vt-btn{border-left:1px solid var(--border)}
 .vt-btn:hover{background:var(--panel-2)}
 .vt-btn.active{background:var(--accent-soft);color:var(--accent)}
+/* deckable = no; still clickable — the click explains why (a hidden or inert
+   control teaches nothing, and touch screens cannot hover a tooltip) */
+.vt-btn.vt-off{opacity:.4}
 .vt-btn .lucide{width:15px;height:15px}
 
 /* floating print action — the document's main deliverable is the PDF, so its

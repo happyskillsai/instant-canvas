@@ -178,7 +178,7 @@ const SHAPES = {
 		},
 	},
 	document: {
-		description: 'Document mode. Presence renders the canvas as paper sheets that print 1:1 (browser print dialog or `instantcanvas print`). Every key is optional — a key\'s presence enables its feature. With "pages", each page becomes a chapter starting on a new sheet. Interactive blocks (form, confirm) and chart sweeps are refused: paper cannot submit or drag.',
+		description: 'Document furnishings. Any display canvas can be VIEWED as paper sheets in the browser (a topbar toggle; sheets print 1:1); this object makes the deck the DEFAULT view and carries what cannot be derived — cover, back cover, running strips, brand theme, paper geometry, TOC preferences. Every key is optional. With "pages", each page becomes a chapter starting on a new sheet. Interactive blocks (form, confirm) and chart sweeps are refused: paper cannot submit or drag.',
 		properties: {
 			cover: { type: 'object', itemShape: 'documentCover', description: 'Front cover sheet.' },
 			toc: { type: 'object', itemShape: 'documentToc', description: 'Table of contents (entries only, no page numbers).' },
@@ -669,7 +669,7 @@ const ENVELOPE = {
 		},
 		title: { type: 'string', required: true, description: 'Canvas title (shown as the page heading and in the sidebar).', example: 'Q3 Campaign Analysis' },
 		description: { type: 'string', description: 'Optional subtitle.' },
-		document: { type: 'object', itemShape: 'document', description: 'Print-ready document mode: renders the canvas as paper sheets (cover, contents, running header/footer, back cover, brand theme) that print 1:1. Display blocks only. See `catalog document`.' },
+		document: { type: 'object', itemShape: 'document', description: 'Document furnishings + default view: opens the canvas as paper sheets (cover, contents, running header/footer, back cover, brand theme) that print 1:1. Any display canvas can also be toggled into document view in the browser. Display blocks only. See `catalog document`.' },
 		blocks: { type: 'array', itemShape: 'block', description: 'Ordered blocks (single-page canvas). XOR with "pages".' },
 		pages: { type: 'array', itemShape: 'page', description: 'Named tabs, each with its own blocks. XOR with "blocks". In document mode each page becomes a chapter.' },
 	},

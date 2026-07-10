@@ -34,8 +34,9 @@ const state = {
 	canvasDoc: null,
 	session: null, // {id, expiresAt} for the active interactive canvas
 	wsAlive: false,
-	docView: 'deck', // document canvases: 'deck' (the default) or 'html'
+	docView: 'deck', // current view: 'deck' or 'html'; default per canvas set on navigation
 	docCanvasId: null, // which canvas docView belongs to — resets on navigation
+	docLand: false, // true while the current canvas is rendered through the deck machinery
 	docFit: null, // re-runs the deck scale fit; set by each document render
 }
 
@@ -99,12 +100,12 @@ function fmtValue(v, format, currency) {
 	return String(v)
 }
 
-function toast(msg) {
+function toast(msg, ms = 2600) {
 	const t = document.createElement('div')
 	t.className = 'toast'
 	t.textContent = msg
 	document.body.appendChild(t)
-	setTimeout(() => t.remove(), 2600)
+	setTimeout(() => t.remove(), ms)
 }
 
 // Syntax highlighting is the skill's job (presentation of local data), and hljs emits
@@ -272,6 +273,9 @@ function palette() {
 	const doc = state.canvasDoc && state.canvasDoc.document
 	if (doc && typeof doc === 'object')
 		return documentPalette(doc.theme)
+	// A reader-toggled deck (no `document` declared) is still paper: light, no brand.
+	if (state.docLand)
+		return documentPalette(null)
 	return currentTheme() === 'dark' ? DARK : LIGHT
 }
 
@@ -2092,6 +2096,23 @@ function docHtmlView(canvas, flatBlocks) {
 	</div></div>`
 }
 
+/** What stops a canvas from being viewed as paper: forms and confirms cannot
+ *  submit, sweeps cannot drag. Everything display-only decks fine. */
+function deckBlockers(canvas) {
+	const blockers = new Set()
+	const pages = Array.isArray(canvas.pages) ? canvas.pages : [{ blocks: canvas.blocks || [] }]
+	for (const p of pages) {
+		for (const b of (p && p.blocks) || []) {
+			if (!b || typeof b !== 'object')
+				continue
+			if (b.type === 'form') blockers.add('a form')
+			else if (b.type === 'confirm') blockers.add('a confirmation')
+			else if (b.type === 'chart' && b.sweep) blockers.add('slider sweeps')
+		}
+	}
+	return [...blockers]
+}
+
 /** Move every chart box into the given view's slots. Charts exist ONCE —
  *  reparent + Plots.resize, never purge + newPlot (WebGL contexts are never
  *  released on teardown). A box with no slot in the target view (a chart on
@@ -2111,33 +2132,53 @@ function moveChartsTo(rootEl, view) {
 }
 
 function syncViewToggle() {
-	const isDoc = !!(state.activeId && state.canvasDoc && state.canvasDoc.document && typeof state.canvasDoc.document === 'object')
-	$('viewToggle').hidden = !isDoc
-	$('printBtn').hidden = !isDoc
-	$('viewDeck').classList.toggle('active', state.docView === 'deck')
-	$('viewHtml').classList.toggle('active', state.docView !== 'deck')
+	// The view is presentation, so the toggle shows for EVERY loaded canvas —
+	// including ones that cannot deck, whose deck button explains itself on
+	// click instead of hiding (a hidden control teaches nothing).
+	const loaded = !!(state.activeId && state.canvasDoc)
+	const blocked = loaded && deckBlockers(state.canvasDoc).length > 0
+	$('viewToggle').hidden = !loaded
+	$('printBtn').hidden = !state.docLand
+	$('viewDeck').classList.toggle('active', loaded && state.docView === 'deck')
+	$('viewDeck').classList.toggle('vt-off', blocked)
+	$('viewDeck').setAttribute('aria-disabled', blocked ? 'true' : 'false')
+	$('viewHtml').classList.toggle('active', loaded && state.docView !== 'deck')
 }
 
 function switchDocView(view) {
-	if (!state.canvasDoc || !state.canvasDoc.document || view === state.docView)
+	if (!state.canvasDoc || view === state.docView)
 		return
+	if (view === 'deck') {
+		const blockers = deckBlockers(state.canvasDoc)
+		if (blockers.length) {
+			toast(`Can't view this canvas as a document: it contains ${blockers.join(' and ')}. `
+				+ 'Paper can\'t submit or drag — ship a display-only version (form values as a table, a sweep\'s frame as plain data) to print it.', 6500)
+			return
+		}
+	}
 	state.docView = view
 	const rootEl = document.querySelector('.doc-mode')
 	if (rootEl) {
+		// Both views already exist: the switch is a class flip + chart move.
 		rootEl.classList.toggle('view-html', view === 'html')
 		moveChartsTo(rootEl, view)
 		if (view === 'deck' && state.docFit)
 			state.docFit() // the deck may have been hidden when last fitted
+	} else {
+		// Classic view on screen and the reader asked for paper: build the deck
+		// lazily now (packing a large canvas eagerly on every open would be waste).
+		renderCanvas()
 	}
 	syncViewToggle()
 }
 
 async function renderDocumentView(main, canvas) {
-	const doc = canvas.document
-	if (state.docCanvasId !== state.activeId) {
-		state.docCanvasId = state.activeId
-		state.docView = 'deck' // the deck is the default view per canvas
-	}
+	// A declared `document` brings its furnishings (cover, strips, theme…).
+	// An undeclared canvas viewed as paper gets pure defaults: A4/15mm, no
+	// cover, and a TOC generated from its own headings and block titles.
+	const declared = canvas.document && typeof canvas.document === 'object'
+	const doc = declared ? canvas.document : {}
+	state.docLand = true
 	const geo = docGeometry(doc)
 	setPageRule(geo)
 	main.innerHTML = '<div class="canvas doc-mode"><div class="deck"><div class="deck-scale"></div></div></div>'
@@ -2165,8 +2206,11 @@ async function renderDocumentView(main, canvas) {
 			anchorSheet.set(el.dataset.docAnchor, i)
 	})
 	const hasCover = doc.cover && typeof doc.cover === 'object'
+	// Declared documents opt in via the `toc` key; a reader-toggled deck gets
+	// a TOC automatically whenever there is anything to list.
+	const wantToc = declared ? (doc.toc && typeof doc.toc === 'object') : entries.length > 0
 	let tocSheets = []
-	if (doc.toc && typeof doc.toc === 'object') {
+	if (wantToc) {
 		tocSheets = packFragments(tocFragments(doc, entries), geo, doc, rootEl)
 		const offset = (hasCover ? 1 : 0) + tocSheets.length
 		for (const ts of tocSheets) {
@@ -2242,6 +2286,7 @@ async function renderCanvas() {
 	const main = $('main')
 	if (!state.activeId) {
 		state.canvasDoc = null
+		state.docLand = false
 		main.innerHTML = renderEmpty()
 		syncViewToggle()
 		return
@@ -2250,6 +2295,7 @@ async function renderCanvas() {
 	if (status !== 200 || !json || !json.ok) {
 		const errors = json && json.errors
 		state.canvasDoc = null
+		state.docLand = false
 		main.innerHTML = `<div class="canvas">
 			<div class="canvas-head"><h1>${esc(state.activeId)}</h1><div class="sub">${esc(state.activeId)}</div></div>
 			${errors ? renderErrors(state.activeId, errors) : `<div class="placeholder">Could not load this canvas (HTTP ${status}).</div>`}
@@ -2261,11 +2307,22 @@ async function renderCanvas() {
 	state.canvasDoc = canvas
 	state.session = json.session || null
 
-	// Document mode: the deck of paper sheets replaces the continuous view.
-	if (canvas.document && typeof canvas.document === 'object') {
-		await renderDocumentView(main, canvas)
-		return
+	// The view is presentation: any display canvas can render as paper. A
+	// declared `document` opens as the deck; everything else opens continuous,
+	// with the topbar toggle switching either way.
+	const declared = canvas.document && typeof canvas.document === 'object'
+	if (state.docCanvasId !== state.activeId) {
+		state.docCanvasId = state.activeId
+		state.docView = declared ? 'deck' : 'html'
 	}
+	if (state.docView === 'deck') {
+		if (deckBlockers(canvas).length === 0) {
+			await renderDocumentView(main, canvas)
+			return
+		}
+		state.docView = 'html' // undeckable content arrived (hot reload); fall back
+	}
+	state.docLand = false
 
 	const pages = Array.isArray(canvas.pages) ? canvas.pages : [{ name: '', blocks: canvas.blocks || [] }]
 	if (state.activePage >= pages.length) state.activePage = 0

@@ -111,7 +111,7 @@ Validation: `data` becomes optional (and is warned about if sent anyway); `frame
 
 ## Document mode
 
-An envelope-level `document` object (`catalog document`) renders the canvas as **paper sheets that print 1:1** — cover, table of contents, running header/footer, chapters (from `pages[]`), back cover, brand theme. Presence of the key enables the mode; every sub-key is optional and presence enables its feature:
+**The document view is presentation, not capability**: any display canvas can be viewed as **paper sheets that print 1:1** via the browser's topbar toggle — a reader-toggled deck gets pure defaults (A4/15mm, an auto-generated TOC whenever the content has headings or block titles, page numbers, light palette). The envelope-level `document` object (`catalog document`) does two things on top: it makes the deck the **default view**, and it carries the furnishings nobody can derive — cover, back cover, running header/footer, brand theme, paper geometry, TOC preferences. Every sub-key is optional and presence enables its feature:
 
 ```jsonc
 "document": {
@@ -127,7 +127,7 @@ An envelope-level `document` object (`catalog document`) renders the canvas as *
 
 Shapes are registry-driven (`SHAPES.document*` in `schema.js`); `checkDocument` in `validate.js` adds the value rules the registry cannot express:
 
-- **`DOCUMENT_INTERACTIVE_BLOCK`** — a `form` or `confirm` block, or a chart carrying `sweep`, is refused in a document canvas: paper cannot submit or drag. The hints teach the fixes (drop the block / remove `document` / ship the one frame you want as plain `data`).
+- **`DOCUMENT_INTERACTIVE_BLOCK`** — a `form` or `confirm` block, or a chart carrying `sweep`, is refused in a **declared** document canvas: paper cannot submit or drag. The hints teach the fixes (drop the block / remove `document` / ship the one frame you want as plain `data`). An *undeclared* interactive canvas is fine — its deck toggle is muted in the browser and clicking it explains the same refusal in a toast instead of a validation error.
 - **`INVALID_COLOR`** — theme colors must match `^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$`. The values are assigned into live CSS via CSSOM, which was observed accepting the literal string `javascript:alert(1)` — nothing looser than strict hex may pass. The palette holds 1–8 colors.
 - **`UNKNOWN_TEMPLATE_VAR`** (warning) — an unknown `{{var}}` in a header/footer string renders literally; only `{{pageNumber}}` and `{{totalPages}}` are substituted.
 - `page.margin` must be a millimeter length (`^\d+(\.\d+)?mm$`) — sheet geometry is computed in millimeters.

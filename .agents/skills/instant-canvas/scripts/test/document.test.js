@@ -265,6 +265,26 @@ test.before(async () => {
 	fs.copyFileSync(path.join(FIXTURES, 'document-handbook.canvas.json'), path.join(root, 'handbook.canvas.json'))
 	fs.copyFileSync(path.join(FIXTURES, 'handbook.md'), path.join(root, 'handbook.md'))
 	fs.copyFileSync(path.join(FIXTURES, 'assets', 'diagram.svg'), path.join(root, 'assets', 'diagram.svg'))
+	// An UNDECLARED display canvas (no `document` key) and an interactive one,
+	// for the universal view toggle.
+	fs.writeFileSync(path.join(root, 'plain.canvas.json'), JSON.stringify({
+		instantcanvas: 1,
+		createdWith: '0.1.0',
+		title: 'Plain display canvas',
+		blocks: [
+			{ type: 'markdown', text: '# Alpha Report\n\nPlain display content, never declared as a document.\n\n## Beta Section\n\nMore prose under a second heading.' },
+			{ type: 'chart', kind: 'line', title: 'Trend', data: [{ x: 'a', y: 1 }, { x: 'b', y: 3 }, { x: 'c', y: 2 }], encoding: { x: 'x', y: 'y' } },
+		],
+	}))
+	fs.writeFileSync(path.join(root, 'formy.canvas.json'), JSON.stringify({
+		instantcanvas: 1,
+		createdWith: '0.1.0',
+		title: 'Interactive canvas',
+		blocks: [
+			{ type: 'markdown', text: '# Setup' },
+			{ type: 'form', destination: { kind: 'none' }, fields: [{ name: 'token', label: 'Token', type: 'text' }] },
+		],
+	}))
 	K.root = root
 	K.child = spawn(process.execPath, [KERNEL, root], {
 		env: { ...process.env, INSTANTCANVAS_STATE_DIR: STATE_DIR },
@@ -289,6 +309,7 @@ test.before(async () => {
 		deckDrive = await driveDeck('report.canvas.json', 4, 2)
 		splitDrive = await driveDeck('split.canvas.json', 2, 0)
 		handbookDrive = await driveDeck('handbook.canvas.json', 3, 0)
+		uniDrive = await driveUniversalToggle()
 	}
 })
 
@@ -483,6 +504,134 @@ test('beforeprint relocates charts into the deck; afterprint restores them', { s
 	const a = themeSnap.views.afterPrint
 	assert.equal(a.printing, false, 'the printing class is removed')
 	assert.equal(a.chartHome, 'html', 'the chart returned to the continuous view')
+})
+
+// ---------------------------------------------------------------- browser: universal view toggle
+
+const UNI_SNAPSHOT_JS = `
+	(() => {
+		const gd = document.querySelector('.js-plotly-plot');
+		const deck = document.querySelector('.deck');
+		return {
+			toggleHidden: document.getElementById('viewToggle').hidden,
+			deckBtnOff: document.getElementById('viewDeck').classList.contains('vt-off'),
+			deckActive: document.getElementById('viewDeck').classList.contains('active'),
+			htmlActive: document.getElementById('viewHtml').classList.contains('active'),
+			fabHidden: document.getElementById('printBtn').hidden,
+			docMode: !!document.querySelector('.doc-mode'),
+			deckDisplay: deck ? getComputedStyle(deck).display : null,
+			sheets: document.querySelectorAll('.deck .sheet').length,
+			overflowing: [...document.querySelectorAll('.deck .sheet')].filter((s) => s.scrollHeight > s.clientHeight).length,
+			tocTitle: (document.querySelector('.toc-title') || {}).textContent || '',
+			tocRows: [...document.querySelectorAll('.toc-entry')].map((r) => ({
+				label: (r.querySelector('.toc-label') || {}).textContent || '',
+				num: (r.querySelector('.toc-num') || {}).textContent || '',
+			})),
+			chartHome: gd ? (gd.closest('.doc-html') ? 'html' : gd.closest('.deck') ? 'deck' : gd.closest('.canvas') ? 'classic' : 'lost') : 'none',
+			traceColor: gd && gd._fullData && gd._fullData[0] && gd._fullData[0].line ? gd._fullData[0].line.color : null,
+			toast: (document.querySelector('.toast') || {}).textContent || '',
+		};
+	})()
+`
+
+let uniDrive = null
+
+async function driveUniversalToggle() {
+	const url = `http://127.0.0.1:${K.port}/?token=${encodeURIComponent(K.token)}#/c/${encodeURIComponent('plain.canvas.json')}`
+	return withChrome(CHROME, url, { onNewDocument: PROBE }, async ({ evaluate }) => {
+		let deadline = Date.now() + 30_000
+		for (;;) {
+			const ready = await evaluate(`(() => !!(window.ic && window.ic.state.tree
+				&& document.querySelector('#main .canvas')
+				&& document.querySelectorAll('.js-plotly-plot .main-svg').length >= 1))()`).catch(() => false)
+			if (ready || Date.now() > deadline)
+				break
+			await cdpSleep(250)
+		}
+		await cdpSleep(500)
+		const classic = await evaluate(UNI_SNAPSHOT_JS)
+
+		// Reader asks for paper: the deck must build lazily, on the spot.
+		await evaluate(`(() => { document.getElementById('viewDeck').click(); return true })()`)
+		deadline = Date.now() + 30_000
+		for (;;) {
+			const ready = await evaluate(`(() => document.querySelectorAll('.deck .sheet').length >= 1
+				&& document.querySelectorAll('.deck .js-plotly-plot .main-svg').length >= 1)()`).catch(() => false)
+			if (ready || Date.now() > deadline)
+				break
+			await cdpSleep(250)
+		}
+		await cdpSleep(600)
+		const deck = await evaluate(UNI_SNAPSHOT_JS)
+
+		await evaluate(`(() => { document.getElementById('viewHtml').click(); return true })()`)
+		await cdpSleep(400)
+		const back = await evaluate(UNI_SNAPSHOT_JS)
+
+		// An interactive canvas: same toggle, but the deck side explains itself.
+		await evaluate(`(() => { location.hash = '#/c/' + encodeURIComponent('formy.canvas.json'); return true })()`)
+		deadline = Date.now() + 15_000
+		for (;;) {
+			const ready = await evaluate(`(() => window.ic.state.activeId === 'formy.canvas.json'
+				&& !!document.querySelector('#main .canvas'))()`).catch(() => false)
+			if (ready || Date.now() > deadline)
+				break
+			await cdpSleep(200)
+		}
+		await cdpSleep(300)
+		const formy = await evaluate(UNI_SNAPSHOT_JS)
+		await evaluate(`(() => { document.getElementById('viewDeck').click(); return true })()`)
+		await cdpSleep(400)
+		const formyClicked = await evaluate(UNI_SNAPSHOT_JS)
+
+		return { classic, deck, back, formy, formyClicked }
+	})
+}
+
+test('any display canvas can be viewed as paper: toggle always shown, deck built lazily', { skip: browserSkip, timeout: 120_000 }, () => {
+	const c = uniDrive.classic
+	assert.equal(c.toggleHidden, false, 'the toggle shows without a document declaration')
+	assert.equal(c.htmlActive, true, 'an undeclared canvas opens continuous')
+	assert.equal(c.docMode, false, 'no deck was built eagerly')
+	assert.equal(c.fabHidden, true, 'no print button before a deck exists')
+	assert.equal(c.deckBtnOff, false, 'a display canvas is deckable')
+	assert.equal(c.chartHome, 'classic')
+
+	const d = uniDrive.deck
+	assert.equal(d.docMode, true, 'the deck built on first toggle')
+	assert.ok(d.sheets >= 1, 'sheets rendered')
+	assert.equal(d.overflowing, 0, 'the invariant holds for a reader-toggled deck')
+	assert.equal(d.deckActive, true)
+	assert.equal(d.fabHidden, false, 'the print button appears with the deck')
+	assert.equal(d.chartHome, 'deck', 'the chart remounted into the deck')
+
+	const b = uniDrive.back
+	assert.equal(b.deckDisplay, 'none', 'toggling back hides the deck')
+	assert.equal(b.chartHome, 'html', 'the chart moved to the continuous twin')
+})
+
+test('a reader-toggled deck derives its TOC and paints paper-light charts', { skip: browserSkip, timeout: 120_000 }, () => {
+	const d = uniDrive.deck
+	assert.equal(d.tocTitle, 'Contents', 'a TOC was generated with zero config')
+	const labels = d.tocRows.map((r) => r.label)
+	for (const expected of ['Alpha Report', 'Beta Section', 'Trend'])
+		assert.ok(labels.includes(expected), `auto-TOC lists "${expected}" (got: ${labels.join(' | ')})`)
+	assert.ok(d.tocRows.every((r) => /^\d+$/.test(r.num)), 'auto-TOC entries carry page numbers')
+	// Paper is light even though the canvas declared no theme (and the app may be dark).
+	assert.equal(d.traceColor, '#6366f1', 'charts use the LIGHT palette, not the app palette')
+})
+
+test('an interactive canvas keeps the toggle and explains the refusal on click', { skip: browserSkip, timeout: 120_000 }, () => {
+	const f = uniDrive.formy
+	assert.equal(f.toggleHidden, false, 'the toggle still shows — hidden controls teach nothing')
+	assert.equal(f.deckBtnOff, true, 'the deck side is visibly muted')
+	assert.equal(f.docMode, false)
+
+	const after = uniDrive.formyClicked
+	assert.equal(after.docMode, false, 'clicking does not build a deck')
+	assert.equal(after.htmlActive, true, 'the view stays continuous')
+	assert.match(after.toast, /a form/, 'the toast names the blocker')
+	assert.match(after.toast, /can't submit or drag/i, 'and says why paper refuses it')
 })
 
 // ---------------------------------------------------------------- browser: deck + packer
