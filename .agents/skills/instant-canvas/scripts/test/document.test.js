@@ -518,6 +518,8 @@ const UNI_SNAPSHOT_JS = `
 			deckActive: document.getElementById('viewDeck').classList.contains('active'),
 			htmlActive: document.getElementById('viewHtml').classList.contains('active'),
 			fabHidden: document.getElementById('printBtn').hidden,
+			tocBtnHidden: document.getElementById('tocBtn').hidden,
+			tocBtnActive: document.getElementById('tocBtn').classList.contains('active'),
 			docMode: !!document.querySelector('.doc-mode'),
 			deckDisplay: deck ? getComputedStyle(deck).display : null,
 			sheets: document.querySelectorAll('.deck .sheet').length,
@@ -564,6 +566,30 @@ async function driveUniversalToggle() {
 		await cdpSleep(600)
 		const deck = await evaluate(UNI_SNAPSHOT_JS)
 
+		// The TOC is the reader's to toggle: off (deck repacks, numbers shift)…
+		await evaluate(`(() => { document.getElementById('tocBtn').click(); return true })()`)
+		deadline = Date.now() + 15_000
+		for (;;) {
+			const gone = await evaluate(`(() => document.querySelectorAll('.deck .sheet').length >= 1
+				&& !document.querySelector('.toc-title'))()`).catch(() => false)
+			if (gone || Date.now() > deadline)
+				break
+			await cdpSleep(200)
+		}
+		await cdpSleep(500)
+		const tocOff = await evaluate(UNI_SNAPSHOT_JS)
+		// …and back on.
+		await evaluate(`(() => { document.getElementById('tocBtn').click(); return true })()`)
+		deadline = Date.now() + 15_000
+		for (;;) {
+			const backOn = await evaluate(`(() => !!document.querySelector('.toc-title'))()`).catch(() => false)
+			if (backOn || Date.now() > deadline)
+				break
+			await cdpSleep(200)
+		}
+		await cdpSleep(500)
+		const tocOn = await evaluate(UNI_SNAPSHOT_JS)
+
 		await evaluate(`(() => { document.getElementById('viewHtml').click(); return true })()`)
 		await cdpSleep(400)
 		const back = await evaluate(UNI_SNAPSHOT_JS)
@@ -584,7 +610,7 @@ async function driveUniversalToggle() {
 		await cdpSleep(400)
 		const formyClicked = await evaluate(UNI_SNAPSHOT_JS)
 
-		return { classic, deck, back, formy, formyClicked }
+		return { classic, deck, tocOff, tocOn, back, formy, formyClicked }
 	})
 }
 
@@ -619,6 +645,24 @@ test('a reader-toggled deck derives its TOC and paints paper-light charts', { sk
 	assert.ok(d.tocRows.every((r) => /^\d+$/.test(r.num)), 'auto-TOC entries carry page numbers')
 	// Paper is light even though the canvas declared no theme (and the app may be dark).
 	assert.equal(d.traceColor, '#6366f1', 'charts use the LIGHT palette, not the app palette')
+})
+
+test('the TOC is the reader\'s: a topbar toggle removes and restores it, repacking the deck', { skip: browserSkip, timeout: 120_000 }, () => {
+	const d = uniDrive.deck
+	assert.equal(d.tocBtnHidden, false, 'the TOC button shows in document view')
+	assert.equal(d.tocBtnActive, true, 'and reads ON while the TOC is present')
+	assert.equal(uniDrive.classic.tocBtnHidden, true, 'no TOC button in the continuous view')
+
+	const off = uniDrive.tocOff
+	assert.equal(off.tocTitle, '', 'toggling removed the TOC sheet')
+	assert.equal(off.tocBtnActive, false)
+	assert.ok(off.sheets < d.sheets, `the deck repacked smaller (${off.sheets} < ${d.sheets})`)
+	assert.equal(off.overflowing, 0, 'the invariant survives the repack')
+
+	const on = uniDrive.tocOn
+	assert.equal(on.tocTitle, 'Contents', 'toggling again restores it')
+	assert.equal(on.tocBtnActive, true)
+	assert.equal(on.sheets, d.sheets, 'and the deck is back to its original pagination')
 })
 
 test('an interactive canvas keeps the toggle and explains the refusal on click', { skip: browserSkip, timeout: 120_000 }, () => {

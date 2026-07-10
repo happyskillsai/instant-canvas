@@ -140,7 +140,7 @@ const SHAPES = {
 		},
 	},
 	documentToc: {
-		description: 'Table of contents sheet: markdown headings plus chart/table/kpi titles, in document order, with dotted leaders and page numbers computed from the deck\'s own pagination. Numbers are exact on screen and via `instantcanvas print`; a manual paper/scale override in the browser print dialog can still repaginate.',
+		description: 'Customizes the table of contents — the TOC itself is generated automatically (markdown headings plus chart/table/kpi titles, dotted leaders, page numbers from the deck\'s own pagination) whenever the document has anything to list, and the reader can toggle it in the browser. Numbers are exact on screen and via `instantcanvas print`; a manual paper/scale override in the browser print dialog can still repaginate.',
 		properties: {
 			title: { type: 'string', default: 'Contents', description: 'TOC heading.' },
 			depth: { type: 'number', enum: [1, 2, 3], default: 2, description: 'Markdown heading levels listed (h1..h{depth}). Chart, table and kpi titles are always listed.' },
@@ -181,7 +181,7 @@ const SHAPES = {
 		description: 'Document furnishings. Any display canvas can be VIEWED as paper sheets in the browser (a topbar toggle; sheets print 1:1); this object makes the deck the DEFAULT view and carries what cannot be derived — cover, back cover, running strips, brand theme, paper geometry, TOC preferences. Every key is optional. With "pages", each page becomes a chapter starting on a new sheet. Interactive blocks (form, confirm) and chart sweeps are refused: paper cannot submit or drag.',
 		properties: {
 			cover: { type: 'object', itemShape: 'documentCover', description: 'Front cover sheet.' },
-			toc: { type: 'object', itemShape: 'documentToc', description: 'Table of contents (entries only, no page numbers).' },
+			toc: { type: 'object', itemShape: 'documentToc', description: 'TOC preferences (title, depth) — the TOC itself is auto-generated and reader-toggleable.' },
 			header: { type: 'object', itemShape: 'documentStrip', description: 'Running header on every content sheet.' },
 			footer: { type: 'object', itemShape: 'documentStrip', description: 'Running footer on every content sheet.' },
 			backCover: { type: 'object', itemShape: 'documentBackCover', description: 'Closing sheet.' },

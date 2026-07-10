@@ -111,7 +111,7 @@ Validation: `data` becomes optional (and is warned about if sent anyway); `frame
 
 ## Document mode
 
-**The document view is presentation, not capability**: any display canvas can be viewed as **paper sheets that print 1:1** via the browser's topbar toggle — a reader-toggled deck gets pure defaults (A4/15mm, an auto-generated TOC whenever the content has headings or block titles, page numbers, light palette). The envelope-level `document` object (`catalog document`) does two things on top: it makes the deck the **default view**, and it carries the furnishings nobody can derive — cover, back cover, running header/footer, brand theme, paper geometry, TOC preferences. Every sub-key is optional and presence enables its feature:
+**The document view is presentation, not capability**: any display canvas can be viewed as **paper sheets that print 1:1** via the browser's topbar toggle, with everything derivable derived — A4/15mm defaults, page numbers, light palette, and a TOC generated automatically from headings and block titles whenever there is anything to list (declared or not; a topbar button lets the reader toggle it off and on, repacking the deck). The envelope-level `document` object (`catalog document`) does two things on top: it makes the deck the **default view**, and it carries what nobody can derive — cover, back cover, running header/footer, brand theme, paper geometry, and TOC *preferences* (title, depth). Every sub-key is optional and presence enables its feature:
 
 ```jsonc
 "document": {

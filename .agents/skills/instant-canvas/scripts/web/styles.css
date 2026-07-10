@@ -94,6 +94,7 @@ button{font:inherit;cursor:pointer}
 .tbtn:hover{background:var(--panel-2)}
 .tbtn.primary{background:var(--accent);color:#fff;border-color:transparent}
 .tbtn.icon{padding:6px 9px}
+.tbtn.active{background:var(--accent-soft);color:var(--accent)}
 
 .body{display:flex;flex:1;min-height:0}
 /* sidebar */

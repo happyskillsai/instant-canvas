@@ -160,7 +160,7 @@ function catalog(name) {
 				'Documents are display-only: form and confirm blocks and chart "sweep" are refused — paper cannot submit or drag. Ship the frame you want as plain "data".',
 				'The sheets on screen ARE the PDF pages: the human prints via the browser dialog, or the agent runs `instantcanvas print <canvas.json> --out <file.pdf>` (requires a local Chrome).',
 				'cover.logo / backCover.logo must be a workspace-local image file (inlined server-side) or a data:image/ URI — remote URLs are never fetched.',
-				'TOC page numbers come from the deck\'s own pagination: exact on screen and via `instantcanvas print`; a manual paper or scale override in the browser print dialog can still repaginate.',
+				'The TOC is generated automatically from headings and block titles whenever there is anything to list; the `toc` key only customizes it (title, depth) and the reader can toggle it in the browser. Its page numbers come from the deck\'s own pagination: exact on screen and via `instantcanvas print`; a manual paper or scale override in the browser print dialog can still repaginate.',
 			],
 			example: {
 				instantcanvas: 1,

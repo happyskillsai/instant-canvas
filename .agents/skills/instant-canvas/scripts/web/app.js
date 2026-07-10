@@ -37,6 +37,9 @@ const state = {
 	docView: 'deck', // current view: 'deck' or 'html'; default per canvas set on navigation
 	docCanvasId: null, // which canvas docView belongs to — resets on navigation
 	docLand: false, // true while the current canvas is rendered through the deck machinery
+	docToc: null, // reader override for the TOC: null = auto (on when there is content), true/false = forced
+	docTocOn: false, // what the last deck render actually did (drives the toggle button state)
+	docEntries: 0, // how many TOC entries the last deck render derived
 	docFit: null, // re-runs the deck scale fit; set by each document render
 }
 
@@ -311,6 +314,15 @@ $('viewHtml').addEventListener('click', () => switchDocView('html'))
 // dialog (where "Save as PDF" lives) and fires beforeprint, so the chart
 // relocation below covers this path too.
 $('printBtn').addEventListener('click', () => window.print())
+
+// TOC on/off — a reader choice, not a schema field. Repacks the deck (the
+// TOC's own sheets shift every page number after them).
+$('tocBtn').addEventListener('click', () => {
+	if (!state.docLand)
+		return
+	state.docToc = !state.docTocOn
+	renderCanvas()
+})
 
 // Cmd+P must print the DECK even from the continuous view: print CSS already
 // shows the deck and hides the rest, so all beforeprint has to do is move the
@@ -2139,6 +2151,9 @@ function syncViewToggle() {
 	const blocked = loaded && deckBlockers(state.canvasDoc).length > 0
 	$('viewToggle').hidden = !loaded
 	$('printBtn').hidden = !state.docLand
+	// The TOC toggle only makes sense while paper is on screen with something to list.
+	$('tocBtn').hidden = !(state.docLand && state.docView === 'deck' && state.docEntries > 0)
+	$('tocBtn').classList.toggle('active', state.docTocOn)
 	$('viewDeck').classList.toggle('active', loaded && state.docView === 'deck')
 	$('viewDeck').classList.toggle('vt-off', blocked)
 	$('viewDeck').setAttribute('aria-disabled', blocked ? 'true' : 'false')
@@ -2206,9 +2221,12 @@ async function renderDocumentView(main, canvas) {
 			anchorSheet.set(el.dataset.docAnchor, i)
 	})
 	const hasCover = doc.cover && typeof doc.cover === 'object'
-	// Declared documents opt in via the `toc` key; a reader-toggled deck gets
-	// a TOC automatically whenever there is anything to list.
-	const wantToc = declared ? (doc.toc && typeof doc.toc === 'object') : entries.length > 0
+	// The TOC belongs to the renderer: generated automatically whenever there
+	// is anything to list, declared or not. The JSON `toc` key only customizes
+	// it (title, depth), and the reader can toggle it off/on from the topbar.
+	const wantToc = entries.length > 0 && (state.docToc !== null ? state.docToc : true)
+	state.docTocOn = wantToc
+	state.docEntries = entries.length
 	let tocSheets = []
 	if (wantToc) {
 		tocSheets = packFragments(tocFragments(doc, entries), geo, doc, rootEl)
@@ -2314,6 +2332,7 @@ async function renderCanvas() {
 	if (state.docCanvasId !== state.activeId) {
 		state.docCanvasId = state.activeId
 		state.docView = declared ? 'deck' : 'html'
+		state.docToc = null // the TOC choice is per canvas
 	}
 	if (state.docView === 'deck') {
 		if (deckBlockers(canvas).length === 0) {
