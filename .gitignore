@@ -76,3 +76,6 @@ $RECYCLE.BIN/
 .directory
 .Trash-*
 .nfs*
+
+# ─── HappySkills local publish cache ───────────────────────────────────────
+.happyskills/
