@@ -1,6 +1,6 @@
 {
 	"lockVersion": 2,
-	"generatedAt": "2026-07-11T10:51:51.338Z",
+	"generatedAt": "2026-07-11T11:00:47.325Z",
 	"skills": {
 		"happyskillsai/happyskills": {
 			"version": "2.6.1",
@@ -261,18 +261,6 @@
 			"dependencies": {},
 			"type": "skill"
 		},
-		"nicolasdao/instant-canvas": {
-			"version": "0.3.2",
-			"ref": "refs/tags/v0.3.2",
-			"commit": "bfdf502c428186c340ec5ab405d2723abca7d2287c0b5265584d0f36375f8230",
-			"integrity": "sha256-0f77600eef98717ebd75ba4764343fd391daeae203d940c4d3b08c8aa384df0f",
-			"base_commit": "bfdf502c428186c340ec5ab405d2723abca7d2287c0b5265584d0f36375f8230",
-			"base_integrity": "sha256-0f77600eef98717ebd75ba4764343fd391daeae203d940c4d3b08c8aa384df0f",
-			"requested_by": [
-				"__root__"
-			],
-			"dependencies": {}
-		},
 		"nicolasdao/create-release-skill": {
 			"version": "0.4.0",
 			"ref": "refs/tags/v0.4.0",
@@ -286,6 +274,19 @@
 			"dependencies": {
 				"happyskillsai/happyskills-design": "^0.9.0"
 			},
+			"type": "skill"
+		},
+		"happyskillsai/instant-canvas": {
+			"version": "0.3.2",
+			"ref": "refs/tags/v0.3.2",
+			"commit": "bfdf502c428186c340ec5ab405d2723abca7d2287c0b5265584d0f36375f8230",
+			"integrity": "sha256-0f77600eef98717ebd75ba4764343fd391daeae203d940c4d3b08c8aa384df0f",
+			"base_commit": "bfdf502c428186c340ec5ab405d2723abca7d2287c0b5265584d0f36375f8230",
+			"base_integrity": "sha256-0f77600eef98717ebd75ba4764343fd391daeae203d940c4d3b08c8aa384df0f",
+			"requested_by": [
+				"__root__"
+			],
+			"dependencies": {},
 			"type": "skill"
 		}
 	}
