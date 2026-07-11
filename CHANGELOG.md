@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.3.2] - 2026-07-11
+
 ### Changed
 - **Every self-referencing invocation the runtime prints now carries `npx -y`** — the usage banner, the `MISSING_CREATED_WITH` fix-it hint, the catalog/schema teaching text, and the browser's kernel-stopped message, matching SKILL.md. Without `-y`, npx prompts before its first-run install and an agent's shell call hangs on the confirmation; the CLI must never hand an agent a command that can block on interactive input.
 
