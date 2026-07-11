@@ -1,0 +1,470 @@
+{
+  "instantcanvas": 1,
+  "createdWith": "0.3.1",
+  "title": "Flows, Networks & Hierarchies",
+  "description": "Sankey, force graph, treemap, sunburst, radar, gauge, parallel coordinates and boxplots.",
+  "blocks": [
+    {
+      "type": "markdown",
+      "text": "# Structure, not just series\n\nFlows (sankey), relationships (graph), part-of-whole hierarchies (treemap, sunburst) and multivariate comparisons (radar, parallel)."
+    },
+    {
+      "type": "chart",
+      "kind": "sankey",
+      "title": "Visitor flow — source → page → outcome",
+      "data": [
+        {
+          "from": "Organic search",
+          "to": "Landing",
+          "visits": 16200
+        },
+        {
+          "from": "Paid search",
+          "to": "Landing",
+          "visits": 9800
+        },
+        {
+          "from": "Social",
+          "to": "Blog",
+          "visits": 5400
+        },
+        {
+          "from": "Email",
+          "to": "Pricing",
+          "visits": 3100
+        },
+        {
+          "from": "Landing",
+          "to": "Pricing",
+          "visits": 9100
+        },
+        {
+          "from": "Landing",
+          "to": "Docs",
+          "visits": 6300
+        },
+        {
+          "from": "Blog",
+          "to": "Landing",
+          "visits": 2900
+        },
+        {
+          "from": "Pricing",
+          "to": "Signup",
+          "visits": 4600
+        },
+        {
+          "from": "Docs",
+          "to": "Signup",
+          "visits": 1900
+        },
+        {
+          "from": "Pricing",
+          "to": "Bounced",
+          "visits": 7600
+        },
+        {
+          "from": "Signup",
+          "to": "Activated",
+          "visits": 3300
+        }
+      ],
+      "encoding": {
+        "source": "from",
+        "target": "to",
+        "value": "visits"
+      }
+    },
+    {
+      "type": "chart",
+      "kind": "graph",
+      "title": "Service dependency graph",
+      "description": "Edge width = requests/s between services.",
+      "data": [
+        {
+          "a": "web",
+          "b": "api-gateway",
+          "rps": 420
+        },
+        {
+          "a": "mobile",
+          "b": "api-gateway",
+          "rps": 310
+        },
+        {
+          "a": "api-gateway",
+          "b": "auth",
+          "rps": 640
+        },
+        {
+          "a": "api-gateway",
+          "b": "billing",
+          "rps": 120
+        },
+        {
+          "a": "api-gateway",
+          "b": "search",
+          "rps": 280
+        },
+        {
+          "a": "api-gateway",
+          "b": "reports",
+          "rps": 90
+        },
+        {
+          "a": "auth",
+          "b": "postgres",
+          "rps": 410
+        },
+        {
+          "a": "billing",
+          "b": "postgres",
+          "rps": 100
+        },
+        {
+          "a": "billing",
+          "b": "stripe-adapter",
+          "rps": 60
+        },
+        {
+          "a": "search",
+          "b": "elastic",
+          "rps": 260
+        },
+        {
+          "a": "reports",
+          "b": "warehouse",
+          "rps": 45
+        },
+        {
+          "a": "reports",
+          "b": "cache",
+          "rps": 150
+        },
+        {
+          "a": "search",
+          "b": "cache",
+          "rps": 190
+        },
+        {
+          "a": "auth",
+          "b": "cache",
+          "rps": 330
+        }
+      ],
+      "encoding": {
+        "source": "a",
+        "target": "b",
+        "value": "rps"
+      }
+    },
+    {
+      "type": "chart",
+      "kind": "treemap",
+      "title": "Monthly cloud spend",
+      "data": [
+        {
+          "name": "Compute",
+          "value": 41800,
+          "children": [
+            {
+              "name": "k8s nodes",
+              "value": 26400
+            },
+            {
+              "name": "GPU pool",
+              "value": 11200
+            },
+            {
+              "name": "Functions",
+              "value": 4200
+            }
+          ]
+        },
+        {
+          "name": "Storage",
+          "value": 15300,
+          "children": [
+            {
+              "name": "Object store",
+              "value": 8900
+            },
+            {
+              "name": "Block volumes",
+              "value": 4100
+            },
+            {
+              "name": "Snapshots",
+              "value": 2300
+            }
+          ]
+        },
+        {
+          "name": "Data",
+          "value": 19600,
+          "children": [
+            {
+              "name": "Warehouse",
+              "value": 12800
+            },
+            {
+              "name": "Streaming",
+              "value": 4300
+            },
+            {
+              "name": "Catalog",
+              "value": 2500
+            }
+          ]
+        },
+        {
+          "name": "Network",
+          "value": 7400
+        },
+        {
+          "name": "Observability",
+          "value": 5900
+        }
+      ]
+    },
+    {
+      "type": "chart",
+      "kind": "sunburst",
+      "title": "Headcount by org",
+      "data": [
+        {
+          "name": "Engineering",
+          "value": 86,
+          "children": [
+            {
+              "name": "Platform",
+              "value": 24
+            },
+            {
+              "name": "Product Eng",
+              "value": 38
+            },
+            {
+              "name": "Data",
+              "value": 14
+            },
+            {
+              "name": "SRE",
+              "value": 10
+            }
+          ]
+        },
+        {
+          "name": "GTM",
+          "value": 52,
+          "children": [
+            {
+              "name": "Sales",
+              "value": 27
+            },
+            {
+              "name": "Marketing",
+              "value": 15
+            },
+            {
+              "name": "Success",
+              "value": 10
+            }
+          ]
+        },
+        {
+          "name": "G&A",
+          "value": 18,
+          "children": [
+            {
+              "name": "Finance",
+              "value": 7
+            },
+            {
+              "name": "People",
+              "value": 6
+            },
+            {
+              "name": "Legal",
+              "value": 5
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "chart",
+      "kind": "radar",
+      "title": "Plan comparison",
+      "data": [
+        {
+          "plan": "Starter",
+          "features": 45,
+          "support": 40,
+          "sla": 30,
+          "security": 55,
+          "price": 95,
+          "apiLimits": 35
+        },
+        {
+          "plan": "Team",
+          "features": 70,
+          "support": 65,
+          "sla": 60,
+          "security": 75,
+          "price": 70,
+          "apiLimits": 65
+        },
+        {
+          "plan": "Enterprise",
+          "features": 95,
+          "support": 90,
+          "sla": 95,
+          "security": 95,
+          "price": 30,
+          "apiLimits": 90
+        }
+      ],
+      "encoding": {
+        "dimensions": [
+          "features",
+          "support",
+          "sla",
+          "security",
+          "price",
+          "apiLimits"
+        ],
+        "name": "plan"
+      }
+    },
+    {
+      "type": "chart",
+      "kind": "gauge",
+      "title": "Net Promoter Score",
+      "data": [
+        {
+          "metric": "NPS",
+          "score": 47
+        }
+      ],
+      "encoding": {
+        "value": "score",
+        "name": "metric",
+        "min": -100,
+        "max": 100
+      }
+    },
+    {
+      "type": "chart",
+      "kind": "parallel",
+      "title": "Vendor scoring matrix",
+      "data": [
+        {
+          "vendor": "Acme Cloud",
+          "cost": 62,
+          "reliability": 88,
+          "support": 71,
+          "compliance": 90,
+          "lockIn": 35
+        },
+        {
+          "vendor": "Nimbus",
+          "cost": 81,
+          "reliability": 74,
+          "support": 66,
+          "compliance": 72,
+          "lockIn": 61
+        },
+        {
+          "vendor": "StratoServe",
+          "cost": 55,
+          "reliability": 92,
+          "support": 84,
+          "compliance": 95,
+          "lockIn": 28
+        },
+        {
+          "vendor": "CloudFoundry+",
+          "cost": 74,
+          "reliability": 69,
+          "support": 58,
+          "compliance": 64,
+          "lockIn": 70
+        },
+        {
+          "vendor": "Meteorix",
+          "cost": 88,
+          "reliability": 61,
+          "support": 49,
+          "compliance": 58,
+          "lockIn": 82
+        }
+      ],
+      "encoding": {
+        "dimensions": [
+          "cost",
+          "reliability",
+          "support",
+          "compliance",
+          "lockIn"
+        ],
+        "name": "vendor"
+      }
+    },
+    {
+      "type": "chart",
+      "kind": "boxplot",
+      "title": "API latency by endpoint (ms, p0/p25/p50/p75/p100)",
+      "data": [
+        {
+          "endpoint": "/v1/search",
+          "min": 18,
+          "q1": 34,
+          "median": 52,
+          "q3": 91,
+          "max": 340
+        },
+        {
+          "endpoint": "/v1/reports",
+          "min": 65,
+          "q1": 120,
+          "median": 190,
+          "q3": 310,
+          "max": 1250
+        },
+        {
+          "endpoint": "/v1/auth",
+          "min": 4,
+          "q1": 9,
+          "median": 13,
+          "q3": 21,
+          "max": 88
+        },
+        {
+          "endpoint": "/v1/events",
+          "min": 11,
+          "q1": 22,
+          "median": 31,
+          "q3": 49,
+          "max": 210
+        },
+        {
+          "endpoint": "/v1/export",
+          "min": 140,
+          "q1": 260,
+          "median": 420,
+          "q3": 700,
+          "max": 2900
+        }
+      ],
+      "encoding": {
+        "x": "endpoint",
+        "min": "min",
+        "q1": "q1",
+        "median": "median",
+        "q3": "q3",
+        "max": "max"
+      }
+    }
+  ]
+}

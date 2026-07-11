@@ -1,0 +1,1749 @@
+{
+  "instantcanvas": 1,
+  "createdWith": "0.3.1",
+  "title": "Time-Series Gallery",
+  "description": "Daily actives, stacked area, OHLC candlesticks, a themeRiver and an intensity heatmap — all synthetic.",
+  "blocks": [
+    {
+      "type": "markdown",
+      "text": "# Time-series shapes\n\nFive ways of looking at time: trend lines, stacked volumes, OHLC ranges, an organic stream, and a weekday × hour grid."
+    },
+    {
+      "type": "chart",
+      "kind": "line",
+      "title": "Daily active users (90 days)",
+      "description": "Weekday/weekend seasonality over a steady growth trend.",
+      "data": [
+        {
+          "date": "2026-04-01",
+          "users": 12431
+        },
+        {
+          "date": "2026-04-02",
+          "users": 11288
+        },
+        {
+          "date": "2026-04-03",
+          "users": 11763
+        },
+        {
+          "date": "2026-04-04",
+          "users": 8348
+        },
+        {
+          "date": "2026-04-05",
+          "users": 9029
+        },
+        {
+          "date": "2026-04-06",
+          "users": 11748
+        },
+        {
+          "date": "2026-04-07",
+          "users": 11961
+        },
+        {
+          "date": "2026-04-08",
+          "users": 11603
+        },
+        {
+          "date": "2026-04-09",
+          "users": 12788
+        },
+        {
+          "date": "2026-04-10",
+          "users": 12385
+        },
+        {
+          "date": "2026-04-11",
+          "users": 9014
+        },
+        {
+          "date": "2026-04-12",
+          "users": 8489
+        },
+        {
+          "date": "2026-04-13",
+          "users": 12563
+        },
+        {
+          "date": "2026-04-14",
+          "users": 12464
+        },
+        {
+          "date": "2026-04-15",
+          "users": 12664
+        },
+        {
+          "date": "2026-04-16",
+          "users": 11919
+        },
+        {
+          "date": "2026-04-17",
+          "users": 13033
+        },
+        {
+          "date": "2026-04-18",
+          "users": 8839
+        },
+        {
+          "date": "2026-04-19",
+          "users": 9530
+        },
+        {
+          "date": "2026-04-20",
+          "users": 12534
+        },
+        {
+          "date": "2026-04-21",
+          "users": 12500
+        },
+        {
+          "date": "2026-04-22",
+          "users": 13259
+        },
+        {
+          "date": "2026-04-23",
+          "users": 12539
+        },
+        {
+          "date": "2026-04-24",
+          "users": 12945
+        },
+        {
+          "date": "2026-04-25",
+          "users": 9577
+        },
+        {
+          "date": "2026-04-26",
+          "users": 10097
+        },
+        {
+          "date": "2026-04-27",
+          "users": 12760
+        },
+        {
+          "date": "2026-04-28",
+          "users": 13342
+        },
+        {
+          "date": "2026-04-29",
+          "users": 13098
+        },
+        {
+          "date": "2026-04-30",
+          "users": 12999
+        },
+        {
+          "date": "2026-05-01",
+          "users": 13344
+        },
+        {
+          "date": "2026-05-02",
+          "users": 9782
+        },
+        {
+          "date": "2026-05-03",
+          "users": 9858
+        },
+        {
+          "date": "2026-05-04",
+          "users": 13440
+        },
+        {
+          "date": "2026-05-05",
+          "users": 13250
+        },
+        {
+          "date": "2026-05-06",
+          "users": 13400
+        },
+        {
+          "date": "2026-05-07",
+          "users": 13686
+        },
+        {
+          "date": "2026-05-08",
+          "users": 13214
+        },
+        {
+          "date": "2026-05-09",
+          "users": 9612
+        },
+        {
+          "date": "2026-05-10",
+          "users": 9783
+        },
+        {
+          "date": "2026-05-11",
+          "users": 13887
+        },
+        {
+          "date": "2026-05-12",
+          "users": 13663
+        },
+        {
+          "date": "2026-05-13",
+          "users": 13990
+        },
+        {
+          "date": "2026-05-14",
+          "users": 13881
+        },
+        {
+          "date": "2026-05-15",
+          "users": 13300
+        },
+        {
+          "date": "2026-05-16",
+          "users": 10246
+        },
+        {
+          "date": "2026-05-17",
+          "users": 9591
+        },
+        {
+          "date": "2026-05-18",
+          "users": 13527
+        },
+        {
+          "date": "2026-05-19",
+          "users": 14260
+        },
+        {
+          "date": "2026-05-20",
+          "users": 13908
+        },
+        {
+          "date": "2026-05-21",
+          "users": 14034
+        },
+        {
+          "date": "2026-05-22",
+          "users": 13686
+        },
+        {
+          "date": "2026-05-23",
+          "users": 9745
+        },
+        {
+          "date": "2026-05-24",
+          "users": 9766
+        },
+        {
+          "date": "2026-05-25",
+          "users": 14117
+        },
+        {
+          "date": "2026-05-26",
+          "users": 14892
+        },
+        {
+          "date": "2026-05-27",
+          "users": 14249
+        },
+        {
+          "date": "2026-05-28",
+          "users": 14800
+        },
+        {
+          "date": "2026-05-29",
+          "users": 13826
+        },
+        {
+          "date": "2026-05-30",
+          "users": 10708
+        },
+        {
+          "date": "2026-05-31",
+          "users": 10688
+        },
+        {
+          "date": "2026-06-01",
+          "users": 14345
+        },
+        {
+          "date": "2026-06-02",
+          "users": 14705
+        },
+        {
+          "date": "2026-06-03",
+          "users": 14613
+        },
+        {
+          "date": "2026-06-04",
+          "users": 14476
+        },
+        {
+          "date": "2026-06-05",
+          "users": 14910
+        },
+        {
+          "date": "2026-06-06",
+          "users": 10439
+        },
+        {
+          "date": "2026-06-07",
+          "users": 9992
+        },
+        {
+          "date": "2026-06-08",
+          "users": 14691
+        },
+        {
+          "date": "2026-06-09",
+          "users": 14307
+        },
+        {
+          "date": "2026-06-10",
+          "users": 15050
+        },
+        {
+          "date": "2026-06-11",
+          "users": 14993
+        },
+        {
+          "date": "2026-06-12",
+          "users": 14895
+        },
+        {
+          "date": "2026-06-13",
+          "users": 10500
+        },
+        {
+          "date": "2026-06-14",
+          "users": 10680
+        },
+        {
+          "date": "2026-06-15",
+          "users": 15413
+        },
+        {
+          "date": "2026-06-16",
+          "users": 15397
+        },
+        {
+          "date": "2026-06-17",
+          "users": 15424
+        },
+        {
+          "date": "2026-06-18",
+          "users": 15632
+        },
+        {
+          "date": "2026-06-19",
+          "users": 15646
+        },
+        {
+          "date": "2026-06-20",
+          "users": 10871
+        },
+        {
+          "date": "2026-06-21",
+          "users": 11105
+        },
+        {
+          "date": "2026-06-22",
+          "users": 15220
+        },
+        {
+          "date": "2026-06-23",
+          "users": 15537
+        },
+        {
+          "date": "2026-06-24",
+          "users": 15909
+        },
+        {
+          "date": "2026-06-25",
+          "users": 15725
+        },
+        {
+          "date": "2026-06-26",
+          "users": 15946
+        },
+        {
+          "date": "2026-06-27",
+          "users": 11330
+        },
+        {
+          "date": "2026-06-28",
+          "users": 11207
+        },
+        {
+          "date": "2026-06-29",
+          "users": 16019
+        }
+      ],
+      "encoding": {
+        "x": "date",
+        "y": "users"
+      },
+      "format": {
+        "y": "number"
+      }
+    },
+    {
+      "type": "chart",
+      "kind": "area",
+      "title": "API requests by region (stacked, June)",
+      "data": [
+        {
+          "date": "2026-06-01",
+          "amer": 39706,
+          "emea": 31224,
+          "apac": 21342,
+          "latam": 9155
+        },
+        {
+          "date": "2026-06-02",
+          "amer": 44337,
+          "emea": 33068,
+          "apac": 21358,
+          "latam": 7907
+        },
+        {
+          "date": "2026-06-03",
+          "amer": 41952,
+          "emea": 32846,
+          "apac": 22332,
+          "latam": 9094
+        },
+        {
+          "date": "2026-06-04",
+          "amer": 42098,
+          "emea": 35648,
+          "apac": 21514,
+          "latam": 8636
+        },
+        {
+          "date": "2026-06-05",
+          "amer": 43193,
+          "emea": 33756,
+          "apac": 22581,
+          "latam": 10664
+        },
+        {
+          "date": "2026-06-06",
+          "amer": 42087,
+          "emea": 33692,
+          "apac": 23887,
+          "latam": 9246
+        },
+        {
+          "date": "2026-06-07",
+          "amer": 43357,
+          "emea": 34925,
+          "apac": 25459,
+          "latam": 9547
+        },
+        {
+          "date": "2026-06-08",
+          "amer": 43642,
+          "emea": 33865,
+          "apac": 23266,
+          "latam": 9215
+        },
+        {
+          "date": "2026-06-09",
+          "amer": 44231,
+          "emea": 33449,
+          "apac": 22243,
+          "latam": 9002
+        },
+        {
+          "date": "2026-06-10",
+          "amer": 44521,
+          "emea": 35217,
+          "apac": 23306,
+          "latam": 10044
+        },
+        {
+          "date": "2026-06-11",
+          "amer": 43906,
+          "emea": 35934,
+          "apac": 26451,
+          "latam": 9361
+        },
+        {
+          "date": "2026-06-12",
+          "amer": 42893,
+          "emea": 35695,
+          "apac": 23935,
+          "latam": 8917
+        },
+        {
+          "date": "2026-06-13",
+          "amer": 44763,
+          "emea": 34891,
+          "apac": 24882,
+          "latam": 9631
+        },
+        {
+          "date": "2026-06-14",
+          "amer": 42608,
+          "emea": 34777,
+          "apac": 25406,
+          "latam": 9920
+        },
+        {
+          "date": "2026-06-15",
+          "amer": 44709,
+          "emea": 36861,
+          "apac": 26785,
+          "latam": 10405
+        },
+        {
+          "date": "2026-06-16",
+          "amer": 45244,
+          "emea": 36053,
+          "apac": 25750,
+          "latam": 10088
+        },
+        {
+          "date": "2026-06-17",
+          "amer": 42132,
+          "emea": 35902,
+          "apac": 27272,
+          "latam": 9964
+        },
+        {
+          "date": "2026-06-18",
+          "amer": 44869,
+          "emea": 38187,
+          "apac": 29744,
+          "latam": 10905
+        },
+        {
+          "date": "2026-06-19",
+          "amer": 46069,
+          "emea": 35073,
+          "apac": 26933,
+          "latam": 9758
+        },
+        {
+          "date": "2026-06-20",
+          "amer": 47326,
+          "emea": 36092,
+          "apac": 28706,
+          "latam": 9554
+        },
+        {
+          "date": "2026-06-21",
+          "amer": 46215,
+          "emea": 34834,
+          "apac": 27067,
+          "latam": 10714
+        },
+        {
+          "date": "2026-06-22",
+          "amer": 47027,
+          "emea": 37191,
+          "apac": 28954,
+          "latam": 11014
+        },
+        {
+          "date": "2026-06-23",
+          "amer": 49949,
+          "emea": 37606,
+          "apac": 30082,
+          "latam": 11083
+        },
+        {
+          "date": "2026-06-24",
+          "amer": 48762,
+          "emea": 38287,
+          "apac": 29839,
+          "latam": 11071
+        },
+        {
+          "date": "2026-06-25",
+          "amer": 46984,
+          "emea": 38280,
+          "apac": 29978,
+          "latam": 11512
+        },
+        {
+          "date": "2026-06-26",
+          "amer": 47114,
+          "emea": 39892,
+          "apac": 28818,
+          "latam": 11493
+        },
+        {
+          "date": "2026-06-27",
+          "amer": 47182,
+          "emea": 37259,
+          "apac": 30952,
+          "latam": 10435
+        },
+        {
+          "date": "2026-06-28",
+          "amer": 48001,
+          "emea": 38981,
+          "apac": 29553,
+          "latam": 11280
+        },
+        {
+          "date": "2026-06-29",
+          "amer": 50125,
+          "emea": 36749,
+          "apac": 30372,
+          "latam": 11095
+        },
+        {
+          "date": "2026-06-30",
+          "amer": 50424,
+          "emea": 38692,
+          "apac": 31371,
+          "latam": 11249
+        }
+      ],
+      "encoding": {
+        "x": "date",
+        "y": [
+          "amer",
+          "emea",
+          "apac",
+          "latam"
+        ],
+        "stack": true
+      },
+      "format": {
+        "y": "number"
+      }
+    },
+    {
+      "type": "chart",
+      "kind": "candlestick",
+      "title": "HAPPY — 60 trading days (synthetic OHLC)",
+      "data": [
+        {
+          "date": "2026-04-01",
+          "open": 104,
+          "close": 107.37,
+          "low": 103.31,
+          "high": 108.35
+        },
+        {
+          "date": "2026-04-02",
+          "open": 107.37,
+          "close": 107.94,
+          "low": 107.23,
+          "high": 108.2
+        },
+        {
+          "date": "2026-04-03",
+          "open": 107.94,
+          "close": 108.99,
+          "low": 106.76,
+          "high": 109.31
+        },
+        {
+          "date": "2026-04-06",
+          "open": 108.99,
+          "close": 105.82,
+          "low": 105.46,
+          "high": 110.23
+        },
+        {
+          "date": "2026-04-07",
+          "open": 105.82,
+          "close": 105.42,
+          "low": 104.28,
+          "high": 106.67
+        },
+        {
+          "date": "2026-04-08",
+          "open": 105.42,
+          "close": 105.73,
+          "low": 105.25,
+          "high": 105.88
+        },
+        {
+          "date": "2026-04-09",
+          "open": 105.73,
+          "close": 103.39,
+          "low": 103.12,
+          "high": 106.26
+        },
+        {
+          "date": "2026-04-10",
+          "open": 103.39,
+          "close": 104.75,
+          "low": 102.69,
+          "high": 105.54
+        },
+        {
+          "date": "2026-04-13",
+          "open": 104.75,
+          "close": 103.5,
+          "low": 102.81,
+          "high": 104.78
+        },
+        {
+          "date": "2026-04-14",
+          "open": 103.5,
+          "close": 101.76,
+          "low": 100.63,
+          "high": 104.42
+        },
+        {
+          "date": "2026-04-15",
+          "open": 101.76,
+          "close": 101.13,
+          "low": 100.92,
+          "high": 102.27
+        },
+        {
+          "date": "2026-04-16",
+          "open": 101.13,
+          "close": 102.4,
+          "low": 100.82,
+          "high": 102.57
+        },
+        {
+          "date": "2026-04-17",
+          "open": 102.4,
+          "close": 103.31,
+          "low": 101.91,
+          "high": 103.81
+        },
+        {
+          "date": "2026-04-20",
+          "open": 103.31,
+          "close": 102.16,
+          "low": 101.57,
+          "high": 104.09
+        },
+        {
+          "date": "2026-04-21",
+          "open": 102.16,
+          "close": 102.7,
+          "low": 101.69,
+          "high": 103.12
+        },
+        {
+          "date": "2026-04-22",
+          "open": 102.7,
+          "close": 101.64,
+          "low": 100.79,
+          "high": 103.21
+        },
+        {
+          "date": "2026-04-23",
+          "open": 101.64,
+          "close": 100.26,
+          "low": 99.86,
+          "high": 102.61
+        },
+        {
+          "date": "2026-04-24",
+          "open": 100.26,
+          "close": 95.44,
+          "low": 95.29,
+          "high": 101.34
+        },
+        {
+          "date": "2026-04-27",
+          "open": 95.44,
+          "close": 98.27,
+          "low": 94.65,
+          "high": 99.07
+        },
+        {
+          "date": "2026-04-28",
+          "open": 98.27,
+          "close": 97.99,
+          "low": 97.65,
+          "high": 98.87
+        },
+        {
+          "date": "2026-04-29",
+          "open": 97.99,
+          "close": 98.05,
+          "low": 97.31,
+          "high": 98.26
+        },
+        {
+          "date": "2026-04-30",
+          "open": 98.05,
+          "close": 98.94,
+          "low": 97.42,
+          "high": 99.72
+        },
+        {
+          "date": "2026-05-01",
+          "open": 98.94,
+          "close": 97.65,
+          "low": 97.41,
+          "high": 99.67
+        },
+        {
+          "date": "2026-05-04",
+          "open": 97.65,
+          "close": 98.94,
+          "low": 97.16,
+          "high": 98.94
+        },
+        {
+          "date": "2026-05-05",
+          "open": 98.94,
+          "close": 100.31,
+          "low": 98.39,
+          "high": 101.45
+        },
+        {
+          "date": "2026-05-06",
+          "open": 100.31,
+          "close": 100.9,
+          "low": 100.02,
+          "high": 101.65
+        },
+        {
+          "date": "2026-05-07",
+          "open": 100.9,
+          "close": 103.86,
+          "low": 99.85,
+          "high": 104.84
+        },
+        {
+          "date": "2026-05-08",
+          "open": 103.86,
+          "close": 104.11,
+          "low": 102.64,
+          "high": 104.74
+        },
+        {
+          "date": "2026-05-11",
+          "open": 104.11,
+          "close": 105.96,
+          "low": 103.63,
+          "high": 106.92
+        },
+        {
+          "date": "2026-05-12",
+          "open": 105.96,
+          "close": 107.7,
+          "low": 104.79,
+          "high": 108.94
+        },
+        {
+          "date": "2026-05-13",
+          "open": 107.7,
+          "close": 108.42,
+          "low": 106.59,
+          "high": 108.8
+        },
+        {
+          "date": "2026-05-14",
+          "open": 108.42,
+          "close": 106.61,
+          "low": 105.66,
+          "high": 108.65
+        },
+        {
+          "date": "2026-05-15",
+          "open": 106.61,
+          "close": 110.35,
+          "low": 105.45,
+          "high": 111.12
+        },
+        {
+          "date": "2026-05-18",
+          "open": 110.35,
+          "close": 110.11,
+          "low": 110.06,
+          "high": 110.48
+        },
+        {
+          "date": "2026-05-19",
+          "open": 110.11,
+          "close": 107.67,
+          "low": 107.2,
+          "high": 111.25
+        },
+        {
+          "date": "2026-05-20",
+          "open": 107.67,
+          "close": 106.9,
+          "low": 106.21,
+          "high": 108.67
+        },
+        {
+          "date": "2026-05-21",
+          "open": 106.9,
+          "close": 107.44,
+          "low": 106.14,
+          "high": 108.14
+        },
+        {
+          "date": "2026-05-22",
+          "open": 107.44,
+          "close": 105,
+          "low": 104.98,
+          "high": 107.6
+        },
+        {
+          "date": "2026-05-25",
+          "open": 105,
+          "close": 103.36,
+          "low": 103.25,
+          "high": 105.23
+        },
+        {
+          "date": "2026-05-26",
+          "open": 103.36,
+          "close": 104.39,
+          "low": 102.44,
+          "high": 105.39
+        },
+        {
+          "date": "2026-05-27",
+          "open": 104.39,
+          "close": 103.82,
+          "low": 103.79,
+          "high": 104.4
+        },
+        {
+          "date": "2026-05-28",
+          "open": 103.82,
+          "close": 102.81,
+          "low": 102.08,
+          "high": 104.6
+        },
+        {
+          "date": "2026-05-29",
+          "open": 102.81,
+          "close": 104.14,
+          "low": 102.14,
+          "high": 104.16
+        },
+        {
+          "date": "2026-06-01",
+          "open": 104.14,
+          "close": 107.09,
+          "low": 103.69,
+          "high": 107.7
+        },
+        {
+          "date": "2026-06-02",
+          "open": 107.09,
+          "close": 108.43,
+          "low": 106.53,
+          "high": 109.45
+        },
+        {
+          "date": "2026-06-03",
+          "open": 108.43,
+          "close": 106.91,
+          "low": 106.84,
+          "high": 108.8
+        },
+        {
+          "date": "2026-06-04",
+          "open": 106.91,
+          "close": 105.3,
+          "low": 104.74,
+          "high": 107.81
+        },
+        {
+          "date": "2026-06-05",
+          "open": 105.3,
+          "close": 103.59,
+          "low": 102.91,
+          "high": 105.74
+        },
+        {
+          "date": "2026-06-08",
+          "open": 103.59,
+          "close": 103.04,
+          "low": 102.55,
+          "high": 104.19
+        },
+        {
+          "date": "2026-06-09",
+          "open": 103.04,
+          "close": 102.37,
+          "low": 101.51,
+          "high": 103.05
+        },
+        {
+          "date": "2026-06-10",
+          "open": 102.37,
+          "close": 102.92,
+          "low": 101.66,
+          "high": 103.03
+        },
+        {
+          "date": "2026-06-11",
+          "open": 102.92,
+          "close": 104.36,
+          "low": 102.74,
+          "high": 105
+        },
+        {
+          "date": "2026-06-12",
+          "open": 104.36,
+          "close": 106.91,
+          "low": 103.97,
+          "high": 107.38
+        },
+        {
+          "date": "2026-06-15",
+          "open": 106.91,
+          "close": 109.51,
+          "low": 105.65,
+          "high": 110.82
+        },
+        {
+          "date": "2026-06-16",
+          "open": 109.51,
+          "close": 112.47,
+          "low": 108.23,
+          "high": 113.3
+        },
+        {
+          "date": "2026-06-17",
+          "open": 112.47,
+          "close": 115.19,
+          "low": 111.27,
+          "high": 115.9
+        },
+        {
+          "date": "2026-06-18",
+          "open": 115.19,
+          "close": 114.9,
+          "low": 114.23,
+          "high": 115.3
+        },
+        {
+          "date": "2026-06-19",
+          "open": 114.9,
+          "close": 118.67,
+          "low": 114.38,
+          "high": 119.67
+        },
+        {
+          "date": "2026-06-22",
+          "open": 118.67,
+          "close": 118.33,
+          "low": 117.11,
+          "high": 119.59
+        },
+        {
+          "date": "2026-06-23",
+          "open": 118.33,
+          "close": 114.68,
+          "low": 114.58,
+          "high": 119.1
+        }
+      ],
+      "encoding": {
+        "x": "date",
+        "open": "open",
+        "close": "close",
+        "low": "low",
+        "high": "high"
+      },
+      "format": {
+        "y": "currency"
+      }
+    },
+    {
+      "type": "chart",
+      "kind": "themeRiver",
+      "title": "Support tickets by topic (10 weeks)",
+      "description": "Bugs shrink, performance complaints grow.",
+      "data": [
+        {
+          "week": "2026-05-04",
+          "topic": "billing",
+          "tickets": 26
+        },
+        {
+          "week": "2026-05-04",
+          "topic": "onboarding",
+          "tickets": 27
+        },
+        {
+          "week": "2026-05-04",
+          "topic": "performance",
+          "tickets": 16
+        },
+        {
+          "week": "2026-05-04",
+          "topic": "integrations",
+          "tickets": 8
+        },
+        {
+          "week": "2026-05-04",
+          "topic": "bugs",
+          "tickets": 37
+        },
+        {
+          "week": "2026-05-11",
+          "topic": "billing",
+          "tickets": 31
+        },
+        {
+          "week": "2026-05-11",
+          "topic": "onboarding",
+          "tickets": 29
+        },
+        {
+          "week": "2026-05-11",
+          "topic": "performance",
+          "tickets": 13
+        },
+        {
+          "week": "2026-05-11",
+          "topic": "integrations",
+          "tickets": 12
+        },
+        {
+          "week": "2026-05-11",
+          "topic": "bugs",
+          "tickets": 36
+        },
+        {
+          "week": "2026-05-18",
+          "topic": "billing",
+          "tickets": 25
+        },
+        {
+          "week": "2026-05-18",
+          "topic": "onboarding",
+          "tickets": 32
+        },
+        {
+          "week": "2026-05-18",
+          "topic": "performance",
+          "tickets": 23
+        },
+        {
+          "week": "2026-05-18",
+          "topic": "integrations",
+          "tickets": 14
+        },
+        {
+          "week": "2026-05-18",
+          "topic": "bugs",
+          "tickets": 30
+        },
+        {
+          "week": "2026-05-25",
+          "topic": "billing",
+          "tickets": 29
+        },
+        {
+          "week": "2026-05-25",
+          "topic": "onboarding",
+          "tickets": 29
+        },
+        {
+          "week": "2026-05-25",
+          "topic": "performance",
+          "tickets": 18
+        },
+        {
+          "week": "2026-05-25",
+          "topic": "integrations",
+          "tickets": 9
+        },
+        {
+          "week": "2026-05-25",
+          "topic": "bugs",
+          "tickets": 37
+        },
+        {
+          "week": "2026-06-01",
+          "topic": "billing",
+          "tickets": 28
+        },
+        {
+          "week": "2026-06-01",
+          "topic": "onboarding",
+          "tickets": 24
+        },
+        {
+          "week": "2026-06-01",
+          "topic": "performance",
+          "tickets": 20
+        },
+        {
+          "week": "2026-06-01",
+          "topic": "integrations",
+          "tickets": 18
+        },
+        {
+          "week": "2026-06-01",
+          "topic": "bugs",
+          "tickets": 31
+        },
+        {
+          "week": "2026-06-08",
+          "topic": "billing",
+          "tickets": 25
+        },
+        {
+          "week": "2026-06-08",
+          "topic": "onboarding",
+          "tickets": 26
+        },
+        {
+          "week": "2026-06-08",
+          "topic": "performance",
+          "tickets": 22
+        },
+        {
+          "week": "2026-06-08",
+          "topic": "integrations",
+          "tickets": 12
+        },
+        {
+          "week": "2026-06-08",
+          "topic": "bugs",
+          "tickets": 30
+        },
+        {
+          "week": "2026-06-15",
+          "topic": "billing",
+          "tickets": 28
+        },
+        {
+          "week": "2026-06-15",
+          "topic": "onboarding",
+          "tickets": 26
+        },
+        {
+          "week": "2026-06-15",
+          "topic": "performance",
+          "tickets": 30
+        },
+        {
+          "week": "2026-06-15",
+          "topic": "integrations",
+          "tickets": 15
+        },
+        {
+          "week": "2026-06-15",
+          "topic": "bugs",
+          "tickets": 24
+        },
+        {
+          "week": "2026-06-22",
+          "topic": "billing",
+          "tickets": 25
+        },
+        {
+          "week": "2026-06-22",
+          "topic": "onboarding",
+          "tickets": 24
+        },
+        {
+          "week": "2026-06-22",
+          "topic": "performance",
+          "tickets": 23
+        },
+        {
+          "week": "2026-06-22",
+          "topic": "integrations",
+          "tickets": 18
+        },
+        {
+          "week": "2026-06-22",
+          "topic": "bugs",
+          "tickets": 28
+        },
+        {
+          "week": "2026-06-29",
+          "topic": "billing",
+          "tickets": 28
+        },
+        {
+          "week": "2026-06-29",
+          "topic": "onboarding",
+          "tickets": 23
+        },
+        {
+          "week": "2026-06-29",
+          "topic": "performance",
+          "tickets": 27
+        },
+        {
+          "week": "2026-06-29",
+          "topic": "integrations",
+          "tickets": 18
+        },
+        {
+          "week": "2026-06-29",
+          "topic": "bugs",
+          "tickets": 27
+        },
+        {
+          "week": "2026-07-06",
+          "topic": "billing",
+          "tickets": 24
+        },
+        {
+          "week": "2026-07-06",
+          "topic": "onboarding",
+          "tickets": 21
+        },
+        {
+          "week": "2026-07-06",
+          "topic": "performance",
+          "tickets": 30
+        },
+        {
+          "week": "2026-07-06",
+          "topic": "integrations",
+          "tickets": 22
+        },
+        {
+          "week": "2026-07-06",
+          "topic": "bugs",
+          "tickets": 18
+        }
+      ],
+      "encoding": {
+        "x": "week",
+        "series": "topic",
+        "value": "tickets"
+      }
+    },
+    {
+      "type": "chart",
+      "kind": "heatmap",
+      "title": "Signups by weekday and hour",
+      "data": [
+        {
+          "day": "Mon",
+          "hour": "8am",
+          "signups": 25
+        },
+        {
+          "day": "Mon",
+          "hour": "9am",
+          "signups": 34
+        },
+        {
+          "day": "Mon",
+          "hour": "10am",
+          "signups": 38
+        },
+        {
+          "day": "Mon",
+          "hour": "11am",
+          "signups": 41
+        },
+        {
+          "day": "Mon",
+          "hour": "12pm",
+          "signups": 46
+        },
+        {
+          "day": "Mon",
+          "hour": "1pm",
+          "signups": 56
+        },
+        {
+          "day": "Mon",
+          "hour": "2pm",
+          "signups": 63
+        },
+        {
+          "day": "Mon",
+          "hour": "3pm",
+          "signups": 50
+        },
+        {
+          "day": "Mon",
+          "hour": "4pm",
+          "signups": 42
+        },
+        {
+          "day": "Mon",
+          "hour": "5pm",
+          "signups": 38
+        },
+        {
+          "day": "Mon",
+          "hour": "6pm",
+          "signups": 29
+        },
+        {
+          "day": "Mon",
+          "hour": "7pm",
+          "signups": 18
+        },
+        {
+          "day": "Tue",
+          "hour": "8am",
+          "signups": 19
+        },
+        {
+          "day": "Tue",
+          "hour": "9am",
+          "signups": 32
+        },
+        {
+          "day": "Tue",
+          "hour": "10am",
+          "signups": 38
+        },
+        {
+          "day": "Tue",
+          "hour": "11am",
+          "signups": 42
+        },
+        {
+          "day": "Tue",
+          "hour": "12pm",
+          "signups": 45
+        },
+        {
+          "day": "Tue",
+          "hour": "1pm",
+          "signups": 59
+        },
+        {
+          "day": "Tue",
+          "hour": "2pm",
+          "signups": 55
+        },
+        {
+          "day": "Tue",
+          "hour": "3pm",
+          "signups": 54
+        },
+        {
+          "day": "Tue",
+          "hour": "4pm",
+          "signups": 36
+        },
+        {
+          "day": "Tue",
+          "hour": "5pm",
+          "signups": 35
+        },
+        {
+          "day": "Tue",
+          "hour": "6pm",
+          "signups": 30
+        },
+        {
+          "day": "Tue",
+          "hour": "7pm",
+          "signups": 21
+        },
+        {
+          "day": "Wed",
+          "hour": "8am",
+          "signups": 32
+        },
+        {
+          "day": "Wed",
+          "hour": "9am",
+          "signups": 25
+        },
+        {
+          "day": "Wed",
+          "hour": "10am",
+          "signups": 39
+        },
+        {
+          "day": "Wed",
+          "hour": "11am",
+          "signups": 35
+        },
+        {
+          "day": "Wed",
+          "hour": "12pm",
+          "signups": 44
+        },
+        {
+          "day": "Wed",
+          "hour": "1pm",
+          "signups": 54
+        },
+        {
+          "day": "Wed",
+          "hour": "2pm",
+          "signups": 57
+        },
+        {
+          "day": "Wed",
+          "hour": "3pm",
+          "signups": 56
+        },
+        {
+          "day": "Wed",
+          "hour": "4pm",
+          "signups": 38
+        },
+        {
+          "day": "Wed",
+          "hour": "5pm",
+          "signups": 37
+        },
+        {
+          "day": "Wed",
+          "hour": "6pm",
+          "signups": 39
+        },
+        {
+          "day": "Wed",
+          "hour": "7pm",
+          "signups": 23
+        },
+        {
+          "day": "Thu",
+          "hour": "8am",
+          "signups": 29
+        },
+        {
+          "day": "Thu",
+          "hour": "9am",
+          "signups": 33
+        },
+        {
+          "day": "Thu",
+          "hour": "10am",
+          "signups": 39
+        },
+        {
+          "day": "Thu",
+          "hour": "11am",
+          "signups": 47
+        },
+        {
+          "day": "Thu",
+          "hour": "12pm",
+          "signups": 53
+        },
+        {
+          "day": "Thu",
+          "hour": "1pm",
+          "signups": 60
+        },
+        {
+          "day": "Thu",
+          "hour": "2pm",
+          "signups": 54
+        },
+        {
+          "day": "Thu",
+          "hour": "3pm",
+          "signups": 45
+        },
+        {
+          "day": "Thu",
+          "hour": "4pm",
+          "signups": 44
+        },
+        {
+          "day": "Thu",
+          "hour": "5pm",
+          "signups": 33
+        },
+        {
+          "day": "Thu",
+          "hour": "6pm",
+          "signups": 35
+        },
+        {
+          "day": "Thu",
+          "hour": "7pm",
+          "signups": 20
+        },
+        {
+          "day": "Fri",
+          "hour": "8am",
+          "signups": 24
+        },
+        {
+          "day": "Fri",
+          "hour": "9am",
+          "signups": 34
+        },
+        {
+          "day": "Fri",
+          "hour": "10am",
+          "signups": 35
+        },
+        {
+          "day": "Fri",
+          "hour": "11am",
+          "signups": 51
+        },
+        {
+          "day": "Fri",
+          "hour": "12pm",
+          "signups": 50
+        },
+        {
+          "day": "Fri",
+          "hour": "1pm",
+          "signups": 49
+        },
+        {
+          "day": "Fri",
+          "hour": "2pm",
+          "signups": 61
+        },
+        {
+          "day": "Fri",
+          "hour": "3pm",
+          "signups": 49
+        },
+        {
+          "day": "Fri",
+          "hour": "4pm",
+          "signups": 35
+        },
+        {
+          "day": "Fri",
+          "hour": "5pm",
+          "signups": 39
+        },
+        {
+          "day": "Fri",
+          "hour": "6pm",
+          "signups": 33
+        },
+        {
+          "day": "Fri",
+          "hour": "7pm",
+          "signups": 26
+        },
+        {
+          "day": "Sat",
+          "hour": "8am",
+          "signups": 8
+        },
+        {
+          "day": "Sat",
+          "hour": "9am",
+          "signups": 14
+        },
+        {
+          "day": "Sat",
+          "hour": "10am",
+          "signups": 12
+        },
+        {
+          "day": "Sat",
+          "hour": "11am",
+          "signups": 10
+        },
+        {
+          "day": "Sat",
+          "hour": "12pm",
+          "signups": 15
+        },
+        {
+          "day": "Sat",
+          "hour": "1pm",
+          "signups": 21
+        },
+        {
+          "day": "Sat",
+          "hour": "2pm",
+          "signups": 20
+        },
+        {
+          "day": "Sat",
+          "hour": "3pm",
+          "signups": 19
+        },
+        {
+          "day": "Sat",
+          "hour": "4pm",
+          "signups": 12
+        },
+        {
+          "day": "Sat",
+          "hour": "5pm",
+          "signups": 9
+        },
+        {
+          "day": "Sat",
+          "hour": "6pm",
+          "signups": 7
+        },
+        {
+          "day": "Sat",
+          "hour": "7pm",
+          "signups": 1
+        },
+        {
+          "day": "Sun",
+          "hour": "8am",
+          "signups": 9
+        },
+        {
+          "day": "Sun",
+          "hour": "9am",
+          "signups": 5
+        },
+        {
+          "day": "Sun",
+          "hour": "10am",
+          "signups": 21
+        },
+        {
+          "day": "Sun",
+          "hour": "11am",
+          "signups": 10
+        },
+        {
+          "day": "Sun",
+          "hour": "12pm",
+          "signups": 16
+        },
+        {
+          "day": "Sun",
+          "hour": "1pm",
+          "signups": 17
+        },
+        {
+          "day": "Sun",
+          "hour": "2pm",
+          "signups": 19
+        },
+        {
+          "day": "Sun",
+          "hour": "3pm",
+          "signups": 20
+        },
+        {
+          "day": "Sun",
+          "hour": "4pm",
+          "signups": 10
+        },
+        {
+          "day": "Sun",
+          "hour": "5pm",
+          "signups": 5
+        },
+        {
+          "day": "Sun",
+          "hour": "6pm",
+          "signups": 14
+        },
+        {
+          "day": "Sun",
+          "hour": "7pm",
+          "signups": 10
+        }
+      ],
+      "encoding": {
+        "x": "hour",
+        "y": "day",
+        "value": "signups"
+      }
+    }
+  ]
+}

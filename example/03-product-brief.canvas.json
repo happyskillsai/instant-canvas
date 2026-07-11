@@ -1,0 +1,20 @@
+{
+  "instantcanvas": 1,
+  "createdWith": "0.3.1",
+  "title": "Product Brief — Atlas",
+  "description": "Markdown documents: an inline intro plus two workspace files rendered via src.",
+  "blocks": [
+    {
+      "type": "markdown",
+      "text": "# Document rendering test\n\nThe two documents below are loaded from `example/notes/*.md` via the `src` property — frontmatter is stripped, tables keep their alignment, task lists render as checkboxes, and code fences are syntax-highlighted."
+    },
+    {
+      "type": "markdown",
+      "src": "example/notes/product-brief.md"
+    },
+    {
+      "type": "markdown",
+      "src": "example/notes/api-changelog.md"
+    }
+  ]
+}

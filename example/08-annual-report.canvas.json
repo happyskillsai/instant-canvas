@@ -1,0 +1,232 @@
+{
+  "instantcanvas": 1,
+  "createdWith": "0.3.1",
+  "title": "Atlas — Annual Report FY2026",
+  "description": "Document-mode canvas: cover, TOC, running header/footer, brand theme, back cover. Printable 1:1.",
+  "document": {
+    "cover": {
+      "title": "Atlas Annual Report",
+      "subtitle": "Fiscal year 2026 — synthetic demo data",
+      "author": "Finance & Analytics",
+      "date": "July 2026"
+    },
+    "toc": {
+      "title": "Contents",
+      "depth": 2
+    },
+    "header": {
+      "left": "Atlas — FY2026",
+      "right": "Confidential (demo)"
+    },
+    "footer": {
+      "left": "Generated with InstantCanvas",
+      "right": "Page {{pageNumber}} of {{totalPages}}"
+    },
+    "backCover": {
+      "title": "Thank you",
+      "text": "Prepared by the Finance & Analytics team. All figures in this document are synthetic and exist only to test document rendering."
+    },
+    "theme": {
+      "accent": "#6d28d9",
+      "palette": [
+        "#6d28d9",
+        "#0ea5e9",
+        "#f59e0b",
+        "#10b981"
+      ]
+    },
+    "page": {
+      "size": "A4",
+      "orientation": "portrait",
+      "margin": "15mm"
+    }
+  },
+  "blocks": [
+    {
+      "type": "markdown",
+      "text": "# Letter to shareholders\n\nFY2026 was a year of disciplined growth. Revenue grew **68% year over year** while operating costs grew 42%, moving the company to within one quarter of break-even.\n\nWe kept three promises made in last year’s letter: we shipped the self-serve tier, we brought gross margin above 70%, and we did it without doubling headcount.\n\n## Highlights\n\n- ARR crossed **$1.8M** in June 2026.\n- Net revenue retention reached **112%**.\n- The self-serve tier now accounts for **31%** of new logos."
+    },
+    {
+      "type": "kpi",
+      "cards": [
+        {
+          "label": "Revenue",
+          "value": 2570000,
+          "format": "currency",
+          "delta": {
+            "value": 0.68,
+            "label": "YoY",
+            "positiveIs": "up"
+          }
+        },
+        {
+          "label": "Gross margin",
+          "value": 0.72,
+          "format": "percent",
+          "delta": {
+            "value": 0.05,
+            "label": "YoY",
+            "positiveIs": "up"
+          }
+        },
+        {
+          "label": "Operating burn",
+          "value": -410000,
+          "format": "currency",
+          "delta": {
+            "value": -0.37,
+            "label": "YoY",
+            "positiveIs": "down"
+          }
+        },
+        {
+          "label": "Customers",
+          "value": 1840,
+          "format": "number",
+          "delta": {
+            "value": 0.54,
+            "label": "YoY",
+            "positiveIs": "up"
+          }
+        }
+      ]
+    },
+    {
+      "type": "chart",
+      "kind": "line",
+      "title": "Revenue vs costs by quarter",
+      "data": [
+        {
+          "quarter": "Q1 2025",
+          "revenue": 317620,
+          "costs": 265270
+        },
+        {
+          "quarter": "Q2 2025",
+          "revenue": 364282,
+          "costs": 290011
+        },
+        {
+          "quarter": "Q3 2025",
+          "revenue": 442339,
+          "costs": 336991
+        },
+        {
+          "quarter": "Q4 2025",
+          "revenue": 486967,
+          "costs": 351328
+        },
+        {
+          "quarter": "Q1 2026",
+          "revenue": 551096,
+          "costs": 382089
+        },
+        {
+          "quarter": "Q2 2026",
+          "revenue": 628614,
+          "costs": 411043
+        }
+      ],
+      "encoding": {
+        "x": "quarter",
+        "y": [
+          "revenue",
+          "costs"
+        ]
+      },
+      "format": {
+        "y": "currency"
+      }
+    },
+    {
+      "type": "markdown",
+      "text": "# Financial review\n\n## Revenue quality\n\nRecurring revenue represented 94% of total revenue, up from 88% in FY2025. Services revenue is deliberately flat: we productize instead of staffing.\n\n## Cost structure\n\nInfrastructure cost per active customer fell 23% after the March storage migration. Sales efficiency (magic number) ended the year at **0.9**."
+    },
+    {
+      "type": "chart",
+      "kind": "bar",
+      "title": "Operating spend by function (FY2026)",
+      "data": [
+        {
+          "fn": "R&D",
+          "spend": 1240000
+        },
+        {
+          "fn": "Sales & Marketing",
+          "spend": 980000
+        },
+        {
+          "fn": "Infrastructure",
+          "spend": 410000
+        },
+        {
+          "fn": "G&A",
+          "spend": 350000
+        }
+      ],
+      "encoding": {
+        "x": "fn",
+        "y": "spend"
+      },
+      "format": {
+        "y": "currency"
+      }
+    },
+    {
+      "type": "table",
+      "title": "Quarterly detail",
+      "columns": [
+        {
+          "key": "quarter",
+          "label": "Quarter"
+        },
+        {
+          "key": "revenue",
+          "label": "Revenue",
+          "format": "currency"
+        },
+        {
+          "key": "costs",
+          "label": "Costs",
+          "format": "currency"
+        }
+      ],
+      "rows": [
+        {
+          "quarter": "Q1 2025",
+          "revenue": 317620,
+          "costs": 265270
+        },
+        {
+          "quarter": "Q2 2025",
+          "revenue": 364282,
+          "costs": 290011
+        },
+        {
+          "quarter": "Q3 2025",
+          "revenue": 442339,
+          "costs": 336991
+        },
+        {
+          "quarter": "Q4 2025",
+          "revenue": 486967,
+          "costs": 351328
+        },
+        {
+          "quarter": "Q1 2026",
+          "revenue": 551096,
+          "costs": 382089
+        },
+        {
+          "quarter": "Q2 2026",
+          "revenue": 628614,
+          "costs": 411043
+        }
+      ]
+    },
+    {
+      "type": "markdown",
+      "text": "# Outlook\n\n## FY2027 priorities\n\n1. Break even by Q2 FY2027 without slowing R&D.\n2. Land the first ten enterprise logos in regulated industries.\n3. Keep infrastructure cost growth below half of revenue growth.\n\n## Risks\n\nConcentration: the top ten customers are 38% of ARR. Mitigation is the self-serve motion, which spreads revenue across 1,400+ small accounts."
+    }
+  ]
+}

@@ -1,0 +1,30 @@
+{
+  "instantcanvas": 1,
+  "createdWith": "0.3.1",
+  "title": "Confirm: Reset Demo Database",
+  "description": "Danger-severity confirmation card — blocks until the human decides in the browser.",
+  "blocks": [
+    {
+      "type": "confirm",
+      "title": "Drop and re-seed the demo database?",
+      "severity": "danger",
+      "description": "This deletes every table in the demo database and re-seeds it from fixtures. Production is not touched, but any demo data you entered today is gone.",
+      "details": [
+        {
+          "label": "Target",
+          "value": "postgres://localhost:5432/atlas_demo"
+        },
+        {
+          "label": "Tables dropped",
+          "value": "14"
+        },
+        {
+          "label": "Last backup",
+          "value": "2026-07-11 06:00 UTC"
+        }
+      ],
+      "confirmLabel": "Drop & re-seed",
+      "cancelLabel": "Keep everything"
+    }
+  ]
+}

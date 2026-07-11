@@ -1,0 +1,377 @@
+{
+  "instantcanvas": 1,
+  "createdWith": "0.3.1",
+  "title": "Marketing Performance — Q2 2026",
+  "description": "Fake marketing data: KPIs, traffic, spend, funnel, channel mix, top campaigns.",
+  "blocks": [
+    {
+      "type": "markdown",
+      "text": "# Q2 2026 Marketing Review\n\nAll figures below are **synthetic demo data** generated to exercise InstantCanvas end-to-end. Traffic grew steadily through the quarter while CAC fell — the funnel and channel mix below show where the gains came from."
+    },
+    {
+      "type": "kpi",
+      "cards": [
+        {
+          "label": "Unique Visitors",
+          "value": 482310,
+          "format": "number",
+          "delta": {
+            "value": 0.121,
+            "label": "QoQ",
+            "positiveIs": "up"
+          }
+        },
+        {
+          "label": "Visit → Paid Conversion",
+          "value": 0.0046,
+          "format": "percent",
+          "delta": {
+            "value": 0.08,
+            "label": "QoQ",
+            "positiveIs": "up"
+          }
+        },
+        {
+          "label": "CAC",
+          "value": 42.8,
+          "format": "currency",
+          "delta": {
+            "value": -0.083,
+            "label": "QoQ",
+            "positiveIs": "down"
+          }
+        },
+        {
+          "label": "MRR",
+          "value": 128400,
+          "format": "currency",
+          "delta": {
+            "value": 0.062,
+            "label": "MoM",
+            "positiveIs": "up"
+          }
+        },
+        {
+          "label": "NPS",
+          "value": 47,
+          "format": "none",
+          "delta": {
+            "value": 0.002,
+            "label": "QoQ",
+            "positiveIs": "up"
+          }
+        }
+      ]
+    },
+    {
+      "type": "chart",
+      "kind": "line",
+      "title": "Weekly sessions by channel",
+      "data": [
+        {
+          "week": "2026-04-06",
+          "organic": 16367,
+          "paid": 9317,
+          "social": 5159,
+          "email": 3361
+        },
+        {
+          "week": "2026-04-13",
+          "organic": 18181,
+          "paid": 10416,
+          "social": 6091,
+          "email": 3461
+        },
+        {
+          "week": "2026-04-20",
+          "organic": 15354,
+          "paid": 11153,
+          "social": 5725,
+          "email": 2916
+        },
+        {
+          "week": "2026-04-27",
+          "organic": 15792,
+          "paid": 9103,
+          "social": 5688,
+          "email": 3618
+        },
+        {
+          "week": "2026-05-04",
+          "organic": 19369,
+          "paid": 12105,
+          "social": 6812,
+          "email": 3734
+        },
+        {
+          "week": "2026-05-11",
+          "organic": 20949,
+          "paid": 11295,
+          "social": 6488,
+          "email": 3650
+        },
+        {
+          "week": "2026-05-18",
+          "organic": 17718,
+          "paid": 12057,
+          "social": 5768,
+          "email": 3658
+        },
+        {
+          "week": "2026-05-25",
+          "organic": 20291,
+          "paid": 13086,
+          "social": 6186,
+          "email": 4152
+        },
+        {
+          "week": "2026-06-01",
+          "organic": 21045,
+          "paid": 11656,
+          "social": 6541,
+          "email": 4529
+        },
+        {
+          "week": "2026-06-08",
+          "organic": 21901,
+          "paid": 12486,
+          "social": 7104,
+          "email": 3955
+        },
+        {
+          "week": "2026-06-15",
+          "organic": 22384,
+          "paid": 14521,
+          "social": 7011,
+          "email": 3863
+        },
+        {
+          "week": "2026-06-22",
+          "organic": 21114,
+          "paid": 14132,
+          "social": 8217,
+          "email": 4073
+        }
+      ],
+      "encoding": {
+        "x": "week",
+        "y": [
+          "organic",
+          "paid",
+          "social",
+          "email"
+        ]
+      },
+      "format": {
+        "y": "number"
+      }
+    },
+    {
+      "type": "chart",
+      "kind": "bar",
+      "title": "Monthly ad spend by channel (stacked)",
+      "data": [
+        {
+          "month": "April",
+          "searchAds": 24825,
+          "socialAds": 16129,
+          "display": 6522,
+          "sponsorships": 5000
+        },
+        {
+          "month": "May",
+          "searchAds": 25755,
+          "socialAds": 18329,
+          "display": 7485,
+          "sponsorships": 6500
+        },
+        {
+          "month": "June",
+          "searchAds": 29573,
+          "socialAds": 18600,
+          "display": 6264,
+          "sponsorships": 8000
+        }
+      ],
+      "encoding": {
+        "x": "month",
+        "y": [
+          "searchAds",
+          "socialAds",
+          "display",
+          "sponsorships"
+        ],
+        "stack": true
+      },
+      "format": {
+        "y": "currency"
+      }
+    },
+    {
+      "type": "chart",
+      "kind": "funnel",
+      "title": "Acquisition funnel — Q2",
+      "data": [
+        {
+          "stage": "Visits",
+          "users": 482310
+        },
+        {
+          "stage": "Signups",
+          "users": 18920
+        },
+        {
+          "stage": "Activated",
+          "users": 9480
+        },
+        {
+          "stage": "Trial started",
+          "users": 4230
+        },
+        {
+          "stage": "Paid",
+          "users": 2210
+        }
+      ],
+      "encoding": {
+        "category": "stage",
+        "value": "users"
+      }
+    },
+    {
+      "type": "chart",
+      "kind": "pie",
+      "donut": true,
+      "title": "Q2 revenue by channel",
+      "data": [
+        {
+          "channel": "Search",
+          "revenue": 154500
+        },
+        {
+          "channel": "Organic",
+          "revenue": 121300
+        },
+        {
+          "channel": "Social",
+          "revenue": 60700
+        },
+        {
+          "channel": "Email",
+          "revenue": 38400
+        },
+        {
+          "channel": "Referral",
+          "revenue": 26100
+        }
+      ],
+      "encoding": {
+        "category": "channel",
+        "value": "revenue"
+      },
+      "format": {
+        "y": "currency"
+      }
+    },
+    {
+      "type": "table",
+      "title": "Top campaigns",
+      "columns": [
+        {
+          "key": "campaign",
+          "label": "Campaign"
+        },
+        {
+          "key": "channel",
+          "label": "Channel"
+        },
+        {
+          "key": "spend",
+          "label": "Spend",
+          "format": "currency"
+        },
+        {
+          "key": "revenue",
+          "label": "Revenue",
+          "format": "currency"
+        },
+        {
+          "key": "roas",
+          "label": "ROAS",
+          "format": "number"
+        },
+        {
+          "key": "conversions",
+          "label": "Conversions",
+          "format": "number"
+        }
+      ],
+      "rows": [
+        {
+          "campaign": "Summer Launch — Search",
+          "channel": "Search",
+          "spend": 18400,
+          "revenue": 96300,
+          "conversions": 812,
+          "roas": 5.23
+        },
+        {
+          "campaign": "Retargeting — Social",
+          "channel": "Social",
+          "spend": 9200,
+          "revenue": 41800,
+          "conversions": 511,
+          "roas": 4.54
+        },
+        {
+          "campaign": "Founder Story — Video",
+          "channel": "Video",
+          "spend": 12600,
+          "revenue": 38900,
+          "conversions": 344,
+          "roas": 3.09
+        },
+        {
+          "campaign": "Newsletter Sponsorship",
+          "channel": "Email",
+          "spend": 4300,
+          "revenue": 21500,
+          "conversions": 260,
+          "roas": 5
+        },
+        {
+          "campaign": "Brand Keywords",
+          "channel": "Search",
+          "spend": 6100,
+          "revenue": 58200,
+          "conversions": 705,
+          "roas": 9.54
+        },
+        {
+          "campaign": "Podcast Mid-rolls",
+          "channel": "Audio",
+          "spend": 7800,
+          "revenue": 18700,
+          "conversions": 149,
+          "roas": 2.4
+        },
+        {
+          "campaign": "Free-tools SEO Hub",
+          "channel": "Organic",
+          "spend": 2900,
+          "revenue": 44600,
+          "conversions": 623,
+          "roas": 15.38
+        },
+        {
+          "campaign": "Partner Co-marketing",
+          "channel": "Referral",
+          "spend": 3500,
+          "revenue": 16900,
+          "conversions": 188,
+          "roas": 4.83
+        }
+      ]
+    }
+  ]
+}

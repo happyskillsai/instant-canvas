@@ -1,0 +1,337 @@
+{
+  "instantcanvas": 1,
+  "createdWith": "0.3.1",
+  "title": "Executive Review — H1 2026",
+  "description": "A multi-page canvas: Overview, Acquisition, Retention and Notes tabs.",
+  "pages": [
+    {
+      "name": "Overview",
+      "blocks": [
+        {
+          "type": "markdown",
+          "text": "# H1 2026 at a glance\n\nSynthetic executive summary. Use the tabs above to switch pages — each page is its own block list."
+        },
+        {
+          "type": "kpi",
+          "cards": [
+            {
+              "label": "ARR",
+              "value": 1840000,
+              "format": "currency",
+              "delta": {
+                "value": 0.34,
+                "label": "YoY",
+                "positiveIs": "up"
+              }
+            },
+            {
+              "label": "Net revenue retention",
+              "value": 1.12,
+              "format": "percent",
+              "delta": {
+                "value": 0.03,
+                "label": "HoH",
+                "positiveIs": "up"
+              }
+            },
+            {
+              "label": "Logo churn",
+              "value": 0.021,
+              "format": "percent",
+              "delta": {
+                "value": -0.004,
+                "label": "HoH",
+                "positiveIs": "down"
+              }
+            },
+            {
+              "label": "Headcount",
+              "value": 156,
+              "format": "number",
+              "delta": {
+                "value": 0.18,
+                "label": "YoY",
+                "positiveIs": "up"
+              }
+            }
+          ]
+        },
+        {
+          "type": "chart",
+          "kind": "bar",
+          "title": "Monthly revenue bridge",
+          "description": "New business and expansion vs churn.",
+          "data": [
+            {
+              "month": "Jan",
+              "newBusiness": 54605,
+              "expansion": 21061,
+              "churnLoss": -10535
+            },
+            {
+              "month": "Feb",
+              "newBusiness": 58351,
+              "expansion": 23411,
+              "churnLoss": -9468
+            },
+            {
+              "month": "Mar",
+              "newBusiness": 67458,
+              "expansion": 27971,
+              "churnLoss": -10475
+            },
+            {
+              "month": "Apr",
+              "newBusiness": 71468,
+              "expansion": 32902,
+              "churnLoss": -10320
+            },
+            {
+              "month": "May",
+              "newBusiness": 78365,
+              "expansion": 32465,
+              "churnLoss": -10956
+            },
+            {
+              "month": "Jun",
+              "newBusiness": 84442,
+              "expansion": 35484,
+              "churnLoss": -11458
+            }
+          ],
+          "encoding": {
+            "x": "month",
+            "y": [
+              "newBusiness",
+              "expansion",
+              "churnLoss"
+            ],
+            "stack": true
+          },
+          "format": {
+            "y": "currency"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Acquisition",
+      "blocks": [
+        {
+          "type": "chart",
+          "kind": "funnel",
+          "title": "H1 funnel",
+          "data": [
+            {
+              "stage": "Leads",
+              "n": 42100
+            },
+            {
+              "stage": "MQL",
+              "n": 12400
+            },
+            {
+              "stage": "SQL",
+              "n": 4900
+            },
+            {
+              "stage": "Opportunity",
+              "n": 1850
+            },
+            {
+              "stage": "Closed won",
+              "n": 512
+            }
+          ],
+          "encoding": {
+            "category": "stage",
+            "value": "n"
+          }
+        },
+        {
+          "type": "table",
+          "title": "Pipeline by segment",
+          "columns": [
+            {
+              "key": "segment",
+              "label": "Segment"
+            },
+            {
+              "key": "open",
+              "label": "Open opps",
+              "format": "number"
+            },
+            {
+              "key": "value",
+              "label": "Pipeline value",
+              "format": "currency"
+            },
+            {
+              "key": "winRate",
+              "label": "Win rate",
+              "format": "percent"
+            }
+          ],
+          "rows": [
+            {
+              "segment": "Enterprise",
+              "open": 84,
+              "value": 2140000,
+              "winRate": 0.22
+            },
+            {
+              "segment": "Mid-market",
+              "open": 231,
+              "value": 1680000,
+              "winRate": 0.31
+            },
+            {
+              "segment": "SMB",
+              "open": 612,
+              "value": 890000,
+              "winRate": 0.44
+            },
+            {
+              "segment": "Self-serve",
+              "open": 1204,
+              "value": 410000,
+              "winRate": 0.58
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Retention",
+      "blocks": [
+        {
+          "type": "chart",
+          "kind": "heatmap",
+          "title": "Cohort retention (%)",
+          "description": "Rows are signup cohorts; columns are months since signup.",
+          "data": [
+            {
+              "cohort": "Jan",
+              "month": "M0",
+              "retention": 100
+            },
+            {
+              "cohort": "Jan",
+              "month": "M1",
+              "retention": 80
+            },
+            {
+              "cohort": "Jan",
+              "month": "M2",
+              "retention": 67
+            },
+            {
+              "cohort": "Jan",
+              "month": "M3",
+              "retention": 53
+            },
+            {
+              "cohort": "Jan",
+              "month": "M4",
+              "retention": 45
+            },
+            {
+              "cohort": "Jan",
+              "month": "M5",
+              "retention": 38
+            },
+            {
+              "cohort": "Feb",
+              "month": "M0",
+              "retention": 100
+            },
+            {
+              "cohort": "Feb",
+              "month": "M1",
+              "retention": 82
+            },
+            {
+              "cohort": "Feb",
+              "month": "M2",
+              "retention": 65
+            },
+            {
+              "cohort": "Feb",
+              "month": "M3",
+              "retention": 55
+            },
+            {
+              "cohort": "Feb",
+              "month": "M4",
+              "retention": 40
+            },
+            {
+              "cohort": "Mar",
+              "month": "M0",
+              "retention": 100
+            },
+            {
+              "cohort": "Mar",
+              "month": "M1",
+              "retention": 79
+            },
+            {
+              "cohort": "Mar",
+              "month": "M2",
+              "retention": 66
+            },
+            {
+              "cohort": "Mar",
+              "month": "M3",
+              "retention": 50
+            },
+            {
+              "cohort": "Apr",
+              "month": "M0",
+              "retention": 100
+            },
+            {
+              "cohort": "Apr",
+              "month": "M1",
+              "retention": 76
+            },
+            {
+              "cohort": "Apr",
+              "month": "M2",
+              "retention": 64
+            },
+            {
+              "cohort": "May",
+              "month": "M0",
+              "retention": 100
+            },
+            {
+              "cohort": "May",
+              "month": "M1",
+              "retention": 74
+            },
+            {
+              "cohort": "Jun",
+              "month": "M0",
+              "retention": 100
+            }
+          ],
+          "encoding": {
+            "x": "month",
+            "y": "cohort",
+            "value": "retention"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Notes",
+      "blocks": [
+        {
+          "type": "markdown",
+          "text": "## Reading this review\n\n- All data is **synthetic**, generated for an InstantCanvas end-to-end test.\n- The retention heatmap intentionally leaves the lower-right triangle empty — younger cohorts have fewer observed months.\n- Next review: **October 2026**.\n\n> Multi-page canvases hold at most one interactive block across *all* pages — this one has none."
+        }
+      ]
+    }
+  ]
+}
