@@ -31,7 +31,7 @@ const KERNEL = path.join(__dirname, 'kernel.js')
 
 const USAGE = `InstantCanvas v${VERSION} — local canvas runtime for coding agents
 
-Usage: npx @happyskillsai/instant-canvas <command> [args]
+Usage: npx -y @happyskillsai/instant-canvas <command> [args]
 
 Commands:
   open <canvas.json> [--workspace <dir>] [--no-open] [--timeout <s>] [--result <file>]

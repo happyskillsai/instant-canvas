@@ -66,7 +66,7 @@ blowing out the measure:
 ## 3. Code, in several languages
 
 ```bash
-npx @happyskillsai/instant-canvas open report.canvas.json --workspace "$PWD"
+npx -y @happyskillsai/instant-canvas open report.canvas.json --workspace "$PWD"
 ```
 
 ```python

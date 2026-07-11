@@ -3613,7 +3613,7 @@ $('stopBtn').addEventListener('click', async () => {
 	if (!window.confirm('Stop the InstantCanvas kernel for this workspace?'))
 		return
 	await api('/api/shutdown', { method: 'POST', body: '{}' })
-	document.body.innerHTML = '<div class="empty full"><div class="big"></div><b>Kernel stopped</b><div>Run <code>npx @happyskillsai/instant-canvas open</code> again to restart it.</div></div>'
+	document.body.innerHTML = '<div class="empty full"><div class="big"></div><b>Kernel stopped</b><div>Run <code>npx -y @happyskillsai/instant-canvas open</code> again to restart it.</div></div>'
 })
 
 // ---------------------------------------------------------------- boot

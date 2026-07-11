@@ -140,7 +140,7 @@ const SHAPES = {
 		},
 	},
 	documentToc: {
-		description: 'Customizes the table of contents — the TOC itself is generated automatically (markdown headings plus chart/table/kpi titles, dotted leaders, page numbers from the deck\'s own pagination) whenever the document has anything to list, and the reader can toggle it in the browser. Numbers are exact on screen and via `npx @happyskillsai/instant-canvas print`; a manual paper/scale override in the browser print dialog can still repaginate.',
+		description: 'Customizes the table of contents — the TOC itself is generated automatically (markdown headings plus chart/table/kpi titles, dotted leaders, page numbers from the deck\'s own pagination) whenever the document has anything to list, and the reader can toggle it in the browser. Numbers are exact on screen and via `npx -y @happyskillsai/instant-canvas print`; a manual paper/scale override in the browser print dialog can still repaginate.',
 		properties: {
 			title: { type: 'string', default: 'Contents', description: 'TOC heading.' },
 			depth: { type: 'number', enum: [1, 2, 3], default: 2, description: 'Markdown heading levels listed (h1..h{depth}). Chart, table and kpi titles are always listed.' },
@@ -664,7 +664,7 @@ const ENVELOPE = {
 		createdWith: {
 			type: 'string',
 			required: true,
-			description: 'The InstantCanvas version that created this canvas. Set by `npx @happyskillsai/instant-canvas stamp`, which reads it from the running CLI — do NOT write it by hand. It records the canvas\'s birth version so a future release can migrate it, and is never rewritten once present.',
+			description: 'The InstantCanvas version that created this canvas. Set by `npx -y @happyskillsai/instant-canvas stamp`, which reads it from the running CLI — do NOT write it by hand. It records the canvas\'s birth version so a future release can migrate it, and is never rewritten once present.',
 			example: PKG_VERSION,
 		},
 		title: { type: 'string', required: true, description: 'Canvas title (shown as the page heading and in the sidebar).', example: 'Q3 Campaign Analysis' },
