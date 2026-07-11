@@ -5,11 +5,11 @@
 	"license": "BSD-3-Clause",
 	"repository": {
 		"type": "git",
-		"url": "git+https://github.com/nicolasdao/instant-canvas.git"
+		"url": "git+https://github.com/happyskillsai/instant-canvas.git"
 	},
-	"homepage": "https://github.com/nicolasdao/instant-canvas#readme",
+	"homepage": "https://github.com/happyskillsai/instant-canvas#readme",
 	"bugs": {
-		"url": "https://github.com/nicolasdao/instant-canvas/issues"
+		"url": "https://github.com/happyskillsai/instant-canvas/issues"
 	},
 	"author": "Nicolas Dao <nicolas.dao@gmail.com>",
 	"keywords": [

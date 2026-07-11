@@ -4,7 +4,7 @@
 	"description": "Release workflow for the instant-canvas npm CLI — clean-tree, docs, test and coverage gates, Keep a Changelog stamping, forward-only bump via npm run rls, skill.json version mirror, v-tag and push.",
 	"type": "skill",
 	"license": "BSD-3-Clause",
-	"repository": "https://github.com/nicolasdao/instant-canvas.git",
+	"repository": "https://github.com/happyskillsai/instant-canvas.git",
 	"authors": [
 		"Nicolas Dao <nicolas.dao@gmail.com>"
 	],
