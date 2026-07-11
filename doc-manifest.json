@@ -153,7 +153,7 @@
         "Result contract (stdout of `open`)",
         "The agent workflow"
       ],
-      "line_count": 83,
+      "line_count": 84,
       "links_to": [
         "docs/canvas-schema.md",
         "docs/security.md"
@@ -162,7 +162,8 @@
       "parse_error": null,
       "path": "docs/cli.md",
       "source": [
-        ".agents/skills/instant-canvas/scripts/instantcanvas.js"
+        ".agents/skills/instant-canvas/scripts/instantcanvas.js",
+        ".agents/skills/instant-canvas/scripts/lib/cdp.js"
       ],
       "source_unresolved": [],
       "tags": [
@@ -493,7 +494,7 @@
         "Security regressions",
         "Browser verification"
       ],
-      "line_count": 64,
+      "line_count": 65,
       "links_to": [
         "docs/gotchas/testing.md"
       ],
@@ -501,7 +502,8 @@
       "parse_error": null,
       "path": "docs/testing.md",
       "source": [
-        ".agents/skills/instant-canvas/scripts/test/**"
+        ".agents/skills/instant-canvas/scripts/test/**",
+        ".agents/skills/instant-canvas/scripts/lib/cdp.js"
       ],
       "source_unresolved": [],
       "tags": [

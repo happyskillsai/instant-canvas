@@ -52,7 +52,7 @@ node scripts/instantcanvas.js open my.canvas.json       # one JSON result on std
 node scripts/instantcanvas.js status
 node scripts/instantcanvas.js stop
 
-# tests (176, zero deps; the browser tests skip without Chrome)
+# tests (180, zero deps; the browser tests skip without Chrome)
 node --test scripts/test/
 ```
 
@@ -68,9 +68,9 @@ node --test scripts/test/
   scripts/
     instantcanvas.js             CLI: open | print | stamp | validate | catalog | status | stop
     kernel.js                    Per-workspace localhost server (HTTP + hand-rolled WS)
-    lib/                         schema/validate/catalog, registry, redact, envfile, …
+    lib/                         schema/validate/catalog, registry, redact, envfile, a zero-dep CDP client, …
     web/                         Browser app (no framework) + csp-shim + vendored Plotly/markdown-it/highlight.js
-    test/                        node:test suite + fixtures + a zero-dep CDP client
+    test/                        node:test suite + fixtures + browser-driving tests
 demos/                           WORKBENCH — showcase canvases (chart gallery, science gallery, sweep gallery, form kitchen sink, …)
 prototype/index.html             WORKBENCH — original user-approved UI reference (read-only)
 specs/                           WORKBENCH — implementation specs (user-owned)

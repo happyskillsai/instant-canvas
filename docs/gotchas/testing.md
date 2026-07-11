@@ -13,7 +13,7 @@ Everything up to HTTP/WS can pass while a chart silently fails to render. It hap
 
 ## `--dump-dom --virtual-time-budget` hides concurrency bugs
 
-It is the tempting way to inspect a rendered page without a WebSocket client, and it is the wrong tool: virtual time runs the event loop to quiescence between steps, so races never manifest. It reported every chart present on a build where a real browser dropped one. Drive a real event loop through the hand-rolled CDP client in `scripts/test/helpers/cdp.js` instead.
+It is the tempting way to inspect a rendered page without a WebSocket client, and it is the wrong tool: virtual time runs the event loop to quiescence between steps, so races never manifest. It reported every chart present on a build where a real browser dropped one. Drive a real event loop through the hand-rolled CDP client (`scripts/lib/cdp.js`, re-exported at `scripts/test/helpers/cdp.js` with the tests' swiftshader launch flags) instead.
 
 ## Never set a `Host` header on Chrome's `/json/list`
 

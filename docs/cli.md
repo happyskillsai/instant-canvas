@@ -3,6 +3,7 @@ description: The instantcanvas CLI — commands, flags, exit codes, stdout disci
 tags: [cli, commands, agent-workflow]
 source:
   - .agents/skills/instant-canvas/scripts/instantcanvas.js
+  - .agents/skills/instant-canvas/scripts/lib/cdp.js
 ---
 
 # CLI

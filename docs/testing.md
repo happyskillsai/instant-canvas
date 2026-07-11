@@ -3,6 +3,7 @@ description: The zero-dependency node:test suite — layout, isolation patterns,
 tags: [testing, node-test, cdp, verification]
 source:
   - .agents/skills/instant-canvas/scripts/test/**
+  - .agents/skills/instant-canvas/scripts/lib/cdp.js
 ---
 
 # Testing
@@ -14,7 +15,7 @@ cd .agents/skills/instant-canvas
 node --test scripts/test/
 ```
 
-176 tests at last count, forty-three of which drive a real browser (or headless printing) and skip when Chrome is absent. `scripts/test/index.js` exists because `node --test <dir>` does not expand a directory on the pinned Node version — the directory resolves to `index.js`, which requires every `*.test.js` (see [gotchas/testing.md](gotchas/testing.md)).
+180 tests at last count, forty-seven of which drive a real browser (or headless printing) and skip when Chrome is absent. `scripts/test/index.js` exists because `node --test <dir>` does not expand a directory on the pinned Node version — the directory resolves to `index.js`, which requires every `*.test.js` (see [gotchas/testing.md](gotchas/testing.md)).
 
 ## Suite layout
 
@@ -33,7 +34,7 @@ node --test scripts/test/
 | `forms.test.js` | Blocking `open` + HTTP submit: `.env` round-trip with redaction sweep, overwrite/outside-root 409 handshakes, confirm/timeout/cancel, json destinations, url-protocol and patternMessage rules. |
 | `hardening.test.js` | Source scans (loopback literal, no third-party requires, timing-safe compare, no CORS, no `console.log` server-side) and runtime error codes (`WRITE_FAILED`, `SESSION_TIMEOUT`, `KERNEL_UNREACHABLE`). |
 | `render.test.js` | Real headless Chrome via `helpers/cdp.js`: an adversarial canvas (splom + violin + 3D + skill-rendered kinds + a sweep + a markdown document) must draw every chart, expose a slider, highlight fenced code, inline a local PNG **and SVG** as `data:` URIs, show an always-visible copy button that survives a real clipboard round-trip, carry **no** `style=""` attribute, and log zero CSP violations. Skips without Chrome. |
-| `document.test.js` | Document mode end to end. Contract: the `document` envelope shapes, interactive/sweep refusal, strict-hex colors, template-var warnings, the logo asset ladder; a spawned kernel inlining logos as `data:` URIs. Browser (skips without Chrome): brand tokens via CSSOM + the Plotly palette sink, the deck (cover/TOC/chapters/back cover), the sheet-height invariant on every sheet, code-split reconstruction with highlighting intact, `printToPDF` `/Count` == sheet count for three fixtures, per-page `pdftotext` markers, the deck⇄continuous toggle reparenting the one live chart, `beforeprint` relocation. |
+| `document.test.js` | Document mode end to end. Contract: the `document` envelope shapes, interactive/sweep refusal, strict-hex colors, template-var warnings, the logo asset ladder; a spawned kernel inlining logos as `data:` URIs. Browser (skips without Chrome): brand tokens via CSSOM + the Plotly palette sink, the deck (cover/TOC/chapters/back cover) with TOC page numbers matching each anchor's sheet, the sheet-height invariant on every sheet, code-split reconstruction with highlighting intact, `printToPDF` `/Count` == sheet count for three fixtures, per-page `pdftotext` markers, the deck⇄continuous toggle reparenting the one live chart (universal: an undeclared canvas decks lazily with an auto-TOC, the reader-side TOC toggle repacks, an interactive canvas's muted deck button toasts the refusal), `beforeprint` relocation. |
 | `print.test.js` | The `print` command: result JSON shape, `/Count` == reported pages, the token/`127.0.0.1` leak regression on the PDF bytes, `CHROME_REQUIRED` on a bad `CHROME_PATH`, `--out` workspace confinement, the non-document refusal. Never asserts gl3d ink (a GPU-less machine prints blank 3D while everything else passes). |
 | `browse.test.js` | Real headless Chrome: the folder-browser modal must list, select without re-listing, and descend by chevron, double-click, and breadcrumb. Skips without Chrome. |
 | `search.test.js` | Real headless Chrome: the search modal must open without fetching, match on name and folder, survive `c++` and `<script>` queries, never mark inside an entity, and wire ⌘K / `/` / arrows / Esc correctly. Skips without Chrome. |
@@ -50,7 +51,7 @@ node --test scripts/test/
 
 ## Browser verification
 
-`render.test.js` **is in the suite**. It drives real headless Chrome through `helpers/cdp.js` — a zero-dependency DevTools-protocol client (the repo's own masked-WebSocket knowledge, inverted: clients mask, servers don't) — renders one deliberately adversarial canvas, and asserts that every chart box drew an SVG root with zero CSP violations. It exists because a chart can fail to draw with no error anywhere, and every server-side test still passes. It skips cleanly when Chrome is absent (`CHROME_PATH` overrides discovery).
+`render.test.js` **is in the suite**. It drives real headless Chrome through the zero-dependency DevTools-protocol client in `scripts/lib/cdp.js` (the repo's own masked-WebSocket knowledge, inverted: clients mask, servers don't — lifted out of the test helpers so the `print` command shares it; `test/helpers/cdp.js` is now a thin re-export whose DEFAULT launch flags remain the tests' swiftshader profile) — renders one deliberately adversarial canvas, and asserts that every chart box drew an SVG root with zero CSP violations. It exists because a chart can fail to draw with no error anywhere, and every server-side test still passes. It skips cleanly when Chrome is absent (`CHROME_PATH` overrides discovery).
 
 Two traps it encodes:
 
@@ -59,6 +60,6 @@ Two traps it encodes:
 
 `browse.test.js` and `search.test.js` drive the same client one level deeper — they *click*, and assert on what the click did. Both exist because the server was never wrong: `POST /api/browse` returned correct listings while the folder browser was unnavigable, and search has no server side at all. Only a real browser could see either. Both encode the two traps in [gotchas/testing.md](gotchas/testing.md) — poll for `window.ic`, not for an element that exists before `app.js` binds it; and use a non-throwing `until()` so one dead step fails one assertion instead of sinking the hook.
 
-`helpers/cdp.js` hands `fn` a raw `send(method, params)` alongside `evaluate`, so a test — or a development-time script — reaches `Page.captureScreenshot` and `Emulation.setDeviceMetricsOverride` directly. The search modal was reviewed as rendered pixels in light and dark that way, not only as asserted DOM.
+`lib/cdp.js` hands `fn` a raw `send(method, params)` alongside `evaluate`, so a test — or a development-time script — reaches `Page.captureScreenshot` and `Emulation.setDeviceMetricsOverride` directly. The search modal was reviewed as rendered pixels in light and dark that way, not only as asserted DOM.
 
 Real mouse and keyboard input (`Input.dispatchMouseEvent` — dragging a slider, hovering a chart) is still development practice rather than suite coverage. That practice caught the date-picker's self-closing arrows, the CSP-dropped grid styles, and the chart `options` series wipe-out.
