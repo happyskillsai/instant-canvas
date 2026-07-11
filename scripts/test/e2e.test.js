@@ -70,7 +70,7 @@ test.before(async () => {
 	npm(['install', '--prefix', prefix, '--no-audit', '--no-fund', '--no-save', '--loglevel=error', tarball], { cwd: prefix })
 
 	bin = path.join(prefix, 'node_modules', '.bin', 'instant-canvas')
-	installedDir = path.join(prefix, 'node_modules', 'instant-canvas')
+	installedDir = path.join(prefix, 'node_modules', '@happyskillsai', 'instant-canvas')
 	ws = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'ic-e2e-ws-')))
 	stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ic-e2e-state-'))
 	fs.writeFileSync(path.join(ws, 'report.canvas.json'), JSON.stringify({

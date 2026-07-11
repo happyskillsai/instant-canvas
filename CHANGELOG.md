@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Changed
+- **The npm package is scoped: `@happyskillsai/instant-canvas`.** npm's typosquat rule blocks the unscoped `instant-canvas` (punctuation-insensitively "too similar" to the squatted, abandoned `instantcanvas`), so the package publishes under the happyskillsai org with `publishConfig.access public`. The canonical invocation becomes `npx -y @happyskillsai/instant-canvas <command>`; the installed command name stays plain `instant-canvas`, and every internal identifier — the `"instantcanvas": 1` marker, the `/healthz` name, the `INSTANTCANVAS_*` env vars, the state-dir layout — is unchanged. v0.3.0 was tagged but never reached npm, so the scoped name ships with no unscoped predecessor.
+
 ## [0.3.0] - 2026-07-11
 
 ### Security

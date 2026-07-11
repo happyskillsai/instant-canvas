@@ -14,7 +14,7 @@ Death to the admin panel: a local, schema-driven canvas runtime that lets coding
 
 ## What this repository is
 
-**This repository is the `instant-canvas` npm package, and the workbench that maintains it.** The whole runtime — the CLI (`scripts/instantcanvas.js`), the per-workspace kernel, the validator and catalog, the browser app, and the vendored assets — lives at the repo root and publishes to npm as `instant-canvas`, invoked via `npx instant-canvas <command>` from any directory.
+**This repository is the `@happyskillsai/instant-canvas` npm package, and the workbench that maintains it.** The whole runtime — the CLI (`scripts/instantcanvas.js`), the per-workspace kernel, the validator and catalog, the browser app, and the vendored assets — lives at the repo root and publishes to npm as `@happyskillsai/instant-canvas` (the unscoped name is blocked by npm's similarity rule), invoked via `npx @happyskillsai/instant-canvas <command>` from any directory. The installed command is plain `instant-canvas`.
 
 The [HappySkills](https://happyskills.dev) skill at `.agents/skills/instant-canvas/` (published as `nicolasdao/instant-canvas`) is the agent-facing contract only: SKILL.md, skill.json, and LICENSE, ~20 KB in total. It teaches agents to drive the CLI through npx; the heavy files (a ~2.6 MB strict Plotly build, a ~1 MB highlight.js bundle) ship in the npm tarball and are fetched lazily on first use. This split is what makes the skill publishable at all — the old runtime-in-skill bundle was ~4.4 MB against a 2 MB registry cap (see [docs/gotchas/packaging.md](docs/gotchas/packaging.md)).
 
@@ -37,23 +37,23 @@ Prerequisites: Node ≥ 20 (with npx), a desktop browser. Commands run from any 
 
 ```bash
 # explore the contract (lean index → one schema at a time)
-npx instant-canvas catalog
-npx instant-canvas catalog sankey
+npx @happyskillsai/instant-canvas catalog
+npx @happyskillsai/instant-canvas catalog sankey
 
 # render a canvas (spawns/reuses the workspace kernel, opens the browser)
-npx instant-canvas open examples/report.canvas.json
+npx @happyskillsai/instant-canvas open examples/report.canvas.json
 
 # the agentic loop
-npx instant-canvas stamp my.canvas.json      # the CLI writes "createdWith", never the agent
-npx instant-canvas validate my.canvas.json   # exit 1 → fix from errors[] → repeat
-npx instant-canvas open my.canvas.json       # one JSON result on stdout
+npx @happyskillsai/instant-canvas stamp my.canvas.json      # the CLI writes "createdWith", never the agent
+npx @happyskillsai/instant-canvas validate my.canvas.json   # exit 1 → fix from errors[] → repeat
+npx @happyskillsai/instant-canvas open my.canvas.json       # one JSON result on stdout
 
 # print a document canvas to PDF (needs a local Chrome)
-npx instant-canvas print report.canvas.json --out report.pdf
+npx @happyskillsai/instant-canvas print report.canvas.json --out report.pdf
 
 # lifecycle
-npx instant-canvas status
-npx instant-canvas stop
+npx @happyskillsai/instant-canvas status
+npx @happyskillsai/instant-canvas stop
 ```
 
 Maintainers run the same CLI from the working tree — `node scripts/instantcanvas.js <command>` — and the tests with `npm test` (215 tests, zero deps; the browser tests skip without Chrome; equivalent to `node --test scripts/test/`). `npm run coverage:cli` enforces the CLI's 100% line coverage. `npm run rls <major|minor|patch|x.y.z>` bumps the package version — validated semver, forward-only. Releases are orchestrated end to end by the `/release-cli` project skill — see [docs/releasing.md](docs/releasing.md).
@@ -63,7 +63,7 @@ Maintainers run the same CLI from the working tree — `node scripts/instantcanv
 ## Project Structure
 
 ```
-package.json                     THE PRODUCT — npm package "instant-canvas" (bin: instant-canvas)
+package.json                     THE PRODUCT — npm package "@happyskillsai/instant-canvas" (bin: instant-canvas)
 scripts/                         Ships to npm (scripts/test/ excluded by the files allowlist)
   instantcanvas.js               CLI: open | print | stamp | validate | catalog | status | stop
   kernel.js                      Per-workspace localhost server (HTTP + hand-rolled WS)

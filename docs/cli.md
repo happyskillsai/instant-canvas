@@ -8,7 +8,7 @@ source:
 
 # CLI
 
-Entry point: `npx instant-canvas <command>`, run from any directory — the current directory is the workspace unless `--workspace` overrides it. The npm `bin` points at `scripts/instantcanvas.js`, so maintainers run `node scripts/instantcanvas.js <command>` from the repo root for the same thing. Node ≥ 20 is enforced first (exit 2 otherwise).
+Entry point: `npx @happyskillsai/instant-canvas <command>`, run from any directory — the current directory is the workspace unless `--workspace` overrides it. The npm `bin` points at `scripts/instantcanvas.js`, so maintainers run `node scripts/instantcanvas.js <command>` from the repo root for the same thing. Node ≥ 20 is enforced first (exit 2 otherwise).
 
 ## Output discipline
 

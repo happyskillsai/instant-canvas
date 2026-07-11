@@ -8,7 +8,7 @@ allowed-tools: Bash, Read, Write, Edit
 
 Render data visually and collect user input safely, in the user's own browser. You only wrangle data into a strict JSON schema — the runtime owns all rendering. A per-workspace localhost kernel serves the canvases with hot reload; form values (including secrets) are written **directly to local files** and you receive redacted metadata only.
 
-All commands run via `npx` from any directory — the current directory is the workspace unless `--workspace` says otherwise. `IC="npx -y instant-canvas"` (Node ≥ 20; npx fetches the CLI on first use, and it has zero npm dependencies).
+All commands run via `npx` from any directory — the current directory is the workspace unless `--workspace` says otherwise. `IC="npx -y @happyskillsai/instant-canvas"` (Node ≥ 20; npx fetches the CLI on first use, and it has zero npm dependencies).
 
 ## When to use
 

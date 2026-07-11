@@ -23,7 +23,11 @@ Against `happyskills@1.20.1` (`MAX_FILE_SIZE` 1 MB, `MAX_TOTAL_SIZE` 2 MB) the o
 
 ## Testing a packed tarball with npx needs `-p`, or npx executes the file
 
-`npx /path/to/instant-canvas-0.3.0.tgz <cmd>` does not install the tarball — an argument containing `/` is treated as the command itself, so npx tries to *execute the .tgz* and dies with `Permission denied`. A relative spec (`npx -y ../foo.tgz`) fails differently: npm resolves it against its computed prefix, not the shell's cwd, producing ENOENT from a surprise directory. The working form is `npx -y -p /abs/path/instant-canvas-<v>.tgz instant-canvas <command>`. Only a bare registry name works as a direct spec: `npx -y instant-canvas <command>`.
+`npx /path/to/happyskillsai-instant-canvas-<v>.tgz <cmd>` does not install the tarball — an argument containing `/` is treated as the command itself, so npx tries to *execute the .tgz* and dies with `Permission denied`. A relative spec (`npx -y ../foo.tgz`) fails differently: npm resolves it against its computed prefix, not the shell's cwd, producing ENOENT from a surprise directory. The working form is `npx -y -p /abs/path/happyskillsai-instant-canvas-<v>.tgz instant-canvas <command>`. Only a bare registry name works as a direct spec: `npx -y @happyskillsai/instant-canvas <command>`.
+
+## A 404 on `npm view` does not mean the name is publishable
+
+npm's typosquat protection rejects a new **unscoped** name at publish time when it is "too similar" to an existing package — similarity is punctuation-insensitive, so `instant-canvas` is blocked forever by the squatted `instantcanvas` (a dead `0.0.1-dev` stub from 2022) even though `npm view instant-canvas` 404s. Check the de-punctuated name too before betting on an unscoped name, or publish scoped from the start — scoped names (`@happyskillsai/...`) are exempt, which is why this package is scoped. First scoped publish needs `--access=public` (or `publishConfig.access` in package.json, which this repo sets).
 
 ## The vendored Plotly build is not interchangeable with a published dist
 

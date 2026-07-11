@@ -711,7 +711,7 @@ function isInteractiveBlock(b) {
 	return typeOf(b) === 'object' && (b.type === 'form' || b.type === 'confirm')
 }
 
-const STAMP_FIX = 'Run `npx instant-canvas stamp <canvas.json>` — the CLI fills the version in from its own manifest. Never write this value by hand.'
+const STAMP_FIX = 'Run `npx @happyskillsai/instant-canvas stamp <canvas.json>` — the CLI fills the version in from its own manifest. Never write this value by hand.'
 
 /**
  * The provenance stamp is the one property no agent may author: it must come

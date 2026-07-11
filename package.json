@@ -1,6 +1,9 @@
 {
-	"name": "instant-canvas",
+	"name": "@happyskillsai/instant-canvas",
 	"version": "0.3.0",
+	"publishConfig": {
+		"access": "public"
+	},
 	"description": "Local canvas runtime for coding agents: renders canvas JSON (markdown, KPIs, tables, 26 chart kinds incl. 3D and ML plots, forms) via a per-workspace localhost kernel and collects input/secrets straight to local files.",
 	"license": "BSD-3-Clause",
 	"repository": {
