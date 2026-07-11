@@ -2,10 +2,10 @@
 description: Browser-side gotchas — CSP surprises, Plotly constraints, WebGL context limits, and popover event traps discovered while building the UI.
 tags: [gotchas, frontend, csp, plotly, webgl]
 source:
-  - .agents/skills/instant-canvas/scripts/web/app.js
-  - .agents/skills/instant-canvas/scripts/web/csp-shim.js
-  - .agents/skills/instant-canvas/scripts/web/styles.css
-  - .agents/skills/instant-canvas/scripts/web/index.html
+  - scripts/web/app.js
+  - scripts/web/csp-shim.js
+  - scripts/web/styles.css
+  - scripts/web/index.html
 ---
 
 # Gotchas — Frontend

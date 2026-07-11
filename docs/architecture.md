@@ -2,13 +2,13 @@
 description: How the CLI, per-workspace kernel, and browser fit together — process model, registry, sessions, hot reload, and the security perimeter.
 tags: [architecture, kernel, sessions, websocket, security]
 source:
-  - .agents/skills/instant-canvas/scripts/kernel.js
-  - .agents/skills/instant-canvas/scripts/lib/paths.js
-  - .agents/skills/instant-canvas/scripts/lib/registry.js
-  - .agents/skills/instant-canvas/scripts/lib/session.js
-  - .agents/skills/instant-canvas/scripts/lib/scan.js
-  - .agents/skills/instant-canvas/scripts/lib/fsatomic.js
-  - .agents/skills/instant-canvas/scripts/lib/browser.js
+  - scripts/kernel.js
+  - scripts/lib/paths.js
+  - scripts/lib/registry.js
+  - scripts/lib/session.js
+  - scripts/lib/scan.js
+  - scripts/lib/fsatomic.js
+  - scripts/lib/browser.js
 ---
 
 # Architecture
@@ -38,7 +38,7 @@ The registry (`lib/registry.js`) is a global **state-only** directory mapping wo
 - `acquireSpawnLock()` serializes concurrent spawns per workspace with a `wx`-created lock file; locks older than 15 s are broken. A second contender polls `readAlive` while waiting and returns the winner's entry instead of spawning.
 - Registry entries, `.env` files, and state files are written via `lib/fsatomic.js` — temp file + rename, mode `0o600` on non-Windows.
 
-Test hooks: `INSTANTCANVAS_STATE_DIR` overrides the state dir; `INSTANTCANVAS_LOCK_WAIT_MS` shortens the lock wait.
+Test hooks: `INSTANTCANVAS_STATE_DIR` overrides the state dir; `INSTANTCANVAS_LOCK_WAIT_MS` shortens the lock wait; `INSTANTCANVAS_SPAWN_WAIT_MS` shortens the CLI's kernel-spawn deadline; `INSTANTCANVAS_PRINT_WAIT_MS` shortens `print`'s render-readiness deadline.
 
 ## Request perimeter
 
@@ -87,7 +87,7 @@ The WebSocket server is hand-rolled RFC 6455 inside `kernel.js` (~100 lines: acc
 
 ## Version handshake
 
-`lib/skillmeta.js` is the **one place** `skill.json` is read. The CLI, the kernel's `/healthz`, the schema's envelope example, the `stamp` command and the browser footer all pull the version from it, so they cannot disagree; `provenance.test.js` fails if anything else opens `skill.json`.
+`lib/pkgmeta.js` is the **one place** `package.json` is read. The CLI, the kernel's `/healthz`, the schema's envelope example, the `stamp` command and the browser footer all pull the version from it, so they cannot disagree; `provenance.test.js` fails if anything else opens `package.json`.
 
 This process-level handshake is unrelated to a canvas's `createdWith` stamp: the handshake keeps two *running processes* in step, while the stamp records what wrote a *file* and is expected to fall behind it (see [canvas-schema.md](canvas-schema.md)).
 

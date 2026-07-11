@@ -16,20 +16,22 @@
       "headings": [
         "InstantCanvas",
         "Table of Contents",
-        "What this repository is (and is not)",
+        "What this repository is",
         "Overview",
         "Getting Started",
         "Project Structure",
         "Documentation"
       ],
-      "line_count": 95,
+      "line_count": 102,
       "links_to": [
         "docs/architecture.md",
         "docs/canvas-schema.md",
         "docs/cli.md",
         "docs/frontend.md",
         "docs/gotchas.md",
+        "docs/gotchas/packaging.md",
         "docs/mission.md",
+        "docs/releasing.md",
         "docs/security.md",
         "docs/testing.md"
       ],
@@ -71,13 +73,13 @@
       "parse_error": null,
       "path": "docs/architecture.md",
       "source": [
-        ".agents/skills/instant-canvas/scripts/kernel.js",
-        ".agents/skills/instant-canvas/scripts/lib/paths.js",
-        ".agents/skills/instant-canvas/scripts/lib/registry.js",
-        ".agents/skills/instant-canvas/scripts/lib/session.js",
-        ".agents/skills/instant-canvas/scripts/lib/scan.js",
-        ".agents/skills/instant-canvas/scripts/lib/fsatomic.js",
-        ".agents/skills/instant-canvas/scripts/lib/browser.js"
+        "scripts/kernel.js",
+        "scripts/lib/paths.js",
+        "scripts/lib/registry.js",
+        "scripts/lib/session.js",
+        "scripts/lib/scan.js",
+        "scripts/lib/fsatomic.js",
+        "scripts/lib/browser.js"
       ],
       "source_unresolved": [],
       "tags": [
@@ -118,11 +120,11 @@
       "parse_error": null,
       "path": "docs/canvas-schema.md",
       "source": [
-        ".agents/skills/instant-canvas/scripts/lib/schema.js",
-        ".agents/skills/instant-canvas/scripts/lib/validate.js",
-        ".agents/skills/instant-canvas/scripts/lib/catalog.js",
-        ".agents/skills/instant-canvas/scripts/lib/markdownsrc.js",
-        ".agents/skills/instant-canvas/scripts/lib/skillmeta.js"
+        "scripts/lib/schema.js",
+        "scripts/lib/validate.js",
+        "scripts/lib/catalog.js",
+        "scripts/lib/markdownsrc.js",
+        "scripts/lib/pkgmeta.js"
       ],
       "source_unresolved": [],
       "tags": [
@@ -140,7 +142,7 @@
     },
     {
       "dangling": false,
-      "description": "The instantcanvas CLI — commands, flags, exit codes, stdout discipline, the result contract, and the agent workflow it enables.",
+      "description": "The instant-canvas CLI — commands, flags, exit codes, stdout discipline, the result contract, and the agent workflow it enables.",
       "has_frontmatter": true,
       "headings": [
         "CLI",
@@ -162,8 +164,8 @@
       "parse_error": null,
       "path": "docs/cli.md",
       "source": [
-        ".agents/skills/instant-canvas/scripts/instantcanvas.js",
-        ".agents/skills/instant-canvas/scripts/lib/cdp.js"
+        "scripts/instantcanvas.js",
+        "scripts/lib/cdp.js"
       ],
       "source_unresolved": [],
       "tags": [
@@ -202,11 +204,11 @@
       "parse_error": null,
       "path": "docs/frontend.md",
       "source": [
-        ".agents/skills/instant-canvas/scripts/web/index.html",
-        ".agents/skills/instant-canvas/scripts/web/app.js",
-        ".agents/skills/instant-canvas/scripts/web/csp-shim.js",
-        ".agents/skills/instant-canvas/scripts/web/styles.css",
-        ".agents/skills/instant-canvas/scripts/web/vendor/**",
+        "scripts/web/index.html",
+        "scripts/web/app.js",
+        "scripts/web/csp-shim.js",
+        "scripts/web/styles.css",
+        "scripts/web/vendor/**",
         "assets/logo.svg"
       ],
       "source_unresolved": [],
@@ -286,10 +288,10 @@
       "parse_error": null,
       "path": "docs/gotchas/frontend.md",
       "source": [
-        ".agents/skills/instant-canvas/scripts/web/app.js",
-        ".agents/skills/instant-canvas/scripts/web/csp-shim.js",
-        ".agents/skills/instant-canvas/scripts/web/styles.css",
-        ".agents/skills/instant-canvas/scripts/web/index.html"
+        "scripts/web/app.js",
+        "scripts/web/csp-shim.js",
+        "scripts/web/styles.css",
+        "scripts/web/index.html"
       ],
       "source_unresolved": [],
       "tags": [
@@ -307,12 +309,14 @@
     },
     {
       "dangling": false,
-      "description": "HappySkills packaging constraints — bundle caps, description validators, and scaffolding rules that shaped the skill's metadata.",
+      "description": "Packaging constraints — what ships where (npm tarball vs HappySkills bundle), the size caps that forced the CLI migration, npx tarball testing, description validators, and scaffolding rules.",
       "has_frontmatter": true,
       "headings": [
-        "Gotchas — Skill Packaging (HappySkills)",
-        "Everything inside the skill folder ships — keep maintainer material out",
-        "Two size caps, and the per-file one is the sharp edge",
+        "Gotchas — Packaging (npm CLI & HappySkills skill)",
+        "Everything inside the skill folder ships — keep everything else out",
+        "The npm tarball is an allowlist — verify with `npm pack --dry-run`",
+        "The size caps that blocked skill publishing are solved by relocation, not shrinking",
+        "Testing a packed tarball with npx needs `-p`, or npx executes the file",
         "The vendored Plotly build is not interchangeable with a published dist",
         "Description validators are strict and double-layered",
         "Never scaffold a skill by hand",
@@ -325,12 +329,14 @@
       "path": "docs/gotchas/packaging.md",
       "source": [
         ".agents/skills/instant-canvas/skill.json",
-        ".agents/skills/instant-canvas/SKILL.md"
+        ".agents/skills/instant-canvas/SKILL.md",
+        "package.json"
       ],
       "source_unresolved": [],
       "tags": [
         "gotchas",
         "happyskills",
+        "npm",
         "packaging"
       ],
       "toc": {
@@ -361,9 +367,9 @@
       "parse_error": null,
       "path": "docs/gotchas/runtime.md",
       "source": [
-        ".agents/skills/instant-canvas/scripts/kernel.js",
-        ".agents/skills/instant-canvas/scripts/instantcanvas.js",
-        ".agents/skills/instant-canvas/scripts/lib/registry.js"
+        "scripts/kernel.js",
+        "scripts/instantcanvas.js",
+        "scripts/lib/registry.js"
       ],
       "source_unresolved": [],
       "tags": [
@@ -391,18 +397,21 @@
         "A new test that cannot fail is worse than no test",
         "A new required field makes every negative fixture pass for the wrong reason",
         "Subtests cannot reach parent-context servers (Node 24.0.x)",
+        "A server inside the test-runner process is invisible to subprocesses (Node 24.0.x)",
+        "An outer npm lifecycle leaks `npm_config_*` into nested npm calls",
+        "Faking `process.platform` splits workspace identity",
         "`node --test <dir>` does not expand the directory",
         "Set the state dir with `||=`, before requiring the registry",
         "A security scan can trip over its own test file",
         "Fake registry entries in shared state dirs look like leaks"
       ],
-      "line_count": 56,
+      "line_count": 68,
       "links_to": [],
       "over_size": false,
       "parse_error": null,
       "path": "docs/gotchas/testing.md",
       "source": [
-        ".agents/skills/instant-canvas/scripts/test/**"
+        "scripts/test/**"
       ],
       "source_unresolved": [],
       "tags": [
@@ -446,6 +455,45 @@
     },
     {
       "dangling": false,
+      "description": "How instant-canvas releases are cut — the rls version bumper, the release-cli skill's gates and changelog stamping, the v-tag convention, and the two manual publishes (npm, HappySkills).",
+      "has_frontmatter": true,
+      "headings": [
+        "Releasing",
+        "One version, two artifacts",
+        "The version bumper: `npm run rls`",
+        "The release workflow: the `release-cli` skill",
+        "Publishing checklist (manual, after the release commit and tag)"
+      ],
+      "line_count": 46,
+      "links_to": [
+        "docs/architecture.md",
+        "docs/testing.md"
+      ],
+      "over_size": false,
+      "parse_error": null,
+      "path": "docs/releasing.md",
+      "source": [
+        "tools/rls.js",
+        ".agents/skills/release-cli/SKILL.md",
+        ".agents/skills/release-cli/scripts/preflight.sh",
+        ".agents/skills/release-cli/scripts/syncversion.js"
+      ],
+      "source_unresolved": [],
+      "tags": [
+        "release",
+        "versioning",
+        "changelog",
+        "semver",
+        "npm"
+      ],
+      "toc": {
+        "linked": false,
+        "present": false,
+        "stale": false
+      }
+    },
+    {
+      "dangling": false,
       "description": "The secret-handling model — what InstantCanvas guarantees, how redaction and workspace confinement work, and what it deliberately does not protect against.",
       "has_frontmatter": true,
       "headings": [
@@ -462,13 +510,13 @@
       "parse_error": null,
       "path": "docs/security.md",
       "source": [
-        ".agents/skills/instant-canvas/scripts/lib/redact.js",
-        ".agents/skills/instant-canvas/scripts/lib/envfile.js",
-        ".agents/skills/instant-canvas/scripts/lib/jsonfile.js",
-        ".agents/skills/instant-canvas/scripts/lib/markdownsrc.js",
-        ".agents/skills/instant-canvas/scripts/lib/fsatomic.js",
-        ".agents/skills/instant-canvas/scripts/kernel.js",
-        ".agents/skills/instant-canvas/scripts/instantcanvas.js"
+        "scripts/lib/redact.js",
+        "scripts/lib/envfile.js",
+        "scripts/lib/jsonfile.js",
+        "scripts/lib/markdownsrc.js",
+        "scripts/lib/fsatomic.js",
+        "scripts/kernel.js",
+        "scripts/instantcanvas.js"
       ],
       "source_unresolved": [],
       "tags": [
@@ -491,19 +539,21 @@
         "Testing",
         "Suite layout",
         "Isolation patterns",
+        "Coverage",
         "Security regressions",
         "Browser verification"
       ],
-      "line_count": 65,
+      "line_count": 86,
       "links_to": [
-        "docs/gotchas/testing.md"
+        "docs/gotchas/testing.md",
+        "docs/releasing.md"
       ],
       "over_size": false,
       "parse_error": null,
       "path": "docs/testing.md",
       "source": [
-        ".agents/skills/instant-canvas/scripts/test/**",
-        ".agents/skills/instant-canvas/scripts/lib/cdp.js"
+        "scripts/test/**",
+        "scripts/lib/cdp.js"
       ],
       "source_unresolved": [],
       "tags": [

@@ -2,11 +2,11 @@
 description: The canvas JSON contract — envelope, six block types, 26 chart kinds, 16 field types, fieldset layout, validation rules, and the progressive-disclosure catalog.
 tags: [schema, validation, catalog, charts, forms]
 source:
-  - .agents/skills/instant-canvas/scripts/lib/schema.js
-  - .agents/skills/instant-canvas/scripts/lib/validate.js
-  - .agents/skills/instant-canvas/scripts/lib/catalog.js
-  - .agents/skills/instant-canvas/scripts/lib/markdownsrc.js
-  - .agents/skills/instant-canvas/scripts/lib/skillmeta.js
+  - scripts/lib/schema.js
+  - scripts/lib/validate.js
+  - scripts/lib/catalog.js
+  - scripts/lib/markdownsrc.js
+  - scripts/lib/pkgmeta.js
 ---
 
 # Canvas Schema, Validator, and Catalog
@@ -18,7 +18,7 @@ source:
 ```jsonc
 {
   "instantcanvas": 1,          // required marker; doubles as the workspace-scan discriminator
-  "createdWith": "0.2.1",      // required provenance stamp; written by `stamp`, never by the agent
+  "createdWith": "0.3.0",      // required provenance stamp; written by `stamp`, never by the agent
   "title": "Q3 Report",        // required
   "description": "optional",
   "blocks": [ /* Block[] */ ]   // XOR "pages": [{"name": "Tab", "blocks": [...]}]
@@ -29,15 +29,15 @@ A canvas holds **at most one interactive block** (`form` or `confirm`) across al
 
 ### `createdWith`: provenance, not compatibility
 
-The two version-shaped fields mean different things. `instantcanvas: 1` is the **contract** version, pinned by `enum: [VERSION]` and reused by `lib/scan.js` as the discriminator that decides what is a canvas at all. `createdWith` is the **skill** version that authored the file, read from `skill.json` through `lib/skillmeta.js`.
+The two version-shaped fields mean different things. `instantcanvas: 1` is the **contract** version, pinned by `enum: [VERSION]` and reused by `lib/scan.js` as the discriminator that decides what is a canvas at all. `createdWith` is the **runtime** version that authored the file, read from `package.json` through `lib/pkgmeta.js`.
 
-It exists because a canvas a user keeps outlives the skill that made it: when something looks wrong a year later, the stamp is how you find out what wrote it. That is its whole job.
+It exists because a canvas a user keeps outlives the runtime that made it: when something looks wrong a year later, the stamp is how you find out what wrote it. That is its whole job.
 
 Three rules follow, and the last is the one that is easy to get wrong:
 
-1. **Only `stamp` writes it.** An agent cannot know the runtime's version, and a hallucinated stamp validates as cleanly as a real one — a field the model authors is a field nobody can trust. `lib/skillmeta.js` is the single reader of `skill.json`, so the stamp, `/healthz`, the CLI handshake and the footer cannot drift apart (`provenance.test.js` pins that nobody opens `skill.json` a second time).
+1. **Only `stamp` writes it.** An agent cannot know the runtime's version, and a hallucinated stamp validates as cleanly as a real one — a field the model authors is a field nobody can trust. `lib/pkgmeta.js` is the single reader of `package.json`, so the stamp, `/healthz`, the CLI handshake and the footer cannot drift apart (`provenance.test.js` pins that nobody opens `package.json` a second time).
 2. **It is never rewritten.** `stamp` on an already-stamped canvas is a no-op, because the birth version *is* the datum. `--retrofit` writes `"unknown"` for canvases created before stamping existed, rather than guessing.
-3. **Drift is not an error.** The validator checks presence and shape only, never equality with the running skill. A canvas stamped `0.1.0` under a `0.9.0` runtime is normal and valid — even across a major bump, where the schema may well still be backward-compatible. The stamp is a breadcrumb for diagnosing a problem *after* one appears, not a compatibility gate. Adding a match check would reject exactly the long-lived files the stamp exists to protect. Do not add one.
+3. **Drift is not an error.** The validator checks presence and shape only, never equality with the running CLI. A canvas stamped `0.1.0` under a `0.9.0` runtime is normal and valid — even across a major bump, where the schema may well still be backward-compatible. The stamp is a breadcrumb for diagnosing a problem *after* one appears, not a compatibility gate. Adding a match check would reject exactly the long-lived files the stamp exists to protect. Do not add one.
 
 Severity is the caller's, because the audiences differ. `validate(source, {provenance})` defaults to `'error'` — the CLI's agentic loop must repair a missing stamp — while the kernel passes `'warn'`, so a human clicking an unstamped canvas in the sidebar sees their data rather than a validation error page. The agent fixes it; the reader never learns there was anything to fix.
 

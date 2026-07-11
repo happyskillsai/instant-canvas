@@ -6,9 +6,9 @@ allowed-tools: Bash, Read, Write, Edit
 
 # InstantCanvas
 
-Render data visually and collect user input safely, in the user's own browser. You only wrangle data into a strict JSON schema — the skill owns all rendering. A per-workspace localhost kernel serves the canvases with hot reload; form values (including secrets) are written **directly to local files** and you receive redacted metadata only.
+Render data visually and collect user input safely, in the user's own browser. You only wrangle data into a strict JSON schema — the runtime owns all rendering. A per-workspace localhost kernel serves the canvases with hot reload; form values (including secrets) are written **directly to local files** and you receive redacted metadata only.
 
-All commands run from this skill's root. `IC="node scripts/instantcanvas.js"` (Node ≥ 20, zero dependencies).
+All commands run via `npx` from any directory — the current directory is the workspace unless `--workspace` says otherwise. `IC="npx -y instant-canvas"` (Node ≥ 20; npx fetches the CLI on first use, and it has zero npm dependencies).
 
 ## When to use
 
@@ -29,7 +29,7 @@ Honest framing: this keeps secrets out of the conversation **during capture**. N
 1. **Browse lean**: `$IC catalog` prints a compact index — one-liners for every block, chart kind, and field type, plus when to use each. No schemas. Skip this step if you already know what you want.
 2. **Pull exact schemas, one at a time**: `$IC catalog <name>` where name is a block (`chart`, `form`, …), a **chart kind** (`sankey`, `heatmap`, `scatter`, …), a field type (`secret`, `range`, …), `fieldset`, or `envelope`. Each returns that thing's full contract: encoding/properties, data shape, and a complete working example. Do NOT use `catalog --full` unless you truly need everything.
 3. **Write** the canvas: `<name>.canvas.json` with `"instantcanvas": 1` at the top level, inside the user's workspace.
-4. **Stamp it**: `$IC stamp <file>` writes `"createdWith"` — the version of this skill — into the file. Run it once on every canvas you create. Never type that value yourself: you cannot know the runtime's version, and a wrong stamp is worse than none. Stamping again is a safe no-op.
+4. **Stamp it**: `$IC stamp <file>` writes `"createdWith"` — the version of the runtime — into the file. Run it once on every canvas you create. Never type that value yourself: you cannot know the runtime's version, and a wrong stamp is worse than none. Stamping again is a safe no-op.
 5. **Validate deterministically**: `$IC validate <file>`. On exit 1, read `errors[]` — each has `code`, `path`, `message`, and usually a `hint` ("Did you mean …") and a correct `example`. Fix and re-validate until `{"ok": true}`. `open` also refuses invalid canvases with the same errors.
 6. **Open**: `$IC open <file> [--workspace <dir>]` — display canvases return immediately; form/confirm canvases **block** until the human responds in the browser.
 7. Parse the single JSON document on stdout (logs go to stderr) and continue from that metadata only.
@@ -40,6 +40,7 @@ If `validate` or `open` reports `MISSING_CREATED_WITH`, just run `stamp` and car
 
 ```
 open <canvas.json> [--workspace <dir>] [--no-open] [--timeout <s>] [--result <file>]
+print <canvas.json> --out <file.pdf> [--workspace <dir>]    # document canvas → PDF (needs a local Chrome)
 stamp <canvas.json> [--workspace <dir>] [--retrofit]
 validate <canvas.json>
 catalog [name]            # exact machine-readable schemas: all, or one block/field type
@@ -57,14 +58,14 @@ stop [--workspace <dir>]
 ```jsonc
 {
   "instantcanvas": 1,             // required marker + contract version
-  "createdWith": "0.2.1",         // required; written by `stamp`, never by you
+  "createdWith": "0.3.0",         // required; written by `stamp`, never by you
   "title": "Q3 Report",           // required
   "description": "optional",
   "blocks": [ /* Block[] */ ]      // XOR "pages": [{"name": "Tab", "blocks": [...]}]
 }
 ```
 
-`createdWith` records which skill version wrote the canvas, so a later release can reason about a file it did not author. It is expected to fall behind the running skill as the skill evolves — an old stamp is normal and is never an error. Only its **absence** is.
+`createdWith` records which InstantCanvas version wrote the canvas, so a later release can reason about a file it did not author. It is expected to fall behind the running CLI as the runtime evolves — an old stamp is normal and is never an error. Only its **absence** is.
 
 ## Block quick reference
 
@@ -122,6 +123,7 @@ Pick from the one-line index (`$IC catalog` → `chartKinds`, with when-to-use g
 | Outcome | stdout |
 |---|---|
 | display | `{"status":"opened","url":...,"canvas":...,"workspace":...,"timestamp":...}` |
+| printed | `{"status":"printed","path":...,"pages":...,"bytes":...,"timestamp":...}` |
 | form saved | `{"status":"saved","destination":{"kind","path"},"fields":[names],"overwritten":[names],"redacted":true,"timestamp"}` |
 | form, no file dest | `{"status":"submitted","fields":[...],"values":{non-secret only}?,"timestamp"}` |
 | user cancelled / expired | `{"status":"cancelled"\|"timeout",...}` — exit 0, a clean outcome; respect the user's choice |
@@ -129,9 +131,5 @@ Pick from the one-line index (`$IC catalog` → `chartKinds`, with when-to-use g
 | error | `{"status":"error","error":{"code","message","errors"?},"timestamp"}` |
 
 Secret values appear in **no** result variant — you get field names, never values. `"return": {"includeValues": true}` (only with `"kind": "none"`) returns non-secret values.
-
-## Examples
-
-`examples/report.canvas.json` (2-page visual report), `env-setup.canvas.json` (secrets → `.env` merge), `confirm.canvas.json` (danger confirm), `mixed.canvas.json` (markdown + form → JSON config). All pass `validate`.
 
 Platform note: macOS and Linux are exercised; Windows paths/spawn are implemented per spec but not yet verified on a Windows machine.

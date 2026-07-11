@@ -1,0 +1,49 @@
+{
+	"name": "release-cli",
+	"version": "0.1.0",
+	"description": "Release workflow for the instant-canvas npm CLI — clean-tree, docs, test and coverage gates, Keep a Changelog stamping, forward-only bump via npm run rls, skill.json version mirror, v-tag and push.",
+	"type": "skill",
+	"license": "BSD-3-Clause",
+	"repository": "https://github.com/nicolasdao/instant-canvas.git",
+	"authors": [
+		"Nicolas Dao <nicolas.dao@gmail.com>"
+	],
+	"keywords": [
+		"release",
+		"changelog",
+		"semver",
+		"versioning",
+		"git",
+		"tag"
+	],
+	"dependencies": {},
+	"systemDependencies": {
+		"git": {
+			"description": "Git — the release is commits, annotated tags, and pushes; the gates and scripts resolve everything from the git root.",
+			"check": "git --version",
+			"install": {
+				"darwin": "brew install git",
+				"linux": "sudo apt-get install -y git",
+				"win32": "winget install Git.Git"
+			}
+		},
+		"node": {
+			"description": "Node.js >= 20 with npm — runs the test and coverage gates, npm run rls, and the version-mirror script.",
+			"check": "node --version",
+			"install": {
+				"darwin": "brew install node",
+				"linux": "sudo apt-get install -y nodejs",
+				"win32": "winget install OpenJS.NodeJS.LTS"
+			}
+		},
+		"python3": {
+			"description": "Python 3 — powers the optional docs-manifest sync gate; the pre-flight warns and continues without it.",
+			"check": "python3 --version",
+			"install": {
+				"darwin": "brew install python",
+				"linux": "sudo apt-get install -y python3",
+				"win32": "winget install Python.Python.3.12"
+			}
+		}
+	}
+}

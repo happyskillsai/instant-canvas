@@ -2,7 +2,7 @@
 description: node:test runner traps on Node 24, plus the browser-driving traps that make the render smoke test trustworthy.
 tags: [gotchas, testing, node24, cdp]
 source:
-  - .agents/skills/instant-canvas/scripts/test/**
+  - scripts/test/**
 ---
 
 # Gotchas — Testing
@@ -38,6 +38,18 @@ Adding a required envelope property (`createdWith`) instantly made `broken.canva
 ## Subtests cannot reach parent-context servers (Node 24.0.x)
 
 Sockets opened inside a `t.test()` subtest get `ECONNRESET`/`ECONNREFUSED` against TCP/HTTP servers created in the parent test's async context — while `lsof` shows the listener alive and healthy. Reproduced with a minimal in-process `http.createServer`; it is not the sandbox and not the kernel. Structure integration tests as **`test.before` hook + sequential top-level `test()` calls** (that crossing works); never exercise a shared server from subtests. `kernel.test.js` carries the header comment explaining this.
+
+## A server inside the test-runner process is invisible to subprocesses (Node 24.0.x)
+
+An in-runner `http` server answers in-process clients normally, but a spawned subprocess's TCP connect to it times out — reproduced with a minimal before-hook server and a `node -e` `http.get` child. Same async-context family as the subtest trap above, one ring further out, and a before hook does NOT fix it. It bites any test that registers a fake kernel and expects a spawned CLI to reach it; the signature is a ~785 ms failure (CLI startup plus the 500 ms health-ping timeout) followed by a pointless respawn. Run fakes as REAL child processes (`helpers/fakekernel.js`), created in `test.before` and killed in `test.after` — teardown in `after` also stops a failing assertion from leaking a live server that hangs the runner forever.
+
+## An outer npm lifecycle leaks `npm_config_*` into nested npm calls
+
+`npm publish --dry-run` exports `npm_config_dry_run=true` to its lifecycle scripts, so when `prepublishOnly` runs the suite, the e2e test's nested `npm pack` inherits it, packs as a dry-run, and writes no tarball — the install step then dies ENOENT on a file that was never created. Any `npm_config_*` flag leaks the same way (`--tag`, `--registry`, …). Nested npm invocations in tests must scrub `npm_*` from their env (`e2e.test.js` does).
+
+## Faking `process.platform` splits workspace identity
+
+`normalizeRoot` case-folds on macOS/Windows and not on Linux, so a `-r` preload that sets `platform = 'linux'` computes a different workspace key than the real-platform kernel it spawns whenever the path has an uppercase character — macOS temp dirs (`/var/folders/.../T/…`) always do. The CLI then waits 10 s for a kernel registered under the other key and dies `KERNEL_UNREACHABLE`. Keep such a test's workspace all-lowercase ON DISK (`/private/tmp/...`), and do not "fix" it by lowercasing a path string — `realpathSync` restores the on-disk case.
 
 ## `node --test <dir>` does not expand the directory
 

@@ -2,11 +2,11 @@
 description: The browser app — shell, sidebar, canvas search, folder browser, block renderers, bespoke form widgets, chart mapping, sweeps, theming, and the CSP constraints that shape the code.
 tags: [frontend, ui, plotly, widgets, theming, sweeps]
 source:
-  - .agents/skills/instant-canvas/scripts/web/index.html
-  - .agents/skills/instant-canvas/scripts/web/app.js
-  - .agents/skills/instant-canvas/scripts/web/csp-shim.js
-  - .agents/skills/instant-canvas/scripts/web/styles.css
-  - .agents/skills/instant-canvas/scripts/web/vendor/**
+  - scripts/web/index.html
+  - scripts/web/app.js
+  - scripts/web/csp-shim.js
+  - scripts/web/styles.css
+  - scripts/web/vendor/**
   - assets/logo.svg
 ---
 
@@ -19,7 +19,7 @@ A single static shell (`index.html` + `styles.css` + `app.js`) served by the ker
 - The token comes from `?token=` (held in memory, never localStorage); asset URLs carry it as a query. `__IC_TOKEN__` placeholders are substituted server-side because CSP forbids inline scripts.
 - Hash routing: `#/c/<encoded-rel-path>`. The sidebar is the workspace scan — the `(root)` group displays the workspace folder's real name with a house icon; subfolders are collections with hover-revealed delete. The header shows the workspace path, filling available space and trimming from the *start* (measured fitting + ResizeObserver) so the tail stays visible.
 - Hot-reload client: WebSocket with exponential backoff; `workspace` refetches the tree, `canvas` re-renders the open canvas (full re-render, state loss accepted), `navigate` routes, `session` refreshes form state. The footer pulse reflects connection health.
-- The sidebar footer's last line is the **running skill version** (`.side-foot .ver`). It reaches the page as an `__IC_VERSION__` placeholder substituted in `serveShell()`, exactly like `__IC_TOKEN__` — the CSP forbids the inline `<script>` that would otherwise carry it, and fetching one string is wasteful when the shell is already being templated. `render.test.js` asserts the rendered text in a real browser, because an unsubstituted placeholder is invisible to every server-side test.
+- The sidebar footer's last line is the **running version** (`.side-foot .ver`, from `package.json` via `lib/pkgmeta.js`). It reaches the page as an `__IC_VERSION__` placeholder substituted in `serveShell()`, exactly like `__IC_TOKEN__` — the CSP forbids the inline `<script>` that would otherwise carry it, and fetching one string is wasteful when the shell is already being templated. `render.test.js` asserts the rendered text in a real browser, because an unsubstituted placeholder is invisible to every server-side test.
 - **Canvas search** (the sidebar magnifier, `⌘K`, or `/`): a frosted-glass modal — a `backdrop-filter` blur over the `--scrim` token, with an opaque `--panel` panel floating above it. The index needs no fetch and no build step: it is `state.tree`, which the sidebar already holds and the kernel refreshes over the WebSocket, flattened and memoized against the tree object's identity. Matching is token-substring over canvas title, folder, and file name, ranked by a title boost. Result rows are built as **DOM nodes, not an HTML string**, so highlighting cannot leak markup or drop a `<mark>` inside an entity like `&amp;`.
 - **Folder browser** (the topbar `+`): a modal over `POST /api/browse`, deliberately unconfined — its whole job is to leave the current root and hand a folder to `POST /api/workspace/open`. Navigation is `navigate(dir)`, which lists first and commits `dir` only once the kernel confirms, so an unreadable folder leaves the crumb where it was. Three ways down (per-row chevron, double-click, breadcrumb segment) and two up (`..`, breadcrumb). Selecting a row is a **class toggle only** — re-listing on select is what once made the browser unnavigable (see [gotchas/frontend.md](gotchas/frontend.md)).
 

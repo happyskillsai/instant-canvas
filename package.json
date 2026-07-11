@@ -1,0 +1,44 @@
+{
+	"name": "instant-canvas",
+	"version": "0.3.0",
+	"description": "Local canvas runtime for coding agents: renders canvas JSON (markdown, KPIs, tables, 26 chart kinds incl. 3D and ML plots, forms) via a per-workspace localhost kernel and collects input/secrets straight to local files.",
+	"license": "BSD-3-Clause",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/nicolasdao/instant-canvas.git"
+	},
+	"homepage": "https://github.com/nicolasdao/instant-canvas#readme",
+	"bugs": {
+		"url": "https://github.com/nicolasdao/instant-canvas/issues"
+	},
+	"author": "Nicolas Dao <nicolas.dao@gmail.com>",
+	"keywords": [
+		"canvas",
+		"charts",
+		"dashboard",
+		"forms",
+		"secrets",
+		"env",
+		"visualization",
+		"localhost",
+		"cli",
+		"agents"
+	],
+	"engines": {
+		"node": ">=20"
+	},
+	"bin": {
+		"instant-canvas": "scripts/instantcanvas.js"
+	},
+	"files": [
+		"scripts",
+		"!scripts/test"
+	],
+	"scripts": {
+		"prepublishOnly": "node --test scripts/test/",
+		"test": "node --test scripts/test/",
+		"rls": "node tools/rls.js",
+		"coverage": "node --test --experimental-test-coverage scripts/test/",
+		"coverage:cli": "node --test --experimental-test-coverage --test-coverage-include=scripts/instantcanvas.js --test-coverage-lines=100 --test-coverage-branches=77 --test-coverage-functions=96 scripts/test/"
+	}
+}

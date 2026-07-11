@@ -1,6 +1,6 @@
 {
 	"lockVersion": 2,
-	"generatedAt": "2026-07-09T10:18:51.491Z",
+	"generatedAt": "2026-07-11T04:22:45.116Z",
 	"skills": {
 		"happyskillsai/happyskills": {
 			"version": "2.6.1",
@@ -272,6 +272,21 @@
 				"__root__"
 			],
 			"dependencies": {}
+		},
+		"nicolasdao/create-release-skill": {
+			"version": "0.4.0",
+			"ref": "refs/tags/v0.4.0",
+			"commit": "4cedf6cf651fcfa74f639d90a25bb946a9b15257e2d72388c4ce3e1be76e92a5",
+			"integrity": "sha256-8dcf791a41c90b59b240eb0570feff0c97aaee3621aef151847582e2f40d0944",
+			"base_commit": "4cedf6cf651fcfa74f639d90a25bb946a9b15257e2d72388c4ce3e1be76e92a5",
+			"base_integrity": "sha256-8dcf791a41c90b59b240eb0570feff0c97aaee3621aef151847582e2f40d0944",
+			"requested_by": [
+				"__root__"
+			],
+			"dependencies": {
+				"happyskillsai/happyskills-design": "^0.9.0"
+			},
+			"type": "skill"
 		}
 	}
 }

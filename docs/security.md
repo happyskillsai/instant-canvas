@@ -2,13 +2,13 @@
 description: The secret-handling model — what InstantCanvas guarantees, how redaction and workspace confinement work, and what it deliberately does not protect against.
 tags: [security, secrets, redaction, csp]
 source:
-  - .agents/skills/instant-canvas/scripts/lib/redact.js
-  - .agents/skills/instant-canvas/scripts/lib/envfile.js
-  - .agents/skills/instant-canvas/scripts/lib/jsonfile.js
-  - .agents/skills/instant-canvas/scripts/lib/markdownsrc.js
-  - .agents/skills/instant-canvas/scripts/lib/fsatomic.js
-  - .agents/skills/instant-canvas/scripts/kernel.js
-  - .agents/skills/instant-canvas/scripts/instantcanvas.js
+  - scripts/lib/redact.js
+  - scripts/lib/envfile.js
+  - scripts/lib/jsonfile.js
+  - scripts/lib/markdownsrc.js
+  - scripts/lib/fsatomic.js
+  - scripts/kernel.js
+  - scripts/instantcanvas.js
 ---
 
 # Security Model

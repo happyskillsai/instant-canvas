@@ -1,6 +1,6 @@
 {
 	"name": "instant-canvas",
-	"version": "0.2.1",
+	"version": "0.3.0",
 	"description": "Local canvas runtime for coding agents: renders canvas JSON (markdown, KPIs, tables, 26 chart kinds incl. 3D and ML plots, forms) via a per-workspace localhost kernel and collects input/secrets straight to local files.",
 	"type": "skill",
 	"license": "BSD-3-Clause",
@@ -21,7 +21,7 @@
 	"dependencies": {},
 	"systemDependencies": {
 		"node": {
-			"description": "Node.js >= 20 — runs the InstantCanvas CLI and per-workspace kernel (zero npm dependencies).",
+			"description": "Node.js >= 20 with npx — fetches and runs the instant-canvas CLI and its per-workspace kernel (the CLI itself has zero npm dependencies).",
 			"check": "node --version",
 			"install": {
 				"darwin": "brew install node",

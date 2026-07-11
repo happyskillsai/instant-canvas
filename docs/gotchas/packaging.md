@@ -1,29 +1,29 @@
 ---
-description: HappySkills packaging constraints — bundle caps, description validators, and scaffolding rules that shaped the skill's metadata.
-tags: [gotchas, happyskills, packaging]
+description: Packaging constraints — what ships where (npm tarball vs HappySkills bundle), the size caps that forced the CLI migration, npx tarball testing, description validators, and scaffolding rules.
+tags: [gotchas, happyskills, npm, packaging]
 source:
   - .agents/skills/instant-canvas/skill.json
   - .agents/skills/instant-canvas/SKILL.md
+  - package.json
 ---
 
-# Gotchas — Skill Packaging (HappySkills)
+# Gotchas — Packaging (npm CLI & HappySkills skill)
 
-## Everything inside the skill folder ships — keep maintainer material out
+## Everything inside the skill folder ships — keep everything else out
 
-`release`/`publish` bundles the **entire** `.agents/skills/instant-canvas/` folder; whatever you drop in there reaches every consumer and competes for their agents' context. That is why this repo splits **product** (the skill folder: SKILL.md, scripts, examples, vendored assets) from **workbench** (repo-level `docs/`, `specs/`, `prototype/`, `demos/`, tooling). Never add design notes, specs, test tooling, or dev docs inside the skill folder — put them at the repo level. The inverse also holds: anything a consumer needs must live *inside* the skill folder, because the published bundle is all they get.
+`release`/`publish` bundles the **entire** `.agents/skills/instant-canvas/` folder; whatever you drop in there reaches every consumer and competes for their agents' context. This is exactly why the runtime was migrated out (2026-07-11): the skill folder now carries only the agent-facing contract — SKILL.md, skill.json, LICENSE, ~20 KB — and 100% of the logic ships as the `instant-canvas` npm package instead, fetched lazily by `npx`. Never add scripts, design notes, specs, test tooling, or dev docs to the skill folder; if a consumer needs it, it belongs in the npm package.
 
-Note that `scripts/test/` (~264 KB, and growing — five browser/print-driving test files and their fixtures live there; the CDP client itself moved to `scripts/lib/cdp.js`) currently ships, because the walker in `file_size_rules.js` skips only dotfiles and `node_modules`. It grows every session that adds a test file (`document.test.js` alone is ~44 KB). Re-measure rather than trust this figure.
+## The npm tarball is an allowlist — verify with `npm pack --dry-run`
 
-## Two size caps, and the per-file one is the sharp edge
+The package publishes only what `package.json` `files` names: `scripts/` minus `scripts/test` (the `!scripts/test` negation), plus the files npm force-includes (package.json, README, LICENSE, CHANGELOG). After touching `files` or adding top-level directories, run `npm pack --dry-run` and read the list — a wrong allowlist either ships the tests or drops `scripts/web/`, leaving a kernel that serves nothing. Shape at migration time: 29 files, ~1.4 MB packed, ~4.3 MB unpacked.
 
-`npx happyskills validate` enforces both, from `cli/src/config/limits.js`:
+## The size caps that blocked skill publishing are solved by relocation, not shrinking
 
-- `MAX_TOTAL_SIZE` — the whole bundle
-- `MAX_FILE_SIZE` — **each individual file**
+Against `happyskills@1.20.1` (`MAX_FILE_SIZE` 1 MB, `MAX_TOTAL_SIZE` 2 MB) the old runtime-in-skill bundle was ~4.4 MB and unpublishable — `plotly.min.js` (~2.64 MB) and `highlight.min.js` (~1.01 MB) each broke the per-file cap, and the caps are bumped independently. The migration fixed this by moving the heavy files into the npm tarball, whose limits are far larger. Do not "fix" any future size pressure by shrinking a vendored bundle — both builds are load-bearing (strict Plotly, class-emitting highlight.js) — and watch that nothing heavy creeps back into the skill folder, or the caps bite again.
 
-They are bumped independently. The vendored Plotly build is ~2.64 MB in one file, so **both** caps must clear it; a total-cap raise alone is not enough. Confirm the current constants before assuming a build will publish — the historical 1 MB per-file cap would reject `plotly.min.js` outright.
+## Testing a packed tarball with npx needs `-p`, or npx executes the file
 
-Measured against `happyskills@1.20.1` (`MAX_FILE_SIZE` 1 MB, `MAX_TOTAL_SIZE` 2 MB), this skill **does not publish today**: the bundle is ~4.4 MB, and two single files exceed the per-file cap — `plotly.min.js` (~2.64 MB) and `highlight.min.js` (~1.01 MB). Raising the caps is tracked as its own piece of work; do not "fix" it by shrinking a vendored bundle, because both builds are load-bearing (strict Plotly, class-emitting highlight.js).
+`npx /path/to/instant-canvas-0.3.0.tgz <cmd>` does not install the tarball — an argument containing `/` is treated as the command itself, so npx tries to *execute the .tgz* and dies with `Permission denied`. A relative spec (`npx -y ../foo.tgz`) fails differently: npm resolves it against its computed prefix, not the shell's cwd, producing ENOENT from a surprise directory. The working form is `npx -y -p /abs/path/instant-canvas-<v>.tgz instant-canvas <command>`. Only a bare registry name works as a direct spec: `npx -y instant-canvas <command>`.
 
 ## The vendored Plotly build is not interchangeable with a published dist
 

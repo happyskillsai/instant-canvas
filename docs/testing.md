@@ -2,8 +2,8 @@
 description: The zero-dependency node:test suite — layout, isolation patterns, security regressions, and the CDP-driven headless-Chrome tests that verify rendering and UI interaction.
 tags: [testing, node-test, cdp, verification]
 source:
-  - .agents/skills/instant-canvas/scripts/test/**
-  - .agents/skills/instant-canvas/scripts/lib/cdp.js
+  - scripts/test/**
+  - scripts/lib/cdp.js
 ---
 
 # Testing
@@ -11,11 +11,10 @@ source:
 Everything runs on `node:test` with zero dependencies:
 
 ```bash
-cd .agents/skills/instant-canvas
-node --test scripts/test/
+node --test scripts/test/   # from the repo root — `npm test` is the same thing
 ```
 
-180 tests at last count, forty-seven of which drive a real browser (or headless printing) and skip when Chrome is absent. `scripts/test/index.js` exists because `node --test <dir>` does not expand a directory on the pinned Node version — the directory resolves to `index.js`, which requires every `*.test.js` (see [gotchas/testing.md](gotchas/testing.md)).
+215 tests at last count: forty-eight drive a real browser (or headless printing) and skip when Chrome is absent, and three exercise the packed npm artifact end to end and skip without npm. `scripts/test/index.js` exists because `node --test <dir>` does not expand a directory on the pinned Node version — the directory resolves to `index.js`, which requires every `*.test.js` (see [gotchas/testing.md](gotchas/testing.md)).
 
 ## Suite layout
 
@@ -27,15 +26,18 @@ node --test scripts/test/
 | `registry.test.js` | Health-ping liveness, stale-entry cleanup, spawn-lock contention and stale-lock breaking. |
 | `validate.test.js` / `catalog.test.js` | Every validator error code; per-kind chart rules; fieldset/ui/span rules; lean-vs-full catalog; the registry-tweak drift test. |
 | `markdownsrc.test.js` | The markdown `src` extension allowlist and the kernel-side read guard (`src: ".env"` is never read), frontmatter stripping, and `data:`-URI image inlining with its confinement, size-cap, and fenced-code exclusions. |
-| `provenance.test.js` | The `createdWith` stamp: only `stamp` writes it and only from `skill.json`; idempotent, byte-preserving (pretty *and* minified), refuses non-canvas JSON; drift validates cleanly and absence does not; the browser still renders an unstamped canvas; every shipped example is stamped and valid. |
+| `provenance.test.js` | The `createdWith` stamp: only `stamp` writes it and only from `package.json`; idempotent, byte-preserving (pretty *and* minified), refuses non-canvas JSON; the re-serialize fallback when the marker is the last key; the nested marker decoy that cannot hijack the splice; drift validates cleanly and absence does not; the browser still renders an unstamped canvas; every example canvas is stamped and valid. |
 | `scan.test.js` | Marker discrimination, 2-level depth, ordering; session lifecycle. |
 | `kernel.test.js` | A real spawned kernel: healthz, 403s (token, Host), asset traversal, tree, WS round-trip, sessions, collection delete, shutdown. |
-| `cli.test.js` | Usage/exit codes, validate/catalog output, the full open lifecycle including kill -9 recovery and `--result`. |
+| `cli.test.js` | Usage/exit codes, unknown flags, validate/catalog output, the full open lifecycle including kill -9 recovery and `--result`; the Node ≥ 20 guard (a `-r` preload fakes an old runtime), an unwritable `--result`, and both browser-opener outcomes — shimmed `open`/`xdg-open` on PATH, and a fake-linux preload for the headless `BROWSER_OPEN_FAILED` warn. |
+| `handshake.test.js` | The CLI against scriptable fake kernels (spawned `helpers/fakekernel.js`): version-skew restart, pending-session warn, a kernel that will not stop; kernel-rejected opens with and without error codes; session-poll tolerance (HTTP 500; three socket failures confirmed by a dead health ping; fifteen failures with a live kernel); the stop and spawn deadlines. |
 | `forms.test.js` | Blocking `open` + HTTP submit: `.env` round-trip with redaction sweep, overwrite/outside-root 409 handshakes, confirm/timeout/cancel, json destinations, url-protocol and patternMessage rules. |
 | `hardening.test.js` | Source scans (loopback literal, no third-party requires, timing-safe compare, no CORS, no `console.log` server-side) and runtime error codes (`WRITE_FAILED`, `SESSION_TIMEOUT`, `KERNEL_UNREACHABLE`). |
 | `render.test.js` | Real headless Chrome via `helpers/cdp.js`: an adversarial canvas (splom + violin + 3D + skill-rendered kinds + a sweep + a markdown document) must draw every chart, expose a slider, highlight fenced code, inline a local PNG **and SVG** as `data:` URIs, show an always-visible copy button that survives a real clipboard round-trip, carry **no** `style=""` attribute, and log zero CSP violations. Skips without Chrome. |
 | `document.test.js` | Document mode end to end. Contract: the `document` envelope shapes, interactive/sweep refusal, strict-hex colors, template-var warnings, the logo asset ladder; a spawned kernel inlining logos as `data:` URIs. Browser (skips without Chrome): brand tokens via CSSOM + the Plotly palette sink, the deck (cover/TOC/chapters/back cover) with TOC page numbers matching each anchor's sheet, the sheet-height invariant on every sheet, code-split reconstruction with highlighting intact, `printToPDF` `/Count` == sheet count for three fixtures, per-page `pdftotext` markers, the deck⇄continuous toggle reparenting the one live chart (universal: an undeclared canvas decks lazily with an auto-TOC, the reader-side TOC toggle repacks, an interactive canvas's muted deck button toasts the refusal), `beforeprint` relocation. |
-| `print.test.js` | The `print` command: result JSON shape, `/Count` == reported pages, the token/`127.0.0.1` leak regression on the PDF bytes, `CHROME_REQUIRED` on a bad `CHROME_PATH`, `--out` workspace confinement, the non-document refusal. Never asserts gl3d ink (a GPU-less machine prints blank 3D while everything else passes). |
+| `print.test.js` | The `print` command: result JSON shape, `/Count` == reported pages, the token/`127.0.0.1` leak regression on the PDF bytes, `CHROME_REQUIRED` on a bad or directory `CHROME_PATH` and when no Chrome is discoverable anywhere (a preload hides every install), canvas and `--out` workspace confinement, validation refusal before any Chrome, the non-document refusal, and the never-finished-rendering failure (`INSTANTCANVAS_PRINT_WAIT_MS`). Never asserts gl3d ink (a GPU-less machine prints blank 3D while everything else passes). |
+| `e2e.test.js` | The packed npm artifact: the tarball allowlist (runtime ships, tests and workbench never), bin wiring and shebang, and the full agentic loop run by the installed bin from a scratch workspace. Skips without npm. |
+| `rls.test.js` | `tools/rls.js`, the version bumper: keyword bumps with npm-style prerelease graduation, real semver precedence (a release outranks its own prerelease; build metadata never counts), invalid/equal/lower refusals that leave the manifest untouched, the leading-`v` hint, the nested-decoy splice guard, and formatting preservation. |
 | `browse.test.js` | Real headless Chrome: the folder-browser modal must list, select without re-listing, and descend by chevron, double-click, and breadcrumb. Skips without Chrome. |
 | `search.test.js` | Real headless Chrome: the search modal must open without fetching, match on name and folder, survive `c++` and `<script>` queries, never mark inside an entity, and wire ⌘K / `/` / arrows / Esc correctly. Skips without Chrome. |
 
@@ -43,7 +45,26 @@ node --test scripts/test/
 
 - **State dir**: every test file that touches the registry sets `INSTANTCANVAS_STATE_DIR` with `||=` *before requiring* `lib/registry` — first loader wins, so the whole single-process suite shares one temp state dir instead of fighting over it (the plain-assignment version caused cross-file kernel misses).
 - **Kernel tests are before-hook + top-level tests, never subtests** — on the pinned Node 24.0.x, sockets opened inside a `t.test()` subtest cannot reach servers created in the parent test's async context (see [gotchas/testing.md](gotchas/testing.md)).
-- Timing knobs for slow paths: `INSTANTCANVAS_LOCK_WAIT_MS` makes the `KERNEL_UNREACHABLE` test fast.
+- **Fake kernels are child processes** (`helpers/fakekernel.js`), never in-test `http` servers — on Node 24.0.x a server inside the runner process is invisible to subprocess clients (see [gotchas/testing.md](gotchas/testing.md)). They are created in `test.before` and killed in `test.after`, so a failing assertion cannot leak a live server that hangs the runner.
+- Timing knobs for slow paths: `INSTANTCANVAS_LOCK_WAIT_MS` and `INSTANTCANVAS_SPAWN_WAIT_MS` make the two `KERNEL_UNREACHABLE` deadlines fast; `INSTANTCANVAS_PRINT_WAIT_MS` expires `print`'s render-readiness deadline.
+
+## Coverage
+
+```bash
+npm run coverage        # full suite with a per-file report (node --experimental-test-coverage)
+npm run coverage:cli    # the enforced gate: scripts/instantcanvas.js at 100 / 77 / 96 (lines / branches / functions)
+```
+
+The built-in reporter counts **subprocess** execution — every spawned CLI and kernel inherits coverage tracking — so the numbers are real even though almost every CLI test runs `instantcanvas.js` as a child process. Both commands double as hard release gates (see [releasing.md](releasing.md)).
+
+`scripts/instantcanvas.js` holds **100% line coverage and 96.55% function coverage**, pinned by the `coverage:cli` thresholds so it cannot silently regress. What the numbers deliberately exclude:
+
+- One region carries a `node:coverage ignore` comment: the re-parse `catch` inside `spliceStamp`, defensively unreachable because the input already parsed as JSON — the reachable guard is the diff below it, which `provenance.test.js` exercises via the nested-decoy canvas.
+- The uncovered branches are structural on a single platform/runtime: the `win32` side of the detached-spawn flag, the rethrow guards in `main().catch` and `cmdCatalog` (they fire only if error handling itself fails), health-object truthiness sub-branches that need a malformed registry entry, and the `.catch(() => false)` readiness-poll arrow in `print` (fires only if `evaluate` rejects mid-poll).
+
+Reachability tricks (all `-r` preloads in `scripts/test/helpers/`): `fakenode18.js` fakes an old runtime for the Node ≥ 20 guard, `fakelinux.js` fakes display-less Linux for the browser warn, `nochrome.js` hides every Chrome install from discovery, and `nokernel.js` sabotages the kernel spawn for the spawn deadline.
+
+One caveat pinned by experiment: `--test-coverage-include` silently drops files that never loaded, so a filtered gate would pass vacuously if the target file never executed. `coverage:cli` is safe because it runs the full suite, which always executes the CLI.
 
 ## Security regressions
 

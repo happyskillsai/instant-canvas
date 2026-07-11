@@ -2,9 +2,9 @@
 description: Kernel and CLI gotchas — process lifecycle, sockets, stdout, and state-dir traps learned while building the runtime.
 tags: [gotchas, kernel, cli]
 source:
-  - .agents/skills/instant-canvas/scripts/kernel.js
-  - .agents/skills/instant-canvas/scripts/instantcanvas.js
-  - .agents/skills/instant-canvas/scripts/lib/registry.js
+  - scripts/kernel.js
+  - scripts/instantcanvas.js
+  - scripts/lib/registry.js
 ---
 
 # Gotchas — Runtime (kernel & CLI)

@@ -1,14 +1,14 @@
 ---
-description: The instantcanvas CLI — commands, flags, exit codes, stdout discipline, the result contract, and the agent workflow it enables.
+description: The instant-canvas CLI — commands, flags, exit codes, stdout discipline, the result contract, and the agent workflow it enables.
 tags: [cli, commands, agent-workflow]
 source:
-  - .agents/skills/instant-canvas/scripts/instantcanvas.js
-  - .agents/skills/instant-canvas/scripts/lib/cdp.js
+  - scripts/instantcanvas.js
+  - scripts/lib/cdp.js
 ---
 
 # CLI
 
-Entry point: `node scripts/instantcanvas.js <command>` from the skill root (`.agents/skills/instant-canvas/`). Node ≥ 20 is enforced first (exit 2 otherwise).
+Entry point: `npx instant-canvas <command>`, run from any directory — the current directory is the workspace unless `--workspace` overrides it. The npm `bin` points at `scripts/instantcanvas.js`, so maintainers run `node scripts/instantcanvas.js <command>` from the repo root for the same thing. Node ≥ 20 is enforced first (exit 2 otherwise).
 
 ## Output discipline
 
@@ -75,7 +75,7 @@ Secret values appear in **no** variant — see [security.md](security.md).
 1. `catalog` → lean index → pick components.
 2. `catalog <name>` → exact schema + example for each pick.
 3. Write `<name>.canvas.json` inside the workspace.
-4. `stamp` → the skill writes `createdWith` from its own manifest.
+4. `stamp` → the CLI writes `createdWith` from its own package manifest.
 5. `validate` → fix from `errors[]` → repeat until `{"ok": true}`.
 6. `open` → parse the one-line result → continue from metadata only.
 
