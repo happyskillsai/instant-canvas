@@ -25,6 +25,7 @@ const { writeAtomic } = require('./lib/fsatomic')
 const { insideRoot } = require('./lib/paths')
 const { withChrome, findChrome } = require('./lib/cdp')
 const { PKG_VERSION, UNKNOWN_VERSION } = require('./lib/pkgmeta')
+const { hasMarkdownExtension } = require('./lib/markdownsrc')
 
 const VERSION = PKG_VERSION
 const KERNEL = path.join(__dirname, 'kernel.js')
@@ -34,17 +35,19 @@ const USAGE = `InstantCanvas v${VERSION} — local canvas runtime for coding age
 Usage: npx -y @happyskillsai/instant-canvas <command> [args]
 
 Commands:
-  open <canvas.json> [--workspace <dir>] [--no-open] [--timeout <s>] [--result <file>]
+  open <canvas.json | file.md> [--workspace <dir>] [--no-open] [--timeout <s>] [--result <file>]
       Render a canvas in the browser. Display canvases return immediately;
       interactive canvases (form/confirm) block until the human responds.
+      A .md/.mdx/.markdown file renders directly — no canvas JSON needed.
   stamp <canvas.json> [--workspace <dir>] [--retrofit]
       Write this CLI's version into the canvas as "createdWith". Idempotent:
       an existing stamp is never rewritten. --retrofit stamps "unknown" for a
       canvas created before stamping existed. Every canvas needs this once.
-  print <canvas.json> --out <file.pdf> [--workspace <dir>]
-      Print a document canvas to PDF via a local headless Chrome. The sheets
-      on screen ARE the PDF pages. Requires Chrome (CHROME_PATH overrides
-      discovery) and an envelope-level "document" object.
+  print <canvas.json | file.md> --out <file.pdf> [--workspace <dir>]
+      Print a document to PDF via a local headless Chrome. The sheets on
+      screen ARE the PDF pages. Requires Chrome (CHROME_PATH overrides
+      discovery). A canvas needs an envelope-level "document" object; a
+      markdown file derives its paper defaults and needs nothing.
   validate <canvas.json>       Validate a canvas file, print JSON verdict.
   catalog [name] [--full]      Lean index; <name> = block | chart kind | field
                                type | fieldset | envelope for ONE full schema.
@@ -143,6 +146,29 @@ function resolveWorkspace(args) {
 	return fs.realpathSync(raw)
 }
 
+/**
+ * Refuse a file the CLI has no business reading — BEFORE it is read.
+ *
+ * A canvas is a `*.json` (lib/scan.js says so) and a document is a markdown
+ * file. Everything else is somebody's data, and reading it leaked it: an
+ * unparseable file came back as INVALID_JSON, and V8's parse message quotes the
+ * bytes it choked on. `validate .env` therefore printed
+ * `Unexpected token 'D', "DB_PASSWOR"...` to stdout — the agent's context, which
+ * is the one place this project exists to keep secrets out of. Redaction is no
+ * answer here: it recognises `sk-`/`AKIA`/`ghp_` shapes, not `DB_PASSWORD`.
+ *
+ * So the extension is checked first and the file is never opened. Same lesson as
+ * the markdown `src` allowlist, and the same reason confinement cannot carry it:
+ * `.env` is inside the workspace root.
+ */
+function assertReadable(abs, command) {
+	const ext = path.extname(abs).toLowerCase()
+	if (ext === '.json' || hasMarkdownExtension(abs))
+		return
+	specError('INVALID_SPEC',
+		`${path.basename(abs)} is neither a canvas (*.json) nor a markdown document (.md, .mdx, .markdown), so ${command} will not read it.`)
+}
+
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
 async function ensureKernel(root) {
@@ -221,16 +247,21 @@ async function cmdOpen(args) {
 	if (rel.startsWith('..') || path.isAbsolute(rel))
 		specError('PATH_OUTSIDE_WORKSPACE',
 			`${canvasAbs} is outside the workspace root ${root}. Pass --workspace <dir> pointing at the folder that contains the canvas.`)
+	assertReadable(canvasAbs, 'open')
 
-	// Never launch UI for an invalid canvas.
-	const verdict = validate(fs.readFileSync(canvasAbs, 'utf8'), { root })
-	log(renderHuman(verdict, rel))
-	if (!verdict.ok)
-		out({
-			status: 'error',
-			error: { code: 'INVALID_SPEC', message: `Canvas failed validation with ${verdict.errorCount} error(s).`, errors: verdict.errors },
-			timestamp: now(),
-		}, 1)
+	// A markdown file is already the data; the runtime synthesises the envelope
+	// for it. There is nothing to validate, and nothing for the agent to write.
+	if (!hasMarkdownExtension(rel)) {
+		// Never launch UI for an invalid canvas.
+		const verdict = validate(fs.readFileSync(canvasAbs, 'utf8'), { root })
+		log(renderHuman(verdict, rel))
+		if (!verdict.ok)
+			out({
+				status: 'error',
+				error: { code: 'INVALID_SPEC', message: `Canvas failed validation with ${verdict.errorCount} error(s).`, errors: verdict.errors },
+				timestamp: now(),
+			}, 1)
+	}
 
 	const entry = await ensureKernel(root)
 	const openBody = { path: rel }
@@ -313,18 +344,25 @@ async function cmdPrint(args) {
 		specError('PATH_OUTSIDE_WORKSPACE',
 			`--out ${outAbs} resolves outside the workspace root ${root}. Write the PDF inside the workspace (or pass a matching --workspace).`)
 
-	const raw = fs.readFileSync(canvasAbs, 'utf8')
-	const verdict = validate(raw, { root })
-	log(renderHuman(verdict, rel))
-	if (!verdict.ok)
-		out({
-			status: 'error',
-			error: { code: 'INVALID_SPEC', message: `Canvas failed validation with ${verdict.errorCount} error(s).`, errors: verdict.errors },
-			timestamp: now(),
-		}, 1)
-	if (!JSON.parse(raw).document)
-		specError('INVALID_SPEC',
-			`${rel} is not a document canvas — print renders the paper deck, which needs an envelope-level "document" object. Add "document": {} (see \`catalog document\`), or use \`open\` for the continuous view.`)
+	assertReadable(canvasAbs, 'print')
+
+	// A markdown file needs no `document` object to be paper: the deck derives
+	// every default it would have declared (A4/15mm, TOC from its own headings).
+	const isDoc = hasMarkdownExtension(rel)
+	if (!isDoc) {
+		const raw = fs.readFileSync(canvasAbs, 'utf8')
+		const verdict = validate(raw, { root })
+		log(renderHuman(verdict, rel))
+		if (!verdict.ok)
+			out({
+				status: 'error',
+				error: { code: 'INVALID_SPEC', message: `Canvas failed validation with ${verdict.errorCount} error(s).`, errors: verdict.errors },
+				timestamp: now(),
+			}, 1)
+		if (!JSON.parse(raw).document)
+			specError('INVALID_SPEC',
+				`${rel} is not a document canvas — print renders the paper deck, which needs an envelope-level "document" object. Add "document": {} (see \`catalog document\`), or use \`open\` for the continuous view.`)
+	}
 
 	// An explicit CHROME_PATH is authoritative: pointing it at a missing binary
 	// is an error to surface, never something to silently fall back from.
@@ -345,7 +383,10 @@ async function cmdPrint(args) {
 		}, 2)
 
 	const entry = await ensureKernel(root)
-	const url = `http://127.0.0.1:${entry.port}/?token=${entry.token}#/c/${encodeURIComponent(rel)}`
+	// A declared `document` opens as the deck on its own; a markdown file opens
+	// continuous like any other display canvas, so print asks for paper directly
+	// rather than reaching into the page to toggle it.
+	const url = `http://127.0.0.1:${entry.port}/?token=${entry.token}&view=deck#/c/${encodeURIComponent(rel)}`
 	log(`printing ${rel} via headless Chrome ...`)
 
 	// ≤ 60 s; env knob for tests, mirroring INSTANTCANVAS_LOCK_WAIT_MS.
@@ -452,6 +493,11 @@ function cmdStamp(args) {
 	if (rel.startsWith('..') || path.isAbsolute(rel))
 		specError('PATH_OUTSIDE_WORKSPACE',
 			`${abs} is outside the workspace root ${root}. Pass --workspace <dir> pointing at the folder that contains the canvas.`)
+	// A markdown document carries no stamp: nothing on disk was authored, so
+	// there is nothing to record the birth version of.
+	if (hasMarkdownExtension(abs))
+		specError('INVALID_SPEC', `${rel} is a markdown document, not a canvas — there is no canvas file to stamp. Just \`open\` it.`)
+	assertReadable(abs, 'stamp')
 
 	const raw = fs.readFileSync(abs, 'utf8')
 	let canvas
@@ -491,6 +537,11 @@ function cmdValidate(args) {
 	if (!file)
 		specError('INVALID_SPEC', 'validate requires a canvas file argument.')
 	const abs = path.resolve(file)
+	// Nothing to validate in a markdown file: it has no contract to satisfy, and
+	// the runtime renders whatever it can of it.
+	if (hasMarkdownExtension(abs))
+		specError('INVALID_SPEC', `${path.basename(abs)} is a markdown document, not a canvas — there is no contract to validate. Just \`open\` it.`)
+	assertReadable(abs, 'validate')
 	let raw
 	try {
 		raw = fs.readFileSync(abs, 'utf8')

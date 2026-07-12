@@ -112,7 +112,14 @@ $ curl 127.0.0.1:51877/healthz
 {"ok":true,"name":"instantcanvas"}
 ```
 
-An absurdly long line, to prove the code block scrolls instead of wrapping: `const result = await Promise.all(blocks.map(async (block, index) => renderBlock(block, { index, theme, palette, root, token, signal })))`
+An absurdly long inline span, which the prose flows around: `const result = await Promise.all(blocks.map(async (block, index) => renderBlock(block, { index, theme, palette, root, token, signal })))`
+
+A fence far wider than the page. On screen the continuous view scrolls it; on paper it **must wrap**, because a PDF has no scrollbar and an unwrapped line is simply cut off at the edge:
+
+```js
+const result = await Promise.all(blocks.map(async (block, index) => renderBlock(block, { index, theme, palette, root, token, signal, retries: 3, deadlineMs: 30000 })))
+const urlThatCannotBeBrokenAnywhere = 'https://example.com/a/very/long/path/that/keeps/going/and/going/without/any/convenient/break/opportunity?token=abcdefghijklmnopqrstuvwxyz0123456789'
+```
 
 This fence *documents* HTML, and must **not** trigger the raw-HTML warning:
 

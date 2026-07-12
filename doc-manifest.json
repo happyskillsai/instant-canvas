@@ -22,7 +22,7 @@
         "Project Structure",
         "Documentation"
       ],
-      "line_count": 102,
+      "line_count": 109,
       "links_to": [
         "docs/architecture.md",
         "docs/canvas-schema.md",
@@ -62,7 +62,7 @@
         "Hot reload",
         "Version handshake"
       ],
-      "line_count": 94,
+      "line_count": 99,
       "links_to": [
         "docs/canvas-schema.md",
         "docs/gotchas/frontend.md",
@@ -78,6 +78,7 @@
         "scripts/lib/registry.js",
         "scripts/lib/session.js",
         "scripts/lib/scan.js",
+        "scripts/lib/mdcanvas.js",
         "scripts/lib/fsatomic.js",
         "scripts/lib/browser.js"
       ],
@@ -105,15 +106,19 @@
         "`createdWith`: provenance, not compatibility",
         "Blocks",
         "The markdown block",
+        "The virtual canvas: a markdown file *is* a canvas",
         "Chart kinds (26)",
         "Sweeps: a slider over precomputed frames",
         "Document mode",
         "Validator behavior",
         "Catalog: progressive disclosure"
       ],
-      "line_count": 161,
+      "line_count": 185,
       "links_to": [
+        "docs/architecture.md",
+        "docs/cli.md",
         "docs/frontend.md",
+        "docs/gotchas/frontend.md",
         "docs/security.md"
       ],
       "over_size": false,
@@ -124,6 +129,7 @@
         "scripts/lib/validate.js",
         "scripts/lib/catalog.js",
         "scripts/lib/markdownsrc.js",
+        "scripts/lib/mdcanvas.js",
         "scripts/lib/pkgmeta.js"
       ],
       "source_unresolved": [],
@@ -155,9 +161,10 @@
         "Result contract (stdout of `open`)",
         "The agent workflow"
       ],
-      "line_count": 84,
+      "line_count": 90,
       "links_to": [
         "docs/canvas-schema.md",
+        "docs/gotchas/runtime.md",
         "docs/security.md"
       ],
       "over_size": false,
@@ -196,7 +203,7 @@
         "CSP shim",
         "Icons and vendored assets"
       ],
-      "line_count": 84,
+      "line_count": 89,
       "links_to": [
         "docs/gotchas/frontend.md"
       ],
@@ -260,6 +267,7 @@
         "Gotchas — Frontend",
         "CSP silently drops `style=\"\"` attributes",
         "markdown-it silently refuses most `data:` image URIs",
+        "`html: false` escapes raw HTML, so \"not rendering\" it means showing it",
         "Shiki cannot be used for syntax highlighting, and it is not about size",
         "Plotly injects a `<style>` element unless you claim its id",
         "Plotly cannot read CSS variables",
@@ -279,10 +287,14 @@
         "Native widget chrome ignores your dark theme",
         "themeRiver needs real dates",
         "swiftshader blanks gl3d in printed output while the screen looks fine",
+        "In the deck, `.md > :first-child` zeroes the margins of EVERY element",
+        "The packer measures what exists — a wrapper mounted later silently grows the sheet",
+        "A clipped table loses COLUMNS, and `max-width` will not save it",
+        "`overflow:auto` is a scrollbar on screen and a guillotine in print",
         "A sheet 3 px too tall prints a silent sliver page",
         "Constraint API quirks around custom widgets"
       ],
-      "line_count": 113,
+      "line_count": 149,
       "links_to": [],
       "over_size": false,
       "parse_error": null,
@@ -360,9 +372,10 @@
         "Background `open` outliving its shell",
         "Adding one field by re-serializing rewrites the whole file",
         "A validator error is a wall of red in someone's browser",
+        "A rejected file leaks its own first bytes through `JSON.parse`",
         "Deleting collections is not `rm -rf`"
       ],
-      "line_count": 46,
+      "line_count": 54,
       "links_to": [],
       "over_size": false,
       "parse_error": null,
@@ -396,6 +409,9 @@
         "Waiting for an element does not mean the app is listening",
         "A throwing `waitFor` in a `before` hook reports the wrong failure",
         "A new test that cannot fail is worse than no test",
+        "Never poll `readAlive` in a before hook — it DELETES the kernel it fails to ping",
+        "A fixture that never contains the hard case makes the bug unfailable",
+        "Assert what the browser computed, never what the stylesheet says",
         "A new required field makes every negative fixture pass for the wrong reason",
         "Subtests cannot reach parent-context servers (Node 24.0.x)",
         "A server inside the test-runner process is invisible to subprocesses (Node 24.0.x)",
@@ -404,9 +420,10 @@
         "`node --test <dir>` does not expand the directory",
         "Set the state dir with `||=`, before requiring the registry",
         "A security scan can trip over its own test file",
-        "Fake registry entries in shared state dirs look like leaks"
+        "Fake registry entries in shared state dirs look like leaks",
+        "A green suite proves the schemas agree; nobody was testing the prose"
       ],
-      "line_count": 68,
+      "line_count": 94,
       "links_to": [],
       "over_size": false,
       "parse_error": null,
@@ -505,7 +522,7 @@
         "Network perimeter",
         "What this does NOT protect against"
       ],
-      "line_count": 49,
+      "line_count": 51,
       "links_to": [],
       "over_size": false,
       "parse_error": null,
@@ -515,6 +532,7 @@
         "scripts/lib/envfile.js",
         "scripts/lib/jsonfile.js",
         "scripts/lib/markdownsrc.js",
+        "scripts/lib/mdcanvas.js",
         "scripts/lib/fsatomic.js",
         "scripts/kernel.js",
         "scripts/instantcanvas.js"
@@ -544,7 +562,7 @@
         "Security regressions",
         "Browser verification"
       ],
-      "line_count": 86,
+      "line_count": 90,
       "links_to": [
         "docs/gotchas/testing.md",
         "docs/releasing.md"

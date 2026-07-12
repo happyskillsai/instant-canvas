@@ -127,6 +127,98 @@ function scanMarkdownSource(text) {
 	return { jsx, esm, html, remote }
 }
 
+// ---------------------------------------------------------------- native view
+
+/*
+ * Everything below serves the NATIVE view of a markdown file — a canvas the
+ * runtime synthesises for a `.md` the reader picked from the sidebar, rather
+ * than one an agent authored around a `src`.
+ *
+ * The two paths render the same file differently, on purpose. Behind an
+ * authored `src` the validator is a teacher: raw HTML warns, a remote image is
+ * a hard REMOTE_ASSET_BLOCKED, and the agent edits the file until both are
+ * gone. A README nobody wrote for us has no such author — we will not rewrite
+ * the user's file, and `html: false` ESCAPES rather than deletes, so leaving it
+ * alone means printing `<details>` and `<img align="right">` as literal text
+ * and letting the CSP break every badge. So the native path degrades instead:
+ * HTML is removed rather than escaped, and a remote image says so.
+ *
+ * All of it matches against the code-blanked twin, so a fenced ```html example
+ * is prose about HTML and stays exactly as written.
+ */
+
+const H1_RE = /^[ \t]{0,3}#[ \t]+(\S.*?)[ \t]*#*[ \t]*$/m
+const BR_RE = /<br\s*\/?>/gi
+const HTML_IMG_RE = /<img\b([^<>]*)>/gi
+const ATTR_RE = (name) => new RegExp(`\\b${name}\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s"'<>]+))`, 'i')
+const ANY_TAG_RE = /<\/?[A-Za-z][A-Za-z0-9.-]*(?:\s[^<>]*)?\/?>|<!--[\s\S]*?-->/g
+const REMOTE_IMG_RE = /!\[([^\]]*)\]\(\s*<?(https?:\/\/[^\s)>]+)>?(?:\s+"[^"]*")?\s*\)/g
+
+/** Title for a markdown document: its first H1, else the file's basename. */
+function markdownTitle(text, rel) {
+	const m = H1_RE.exec(blankCode(stripFrontmatter(String(text))))
+	if (m && m[1].trim())
+		return m[1].trim()
+	return path.basename(String(rel), path.extname(String(rel)))
+}
+
+/**
+ * Rewrite `text` at the offsets `re` matched in its code-blanked twin.
+ *
+ * Every native-view transform below is a search-and-replace that must not fire
+ * inside a code fence. Blanking preserves offsets and length, so a match found
+ * in the mask indexes the real text exactly.
+ */
+function replaceOutsideCode(text, re, replacer) {
+	const masked = blankCode(text)
+	let out = '', last = 0
+	re.lastIndex = 0
+	for (const m of masked.matchAll(re)) {
+		out += text.slice(last, m.index)
+		out += replacer(text.slice(m.index, m.index + m[0].length), m)
+		last = m.index + m[0].length
+	}
+	return out + text.slice(last)
+}
+
+const attr = (attrs, name) => {
+	const m = ATTR_RE(name).exec(attrs)
+	return m ? (m[1] ?? m[2] ?? m[3] ?? '') : ''
+}
+
+/**
+ * `<img src="logo.png" alt="Logo">` → `![Logo](logo.png)`, so a README's HTML
+ * images survive the tag strip below and reach the normal image pipeline
+ * (local → `data:` URI, remote → the placeholder). An `<img>` with no `src` is
+ * dropped with everything else.
+ */
+function htmlImagesToMarkdown(text) {
+	return replaceOutsideCode(text, HTML_IMG_RE, (_raw, m) => {
+		const src = attr(m[1], 'src')
+		return src ? `![${attr(m[1], 'alt')}](${src})` : ''
+	})
+}
+
+/** Remove raw HTML rather than let `html: false` escape it into visible tags. */
+function stripRawHtml(text) {
+	// A <br> carries a line break, which is content; every other tag is chrome.
+	const withBreaks = replaceOutsideCode(text, BR_RE, () => '\n')
+	return replaceOutsideCode(withBreaks, ANY_TAG_RE, () => '')
+}
+
+/**
+ * A remote image cannot render — the runtime never fetches and the CSP would
+ * block it anyway — so say so, rather than leaving the reader a broken icon.
+ */
+function placeholderRemoteImages(text) {
+	return replaceOutsideCode(text, REMOTE_IMG_RE, () => '*(remote image not shown)*')
+}
+
+/** The full native-view pipeline: HTML out, remote images labeled. */
+function renderableMarkdown(text) {
+	return placeholderRemoteImages(stripRawHtml(htmlImagesToMarkdown(String(text))))
+}
+
 // ---------------------------------------------------------------- image inlining
 
 const IMAGE_MIME = {
@@ -211,4 +303,9 @@ module.exports = {
 	scanMarkdownSource,
 	inlineLocalImages,
 	inlineImageFile,
+	markdownTitle,
+	htmlImagesToMarkdown,
+	stripRawHtml,
+	placeholderRemoteImages,
+	renderableMarkdown,
 }

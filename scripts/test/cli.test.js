@@ -48,6 +48,48 @@ test('cli: validate — valid file exits 0, broken file exits 1, stdout is exact
 	assert.equal(missing.json.ok, false)
 })
 
+test('cli: a markdown document has no contract to validate and no stamp to carry', () => {
+	const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'ic-mdcli-')))
+	fs.writeFileSync(path.join(root, 'notes.md'), '# Notes\n')
+
+	// Nothing on disk was authored for us, so there is no birth version to record
+	// and no envelope to check. Both commands say so and point at `open`.
+	const stamped = run(['stamp', 'notes.md'], { cwd: root })
+	assert.equal(stamped.code, 1)
+	assert.equal(stamped.json.error.code, 'INVALID_SPEC')
+	assert.match(stamped.json.error.message, /markdown document/)
+	assert.match(stamped.json.error.message, /open/)
+	assert.equal(fs.readFileSync(path.join(root, 'notes.md'), 'utf8'), '# Notes\n', 'the file is untouched')
+
+	const validated = run(['validate', 'notes.md'], { cwd: root })
+	assert.equal(validated.code, 1)
+	assert.match(validated.json.error.message, /no contract to validate/)
+})
+
+test('cli: LEAK REGRESSION — a file that is neither a canvas nor a document is never read', () => {
+	// The CLI used to read any path it was handed and validate it. An unparseable
+	// file came back as INVALID_JSON, and V8's parse message quotes the bytes it
+	// choked on — so `validate .env` printed `Unexpected token 'D',
+	// "DB_PASSWOR"...` onto stdout, which IS the agent's context. Redaction does
+	// not save this: it knows `sk-`/`AKIA`/`ghp_` shapes, not `DB_PASSWORD`.
+	const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'ic-leak-')))
+	const secret = 'DB_PASSWORD=hunter2VerySecret'
+	fs.writeFileSync(path.join(root, '.env'), secret + '\n')
+	fs.writeFileSync(path.join(root, 'secrets.txt'), secret + '\n')
+	fs.writeFileSync(path.join(root, 'creds.yaml'), secret + '\n')
+
+	for (const cmd of ['validate', 'open', 'stamp', 'print']) {
+		for (const file of ['.env', 'secrets.txt', 'creds.yaml']) {
+			const args = cmd === 'print' ? [cmd, file, '--out', 'x.pdf'] : [cmd, file]
+			const r = run([...args, '--no-open'], { cwd: root })
+			assert.equal(r.code, 1, `${cmd} ${file} must be refused`)
+			const channels = `${r.stdout}${r.stderr}`
+			assert.ok(!channels.includes('DB_PASSWOR'), `${cmd} ${file} leaked file content: ${channels}`)
+			assert.ok(!channels.includes('hunter2'), `${cmd} ${file} leaked file content: ${channels}`)
+		}
+	}
+})
+
 test('cli: catalog — lean index by default, one schema per name, --full for everything', () => {
 	const lean = run(['catalog'])
 	assert.equal(lean.code, 0)
@@ -100,6 +142,22 @@ test('cli: open lifecycle — display open, kernel reuse, kill -9 recovery, stop
 	assert.equal(opened.json.status, 'opened')
 	assert.match(opened.json.url, /^http:\/\/127\.0\.0\.1:\d+\/\?token=/)
 	assert.equal(opened.json.canvas, 'marketing/report.canvas.json')
+
+	// a markdown file opens with no canvas JSON anywhere: no stamp, no validate,
+	// no wrapper for the agent to write. The runtime synthesises the envelope.
+	fs.writeFileSync(path.join(root, 'notes.md'), '# Notes\n\nProse.\n')
+	const md = run(['open', 'notes.md', '--no-open'], { cwd: root })
+	assert.equal(md.code, 0, md.stderr)
+	assert.equal(md.json.status, 'opened')
+	assert.equal(md.json.canvas, 'notes.md')
+	assert.match(md.json.url, /#\/c\/notes\.md$/)
+	assert.deepEqual(fs.readdirSync(root).filter((f) => f.endsWith('.md')), ['notes.md'], 'nothing was written beside it')
+
+	// the markdown allowlist is the gate here too — `open .env` is not a document.
+	fs.writeFileSync(path.join(root, '.env'), 'API_KEY=sk-live-topsecret\n')
+	const env = run(['open', '.env', '--no-open'], { cwd: root })
+	assert.equal(env.code, 1)
+	assert.ok(!/sk-live/.test(env.stdout + env.stderr), 'no secret content in any output channel')
 
 	// same kernel is reused
 	const s1 = run(['status', '--workspace', root])

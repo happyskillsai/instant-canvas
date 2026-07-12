@@ -123,8 +123,15 @@ function makeWorkspace() {
 	fs.mkdirSync(path.join(root, 'marketing'))
 	fs.copyFileSync(path.join(FIXTURES, 'valid-display.canvas.json'), path.join(root, 'marketing', 'funnel.canvas.json'))
 	fs.copyFileSync(path.join(FIXTURES, 'valid-form.canvas.json'), path.join(root, 'marketing', 'setup.canvas.json'))
-	// distractors: json without marker, dot dir, node_modules
+	// A markdown file is a canvas in its own right — the kernel synthesises the
+	// envelope. It carries the two things the native view must degrade.
+	fs.writeFileSync(path.join(root, 'guide.md'),
+		'# Field Guide\n\n<details><summary>Open</summary>\n\nHidden prose.\n\n</details>\n\n![badge](https://img.shields.io/b.svg)\n')
+	// distractors: json without marker, dot dir, node_modules, and a secret that
+	// lives INSIDE the root — confinement alone would happily serve it.
 	fs.writeFileSync(path.join(root, 'package.json'), '{"name":"x"}')
+	fs.writeFileSync(path.join(root, '.env'), 'API_KEY=sk-live-topsecret\n')
+	fs.writeFileSync(path.join(root, 'secrets.txt'), 'API_KEY=sk-live-topsecret\n')
 	fs.mkdirSync(path.join(root, '.hidden'))
 	fs.writeFileSync(path.join(root, '.hidden', 'h.json'), '{"instantcanvas":1,"title":"no","blocks":[]}')
 	fs.mkdirSync(path.join(root, 'node_modules'))
@@ -141,10 +148,21 @@ test.before(async () => {
 		env: { ...process.env, INSTANTCANVAS_STATE_DIR: STATE_DIR },
 		stdio: 'ignore',
 	})
-	const deadline = Date.now() + 8000
+
+	// Raw registry read, deliberately NOT readAlive — the same trap print.test.js
+	// already documents, and a much nastier one here. readAlive proves liveness with
+	// a 500 ms health ping and DELETES the entry when that ping times out. Under
+	// full-suite load (a dozen kernels and several Chromes are up by the time this
+	// hook runs) the ping loses that race, readAlive unregisters a perfectly healthy
+	// kernel, and every later poll finds nothing — so the hook reports "kernel did
+	// not come up" about a kernel that is listening happily. It is a root-level
+	// before hook in a single-process suite, so that one throw failed ALL 243 tests
+	// with an error naming the wrong file. Poll for the entry, then confirm liveness
+	// ourselves with a timeout that load cannot beat.
+	const deadline = Date.now() + 15_000
 	while (Date.now() < deadline) {
-		const entry = await registry.readAlive(K.root)
-		if (entry) {
+		const entry = registry.read(K.root)
+		if (entry && entry.port && await pingHealthz(entry.port)) {
 			K.port = entry.port
 			K.token = entry.token
 			K.auth = { 'X-IC-Token': entry.token }
@@ -156,6 +174,16 @@ test.before(async () => {
 	K.child.kill('SIGKILL')
 	throw new Error('kernel did not come up')
 })
+
+/** Liveness with a generous timeout, and — unlike readAlive — no side effect. */
+async function pingHealthz(port) {
+	try {
+		const r = await httpReq({ port, path: '/healthz' })
+		return r.status === 200 && r.json && r.json.name === 'instantcanvas'
+	} catch {
+		return false
+	}
+}
 
 test.after(() => {
 	if (K.child && K.child.exitCode === null && K.child.signalCode === null)
@@ -211,6 +239,61 @@ test('kernel: GET /api/canvas returns parsed canvas or validation errors', async
 	const out = await httpReq({ port: K.port, path: '/api/canvas?path=../outside.json', headers: K.auth })
 	assert.equal(out.status, 403)
 	assert.equal(out.json.errors[0].code, 'PATH_OUTSIDE_WORKSPACE')
+})
+
+test('kernel: a markdown file renders as a canvas nobody wrote, degraded for a reader with no author', async () => {
+	const r = await httpReq({ port: K.port, path: '/api/canvas?path=guide.md', headers: K.auth })
+	assert.equal(r.status, 200)
+	assert.equal(r.json.canvas.title, 'Field Guide', 'title from the first H1')
+	assert.equal(r.json.canvas.instantcanvas, 1)
+	assert.deepEqual(r.json.canvas.blocks, [{ type: 'markdown', src: 'guide.md', text: r.json.canvas.blocks[0].text }])
+
+	const text = r.json.canvas.blocks[0].text
+	assert.ok(!/<details>|<summary>/.test(text), 'raw HTML is removed, never escaped into view')
+	assert.match(text, /Hidden prose\./, 'the prose the tags wrapped is kept')
+	assert.match(text, /\*\(remote image not shown\)\*/, 'a remote image the runtime cannot fetch says so')
+
+	// The file on disk is the user's. We render it; we never rewrite it.
+	assert.match(fs.readFileSync(path.join(K.root, 'guide.md'), 'utf8'), /<details>/)
+})
+
+test('kernel: the workspace tree lists markdown documents beside canvases', async () => {
+	const r = await httpReq({ port: K.port, path: '/api/workspace', headers: K.auth })
+	const rootGroup = r.json.collections[0]
+	const guide = rootGroup.canvases.find((c) => c.id === 'guide.md')
+	assert.equal(guide.kind, 'document')
+	assert.equal(guide.title, 'Field Guide')
+
+	// `count` still means canvases and nothing else — the delete dialog promises
+	// by it, and it deletes no documents. Counted from the tree rather than
+	// pinned to a literal: earlier tests add canvases to this shared workspace.
+	const all = r.json.collections.flatMap((c) => c.canvases)
+	assert.equal(r.json.count, all.filter((c) => c.kind === 'canvas').length)
+	assert.equal(r.json.docCount, all.filter((c) => c.kind === 'document').length)
+	assert.equal(r.json.docCount, 1)
+})
+
+test('kernel: SECURITY — /api/canvas reads canvases and markdown, and NOTHING else', async () => {
+	// Regression. This route used to read any file in the workspace and hand the
+	// JSON.parse failure back as INVALID_JSON — whose V8 message quotes the bytes
+	// it choked on, so `?path=.env` answered with `Unexpected token 'A',
+	// "API_KEY=sk"...`. Confinement never caught it: .env is inside the root.
+	for (const p of ['.env', 'secrets.txt']) {
+		const r = await httpReq({ port: K.port, path: `/api/canvas?path=${encodeURIComponent(p)}`, headers: K.auth })
+		assert.equal(r.status, 404, `${p} must not be readable through this route`)
+		assert.ok(!/API_KEY|sk-live/.test(r.text), `${p} content leaked into the error body: ${r.text}`)
+	}
+})
+
+test('kernel: editing a markdown file hot-reloads it exactly like editing a canvas', async () => {
+	const ws = await wsConnect(K.port, K.token)
+	try {
+		fs.appendFileSync(path.join(K.root, 'guide.md'), '\nA new paragraph.\n')
+		const hit = await ws.waitFor((m) => m.type === 'canvas' && m.path === 'guide.md')
+		assert.equal(hit.path, 'guide.md')
+	} finally {
+		ws.close()
+	}
 })
 
 test('kernel: an unstamped canvas still renders for the human — the missing stamp is a warning, not an error page', async () => {
@@ -269,6 +352,29 @@ test('kernel: browse lists directories with canvas counts', async () => {
 	assert.equal(marketing.canvasCount, 2)
 	assert.ok(!r.json.entries.some((e) => e.name === 'node_modules' || e.name.startsWith('.')))
 	assert.equal(typeof r.json.parent, 'string')
+})
+
+test('kernel: browse counts a markdown-only folder as worth opening, but not as canvases', async () => {
+	// The badge answers "is there anything to see in here" — a folder of markdown
+	// says yes. It must not call them canvases: nothing there can be deleted, and
+	// the two counts drive two different promises.
+	const dir = path.join(K.root, 'docsonly')
+	fs.mkdirSync(dir)
+	fs.writeFileSync(path.join(dir, 'a.md'), '# A\n')
+	fs.writeFileSync(path.join(dir, 'b.md'), '# B\n')
+
+	const r = await httpReq({ port: K.port, method: 'POST', path: '/api/browse', headers: K.auth, body: { dir: K.root } })
+	const entry = r.json.entries.find((e) => e.name === 'docsonly')
+	assert.equal(entry.canvasCount, 2, 'worth opening')
+	assert.equal(entry.canvases, 0, 'but none of them are canvases')
+	assert.equal(entry.docs, 2)
+
+	// And delete would find nothing to remove — which is why the sidebar offers no
+	// delete button for a collection like this one.
+	const del = await httpReq({ port: K.port, method: 'POST', path: '/api/collection/delete', headers: K.auth, body: { name: 'docsonly' } })
+	assert.equal(del.json.removedCanvases, 0)
+	assert.equal(del.json.removedFolder, false, 'the documents are still there, so the folder stays')
+	assert.ok(fs.existsSync(path.join(dir, 'a.md')), 'a document is never deleted')
 })
 
 test('kernel: collection delete removes canvas files only, refuses root and traversal', async () => {

@@ -48,6 +48,8 @@ let root = null
 let printed = null
 let pdf = null
 let kernelToken = null
+let printedMd = null
+let mdPdf = null
 
 test.before(async () => {
 	root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'ic-print-ws-')))
@@ -55,6 +57,7 @@ test.before(async () => {
 	fs.mkdirSync(path.join(root, 'assets'))
 	fs.copyFileSync(path.join(FIXTURES, 'assets', 'logo.png'), path.join(root, 'assets', 'logo.png'))
 	fs.copyFileSync(path.join(FIXTURES, 'valid-display.canvas.json'), path.join(root, 'classic.canvas.json'))
+	fs.copyFileSync(path.join(FIXTURES, 'handbook.md'), path.join(root, 'handbook.md'))
 	if (!CHROME)
 		return
 	printed = runCli(['print', path.join(root, 'report.canvas.json'), '--out', path.join(root, 'out', 'report.pdf'), '--workspace', root])
@@ -66,6 +69,9 @@ test.before(async () => {
 		const entry = registry.read(root)
 		kernelToken = entry && entry.token
 	}
+	printedMd = runCli(['print', path.join(root, 'handbook.md'), '--out', path.join(root, 'out', 'handbook.pdf'), '--workspace', root])
+	if (printedMd.code === 0)
+		mdPdf = fs.readFileSync(path.join(root, 'out', 'handbook.pdf'))
 })
 
 test.after(() => {
@@ -131,6 +137,21 @@ test('print refuses a non-document canvas with a teaching error', () => {
 	assert.equal(r.json.error.code, 'INVALID_SPEC')
 	assert.match(r.json.error.message, /"document"/)
 	assert.match(r.json.error.message, /catalog document/)
+})
+
+test('a markdown file prints with no canvas and no "document" object at all', { skip, timeout: 120_000 }, () => {
+	// The whole point: paper from a .md, with nothing authored around it. A canvas
+	// needs a declared `document` because a display canvas is not paper by
+	// default; a markdown file IS the document, and derives every default (A4,
+	// 15mm, TOC from its own headings).
+	assert.equal(printedMd.code, 0, JSON.stringify(printedMd.json))
+	assert.equal(printedMd.json.status, 'printed')
+	assert.equal(printedMd.json.path, 'out/handbook.pdf')
+	assert.ok(printedMd.json.pages >= 1, `at least one sheet (got ${printedMd.json.pages})`)
+	assert.equal(mdPdf.subarray(0, 5).toString(), '%PDF-')
+	// The invariant that carries document mode: sheets ARE the pages. It must hold
+	// for a deck the browser was told to build, not just one a canvas declared.
+	assert.equal(pdfPageCount(mdPdf), printedMd.json.pages, 'sheets ARE the pages — by construction')
 })
 
 test('print without --out teaches the flag', () => {

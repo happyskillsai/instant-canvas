@@ -125,7 +125,13 @@ button{font:inherit;cursor:pointer}
 	color:var(--text);cursor:pointer;font-size:13px}
 .item:hover{background:var(--panel-2)}
 .item.active{background:var(--accent-soft);color:var(--accent);font-weight:600}
-.item .dot{width:6px;height:6px;border-radius:50%;background:currentColor;opacity:.55;flex:0 0 6px}
+/* The canvas dot and the document icon share one 14px slot, so a folder holding
+   both still reads as a single left-aligned column of titles. */
+.item .dot,.item .doc-ico{flex:0 0 14px;height:14px;display:flex;align-items:center;justify-content:center}
+.item .dot::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor;opacity:.55}
+.item .doc-ico{opacity:.6}
+.item .doc-ico .lucide{width:13px;height:13px}
+.item:hover .doc-ico,.item.active .doc-ico{opacity:1}
 .side-foot{padding:10px 16px;border-top:1px solid var(--border);color:var(--muted);font-size:11.5px}
 .side-foot .watch{display:flex;align-items:center;gap:6px;margin-top:4px;min-width:0}
 .side-foot .watch #watchState{flex:0 0 auto}
@@ -145,6 +151,9 @@ button{font:inherit;cursor:pointer}
 .canvas{max-width:none;margin:0;padding:28px var(--gutter) 80px}
 .canvas-head h1{margin:0 0 4px;font-size:22px;letter-spacing:-.02em}
 .canvas-head .sub{color:var(--muted);font-size:12.5px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+/* A markdown file titles itself, so its head is only the breadcrumb — and the
+   document's own H1 follows immediately, which needs the room the title left. */
+.canvas-head.head-doc{margin-bottom:-8px}
 .tabs{display:flex;gap:2px;margin:18px 0 6px;border-bottom:1px solid var(--border)}
 .tab{padding:8px 14px;border:none;background:none;color:var(--muted);font-weight:600;font-size:13px;
 	border-bottom:2px solid transparent;margin-bottom:-1px}
@@ -620,6 +629,85 @@ body.modal-open .main{overflow:hidden}
 .doc-frag{display:flow-root}
 .sheet .block.card{box-shadow:none;border:1px solid var(--border)}
 
+/* ---------------------------------------------------------- paper typography
+   In the deck, every markdown element becomes its OWN `.md.doc-frag` box — so it
+   is at once `.md > :first-child` AND `.md > :last-child`, and that reset (which
+   exists for one `.md` holding a whole document) zeroed BOTH of its margins.
+   Paper therefore rendered with no vertical rhythm whatsoever: every heading
+   glued to the prose above and below it. The rhythm is rebuilt here, at a
+   specificity that beats the reset, and loosened for reading on paper.
+
+   These margins sit INSIDE each `flow-root` fragment, so they cannot collapse
+   away and the packer counts them. Every rule is scoped to `.sheet`, which the
+   hidden measuring replica also is — so what is measured, what is shown, and
+   what is printed are the same layout by construction. The continuous view is
+   untouched and keeps its tighter on-screen rhythm. */
+.sheet .md{line-height:1.7}
+.sheet .md h1{margin:34px 0 16px}
+.sheet .md h2{margin:34px 0 14px}
+.sheet .md h3{margin:26px 0 10px}
+.sheet .md h4,.sheet .md h5,.sheet .md h6{margin:22px 0 8px}
+.sheet .md p{margin:14px 0}
+.sheet .md ul,.sheet .md ol{margin:14px 0}
+.sheet .md li{margin:6px 0}
+.sheet .md blockquote,.sheet .md table,.sheet .md img,.sheet .md pre{margin:18px 0}
+.sheet .md hr{margin:30px 0}
+/* No dead band at the top of a page: whichever fragment lands first starts
+   flush. The packer's measuring body carries `.sheet-body` too, so it measures
+   this rule rather than discovering it at render time. */
+.sheet-body>.doc-frag:first-child>*{margin-top:0}
+
+/* ------------------------------------------------------------- code on paper
+   A PDF has no horizontal scrollbar. `overflow:auto` looks fine on screen and
+   becomes a hard CLIP when printed, silently cutting every long line off at the
+   right edge — so on paper the fence WRAPS instead. That makes it taller and
+   changes pagination, which is safe only because the packer measures inside a
+   real `.sheet` and so sees the same wrapped height the printer will.
+   `anywhere` (not `break-word`) so an unbreakable token — a URL, a base64 blob —
+   still cannot push past the edge. */
+.sheet .md pre{white-space:pre-wrap;overflow-wrap:anywhere;overflow:visible}
+/* Paper has no clipboard, so the deck mounts no copy button (see mountCodeCopy)
+   and the fence takes back the 52px that was reserved for one. */
+.sheet .code-block pre{padding-right:16px}
+
+/* A wide TABLE is the same guillotine as the fence above, except it was deleting
+   DATA rather than truncating a line. On screen `.md table` is `display:block;
+   overflow-x:auto`, so a table wider than the measure scrolls inside its own box
+   and every column stays reachable. Printed, there is nothing to scroll — Chrome
+   clipped it at the sheet edge, so an 11-column table reached the PDF with 7½
+   columns and `ws_clients`, `idle_seconds` and `version` simply absent from the
+   document. No ellipsis, no marker, nothing to tell the reader they ever existed.
+
+   `table-layout: fixed` is the load-bearing part, and the two obvious alternatives
+   both fail. Default AUTO layout sizes columns from their content, and a column's
+   min-content width is a hard floor the table overflows rather than go under — so
+   `max-width: 100%` is quietly ignored and the tail is clipped exactly as before.
+   Dropping that floor with `overflow-wrap: anywhere` does stop the clip, but it
+   lets every column shrink to one character and the layout then starves them all:
+   `id` prints as "i/d" and `48213` as "48/21/3". FIXED layout takes its widths from
+   the PAGE instead of the content, so the table can never exceed the measure and
+   nothing can be cut, while `break-word` folds only the cells that genuinely do not
+   fit and leaves short headers whole. Paper also buys the columns room the screen
+   does not need (a smaller face, tighter cells), because folding should be the last
+   resort rather than the first. A cramped column is a cosmetic complaint; a missing
+   column is a lie.
+
+   Only a table that would actually OVERFLOW is folded. Fixed layout divides the
+   page evenly, which is exactly wrong for a table that already fits — it stretches
+   a tidy four-column table across the sheet and gives `id` the same width as a
+   timestamp. So the packer measures each table first and tags the offenders
+   `.wide` (`tagWideTables`), and the class must land BEFORE measurement, for the
+   same reason the code-block wrapper does: a fragment whose geometry changes after
+   it was sized is a sheet that overflows.
+
+   Folding makes rows taller, which repaginates — safe because the packer measures
+   inside a real `.sheet`, and it already splits a long table by rows and repeats
+   the `<thead>` on the continuation. */
+.sheet .md table{display:table;width:fit-content;max-width:100%;overflow:visible}
+.sheet .md table.wide{table-layout:fixed;width:100%;font-size:11px}
+.sheet .md table.wide th,.sheet .md table.wide td{padding:5px 8px;font-size:inherit;overflow-wrap:break-word}
+.sheet .md table.wide code{font-size:10px;padding:1px 3px}
+
 /* running header/footer — ordinary DOM inside each sheet, so they survive
    Cmd+P exactly like they survive the print command */
 .sheet-hdr,.sheet-ftr{display:flex;align-items:baseline;gap:12px;font-size:11px;color:var(--muted);flex-shrink:0}
@@ -679,9 +767,12 @@ body.modal-open .main{overflow:hidden}
 @media print{
 	html{print-color-adjust:exact;-webkit-print-color-adjust:exact}
 	.print-fab{display:none !important}
+	/* No `.code-copy` rule here on purpose: the deck mounts no copy button at all
+	   (mountCodeCopy's `{button: false}`), so there is nothing to hide. Hiding a
+	   button that should not exist is a fact that rots — this way a test can
+	   assert paper holds zero of them. */
 	body:has(.deck) .topbar,
-	body:has(.deck) .sidebar,
-	body:has(.deck) .code-copy{display:none !important}
+	body:has(.deck) .sidebar{display:none !important}
 	body:has(.deck) .app{display:block;height:auto}
 	body:has(.deck) .body{display:block}
 	body:has(.deck) .main{overflow:visible;padding:0;margin:0}

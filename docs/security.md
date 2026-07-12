@@ -6,6 +6,7 @@ source:
   - scripts/lib/envfile.js
   - scripts/lib/jsonfile.js
   - scripts/lib/markdownsrc.js
+  - scripts/lib/mdcanvas.js
   - scripts/lib/fsatomic.js
   - scripts/kernel.js
   - scripts/instantcanvas.js
@@ -38,8 +39,9 @@ InstantCanvas keeps secrets out of the agent conversation **during capture**: th
 - Loopback only: the literal `127.0.0.1`, no network mode, no HTTPS, no CORS.
 - Per-kernel random 32-byte token on every route except `/healthz`, compared timing-safely. Kill the kernel, the token dies with it.
 - Host-header allowlist defeats DNS rebinding; strict CSP (`default-src 'none'`) confines the page to same-origin scripts/styles and the kernel's own WebSocket.
-- Path traversal is blocked at every file-touching surface: `/assets/` normalization, canvas paths, markdown `src`, markdown image references, and destination paths all go through `insideRoot()` (`lib/paths.js`), which realpaths the deepest existing ancestor — defeating both `../` traversal and symlink escapes, including for files that do not exist yet.
-- **Confinement is not enough on its own: a markdown `src` is also restricted to a `.md`/`.mdx`/`.markdown` allowlist.** `.env` lives *inside* the workspace, so `insideRoot()` happily admitted it and the block rendered the file. The allowlist is enforced in `lib/markdownsrc.js` and applied by both the validator and the kernel, because a canvas can reach the kernel without passing the CLI.
+- Path traversal is blocked at every file-touching surface: `/assets/` normalization, canvas paths, markdown `src`, the markdown file a virtual canvas is built from, markdown image references, and destination paths all go through `insideRoot()` (`lib/paths.js`), which realpaths the deepest existing ancestor — defeating both `../` traversal and symlink escapes, including for files that do not exist yet.
+- **Confinement is not enough on its own: a markdown `src` is also restricted to a `.md`/`.mdx`/`.markdown` allowlist.** `.env` lives *inside* the workspace, so `insideRoot()` happily admitted it and the block rendered the file. The allowlist is enforced in `lib/markdownsrc.js` and applied by both the validator and the kernel, because a canvas can reach the kernel without passing the CLI. The same allowlist — the same function, never a parallel copy — gates the virtual-canvas route that renders a markdown file directly (`lib/mdcanvas.js`), which is a *second* way to name a file for rendering and must not grow its own way around it.
+- **A file the runtime refuses must not be read at all, because refusing it leaks it.** V8's `JSON.parse` error quotes the bytes it choked on, so any surface that read a path and reported the parse failure was an exfiltration channel: `validate .env` printed `Unexpected token 'D', "DB_PASSWOR"...` onto the CLI's stdout — the agent's context — and `GET /api/canvas?path=.env` returned the same in a 422. Redaction is no defense (it knows `sk-`/`AKIA`/`ghp_` shapes, not `DB_PASSWORD`), and neither is confinement (`.env` is inside the root). Both surfaces now decide from the extension and never open the file: `assertReadable()` in the CLI, the `.json`-or-markdown gate in `loadCanvas`. Any new command that accepts a path must gate the same way.
 - **The runtime never fetches.** The kernel's only outbound request is its own `127.0.0.1/healthz`. Remote assets in markdown are rejected at validate time (`REMOTE_ASSET_BLOCKED`) rather than proxied, and workspace-local images are inlined as `data:` URIs server-side. This deletes SSRF and phone-home at the source: the download happens once, at authoring time, by the agent — outside this software entirely.
 
 ## What this does NOT protect against

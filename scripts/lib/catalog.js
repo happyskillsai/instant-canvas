@@ -4,7 +4,7 @@
 // `npx -y @happyskillsai/instant-canvas catalog`. Progressive disclosure by design:
 //   catalog            → lean index: one-liners only, no schemas
 //   catalog <name>     → ONE full schema (block, chart kind, field type,
-//                        'fieldset', 'envelope')
+//                        'fieldset', 'sweep', 'document', 'envelope')
 //   catalog --full     → everything at once (large; avoid unless needed)
 
 const { VERSION, ENVELOPE, BLOCKS, FIELD_TYPES, CHART_KINDS, UNSUPPORTED_CHARTS, SHAPES } = require('./schema')
@@ -75,7 +75,7 @@ function renderChartKind(name, def) {
 		whenToUse: def.whenToUse,
 		data: def.data,
 		encoding,
-		blockShape: 'Wrap in a chart block: {"type":"chart","kind":"' + name + '","title"?,"description"?,"data":[...],"encoding":{...},"format"?:{"y":"number|currency|percent","currency"?},"options"?:{raw Plotly {data,layout}, applied last}}',
+		blockShape: 'Wrap in a chart block: {"type":"chart","kind":"' + name + '","title"?,"description"?,"data":[...] (XOR "sweep":{"frames":[...]}),"encoding":{...}' + (name === 'pie' ? ',"donut"?:true' : '') + ',"format"?:{"y":"number|currency|percent","currency"?},"options"?:{raw Plotly {data,layout}, applied last}}',
 		example: def.example,
 	}
 }
@@ -98,20 +98,50 @@ function renderFieldsetShape() {
 
 const oneLiners = (obj, pick) => Object.fromEntries(Object.entries(obj).map(([k, v]) => [k, pick(v)]))
 
+/**
+ * The opening sentences of a description, whole.
+ *
+ * The lean index is the first — and for a confident agent, the only — thing read
+ * before a canvas is written, so a fragment here is a fragment in every canvas that
+ * follows. `description.split('.')[0]` was not a sentence splitter: it rendered the
+ * chart block's entire teaching as the single word "Chart.", and cut the confirm
+ * block at the period inside "(e.g." to give "Confirmation card (e.".
+ *
+ * A sentence ends at .!? followed by whitespace and something that STARTS a sentence
+ * (a capital or a digit) — which is what makes "e.g. before" and "validation.protocols"
+ * safe. That alone repairs every mangled entry; a second sentence is pulled in ONLY
+ * when the first is too short to teach anything ("Chart."), because the index is
+ * capped and every byte spent here is a byte of the agent's context.
+ */
+const LEAD_MIN = 30
+const LEAD_MAX = 260
+function lead(text) {
+	const src = String(text).trim()
+	const parts = src.split(/(?<=[.!?])\s+(?=[A-Z0-9])/)
+	let out = ''
+	for (const p of parts) {
+		if (out && (out.length >= LEAD_MIN || out.length + p.length + 1 > LEAD_MAX))
+			break
+		out += (out ? ' ' : '') + p
+	}
+	return out || src
+}
+
 /** Lean index — the progressive-disclosure entry point. */
 function leanIndex() {
 	return {
 		version: VERSION,
-		usage: 'This is the lean index. Pull ONE full schema at a time with `catalog <name>` (a block, a chart kind, a field type, "fieldset", "sweep", or "envelope"). `catalog --full` dumps everything (large).',
-		envelope: 'Every canvas: {"instantcanvas":1,"title":...,then "blocks":[...] XOR "pages":[{"name","blocks"}]} — `catalog envelope`',
-		blocks: oneLiners(BLOCKS, (b) => b.description.split('.')[0] + '.'),
+		usage: 'This is the lean index. Pull ONE full schema at a time with `catalog <name>` (a block, a chart kind, a field type, "fieldset", "sweep", "document", or "envelope"). `catalog --full` dumps everything (large).',
+		markdownFiles: 'A .md/.mdx/.markdown file that ALREADY EXISTS needs no canvas: `open <file.md>` renders it, `print <file.md> --out <f.pdf>` prints it. Author a canvas only for data you wrangled, or to put markdown beside other blocks.',
+		envelope: 'Every canvas: {"instantcanvas":1,"createdWith":<written by `stamp`, never by you>,"title":...,then "blocks":[...] XOR "pages":[{"name","blocks"}]} — `catalog envelope`',
+		blocks: oneLiners(BLOCKS, (b) => lead(b.description)),
 		chartKinds: oneLiners(CHART_KINDS, (k) => `${k.summary} ${k.whenToUse}`),
 		unsupportedChartKinds: UNSUPPORTED_CHARTS,
-		fieldTypes: oneLiners(FIELD_TYPES, (f) => f.description.split('.')[0] + '.'),
+		fieldTypes: oneLiners(FIELD_TYPES, (f) => lead(f.description)),
 		chartSweep: 'Any chart kind becomes a parameter sweep with {"sweep":{"label"?,"frames":[{"label","data"}]}} instead of "data": a slider steps through frames you precompute — `catalog sweep`',
 		documentMode: 'Envelope "document":{...} renders the canvas as print-ready paper sheets (cover, contents, header/footer, back cover, brand theme; display blocks only) that print 1:1 — `catalog document`',
 		formLayout: 'Group fields with {"type":"fieldset","legend","columns":1-3,"fields":[...]} inside fields[]; per-field "span" widens, "ui":"buttons"|"pills" restyles select/radio/checkboxGroup — `catalog fieldset`',
-		validation: 'Per-field validation: {minLength,maxLength,pattern,patternMessage,min,max,step,protocols} — enforced live and server-side.',
+		validation: 'Per-field rules NEST under "validation": {"type":"secret","validation":{minLength,maxLength,pattern,patternMessage,min,max,step,protocols}} — enforced live and server-side. Flat on the field they are unknown properties: the canvas still validates and the rule silently does not exist.',
 	}
 }
 
@@ -135,6 +165,11 @@ function fullCatalog() {
 		fieldTypes,
 		fieldCommonShape: renderShape(SHAPES.field),
 		fieldsetShape: renderFieldsetShape(),
+		// `--full` means full. These two were reachable only by name, so an agent that
+		// pulled the whole contract to see what existed concluded document mode and
+		// sweeps did not — the one mistake a catalog must never cause.
+		document: catalog('document'),
+		sweep: catalog('sweep'),
 	}
 }
 
@@ -158,7 +193,10 @@ function catalog(name) {
 			...renderShape(SHAPES.document),
 			notes: [
 				'Documents are display-only: form and confirm blocks and chart "sweep" are refused — paper cannot submit or drag. Ship the frame you want as plain "data".',
-				'The sheets on screen ARE the PDF pages: the human prints via the browser dialog, or the agent runs `npx -y @happyskillsai/instant-canvas print <canvas.json> --out <file.pdf>` (requires a local Chrome).',
+				'The sheets on screen ARE the PDF pages: the human prints via the browser dialog, or the agent runs `npx -y @happyskillsai/instant-canvas print <canvas.json|file.md> --out <file.pdf>` (requires a local Chrome).',
+				'A "document" object is needed only to print a CANVAS. A plain .md/.mdx file prints with no canvas and no "document" at all — `print report.md --out report.pdf` derives its own paper (A4, margins, a TOC from its own headings). Declare "document" when you want what nobody can derive: a cover, a brand theme, a back cover, or header/footer TEXT of your own.',
+				'A running header/footer is DERIVED when you declare none: the reader turns one on from the browser (canvas title, "{{pageNumber}} / {{totalPages}}"), and can equally turn a declared one off. That choice lives in their browser, so `print` never sees it — if the PDF *you* generate must carry page numbers, declare "header"/"footer" yourself. Either way the strips cost content height: they are measured into every sheet, so adding them can add a page and renumber the TOC.',
+				'On paper, code fences WRAP rather than scroll (a PDF has no scrollbar, so an overflowing line would simply be cut off) and carry no copy button. A table too wide for the page FOLDS its cells for the same reason, so no column is ever dropped. Long lines and wide tables are both safe to ship — do not pre-trim either to "make it fit".',
 				'cover.logo / backCover.logo must be a workspace-local image file (inlined server-side) or a data:image/ URI — remote URLs are never fetched.',
 				'The TOC is generated automatically from headings and block titles whenever there is anything to list; the `toc` key only customizes it (title, depth) and the reader can toggle it in the browser. Its page numbers come from the deck\'s own pagination: exact on screen and via `npx -y @happyskillsai/instant-canvas print`; a manual paper or scale override in the browser print dialog can still repaginate.',
 			],

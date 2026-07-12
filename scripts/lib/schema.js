@@ -140,10 +140,10 @@ const SHAPES = {
 		},
 	},
 	documentToc: {
-		description: 'Customizes the table of contents — the TOC itself is generated automatically (markdown headings plus chart/table/kpi titles, dotted leaders, page numbers from the deck\'s own pagination) whenever the document has anything to list, and the reader can toggle it in the browser. Numbers are exact on screen and via `npx -y @happyskillsai/instant-canvas print`; a manual paper/scale override in the browser print dialog can still repaginate.',
+		description: 'Customizes the table of contents — the TOC itself is generated automatically (markdown headings plus the titles of chart and table blocks that have one, dotted leaders, page numbers from the deck\'s own pagination) whenever the document has anything to list, and the reader can toggle it in the browser. Numbers are exact on screen and via `npx -y @happyskillsai/instant-canvas print`; a manual paper/scale override in the browser print dialog can still repaginate.',
 		properties: {
 			title: { type: 'string', default: 'Contents', description: 'TOC heading.' },
-			depth: { type: 'number', enum: [1, 2, 3], default: 2, description: 'Markdown heading levels listed (h1..h{depth}). Chart, table and kpi titles are always listed.' },
+			depth: { type: 'number', enum: [1, 2, 3], default: 2, description: 'Markdown heading levels listed (h1..h{depth}). A chart or table block is listed when it carries a "title"; a kpi block has no title and is never listed.' },
 		},
 	},
 	documentStrip: {
@@ -178,7 +178,7 @@ const SHAPES = {
 		},
 	},
 	document: {
-		description: 'Document furnishings. Any display canvas can be VIEWED as paper sheets in the browser (a topbar toggle; sheets print 1:1); this object makes the deck the DEFAULT view and carries what cannot be derived — cover, back cover, running strips, brand theme, paper geometry, TOC preferences. Every key is optional. With "pages", each page becomes a chapter starting on a new sheet. Interactive blocks (form, confirm) and chart sweeps are refused: paper cannot submit or drag.',
+		description: 'Document furnishings. Any display canvas can be VIEWED as paper sheets in the browser (a topbar toggle; sheets print 1:1); this object makes the deck the DEFAULT view and carries what the reader cannot conjure — cover, back cover, brand theme, paper geometry, and the TEXT of the running strips. Geometry, the TOC and the strips themselves are derived when you omit them, and the reader can toggle the last two in the browser — but `print` never sees a reader toggle, so declare "header"/"footer" if the PDF you generate must carry page numbers. Every key is optional. With "pages", each page becomes a chapter starting on a new sheet. Interactive blocks (form, confirm) and chart sweeps are refused: paper cannot submit or drag.',
 		properties: {
 			cover: { type: 'object', itemShape: 'documentCover', description: 'Front cover sheet.' },
 			toc: { type: 'object', itemShape: 'documentToc', description: 'TOC preferences (title, depth) — the TOC itself is auto-generated and reader-toggleable.' },
@@ -354,7 +354,7 @@ const CHART_KINDS = {
 		encoding: {
 			source: { type: 'key', required: true, description: 'Key for the edge source node name.' },
 			target: { type: 'key', required: true, description: 'Key for the edge target node name.' },
-			value: { type: 'key', description: 'Optional key for edge weight (line width).' },
+			value: { type: 'key', description: 'Optional key for edge weight, drawn as line width (heaviest edge thickest). Weighted edges are drawn in a few width bands, so the figure holds several edge traces — relevant only if you also patch traces by index through "options". Unweighted, the graph is exactly [edges, nodes].' },
 		},
 		example: { type: 'chart', kind: 'graph', title: 'Service deps', data: [{ a: 'web', b: 'api' }, { a: 'api', b: 'db' }, { a: 'api', b: 'cache' }], encoding: { source: 'a', target: 'b' } },
 	},
@@ -535,12 +535,12 @@ const FIELD_TYPES = {
 	text: { description: 'Single-line text input.', serialization: 'string', aliases: ['string', 'input'] },
 	textarea: { description: 'Multi-line text input.', serialization: 'string', aliases: ['multiline'] },
 	secret: { description: 'Password-masked input with an eye reveal. Never logged, never returned to the agent; written to the destination only.', serialization: 'string', aliases: ['password', 'apikey', 'token'] },
-	email: { description: 'Email input. Browser syntax validation only — format, not deliverability.', serialization: 'string' },
+	email: { description: 'Email input. Format-checked live in the browser AND re-checked server-side on submit — format, never deliverability.', serialization: 'string' },
 	url: { description: 'URL input, validated live on blur and server-side: must parse and use an allowed scheme (default: http, https, ftp, ftps, sftp, ws, wss, file, mailto; restrict via validation.protocols).', serialization: 'string', aliases: ['link', 'website'] },
 	tel: { description: 'Telephone input.', serialization: 'string', aliases: ['phone'] },
 	number: { description: 'Numeric input.', serialization: 'env: decimal string; json: number', aliases: ['integer', 'float', 'int'] },
 	date: { description: 'Date picker. ISO date string (YYYY-MM-DD).', serialization: 'string' },
-	datetime: { description: 'Date+time picker (datetime-local). ISO string.', serialization: 'string', aliases: ['datetime-local', 'timestamp'] },
+	datetime: { description: 'Date+time picker (a bespoke calendar+time popover, not a native control; the input stays a typable ISO string). ISO string.', serialization: 'string', aliases: ['datetime-local', 'timestamp'] },
 	select: { description: 'Dropdown — one value from options. Requires "options".', serialization: 'string', requires: ['options'], aliases: ['dropdown', 'combobox'] },
 	radio: { description: 'Radio group — one value from options. Requires "options".', serialization: 'string', requires: ['options'], aliases: ['radiogroup'] },
 	checkbox: { description: 'Single yes/no checkbox.', serialization: 'env: "true"/"false"; json: boolean', aliases: ['boolean', 'bool', 'toggle', 'switch'] },
@@ -555,9 +555,10 @@ SHAPES.field.properties.type.enum = Object.keys(FIELD_TYPES)
 const BLOCKS = {
 	markdown: {
 		kind: 'display',
-		description: 'Markdown rendered as a document (raw HTML disabled). Exactly one of "text" (inline) or "src" (a workspace-confined .md, .mdx or .markdown file). Fenced code is syntax-highlighted, and leading YAML frontmatter is stripped. An .mdx file renders as static markdown: its JSX and imports are never evaluated, and warn.',
+		description: 'Markdown rendered as a document (raw HTML disabled). Exactly one of "text" (inline) or "src" (a workspace-confined .md, .mdx or .markdown file). Fenced code is syntax-highlighted. Leading YAML frontmatter is stripped from a "src" file (Jekyll/Hugo/Obsidian carry it); inline "text" is rendered as given, so do not open it with a --- block. An .mdx file renders as static markdown: its JSX and imports are never evaluated, and warn.',
 		aliases: ['md', 'text'],
 		notes: [
+			'If the markdown ALREADY EXISTS as a file, do not write a canvas around it — run `open <file.md>` (or `print <file.md> --out <file.pdf>`) and the runtime synthesises the envelope itself. Use this block only when the markdown belongs beside other blocks (a chart, a KPI row, a form), or when you are authoring the prose yourself as "text".',
 			'Remote assets are never fetched — the canvas cannot reach off-origin, by design. Download the asset yourself, then reference a local form.',
 			'Disposable canvas: inline the asset as a data: URI — ![alt](data:image/png;base64,...). Nothing lands in the user\'s project, and deleting the canvas removes everything. Keep it small: a canvas file is capped at 2 MB.',
 			'Durable report: save the asset to a workspace-local file beside the canvas and reference its relative path. Local images are inlined server-side, so the report stays a portable bundle.',
@@ -566,7 +567,7 @@ const BLOCKS = {
 		properties: {
 			type: { type: 'string', required: true, enum: ['markdown'] },
 			text: { type: 'string', description: 'Inline markdown. XOR with "src".', example: '## Hi **there**' },
-			src: { type: 'string', description: 'Workspace-relative path to a .md, .mdx or .markdown file — the only file types a canvas will read. XOR with "text".', example: 'notes/summary.md' },
+			src: { type: 'string', description: 'Workspace-relative path to a .md, .mdx or .markdown file — the only file types "src" will read (images referenced FROM the markdown are still inlined from disk). XOR with "text".', example: 'notes/summary.md' },
 		},
 		example: { type: 'markdown', text: '## Executive summary\nSpend was up **12% QoQ**.' },
 	},
@@ -604,6 +605,9 @@ const BLOCKS = {
 		kind: 'display',
 		description: 'Data table. Column "format" drives cell rendering; numeric formats right-align with tabular numerals.',
 		aliases: ['grid', 'datatable'],
+		notes: [
+			'Ship every column you need — do NOT pre-trim columns to "make it fit". On screen a table wider than the pane scrolls sideways; printed, one too wide for the page folds its cells to fit. A wide table is cramped on paper, never truncated: no column is dropped.',
+		],
 		properties: {
 			type: { type: 'string', required: true, enum: ['table'] },
 			title: { type: 'string', description: 'Card title.', example: 'Top customers' },

@@ -14,9 +14,10 @@ const { spawn } = require('node:child_process')
 const { normalizeRoot, insideRoot, stateDir } = require('./lib/paths')
 const registry = require('./lib/registry')
 const { registerSecret, redact, errorOut } = require('./lib/redact')
-const { scan, canvasCount, readCanvasFile, MAX_CANVAS_BYTES } = require('./lib/scan')
+const { scan, counts, readCanvasFile, MAX_CANVAS_BYTES } = require('./lib/scan')
 const { validate, collectBlocks, isInteractiveBlock, flattenFields } = require('./lib/validate')
-const { readMarkdownSrc, inlineLocalImages, inlineImageFile } = require('./lib/markdownsrc')
+const { readMarkdownSrc, inlineLocalImages, inlineImageFile, hasMarkdownExtension, renderableMarkdown } = require('./lib/markdownsrc')
+const { virtualCanvasFor } = require('./lib/mdcanvas')
 const { Sessions } = require('./lib/session')
 const envfile = require('./lib/envfile')
 const jsonfile = require('./lib/jsonfile')
@@ -132,6 +133,27 @@ function loadCanvas(rel) {
 	const abs = path.resolve(ROOT, rel)
 	if (!insideRoot(ROOT, abs))
 		return { status: 403, body: { ok: false, errors: [{ code: 'PATH_OUTSIDE_WORKSPACE', path: '', message: `"${rel}" is outside the workspace root.` }] } }
+
+	// A markdown file is its own canvas — synthesised here, never written. The
+	// branch is keyed on the extension allowlist, which is also what keeps this
+	// route from becoming a second way to render `.env`.
+	if (hasMarkdownExtension(rel)) {
+		const canvas = virtualCanvasFor(ROOT, rel, MAX_CANVAS_BYTES)
+		if (!canvas)
+			return { status: 404, body: { ok: false, message: `Document not found: ${rel}` } }
+		resolveMarkdownSrc(canvas, { native: true })
+		return { status: 200, body: { ok: true, path: rel, canvas, warnings: [] }, canvas }
+	}
+
+	// A canvas is a *.json (lib/scan.js says so), and this route must read nothing
+	// else. Without the gate it happily opened any file in the workspace and, when
+	// JSON.parse choked, handed the failure back as INVALID_JSON — whose V8 message
+	// quotes the first bytes it could not parse. `?path=.env` therefore answered
+	// with `Unexpected token 'A', "API_KEY=sk"...`. Same lesson as the markdown
+	// allowlist: confinement is not enough, because .env is inside the root too.
+	if (!rel.toLowerCase().endsWith('.json'))
+		return { status: 404, body: { ok: false, message: `Not a canvas or a markdown document: ${rel}` } }
+
 	let raw
 	try {
 		raw = fs.readFileSync(abs, 'utf8')
@@ -154,8 +176,15 @@ function loadCanvas(rel) {
  * Inline markdown "src" files and their local images server-side — the browser
  * has no raw file route, and the CSP lets it fetch neither. It only ever sees
  * markdown text and `data:` URIs.
+ *
+ * `native` marks a canvas the runtime synthesised around a markdown file the
+ * reader opened directly. That file has no author to teach: the validator's
+ * raw-HTML warning and REMOTE_ASSET_BLOCKED error exist so an agent fixes its
+ * own `src` file, and there is no agent here — so the text degrades instead
+ * (HTML removed rather than escaped into view, remote images labeled). We do
+ * not rewrite the user's markdown; we render less of it.
  */
-function resolveMarkdownSrc(canvas) {
+function resolveMarkdownSrc(canvas, { native = false } = {}) {
 	for (const { block } of collectBlocks(canvas)) {
 		if (!block || block.type !== 'markdown')
 			continue
@@ -167,8 +196,11 @@ function resolveMarkdownSrc(canvas) {
 			if (insideRoot(ROOT, abs))
 				baseDir = path.dirname(abs)
 		}
-		if (typeof block.text === 'string')
-			block.text = inlineLocalImages(block.text, ROOT, baseDir, MAX_CANVAS_BYTES)
+		if (typeof block.text !== 'string')
+			continue
+		if (native)
+			block.text = renderableMarkdown(block.text)
+		block.text = inlineLocalImages(block.text, ROOT, baseDir, MAX_CANVAS_BYTES)
 	}
 }
 
@@ -528,7 +560,10 @@ async function route(req, res, url) {
 			.sort((a, b) => a.name.localeCompare(b.name))
 			.map((d) => {
 				const abs = path.join(dir, d.name)
-				return { name: d.name, path: abs, canvasCount: canvasCount(abs) }
+				const c = counts(abs)
+				// canvasCount stays the total (it answers "is this folder worth
+				// opening"); the split is what the badge needs to name them honestly.
+				return { name: d.name, path: abs, canvasCount: c.canvases + c.docs, canvases: c.canvases, docs: c.docs }
 			})
 		const parent = path.dirname(dir)
 		return sendJson(res, 200, { ok: true, dir, parent: parent === dir ? null : parent, entries })
@@ -761,7 +796,9 @@ function onFsEvent(eventType, filename) {
 		changedFiles.clear()
 		broadcast({ type: 'workspace' })
 		for (const f of files) {
-			if (f.endsWith('.json') && readCanvasFile(path.join(ROOT, f)))
+			// A markdown file is a canvas here, so editing one must re-render the
+			// open document exactly as editing a *.canvas.json does.
+			if (hasMarkdownExtension(f) || (f.endsWith('.json') && readCanvasFile(path.join(ROOT, f))))
 				broadcast({ type: 'canvas', path: f })
 		}
 	}, 150)

@@ -31,6 +31,24 @@ When one driving step never happens, a helper that throws sinks the whole `test.
 
 The render smoke test was written, passed, and proved nothing until the bug it targets was deliberately reintroduced. It did not fail. That is how the real cause (the 2-dimension `splom`, not `newPlot` re-entrancy) was found. Before trusting any regression test, break the thing it guards and watch it go red.
 
+## Never poll `readAlive` in a before hook — it DELETES the kernel it fails to ping
+
+`registry.readAlive()` proves liveness with a **500 ms health ping, and unregisters the entry when that ping times out** — which is exactly right in production (it is what makes `kill -9` recovery automatic) and a trap in a test. Under full-suite load a dozen kernels and several headless Chromes are already up, the ping loses its race, and `readAlive` cheerfully deletes the registry entry of a kernel that is listening perfectly happily. Every later poll then finds nothing, and the hook concludes *"kernel did not come up"* about a kernel you can `curl` by hand.
+
+The blast radius is the part that hurts. `scripts/test/index.js` requires every test file into **one process**, so a top-level `test.before` is a hook on the *root* suite: one throwing hook fails **every test in the suite** — 243 of them — all reporting an error that names a file which is not the one that failed. Two suites had this and both were fine until the suite grew heavy enough to lose the race, at which point `npm test` went from green to 243 red with no code change to the runtime at all.
+
+So a before hook polls `registry.read()` (raw, no side effect), confirms liveness with its own `/healthz` request, and gives load a deadline it cannot beat. `print.test.js` learned this first and its comment says so; `kernel.test.js` and `document.test.js` now do the same. **Never call `readAlive` from a hook whose failure takes the suite with it.**
+
+## A fixture that never contains the hard case makes the bug unfailable
+
+Fences were being **clipped** in every printed PDF — a line wider than the page was simply cut off at the edge — and the deck suite was green throughout. Not because the assertions were weak: because `fixtures/handbook.md` had no fence wider than the page. It carried a long *inline* code span (labelled, in the fixture, "to prove the code block scrolls instead of wrapping"), and an inline span reflows with the prose. No test could ever have caught the clip, so the bug was not untested — it was **unfailable**. The fixture now carries a `<pre>` far wider than the sheet, including a URL with no break opportunity in it.
+
+Generalise it: when a test guards a *layout* rule, the fixture must contain the input that violates it. Ask what the smallest content is that breaks the rule, and put that content in the fixture — otherwise the suite proves only that the easy case is easy.
+
+## Assert what the browser computed, never what the stylesheet says
+
+Two of the paper-layout regressions above are invisible to a CSS-level check. A fence that overflows its box still *has* `overflow-wrap` in its cascade if a more specific rule beat it — so the wrap test asserts `pre.scrollWidth <= pre.clientWidth`, a measurement. And the deck's zeroed heading margins came from a rule that was present and correct (`.md h2{margin:34px 0 14px}`) being overridden by `.md > :first-child` — so the rhythm test reads `getComputedStyle(el).marginTop` and requires a real number. Grepping the stylesheet would have passed in both cases. Assert the computed value, in a real browser.
+
 ## A new required field makes every negative fixture pass for the wrong reason
 
 Adding a required envelope property (`createdWith`) instantly made `broken.canvas.json` fail *one more way*. Its tests kept passing — they assert `errorCount >= 3` and look for specific codes — so nothing went red, while the fixture had quietly stopped being a clean test of the six defects it was built around. A negative fixture must fail **only** on the defect it is named for; stamp it, or assert on the exact error-code set rather than a count. The same trap hits the positive direction harder: the four canvases in `examples/` were left unstamped when the field became required, so every shipped example failed `validate` and no test noticed, because nothing asserted that the examples validate. `provenance.test.js` now does.
@@ -66,3 +84,11 @@ The hardening test asserts the wildcard bind address appears nowhere in the sour
 ## Fake registry entries in shared state dirs look like leaks
 
 `registry.test.js` writes entries with dead ports and dummy tokens into the shared state dir; after a full-suite run those files linger and look like orphaned kernels. Check `token: "t"` / `startedAt: "now"` before chasing a "leaked kernel" — it is test debris, cleaned by the OS temp reaper.
+
+## A green suite proves the schemas agree; nobody was testing the prose
+
+The catalog's structural tests are strong and have always passed: every example validates, and a test pins that one registry tweak changes the validator *and* the catalog. None of that reads a **sentence**. So the teaching text — the `notes[]`, the `description:` strings, the lean-index one-liners, all of which are the agent's actual contract — rotted for months behind a green suite. An audit found `catalog --full` omitting `document` and `sweep` while promising "everything"; the chart block reaching agents as the single word *"Chart."*; `minLength` advertised as a flat field key when flat it is an inert `UNKNOWN_PROPERTY`; and the `graph` kind's `encoding.value` documented as edge width, existence-checked by the validator, and never read by the renderer.
+
+They share one root cause and one fix. **A claim in agent-facing prose is a behavior, and it needs a test like any other.** Where a string promises something checkable, assert the string *and* the behavior together — the catalog test that warns "a flat validation rule silently does not exist" also asserts that a flat rule still validates, so the day that becomes a hard error the warning fails instead of quietly becoming a lie. And prefer a test that constrains the *shape* of generated prose (no fragment, no cut abbreviation, no unbalanced paren) over one that pins its exact wording, which only rots differently.
+
+The corollary bit twice while fixing this: **the first version of three separate new tests could not fail.** One asserted the packed deck contained no bare `<pre>` — true even with the bug, because the wrapper was added later in the same render. One asserted copy buttons on a canvas whose fences never split. One asserted `--full` completeness against a `--full` that was already broken. Every one passed on the *unfixed* code. Reintroduce the bug and watch the new test go red before believing it: a test written from the fix, rather than from the failure, tends to assert the fix's own postconditions and nothing else.

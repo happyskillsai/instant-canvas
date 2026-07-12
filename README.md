@@ -24,6 +24,8 @@ Everything else is workbench: this documentation (`docs/`), the specifications (
 
 InstantCanvas's paradigm is a strict separation of concerns: **the LLM wrangles data into a JSON contract; the runtime owns all rendering.** An agent writes a `*.canvas.json` file, runs `open`, and a persistent per-workspace localhost kernel renders it in the default browser with hot reload. Display canvases return immediately; form and confirm canvases block until the human responds in the browser — and the agent receives redacted metadata only (field names, never values).
 
+A markdown file needs none of that. `.md` / `.mdx` / `.markdown` files are **first-class canvases**: they appear in the sidebar on their own, and `open report.md` renders one directly — the runtime synthesises the envelope in memory, so there is no wrapper for an agent to write and nothing extra on disk. `print report.md --out report.pdf` prints it as paper.
+
 Instead of maintaining an answers *warehouse* (pre-built admin panels), agents deliver answers *on the fly* — disposable, data-driven views generated the moment a question is asked. See [docs/mission.md](docs/mission.md) for the full framing.
 
 Two design commitments run through everything:
@@ -43,6 +45,10 @@ npx -y @happyskillsai/instant-canvas catalog sankey
 # render a canvas (spawns/reuses the workspace kernel, opens the browser)
 npx -y @happyskillsai/instant-canvas open examples/report.canvas.json
 
+# render a markdown file directly — no canvas JSON, no stamp, no validate
+npx -y @happyskillsai/instant-canvas open README.md
+npx -y @happyskillsai/instant-canvas print docs/report.md --out report.pdf
+
 # the agentic loop
 npx -y @happyskillsai/instant-canvas stamp my.canvas.json      # the CLI writes "createdWith", never the agent
 npx -y @happyskillsai/instant-canvas validate my.canvas.json   # exit 1 → fix from errors[] → repeat
@@ -56,7 +62,7 @@ npx -y @happyskillsai/instant-canvas status
 npx -y @happyskillsai/instant-canvas stop
 ```
 
-Maintainers run the same CLI from the working tree — `node scripts/instantcanvas.js <command>` — and the tests with `npm test` (215 tests, zero deps; the browser tests skip without Chrome; equivalent to `node --test scripts/test/`). `npm run coverage:cli` enforces the CLI's 100% line coverage. `npm run rls <major|minor|patch|x.y.z>` bumps the package version — validated semver, forward-only. Releases are orchestrated end to end by the `/release-cli` project skill — see [docs/releasing.md](docs/releasing.md).
+Maintainers run the same CLI from the working tree — `node scripts/instantcanvas.js <command>` — and the tests with `npm test` (250 tests, zero deps; the browser tests skip without Chrome; equivalent to `node --test scripts/test/`). `npm run coverage:cli` enforces the CLI's 100% line coverage. `npm run rls <major|minor|patch|x.y.z>` bumps the package version — validated semver, forward-only. Releases are orchestrated end to end by the `/release-cli` project skill — see [docs/releasing.md](docs/releasing.md).
 
 `examples/` contains four ready canvases (visual report, secrets → `.env` form, danger confirm, mixed); `demos/` holds larger showcases (all 17 general chart kinds, the 9 scientific ones, slider-driven sweeps, the form kitchen sink).
 
@@ -67,7 +73,8 @@ package.json                     THE PRODUCT — npm package "@happyskillsai/ins
 scripts/                         Ships to npm (scripts/test/ excluded by the files allowlist)
   instantcanvas.js               CLI: open | print | stamp | validate | catalog | status | stop
   kernel.js                      Per-workspace localhost server (HTTP + hand-rolled WS)
-  lib/                           schema/validate/catalog, registry, redact, envfile, pkgmeta, a zero-dep CDP client, …
+  lib/                           schema/validate/catalog, registry, redact, envfile, pkgmeta, mdcanvas
+                                 (the envelope a markdown file gets for free), a zero-dep CDP client, …
   web/                           Browser app (no framework) + csp-shim + vendored Plotly/markdown-it/highlight.js
   test/                          node:test suite + fixtures + browser-driving tests (repo-only)
 .agents/skills/instant-canvas/   THE SKILL — agent-facing contract published to HappySkills (~20 KB)

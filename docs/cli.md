@@ -17,8 +17,8 @@ Entry point: `npx -y @happyskillsai/instant-canvas <command>`, run from any dire
 ## Commands
 
 ```
-open <canvas.json> [--workspace <dir>] [--no-open] [--timeout <s>] [--result <file>]
-print <canvas.json> --out <file.pdf> [--workspace <dir>]
+open <canvas.json | file.md> [--workspace <dir>] [--no-open] [--timeout <s>] [--result <file>]
+print <canvas.json | file.md> --out <file.pdf> [--workspace <dir>]
 stamp <canvas.json> [--workspace <dir>] [--retrofit]
 validate <canvas.json>
 catalog [name] [--full]
@@ -26,10 +26,12 @@ status [--workspace <dir>]
 stop [--workspace <dir>]
 ```
 
+Every command that takes a path first passes `assertReadable()`: a canvas is a `*.json`, a document is a `.md`/`.mdx`/`.markdown`, and **anything else is refused before it is opened**. This is not tidiness — refusing a file used to print the first ten bytes of it, because V8's `JSON.parse` error quotes the text it choked on (see [gotchas/runtime.md](gotchas/runtime.md)).
+
 ### open
 
 1. Workspace root = `--workspace` else cwd (realpath'd). The canvas must resolve inside it — otherwise exit 1 `PATH_OUTSIDE_WORKSPACE` with a message telling the agent to pass `--workspace`.
-2. **Validate locally first.** An invalid canvas never launches the UI; the CLI exits 1 with the full `errors[]` array.
+2. **Validate locally first.** An invalid canvas never launches the UI; the CLI exits 1 with the full `errors[]` array. A **markdown file skips this step entirely** — there is no envelope to check, because the runtime synthesises it (see [canvas-schema.md](canvas-schema.md)).
 3. Ensure a kernel: reuse via registry health ping, else spawn under the spawn lock (detached — survives the CLI exiting) and poll `/healthz` up to 10 s (`KERNEL_UNREACHABLE`, exit 2, includes the kernel log path). A version mismatch restarts an idle kernel.
 4. `POST /api/open`, then open the browser (unless `--no-open`; a failed browser launch is a stderr warning `BROWSER_OPEN_FAILED` with the URL, never an error).
 5. **Display canvas** → print `{"status": "opened", "url", ...}`, exit 0 immediately. **Interactive canvas** → block, polling the session every second until the human resolves it. Polling tolerates transient socket blips: fresh connection per request (`agent: false`) and up to 3 consecutive failures cross-checked against the registry health ping before declaring the kernel lost.
@@ -37,7 +39,9 @@ stop [--workspace <dir>]
 
 ### print
 
-Prints a **document canvas** (envelope-level `document` object — anything else is refused with a teaching error) to PDF through a local headless Chrome: validate → ensure kernel → drive Chrome to the canvas URL → wait until the deck is laid out and every chart drew (structure, never "ink") → `Page.printToPDF` with `printBackground` + `preferCSSPageSize` and zero margins → atomic write. The sheets on screen ARE the PDF pages, so the reported `pages` equals the PDF's `/Count` by construction.
+Prints a **document canvas** (envelope-level `document` object — any other canvas is refused with a teaching error) **or any markdown file** to PDF through a local headless Chrome: validate → ensure kernel → drive Chrome to the canvas URL → wait until the deck is laid out and every chart drew (structure, never "ink") → `Page.printToPDF` with `printBackground` + `preferCSSPageSize` and zero margins → atomic write. The sheets on screen ARE the PDF pages, so the reported `pages` equals the PDF's `/Count` by construction.
+
+`print notes.md --out notes.pdf` needs no `document` object and no canvas: a markdown file *is* the document, and the deck derives every default it would have declared (A4, 15 mm, a TOC from its own headings). Because a display canvas opens continuous, the print URL carries `?view=deck` — the browser builds paper on arrival rather than print reaching into the page to click the toggle for itself.
 
 - **The only Chrome-dependent command.** Discovery reuses `findChrome`; no Chrome → `CHROME_REQUIRED` (exit 2) naming `CHROME_PATH` as the override. An explicit `CHROME_PATH` pointing at a missing binary is an error, never a silent fallback.
 - Chrome launches `--headless=new --enable-gpu` — **never** the tests' swiftshader profile, which silently blanks 3D charts in printed output. 3D kinds need a working GPU for `print`; Cmd+P from the real browser always works. (Verified on macOS/Apple Silicon; a GPU-less CI box may still print blank 3D.)
@@ -45,7 +49,7 @@ Prints a **document canvas** (envelope-level `document` object — anything else
 
 ### stamp
 
-The only writer of `createdWith` (see [canvas-schema.md](canvas-schema.md)). It parses the file, refuses anything whose top level lacks `"instantcanvas": 1` — a canvas marker, not arbitrary JSON — and confines the target to the workspace root, because unlike `validate` it *writes*.
+The only writer of `createdWith` (see [canvas-schema.md](canvas-schema.md)). It parses the file, refuses anything whose top level lacks `"instantcanvas": 1` — a canvas marker, not arbitrary JSON — and confines the target to the workspace root, because unlike `validate` it *writes*. A markdown file is refused too, and for a reason worth stating: nothing on disk was authored for us, so there is no birth version to record. `validate` refuses it for the mirror reason — no envelope, no contract to check.
 
 Two properties are load-bearing. It is **idempotent**: an existing stamp is returned as `{"changed": false}` and the file is not touched, so a canvas keeps the version that bore it forever. And it **splices the field in as text**, mirroring the file's own indentation and colon spacing, rather than re-serializing the parsed object — a canvas belongs to the user, and re-serializing turned a one-line addition into a 148-line reformat (a minified canvas stays minified). The splice is re-parsed and diffed against the original before it is written; anything unexpected falls back to a full re-serialize. `--retrofit` writes `"unknown"` instead of the running version, for files created before stamping existed.
 
@@ -80,5 +84,7 @@ Secret values appear in **no** variant — see [security.md](security.md).
 6. `open` → parse the one-line result → continue from metadata only.
 
 Step 4 is the one step the agent cannot fake, and skipping it is self-correcting rather than silent: `validate` and `open` both refuse an unstamped canvas with `MISSING_CREATED_WITH`, whose `hint` is the `stamp` command itself. The agent repairs it inside its own loop; the user never sees it.
+
+**To show a markdown file that already exists, skip all six steps**: `open report.md`. There is no wrapper to write, nothing to stamp, and nothing to validate. The loop above is for data the agent wrangled into a contract; a `.md` is already the data.
 
 Convention: use the project root as the workspace for a whole session and subfolders as sidebar sections; separate workspaces only when the user genuinely wants isolation.

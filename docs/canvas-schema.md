@@ -6,6 +6,7 @@ source:
   - scripts/lib/validate.js
   - scripts/lib/catalog.js
   - scripts/lib/markdownsrc.js
+  - scripts/lib/mdcanvas.js
   - scripts/lib/pkgmeta.js
 ---
 
@@ -29,7 +30,7 @@ A canvas holds **at most one interactive block** (`form` or `confirm`) across al
 
 ### `createdWith`: provenance, not compatibility
 
-The two version-shaped fields mean different things. `instantcanvas: 1` is the **contract** version, pinned by `enum: [VERSION]` and reused by `lib/scan.js` as the discriminator that decides what is a canvas at all. `createdWith` is the **runtime** version that authored the file, read from `package.json` through `lib/pkgmeta.js`.
+The two version-shaped fields mean different things. `instantcanvas: 1` is the **contract** version, pinned by `enum: [VERSION]` and reused by `lib/scan.js` as the discriminator that decides which *JSON file* is a canvas at all (a markdown file needs no marker — it is not a canvas file, and its envelope is synthesised; see [the virtual canvas](#the-virtual-canvas-a-markdown-file-is-a-canvas)). `createdWith` is the **runtime** version that authored the file, read from `package.json` through `lib/pkgmeta.js`.
 
 It exists because a canvas a user keeps outlives the runtime that made it: when something looks wrong a year later, the stamp is how you find out what wrote it. That is its whole job.
 
@@ -68,6 +69,21 @@ So a remote image (`![](https://…)` or a raw `<img src="https://…">`) is a *
 
 Workspace-local images **are** inlined, server-side, as `data:` URIs in the same pass that inlines `src` (see [frontend.md](frontend.md)); the browser only ever sees `data:` or a labeled fallback. The source scan blanks fenced and inline code first, so a README that documents `<table>` or a ```` ```jsx ```` sample is never warned about the code it merely quotes.
 
+## The virtual canvas: a markdown file *is* a canvas
+
+An agent never has to write an envelope around a markdown file. The workspace scan lists every `.md` / `.mdx` / `.markdown` file (see [architecture.md](architecture.md)), and when one is opened the kernel synthesises the canvas for it — in memory, per request, **never on disk**:
+
+```jsonc
+{"instantcanvas": 1, "createdWith": "<running version>", "title": "<first H1, else the file name>",
+ "blocks": [{"type": "markdown", "src": "docs/report.md"}]}
+```
+
+That is `virtualCanvasFor()` in `lib/mdcanvas.js`, and it is the same `markdown` block an agent would have typed. Everything downstream — image inlining, the deck, the auto-TOC, `print`, hot reload, sidebar search — works with no knowledge that no canvas file exists. `instant-canvas open README.md` and `print README.md --out readme.pdf` follow directly (see [cli.md](cli.md)); `validate` and `stamp` refuse a markdown file, because there is no contract to check and nothing on disk whose birth version could be recorded.
+
+The gate is the extension allowlist, reused rather than reimplemented — this route is a *second* way to name a file for rendering, and the first one already shipped the `src: ".env"` bug. `createdWith` is honest here rather than borrowed: the running runtime is what authored this object, this instant.
+
+**The native view degrades where the authored path teaches.** Behind an agent's `src`, the validator is a teacher: raw HTML warns and a remote image is a hard `REMOTE_ASSET_BLOCKED`, so the agent fixes the file. A README has no such author, we will not rewrite the user's file, and `html: false` *escapes* rather than deletes — leaving it alone means printing `<details>` as literal text and breaking every badge. So `renderableMarkdown()` removes HTML instead of escaping it (keeping the prose the tags wrapped), turns an HTML `<img>` into a markdown image so a README's logo survives, and replaces a remote image with `*(remote image not shown)*`. This is the one deliberate behavioral fork in the project: the same file renders differently viewed natively than behind an authored `src`. See [gotchas/frontend.md](gotchas/frontend.md).
+
 ## Chart kinds (26)
 
 General (17): `line area bar pie(+donut) scatter heatmap radar funnel gauge candlestick boxplot sankey graph treemap sunburst parallel themeRiver`
@@ -92,6 +108,8 @@ Kinds requiring external assets or JS callbacks are **documented as unsupported 
 
 Two kinds have no Plotly trace and are rendered by the skill itself — `graph` (deterministic force layout, drawn as scatter edges + degree-sized nodes) and `themeRiver` (symmetric streamgraph baseline, drawn as closed polygons). Their contract is unchanged: the agent still ships plain rows.
 
+`graph`'s optional `value` is the edge weight and drives **line width**. It was documented that way long before it was rendered that way: the validator existence-checked the key and the renderer drew every edge at width 1, so a weighted graph validated green and silently discarded its weights. Because a Plotly scatter trace carries a single line width, weighted edges are drawn in a few width bands (one trace each). An **unweighted** graph is still exactly `[edges, nodes]` — `options` merges traces by index, so keeping the node trace at index 1 is what stops an existing patch from silently landing on an edge.
+
 ## Sweeps: a slider over precomputed frames
 
 Any chart kind becomes a parameter sweep by replacing `data` with `sweep` (`catalog sweep`):
@@ -111,7 +129,9 @@ Validation: `data` becomes optional (and is warned about if sent anyway); `frame
 
 ## Document mode
 
-**The document view is presentation, not capability**: any display canvas can be viewed as **paper sheets that print 1:1** via the browser's topbar toggle, with everything derivable derived — A4/15mm defaults, page numbers, light palette, and a TOC generated automatically from headings and block titles whenever there is anything to list (declared or not; a topbar button lets the reader toggle it off and on, repacking the deck). The envelope-level `document` object (`catalog document`) does two things on top: it makes the deck the **default view**, and it carries what nobody can derive — cover, back cover, running header/footer, brand theme, paper geometry, and TOC *preferences* (title, depth). Every sub-key is optional and presence enables its feature:
+> **"Document" means two unrelated things — do not conflate them.** A scan entry's `kind: "document"` is a *markdown file listed in the sidebar* (the section above). The envelope-level `document` object below is *paper geometry* — cover, TOC, header/footer — and any canvas may carry it. A markdown document does **not** declare one: it opens continuous like every other display canvas and derives its paper defaults only when someone asks for the deck.
+
+**The document view is presentation, not capability**: any display canvas can be viewed as **paper sheets that print 1:1** via the browser's topbar toggle, with everything derivable derived — A4/15mm defaults, page numbers, light palette, a looser typographic rhythm for reading on paper, **code fences that wrap instead of scrolling** (a PDF has no scrollbar, so an overflowing fence would be a clipped one), no copy-to-clipboard buttons, and a TOC generated automatically from headings and block titles whenever there is anything to list (declared or not; a topbar button lets the reader toggle it off and on, repacking the deck). The **running header and footer** derive the same way: on a canvas that declares neither, a topbar button turns them on — the canvas title in the header, `{{pageNumber}} / {{totalPages}}` in the footer — and that same button turns a *declared* pair off, because the reader owns what is on their own paper. Unlike the TOC, the strips are not free: they are measured **into** every sheet's content budget, so turning them on shrinks each page, can add a sheet, and shifts every page number after it — the ones printed in the TOC included. The deck is therefore repacked from scratch, never patched. The envelope-level `document` object (`catalog document`) does two things on top: it makes the deck the **default view**, and it carries what nobody can derive — cover, back cover, the header/footer *text*, brand theme, paper geometry, and TOC *preferences* (title, depth). Every sub-key is optional and presence enables its feature:
 
 ```jsonc
 "document": {
@@ -154,8 +174,12 @@ Error codes: `INVALID_JSON, INVALID_SPEC, UNSUPPORTED_VERSION, MISSING_CREATED_W
 
 The catalog is designed so an agent pulls **only the information it needs, when it needs it**:
 
-1. `catalog` (bare) — a **~6 KB lean index**: one-liners for every block, every chart kind (with when-to-use), every field type, plus layout/validation pointers. No schemas — a test asserts no `"properties"` key appears and caps the payload size.
-2. `catalog <name>` — ONE full contract: a block, a chart kind, a field type, `fieldset`, or `envelope`. Chart kinds return summary, when-to-use, data shape, typed encoding, and a working example.
-3. `catalog --full` — the everything dump, for the rare case it is genuinely needed.
+1. `catalog` (bare) — a **~7 KB lean index**: one-liners for every block, every chart kind (with when-to-use), every field type, plus layout/validation pointers. No schemas — a test asserts no `"properties"` key appears and caps the payload at 7.5 KB. It opens with `markdownFiles`, because the cheapest canvas is the one an agent never writes: a `.md` that already exists is opened, not wrapped.
+2. `catalog <name>` — ONE full contract: a block, a chart kind, a field type, `fieldset`, `sweep`, `document`, or `envelope`. Chart kinds return summary, when-to-use, data shape, typed encoding, and a working example.
+3. `catalog --full` — the everything dump, for the rare case it is genuinely needed. It means *everything*: `document` and `sweep` were once reachable only by name, so an agent that pulled the whole contract to learn what existed concluded they did not.
+
+The one-liners are generated from each registry `description`, and generating them is not free of judgment: the first implementation cut at the first `.`, which is not a sentence boundary — the chart block reached agents as the word *"Chart."* and confirm as *"Confirmation card (e."*. `lead()` takes whole sentences, and the cap exists to force concision on the *source* descriptions, never to be met by truncating them. That is why the size test is paired with one that rejects any fragment, cut abbreviation, or unbalanced paren.
 
 Unknown names fail helpfully: `catalog custom` explains *why* it is unsupported; misspellings get the closest valid entry.
+
+**The catalog teaches, so a rule that lives only in SKILL.md does not exist.** SKILL.md is prose an agent may never read, or may compact away; the catalog is what it pulls on demand. So the "don't wrap a markdown file you could have opened" rule is stated three times on the deterministic surface — the lean index leads with it, it is the *first* note of `catalog markdown`, and `catalog document` says a `document` object is needed only to print a *canvas*. Anything an agent must not get wrong belongs here, not in the prose.

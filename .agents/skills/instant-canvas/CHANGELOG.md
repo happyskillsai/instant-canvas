@@ -5,6 +5,97 @@ The agent-facing contract for InstantCanvas. The runtime ships as the
 and LICENSE, and agents drive the CLI through `npx`. Versions track the runtime
 package they were authored alongside.
 
+## [Unreleased]
+
+### Added
+- **Markdown files need no canvas.** `open report.md` and `print report.md --out
+  report.pdf` now work directly — no envelope to write, no `stamp`, no
+  `validate`. SKILL.md teaches this as the first thing to reach for when the
+  content already exists as a file, and tells you not to author a wrapper canvas
+  around a `.md` you could have opened. Author a real canvas with a `markdown`
+  block only when the file belongs *beside* other blocks.
+- **The rule is deterministic, not just prose.** The catalog teaches it too, so an
+  agent that never reads SKILL.md — or whose context dropped it — still cannot
+  fall into the wrapper anti-pattern: the lean index leads with `markdownFiles`,
+  and the first note of `catalog markdown` says to `open` the file instead of
+  wrapping it. `catalog document` now states that a `document` object is needed
+  only to print a *canvas*, and that a `.md` derives its own paper.
+- **Discovery**: the skill description and keywords name markdown and PDF. The
+  trigger vocabulary had covered only charts, tables, KPIs, forms and secrets —
+  so "show me this README" or "turn this doc into a PDF" would not have reached
+  InstantCanvas at all.
+- **Printing a *canvas* is finally documented — you could not previously get
+  there from SKILL.md.** `print <canvas.json>` refuses a canvas that has no
+  envelope-level `document` object, and the contract never mentioned that key
+  existed: you would write the canvas, run `print`, and be refused with nothing
+  in the skill explaining why. There is now a Printing section — the `document`
+  shape, `$IC catalog document`, the display-only rule
+  (`DOCUMENT_INTERACTIVE_BLOCK`: paper cannot submit or drag),
+  `{{pageNumber}}`/`{{totalPages}}`, and strict-hex theme colors.
+  `"document": {}` alone is enough to make a canvas printable — geometry, the
+  TOC and even the running header/footer are all derived when you omit them.
+- **Page numbers in a PDF must be declared by you.** A human reading a document
+  on screen can now switch a running header/footer on themselves, but that
+  choice lives in their browser and `print` never sees it. If the PDF *you*
+  generate has to carry page numbers, put them in `"footer"` yourself.
+- **Wide content is safe to ship — stop trimming it to fit.** The catalog now
+  states what paper does with content too wide for the page, because the old
+  answer was "silently deletes it" and an agent that knew that would rationally
+  pre-trim to protect the data. A code fence too long for the line **wraps**
+  (and carries no copy button — nobody copies a PDF to a clipboard), and a table
+  too wide for the page **folds its cells**: it comes out cramped, never
+  truncated, and **no column is dropped**. Said on both surfaces an agent
+  actually reads — `catalog table` (a new note: "ship every column you need — do
+  NOT pre-trim columns to make it fit") and `catalog document`. Nothing in the
+  canvas JSON changes; this is a promise about the rendering you can now rely on.
+
+### Changed
+- `open`/`print` accept a canvas or a markdown file; `stamp`/`validate` are
+  canvases only, and refuse markdown with a teaching error. Anything that is
+  neither a canvas nor markdown is refused **unread** — never point these
+  commands at `.env` or other data files.
+- A natively-opened markdown file renders best-effort rather than validated: raw
+  HTML is dropped (its prose kept) and a remote image becomes
+  `*(remote image not shown)*`, because the runtime never fetches.
+- **That leniency is only for `open <file.md>`.** Point a `markdown` block's
+  `src` at the same file and you are its author: a remote image — a shields.io
+  badge in a README is the usual way to meet this — is a hard
+  `REMOTE_ASSET_BLOCKED` **error**, exit 1, not a silent degrade.
+- **`catalog` corrections you should act on.** Bare `catalog` returns the lean
+  index and **no schemas at all** (SKILL.md previously claimed it returned "all"
+  schemas). `catalog <name>` also accepts `sweep` and `document`. `catalog
+  --full` now really does dump everything: `document` and `sweep` used to be
+  missing from it, so an agent that pulled the whole contract to find out what
+  existed concluded they did not.
+- **Per-field validation nests under its own key**: `{"type": "secret",
+  "validation": {"minLength": 12}}`. Written flat on the field those keys are
+  merely unknown properties — the canvas still validates and the rule silently
+  does not exist. The lean index now says so.
+- **A sweep needs at least two frames** (one is refused), and is not allowed in a
+  `document` — paper cannot drag a slider.
+- Contract details that were undocumented and each cost a failed run: `--out`
+  must resolve **inside the workspace** (no printing to `/tmp`); `validate` takes
+  `--workspace`, and without it a markdown `src` resolves against your current
+  directory and invents `MISSING_SOURCE` errors; `--retrofit` permanently writes
+  `"unknown"` and must **never** be used on a canvas you just wrote, because a
+  stamp is never rewritten; `CHROME_PATH` overrides Chrome discovery for `print`;
+  and an unknown command or flag prints usage to **stderr with empty stdout**, so
+  check the exit code before parsing stdout as JSON.
+
+### Fixed
+- **A weighted `graph` silently threw your weights away.** `encoding.value` was
+  documented as edge weight → line width and the validator even checked the key
+  against your data, but every edge was drawn at width 1. Ship weights and they
+  now render (heaviest edge thickest).
+- **The lean index was mangling its own one-liners.** The `chart` block reached
+  you as the single word *"Chart."* and `confirm` as *"Confirmation card (e."* —
+  the teaching was being truncated away. One-liners are whole sentences now.
+- Corrected contract text that misdescribed the runtime: the auto-TOC lists chart
+  and table blocks **that carry a `title`** (a `kpi` block has no title and is
+  never listed — it was previously claimed they always were); `datetime` renders
+  a bespoke calendar popover, not a native `datetime-local` control; and
+  `catalog pie` now shows the `donut` slot it tells you to set.
+
 ## [0.3.2] - 2026-07-11
 
 ### Changed

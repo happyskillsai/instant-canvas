@@ -7,6 +7,12 @@
 
 const TOKEN = new URLSearchParams(location.search).get('token') || ''
 
+// `print` drives a headless Chrome at this page and needs paper on screen. A
+// declared `document` opens as the deck on its own; a markdown file — and any
+// other display canvas — opens continuous, so print asks for the deck in the
+// URL rather than reaching into the page to click the toggle for itself.
+const FORCE_DECK = new URLSearchParams(location.search).get('view') === 'deck'
+
 async function api(path, opts = {}) {
 	const res = await fetch(path, {
 		...opts,
@@ -40,6 +46,8 @@ const state = {
 	docToc: null, // reader override for the TOC: null = auto (on when there is content), true/false = forced
 	docTocOn: false, // what the last deck render actually did (drives the toggle button state)
 	docEntries: 0, // how many TOC entries the last deck render derived
+	docStrips: null, // reader override for the running header/footer: null = auto (on iff declared), true/false = forced
+	docStripsOn: false, // what the last deck render actually did (drives the toggle button state)
 	docFit: null, // re-runs the deck scale fit; set by each document render
 }
 
@@ -57,6 +65,7 @@ const LUCIDE = {
 	'corner-left-up': '<path d="M14 9 9 4 4 9"/><path d="M20 20h-7a4 4 0 0 1-4-4V4"/>',
 	'eye': '<path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/>',
 	'eye-off': '<path d="M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49"/><path d="M14.084 14.158a3 3 0 0 1-4.242-4.242"/><path d="M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143"/><path d="m2 2 20 20"/>',
+	'file-text': '<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/>',
 	'folder': '<path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/>',
 	'folder-open': '<path d="m6 14 1.5-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.54 6a2 2 0 0 1-1.95 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H18a2 2 0 0 1 2 2v2"/>',
 	'house': '<path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"/><path d="M3 10a2 2 0 0 1 .709-1.528l7-6a2 2 0 0 1 2.582 0l7 6A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
@@ -324,6 +333,19 @@ $('tocBtn').addEventListener('click', () => {
 	renderCanvas()
 })
 
+// Running header/footer on/off — a reader choice, like the TOC. Also repacks,
+// and for a sharper reason: the strips are measured INTO every sheet's content
+// budget (packFragments probes a sheet with them attached), so turning them on
+// shrinks each page, which can add a sheet, which shifts every page number
+// after it — including the ones printed in the TOC. Deriving the whole deck
+// again is what keeps those three in agreement; never patch the strips in.
+$('stripsBtn').addEventListener('click', () => {
+	if (!state.docLand)
+		return
+	state.docStrips = !state.docStripsOn
+	renderCanvas()
+})
+
 // Cmd+P must print the DECK even from the continuous view: print CSS already
 // shows the deck and hides the rest, so all beforeprint has to do is move the
 // live chart nodes into the deck's slots (cheap, synchronous). The .printing
@@ -362,22 +384,34 @@ function renderTree() {
 	tree.innerHTML = state.tree.collections.map((g) => {
 		const isC = state.collapsed.has(g.name)
 		const isRoot = g.name === '(root)' // canvases living directly in the workspace folder
+		// A document is a markdown file the runtime renders as itself — same click,
+		// same canvas, but it was not authored for us, so it does not wear the
+		// canvas dot.
 		const items = g.canvases.map((c) => `
-			<div class="item ${c.id === state.activeId ? 'active' : ''}" data-canvas="${esc(c.id)}">
-				<span class="dot"></span>${esc(c.title)}
+			<div class="item ${c.id === state.activeId ? 'active' : ''}" data-canvas="${esc(c.id)}" title="${esc(c.id)}">
+				${c.kind === 'document' ? `<span class="doc-ico">${icon('file-text')}</span>` : '<span class="dot"></span>'}${esc(c.title)}
 			</div>`).join('')
+		// Delete removes marker-verified canvases and nothing else, so a folder that
+		// holds only documents has nothing for it to remove. Offering the button
+		// there would be a control that lies: the dialog would promise zero files
+		// and the click would do nothing.
+		const deletable = !isRoot && g.canvases.some((c) => c.kind !== 'document')
 		return `<div class="group ${isC ? 'collapsed' : ''}">
-			<div class="group-row" data-group="${esc(g.name)}" ${isRoot ? `title="Canvases directly inside the workspace folder (${esc(state.tree.root)})"` : ''}>
+			<div class="group-row" data-group="${esc(g.name)}" ${isRoot ? `title="Canvases and documents directly inside the workspace folder (${esc(state.tree.root)})"` : ''}>
 				<span class="caret">${icon('chevron-down')}</span>${icon(isRoot ? 'house' : 'folder')}
 				<span class="gname">${esc(isRoot ? rootBase : g.name)}</span>
-				${isRoot ? '' : `<button class="grp-del" data-del-group="${esc(g.name)}" title="Delete this folder's canvases from disk">${icon('trash-2')}</button>`}
+				${deletable ? `<button class="grp-del" data-del-group="${esc(g.name)}" title="Delete this folder's canvases from disk">${icon('trash-2')}</button>` : ''}
 			</div>
 			<div class="items">${items}</div>
 		</div>`
-	}).join('') || '<div class="tree-empty">(no canvases yet)</div>'
+	}).join('') || '<div class="tree-empty">(nothing to show yet)</div>'
 
-	const n = state.tree.count, ng = state.tree.collections.length
-	$('wsStats').textContent = `${n} canvas${n === 1 ? '' : 'es'} · ${ng} group${ng === 1 ? '' : 's'}`
+	const n = state.tree.count, nd = state.tree.docCount || 0, ng = state.tree.collections.length
+	$('wsStats').textContent = [
+		`${n} canvas${n === 1 ? '' : 'es'}`,
+		...(nd ? [`${nd} doc${nd === 1 ? '' : 's'}`] : []),
+		`${ng} group${ng === 1 ? '' : 's'}`,
+	].join(' · ')
 	fullRootPath = state.tree.root
 	$('rootpath').title = state.tree.root
 	fitRootPath()
@@ -411,11 +445,17 @@ new ResizeObserver(fitRootPath).observe($('rootpath'))
 
 async function deleteCollection(name) {
 	const group = state.tree && state.tree.collections.find((c) => c.name === name)
-	const count = group ? group.canvases.length : 0
+	// Canvases only: the kernel deletes marker-verified *.json and nothing else,
+	// so a folder's markdown documents are listed here but never removed — the
+	// count must promise exactly what the delete does.
+	const entries = group ? group.canvases : []
+	const count = entries.filter((c) => c.kind !== 'document').length
+	const docs = entries.length - count
 	const yes = await askConfirmation({
 		title: `Delete folder "${name}"?`,
 		bodyHtml: `<p>This deletes the <b>${count}</b> canvas file${count === 1 ? '' : 's'} inside <code>${esc(name)}/</code> from disk.
-			Non-canvas files are left alone; the folder itself is removed only if it ends up empty.</p>`,
+			${docs ? `Its <b>${docs}</b> markdown document${docs === 1 ? '' : 's'} and all other non-canvas files are left alone` : 'Non-canvas files are left alone'};
+			the folder itself is removed only if it ends up empty.</p>`,
 		confirmLabel: 'Delete',
 	})
 	if (!yes)
@@ -465,14 +505,31 @@ function renderMarkdown(block) {
  * content, so it must not travel with the markdown, and building it here keeps
  * the markup free of the style attributes the CSP would drop anyway.
  */
-function mountCodeCopy(scope) {
+/**
+ * Wrap every code block in its positioning context and, unless told otherwise,
+ * give it a copy button.
+ *
+ * The two halves are separable, and on paper only the wrapper is wanted: nobody
+ * copies a PDF to the clipboard, so `{button: false}` mounts the wrapper alone.
+ * The wrapper still goes on before the packer measures (renderDocumentView wraps
+ * the fragments up front), because any wrapper-dependent style must exist at
+ * measure time or the sheet grows after it was sized — the rule that a fence's
+ * geometry is settled BEFORE measurement, never after.
+ *
+ * Idempotent, and it repairs a wrapper that has no button yet — which is what a
+ * split fence's continuation inherits from `cloneChain`.
+ */
+function mountCodeCopy(scope, { button = true } = {}) {
 	for (const pre of scope.querySelectorAll('.md pre')) {
-		if (pre.parentElement.classList.contains('code-block'))
+		let wrap = pre.parentElement
+		if (!wrap.classList.contains('code-block')) {
+			wrap = document.createElement('div')
+			wrap.className = 'code-block'
+			pre.parentNode.insertBefore(wrap, pre)
+			wrap.appendChild(pre)
+		}
+		if (!button || wrap.querySelector(':scope > .code-copy'))
 			continue
-		const wrap = document.createElement('div')
-		wrap.className = 'code-block'
-		pre.parentNode.insertBefore(wrap, pre)
-		wrap.appendChild(pre)
 
 		const btn = document.createElement('button')
 		btn.type = 'button'
@@ -586,6 +643,13 @@ function applyOptions(fig, options) {
 	}
 	return { data, layout }
 }
+
+// Edge-weight → line-width band for `graph`. Quantized rather than continuous: a
+// scatter trace holds one width, so each distinct width costs a trace, and a few
+// legible bands beat one trace per edge on a dense graph.
+const EDGE_W_MIN = 1
+const EDGE_W_MAX = 6
+const EDGE_BANDS = 5
 
 /** Fruchterman-Reingold on a unit square. Deterministic: a hot reload must not
  *  reshuffle the graph under the reader. Plotly has no network trace, so the
@@ -1014,17 +1078,44 @@ function chartFigure(block) {
 			const edges = rows.map((r) => [String(r[enc.source]), String(r[enc.target])])
 			const pos = forceLayout(names.map(String), edges)
 			const at = new Map(names.map((n, i) => [String(n), i]))
-			const ex = [], ey = []
-			for (const [a, b] of edges) {
-				const pa = pos[at.get(a)], pb = pos[at.get(b)]
-				if (!pa || !pb) continue
-				ex.push(pa.x, pb.x, null)
-				ey.push(pa.y, pb.y, null)
+			// `encoding.value` is the edge weight, and it drives line width — as the schema
+			// has always promised and the renderer never delivered: every edge was drawn at
+			// width 1, so a weighted graph validated green and threw its weights away.
+			//
+			// A Plotly scatter trace carries ONE line width, so weighted edges are bucketed
+			// into a few width bands and drawn as one trace per band — bands, not edges, so
+			// a dense graph stays cheap. With no `value` there is exactly one band, which is
+			// the old single hairline trace: unweighted graphs render byte-identically, and
+			// the node trace stays at index 1 for any `options` patch aimed at it.
+			const weights = enc.value ? rows.map((r) => Number(r[enc.value])) : []
+			const finite = weights.filter((w) => Number.isFinite(w))
+			const lo = finite.length ? Math.min(...finite) : 0
+			const hi = finite.length ? Math.max(...finite) : 0
+			const widthOf = (w) => {
+				if (!finite.length || hi === lo || !Number.isFinite(w))
+					return EDGE_W_MIN
+				const step = Math.round(((w - lo) / (hi - lo)) * (EDGE_BANDS - 1)) / (EDGE_BANDS - 1)
+				return EDGE_W_MIN + step * (EDGE_W_MAX - EDGE_W_MIN)
 			}
+			const bands = new Map()
+			edges.forEach(([a, b], i) => {
+				const pa = pos[at.get(a)], pb = pos[at.get(b)]
+				if (!pa || !pb) return
+				const w = widthOf(weights[i])
+				if (!bands.has(w)) bands.set(w, { x: [], y: [] })
+				const band = bands.get(w)
+				band.x.push(pa.x, pb.x, null)
+				band.y.push(pa.y, pb.y, null)
+			})
+			if (!bands.size)
+				bands.set(EDGE_W_MIN, { x: [], y: [] })
+			const edgeTraces = [...bands.entries()].sort((m, n) => m[0] - n[0]).map(([w, band]) => (
+				{ type: 'scatter', mode: 'lines', x: band.x, y: band.y, line: { width: w, color: p.border }, hoverinfo: 'skip' }
+			))
 			const hidden = { visible: false, fixedrange: false }
 			return {
 				data: [
-					{ type: 'scatter', mode: 'lines', x: ex, y: ey, line: { width: 1, color: p.border }, hoverinfo: 'skip' },
+					...edgeTraces,
 					{
 						type: 'scatter',
 						mode: 'markers+text',
@@ -1620,6 +1711,23 @@ function stripEl(cls, spec) {
 	return el
 }
 
+/** The strips a deck actually renders. A declared header/footer belongs to the
+ *  author and is used verbatim; an undeclared canvas can still get running
+ *  strips from the topbar toggle, derived from the only two things the renderer
+ *  knows without being told — the title, and the pagination it computes itself.
+ *  Either way the reader has the last word. Presentation, not capability: the
+ *  same rule that lets any display canvas be viewed as paper. */
+function docStrips(canvas, doc) {
+	const declared = !!(doc.header || doc.footer)
+	const on = state.docStrips !== null ? state.docStrips : declared
+	if (!on)
+		return { header: null, footer: null, on: false }
+	if (declared)
+		return { header: doc.header || null, footer: doc.footer || null, on: true }
+	const title = (doc.cover && doc.cover.title) || canvas.title || ''
+	return { header: { left: title }, footer: { right: '{{pageNumber}} / {{totalPages}}' }, on: true }
+}
+
 /** {{pageNumber}}/{{totalPages}} become text AFTER assembly — the packer knows
  *  both. Substitution is textContent-only; unknown vars stay literal (warned). */
 function substitutePageVars(scaleEl, total) {
@@ -1867,6 +1975,47 @@ function trySplit(f, avail, scratch) {
 // ---- the packer ----
 
 /**
+ * Mark every table too wide for the measure, BEFORE anything is measured.
+ *
+ * On screen a wide table scrolls inside its own box. Paper has nowhere to scroll,
+ * so Chrome simply clipped it at the sheet edge — an eleven-column table printed
+ * with seven and a half, and the missing columns left no trace in the document.
+ * A `.wide` table switches to fixed layout and folds its cells instead, which
+ * cannot overflow, so nothing is ever cut (see styles.css for why fixed layout is
+ * the only option that holds).
+ *
+ * Only the offenders are tagged: fixed layout divides the page evenly, which would
+ * stretch a tidy four-column table across the sheet and hand `id` the same width
+ * as a timestamp. So each table is measured in a real sheet body at content width
+ * and tagged only if its natural layout does not fit.
+ *
+ * The tag lands here, before the packer sizes anything, for the same reason the
+ * `.code-block` wrapper does: folding makes rows taller, and a fragment that grows
+ * AFTER it was measured is a sheet that silently overflows onto a sliver page.
+ * `cloneChain` copies the class onto a split table's continuation, so the second
+ * half of a folded table stays folded.
+ */
+function tagWideTables(fragments, scratch) {
+	for (const f of fragments) {
+		const table = f.el.querySelector && f.el.querySelector('table')
+		if (!table)
+			continue
+		scratch.textContent = ''
+		scratch.appendChild(f.el)
+		// scrollWidth, NOT offsetWidth: `max-width:100%` clamps the table's BOX to the
+		// measure while its columns overflow inside it, so offsetWidth reads exactly
+		// the container width no matter how far the content spills — it can never
+		// exceed, and the check silently never fires. scrollWidth is what the content
+		// actually needs (measured: 1059px of columns inside a 680px box).
+		// +1px so sub-pixel rounding cannot tag a table that really fits.
+		if (table.scrollWidth > scratch.clientWidth + 1)
+			table.classList.add('wide')
+		f.el.remove()
+	}
+	scratch.textContent = ''
+}
+
+/**
  * Pack fragments into sheets. The measuring body IS a real sheet body inside a
  * hidden replica (same strips, same width), so `scrollHeight <= clientHeight`
  * during packing is literally the invariant the printed page depends on.
@@ -1899,6 +2048,8 @@ function packFragments(fragments, geo, doc, host) {
 	const measBody = makeGrowingBody()
 	const scratch = makeGrowingBody()
 	host.appendChild(measure)
+
+	tagWideTables(fragments, scratch)
 
 	const budget = probeBody.clientHeight - SHEET_SLACK
 	const fits = () => measBody.scrollHeight <= budget
@@ -2103,9 +2254,29 @@ function docHtmlView(canvas, flatBlocks) {
 		return ''
 	}).join('')
 	return `<div class="doc-html"><div class="canvas">
-		<div class="canvas-head"><h1>${esc(canvas.title)}</h1><div class="sub">${esc(state.activeId)}</div></div>
+		${canvasHead(canvas)}
 		${tabs}${inner}
 	</div></div>`
+}
+
+const MD_FILE_RE = /\.(?:md|mdx|markdown)$/i
+
+/** True while the open canvas is one the runtime synthesised around a markdown file. */
+const isNativeDoc = () => MD_FILE_RE.test(state.activeId || '')
+
+/**
+ * The canvas head: an agent's canvas gets its declared title, a markdown file
+ * gets only its path.
+ *
+ * A document's title IS its first heading — that is where the sidebar label came
+ * from — so printing it in the head as well renders it twice, once as chrome and
+ * once as content. The file speaks for itself; the head just says which file it
+ * is. A markdown file with no heading has no title, and inventing one from its
+ * name would be the app talking over the document.
+ */
+function canvasHead(canvas) {
+	const path = `<div class="sub">${esc(state.activeId)}</div>`
+	return `<div class="canvas-head${isNativeDoc() ? ' head-doc' : ''}">${isNativeDoc() ? '' : `<h1>${esc(canvas.title)}</h1>`}${path}</div>`
 }
 
 /** What stops a canvas from being viewed as paper: forms and confirms cannot
@@ -2154,6 +2325,9 @@ function syncViewToggle() {
 	// The TOC toggle only makes sense while paper is on screen with something to list.
 	$('tocBtn').hidden = !(state.docLand && state.docView === 'deck' && state.docEntries > 0)
 	$('tocBtn').classList.toggle('active', state.docTocOn)
+	// The strips need no content to derive from — every deck can carry them.
+	$('stripsBtn').hidden = !(state.docLand && state.docView === 'deck')
+	$('stripsBtn').classList.toggle('active', state.docStripsOn)
 	$('viewDeck').classList.toggle('active', loaded && state.docView === 'deck')
 	$('viewDeck').classList.toggle('vt-off', blocked)
 	$('viewDeck').setAttribute('aria-disabled', blocked ? 'true' : 'false')
@@ -2194,6 +2368,12 @@ async function renderDocumentView(main, canvas) {
 	const declared = canvas.document && typeof canvas.document === 'object'
 	const doc = declared ? canvas.document : {}
 	state.docLand = true
+	// The strips resolve BEFORE anything is packed: they eat into the per-sheet
+	// content budget, so they are an input to pagination, never a decoration
+	// applied to it. `docP` is what every packing call sees.
+	const strips = docStrips(canvas, doc)
+	state.docStripsOn = strips.on
+	const docP = { ...doc, header: strips.header, footer: strips.footer }
 	const geo = docGeometry(doc)
 	setPageRule(geo)
 	main.innerHTML = '<div class="canvas doc-mode"><div class="deck"><div class="deck-scale"></div></div></div>'
@@ -2203,8 +2383,17 @@ async function renderDocumentView(main, canvas) {
 	const scaleEl = main.querySelector('.deck-scale')
 
 	const { fragments, entries, flatBlocks } = docFragments(canvas, doc)
-	// Images must have their real size before measuring, or a sheet overflows
-	// the moment they decode. All srcs are data: URIs, so this is near-instant.
+	// Everything that changes a fragment's HEIGHT must happen before it is measured.
+	// Two such things exist, and both were learned the hard way:
+	//   1. Images must have decoded, or a sheet overflows the moment they do. All
+	//      srcs are data: URIs, so this is near-instant.
+	//   2. Code blocks must already carry their `.code-block` wrapper. Measuring a
+	//      bare <pre> and letting mountCodeCopy() grow it afterwards silently
+	//      overflowed the sheet — 160px over budget on a five-fence page, which
+	//      prints as a sliver page. The wrapper goes on with NO button: paper has
+	//      no clipboard, and the deck reclaims the right padding the button needs.
+	for (const f of fragments)
+		mountCodeCopy(f.el, { button: false })
 	await Promise.all(fragments
 		.flatMap((f) => [...f.el.querySelectorAll('img')])
 		.map((img) => img.decode().catch(() => {})))
@@ -2214,7 +2403,7 @@ async function renderDocumentView(main, canvas) {
 	// own sheet count shifts the absolute numbers), and only then are the
 	// numbers written into the already-placed rows — digits don't change a
 	// row's height, so nothing needs repacking.
-	const bodySheets = packFragments(fragments, geo, doc, rootEl)
+	const bodySheets = packFragments(fragments, geo, docP, rootEl)
 	const anchorSheet = new Map()
 	bodySheets.forEach((sheet, i) => {
 		for (const el of sheet.querySelectorAll('[data-doc-anchor]'))
@@ -2229,7 +2418,7 @@ async function renderDocumentView(main, canvas) {
 	state.docEntries = entries.length
 	let tocSheets = []
 	if (wantToc) {
-		tocSheets = packFragments(tocFragments(doc, entries), geo, doc, rootEl)
+		tocSheets = packFragments(tocFragments(doc, entries), geo, docP, rootEl)
 		const offset = (hasCover ? 1 : 0) + tocSheets.length
 		for (const ts of tocSheets) {
 			for (const row of ts.querySelectorAll('.toc-entry')) {
@@ -2272,7 +2461,16 @@ async function renderDocumentView(main, canvas) {
 			sheet.scrollIntoView({ behavior: 'smooth', block: 'start' })
 	})
 
-	mountCodeCopy(main)
+	// Wrappers everywhere — this is also the pass that repairs a split fence's
+	// continuation, which `cloneChain` hands over wrapped but unbuttoned. Buttons
+	// go to the continuous view ONLY: the deck is paper, and paper has no
+	// clipboard. Doing it in this order means the deck never holds a button, so
+	// nothing has to hide one at print time.
+	mountCodeCopy(main, { button: false })
+	const htmlView = rootEl.querySelector('.doc-html')
+	if (htmlView)
+		mountCodeCopy(htmlView)
+
 	mountCharts(flatBlocks, deckEl)
 	if (state.docView === 'html')
 		moveChartsTo(rootEl, 'html')
@@ -2294,8 +2492,8 @@ function renderErrors(id, errors) {
 
 function renderEmpty() {
 	const root = state.tree ? state.tree.root : ''
-	return `<div class="empty"><div class="big"></div><b>No canvas selected</b>
-		<div>Pick a canvas from the sidebar, or drop a <code>.json</code> file into this folder — it appears automatically.</div>
+	return `<div class="empty"><div class="big"></div><b>Nothing selected</b>
+		<div>Pick a canvas from the sidebar, or drop a <code>.json</code> canvas or a <code>.md</code> file into this folder — it appears automatically.</div>
 		<div class="empty-note">Watching <code>${esc(root)}</code></div></div>`
 }
 
@@ -2331,8 +2529,9 @@ async function renderCanvas() {
 	const declared = canvas.document && typeof canvas.document === 'object'
 	if (state.docCanvasId !== state.activeId) {
 		state.docCanvasId = state.activeId
-		state.docView = declared ? 'deck' : 'html'
+		state.docView = declared || FORCE_DECK ? 'deck' : 'html'
 		state.docToc = null // the TOC choice is per canvas
+		state.docStrips = null // and so is the header/footer choice
 	}
 	if (state.docView === 'deck') {
 		if (deckBlockers(canvas).length === 0) {
@@ -2363,7 +2562,7 @@ async function renderCanvas() {
 	}).join('')
 
 	main.innerHTML = `<div class="canvas">
-		<div class="canvas-head"><h1>${esc(canvas.title)}</h1><div class="sub">${esc(state.activeId)}</div></div>
+		${canvasHead(canvas)}
 		${tabs}${inner}
 	</div>`
 	mountCodeCopy(main)
@@ -3301,7 +3500,7 @@ async function openFolderModal() {
 		<div class="modal-body">
 			<div class="fb-crumb" id="fbCrumb"></div>
 			<div class="fb-list" id="fbList"></div>
-			<div class="fb-hint">Click a folder to select it, ${icon('chevron-right')} or double-click to browse inside. Folders that already contain canvases show a ✓ badge.</div>
+			<div class="fb-hint">Click a folder to select it, ${icon('chevron-right')} or double-click to browse inside. Folders that already contain canvases or markdown documents show a ✓ badge.</div>
 		</div>
 		<div class="modal-foot">
 			<button class="btn ghost" data-close>Cancel</button>
@@ -3372,11 +3571,18 @@ async function openFolderModal() {
 		}).join('')
 		crumbEl.title = dir
 
+		// The badge answers "is this folder worth opening". It names what it counted:
+		// a folder of markdown IS worth opening, but those are not canvases.
+		const fbTally = (en) => [
+			...(en.canvases ? [`${en.canvases} canvas${en.canvases === 1 ? '' : 'es'}`] : []),
+			...(en.docs ? [`${en.docs} doc${en.docs === 1 ? '' : 's'}`] : []),
+		].join(' · ')
+
 		const up = parent ? `<div class="fb-row" data-up>${icon('corner-left-up')} ..</div>` : ''
 		const rows = entries.map((en) => `
 			<div class="fb-row" data-path="${esc(en.path)}">
 				${icon('folder')} <span class="fb-name">${esc(en.name)}</span>
-				${en.canvasCount > 0 ? `<span class="fb-badge">${icon('check')} workspace (${en.canvasCount} canvas${en.canvasCount === 1 ? '' : 'es'})</span>` : ''}
+				${en.canvasCount > 0 ? `<span class="fb-badge">${icon('check')} workspace (${fbTally(en)})</span>` : ''}
 				<button type="button" class="fb-into" data-into="${esc(en.path)}" title="Browse inside ${esc(en.name)}" aria-label="Browse inside ${esc(en.name)}">${icon('chevron-right')}</button>
 			</div>`).join('')
 		listEl.innerHTML = up + (rows || '<div class="fb-row fb-none">(no subfolders)</div>')
@@ -3435,6 +3641,7 @@ function searchDocs() {
 			folder,
 			file: baseName(c.id),
 			interactive: c.interactive,
+			kind: c.kind,
 			hay: `${c.title} ${folder} ${c.id}`.toLowerCase(),
 		}))
 	})
@@ -3527,10 +3734,11 @@ function renderSearch(q) {
 		name.className = 'csm-row-name'
 		appendHighlighted(name, d.title, tokens)
 		title.appendChild(name)
-		if (d.interactive) {
+		const tagText = d.interactive ? 'interactive' : (d.kind === 'document' ? 'document' : '')
+		if (tagText) {
 			const tag = document.createElement('span')
 			tag.className = 'csm-row-tag'
-			tag.textContent = 'interactive'
+			tag.textContent = tagText
 			title.appendChild(tag)
 		}
 
@@ -3636,5 +3844,5 @@ async function boot() {
 boot()
 
 // Exposed for the forms layer (Phase G) and debugging.
-window.ic = { api, state, esc, fmtValue, toast, renderCanvas, TOKEN: () => TOKEN }
+window.ic = { api, state, esc, fmtValue, toast, renderCanvas, chartFigure, TOKEN: () => TOKEN }
 })()

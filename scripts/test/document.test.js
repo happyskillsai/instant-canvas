@@ -200,6 +200,16 @@ test('catalog document: one schema with agent notes; its example validates clean
 	assert.ok(Array.isArray(d.notes) && d.notes.length >= 3)
 	assert.ok(d.notes.some((n) => /display-only/.test(n)))
 	assert.ok(d.notes.some((n) => /deck's own pagination/.test(n)), 'the TOC page-number honesty note is carried')
+	// The agent cannot see the browser, so the catalog is the only place it can learn
+	// that a header/footer is derivable — and, the part that actually changes what it
+	// writes, that `print` renders ONLY what was declared. An agent told the strips are
+	// "what nobody can derive" would declare them needlessly; an agent not told about
+	// print would ship a PDF with no page numbers and never know why.
+	const strips = d.notes.find((n) => /DERIVED when you declare none/.test(n))
+	assert.ok(strips, `the derived-header/footer note is carried: ${JSON.stringify(d.notes)}`)
+	assert.match(strips, /`print` never sees it/, 'and it warns that print renders only the declared JSON')
+	assert.ok(!d.notes.some((n) => /nobody can derive: a cover, a brand theme, running header\/footer/.test(n)),
+		'the superseded "header/footer cannot be derived" claim is gone — a stale contract is worse than none')
 	const r = validate(d.example)
 	assert.equal(r.ok, true, JSON.stringify(r.errors))
 	assert.deepEqual(r.warnings, [])
@@ -230,6 +240,16 @@ function get(port, p) {
 			})
 		}).on('error', reject)
 	})
+}
+
+/** Liveness with no deadline of its own and — unlike readAlive — no side effect. */
+async function healthzOk(port) {
+	try {
+		const r = await get(port, '/healthz')
+		return r.status === 200 && r.json && r.json.name === 'instantcanvas'
+	} catch {
+		return false
+	}
 }
 
 const K = { root: null, child: null, port: 0, token: '' }
@@ -290,10 +310,18 @@ test.before(async () => {
 		env: { ...process.env, INSTANTCANVAS_STATE_DIR: STATE_DIR },
 		stdio: 'ignore',
 	})
-	const deadline = Date.now() + 8000
+	// Raw registry read, deliberately NOT readAlive — the trap print.test.js already
+	// documents. readAlive proves liveness with a 500 ms health ping and DELETES the
+	// entry when that ping times out; under full-suite load (a dozen kernels and
+	// several Chromes are up by the time this hook runs) it loses that race and
+	// unregisters a kernel that is listening happily. This is a root-level before
+	// hook in a single-process suite, so the resulting throw failed ALL 243 tests
+	// with an error naming the wrong file. Poll for the entry, confirm liveness
+	// ourselves, and give load a deadline it cannot beat.
+	const deadline = Date.now() + 15_000
 	while (Date.now() < deadline) {
-		const entry = await registry.readAlive(root)
-		if (entry) {
+		const entry = registry.read(root)
+		if (entry && entry.port && await healthzOk(entry.port)) {
 			K.port = entry.port
 			K.token = entry.token
 			break
@@ -310,6 +338,7 @@ test.before(async () => {
 		splitDrive = await driveDeck('split.canvas.json', 2, 0)
 		handbookDrive = await driveDeck('handbook.canvas.json', 3, 0)
 		uniDrive = await driveUniversalToggle()
+		stripsDrive = await driveHandbookStrips()
 	}
 })
 
@@ -520,15 +549,61 @@ const UNI_SNAPSHOT_JS = `
 			fabHidden: document.getElementById('printBtn').hidden,
 			tocBtnHidden: document.getElementById('tocBtn').hidden,
 			tocBtnActive: document.getElementById('tocBtn').classList.contains('active'),
+			stripsBtnHidden: document.getElementById('stripsBtn').hidden,
+			stripsBtnActive: document.getElementById('stripsBtn').classList.contains('active'),
 			docMode: !!document.querySelector('.doc-mode'),
 			deckDisplay: deck ? getComputedStyle(deck).display : null,
 			sheets: document.querySelectorAll('.deck .sheet').length,
 			overflowing: [...document.querySelectorAll('.deck .sheet')].filter((s) => s.scrollHeight > s.clientHeight).length,
+			overflowDetail: [...document.querySelectorAll('.deck .sheet')].map((s, i) => ({
+				i, scroll: s.scrollHeight, client: s.clientHeight, over: s.scrollHeight - s.clientHeight,
+				fences: s.querySelectorAll('pre').length,
+			})).filter((s) => s.scroll > s.client),
+			// Every code block on paper must already carry its wrapper — the packer's
+			// measurement is only honest if the wrapper was there when it measured.
+			bareFences: [...document.querySelectorAll('.deck .sheet .md pre')]
+				.filter((p) => !p.parentElement.classList.contains('code-block')).length,
+			deckCopyBtns: document.querySelectorAll('.deck .code-copy').length,
+			htmlCopyBtns: document.querySelectorAll('.doc-html .code-copy').length,
+			deckFences: document.querySelectorAll('.deck .sheet .md pre').length,
+			htmlFences: document.querySelectorAll('.doc-html .md pre').length,
+			hdrs: document.querySelectorAll('.deck .sheet-hdr').length,
+			ftrs: document.querySelectorAll('.deck .sheet-ftr').length,
+			hdrText: (document.querySelector('.deck .sheet-hdr') || {}).textContent || '',
+			// The LAST footer: its {{pageNumber}} must have resolved to the last page.
+			ftrText: (() => {
+				const f = [...document.querySelectorAll('.deck .sheet-ftr')].pop();
+				return f ? f.textContent.trim() : '';
+			})(),
+			// The per-sheet content budget. Strips eat into it — this is the number
+			// that makes pagination move, so assert on it rather than on luck.
+			bodyH: (() => {
+				const b = document.querySelector('.deck .sheet .sheet-body');
+				return b ? b.clientHeight : 0;
+			})(),
 			tocTitle: (document.querySelector('.toc-title') || {}).textContent || '',
 			tocRows: [...document.querySelectorAll('.toc-entry')].map((r) => ({
 				label: (r.querySelector('.toc-label') || {}).textContent || '',
 				num: (r.querySelector('.toc-num') || {}).textContent || '',
 			})),
+			// Ground truth: every printed TOC number vs the sheet the anchor ACTUALLY
+			// landed on. tocLies > 0 means the deck repaginated and the TOC lied about
+			// it. tocResolved guards the check itself — if no anchor ever matched, a
+			// zero here would be a vacuous pass, not a passing feature.
+			...(() => {
+				const at = new Map();
+				[...document.querySelectorAll('.deck .sheet')].forEach((s, i) => {
+					for (const el of s.querySelectorAll('[data-doc-anchor]'))
+						at.set(el.dataset.docAnchor, i + 1);
+				});
+				const rows = [...document.querySelectorAll('.toc-entry')];
+				const hits = rows.filter((r) => at.get(r.dataset.target) !== undefined);
+				return {
+					tocResolved: hits.length,
+					tocLies: hits.filter((r) =>
+						at.get(r.dataset.target) !== Number((r.querySelector('.toc-num') || {}).textContent)).length,
+				};
+			})(),
 			chartHome: gd ? (gd.closest('.doc-html') ? 'html' : gd.closest('.deck') ? 'deck' : gd.closest('.canvas') ? 'classic' : 'lost') : 'none',
 			traceColor: gd && gd._fullData && gd._fullData[0] && gd._fullData[0].line ? gd._fullData[0].line.color : null,
 			toast: (document.querySelector('.toast') || {}).textContent || '',
@@ -537,6 +612,7 @@ const UNI_SNAPSHOT_JS = `
 `
 
 let uniDrive = null
+let stripsDrive = null
 
 async function driveUniversalToggle() {
 	const url = `http://127.0.0.1:${K.port}/?token=${encodeURIComponent(K.token)}#/c/${encodeURIComponent('plain.canvas.json')}`
@@ -590,6 +666,32 @@ async function driveUniversalToggle() {
 		await cdpSleep(500)
 		const tocOn = await evaluate(UNI_SNAPSHOT_JS)
 
+		// The running header/footer is the reader's too — and unlike the TOC it
+		// costs content height, so the deck must repaginate and the TOC must
+		// follow. Toggle it on…
+		await evaluate(`(() => { document.getElementById('stripsBtn').click(); return true })()`)
+		deadline = Date.now() + 15_000
+		for (;;) {
+			const up = await evaluate(`(() => !!document.querySelector('.deck .sheet-hdr'))()`).catch(() => false)
+			if (up || Date.now() > deadline)
+				break
+			await cdpSleep(200)
+		}
+		await cdpSleep(500)
+		const stripsOn = await evaluate(UNI_SNAPSHOT_JS)
+		// …and off again.
+		await evaluate(`(() => { document.getElementById('stripsBtn').click(); return true })()`)
+		deadline = Date.now() + 15_000
+		for (;;) {
+			const gone = await evaluate(`(() => document.querySelectorAll('.deck .sheet').length >= 1
+				&& !document.querySelector('.deck .sheet-hdr'))()`).catch(() => false)
+			if (gone || Date.now() > deadline)
+				break
+			await cdpSleep(200)
+		}
+		await cdpSleep(500)
+		const stripsOff = await evaluate(UNI_SNAPSHOT_JS)
+
 		await evaluate(`(() => { document.getElementById('viewHtml').click(); return true })()`)
 		await cdpSleep(400)
 		const back = await evaluate(UNI_SNAPSHOT_JS)
@@ -610,7 +712,7 @@ async function driveUniversalToggle() {
 		await cdpSleep(400)
 		const formyClicked = await evaluate(UNI_SNAPSHOT_JS)
 
-		return { classic, deck, tocOff, tocOn, back, formy, formyClicked }
+		return { classic, deck, tocOff, tocOn, stripsOn, stripsOff, back, formy, formyClicked }
 	})
 }
 
@@ -665,6 +767,84 @@ test('the TOC is the reader\'s: a topbar toggle removes and restores it, repacki
 	assert.equal(on.sheets, d.sheets, 'and the deck is back to its original pagination')
 })
 
+test('the running header/footer is the reader\'s: derived with zero config, toggled from the topbar', { skip: browserSkip, timeout: 120_000 }, () => {
+	const d = uniDrive.deck
+	assert.equal(uniDrive.classic.stripsBtnHidden, true, 'no strips button in the continuous view')
+	assert.equal(d.stripsBtnHidden, false, 'the strips button shows in document view')
+	assert.equal(d.stripsBtnActive, false, 'an undeclared canvas starts with no strips')
+	assert.equal(d.hdrs, 0, 'and renders none')
+	assert.equal(d.ftrs, 0)
+
+	const on = uniDrive.stripsOn
+	assert.equal(on.stripsBtnActive, true, 'the toggle reads ON')
+	assert.ok(on.hdrs >= 1 && on.ftrs >= 1, `strips rendered (${on.hdrs} headers, ${on.ftrs} footers)`)
+	assert.equal(on.hdrs, on.ftrs, 'every content sheet carries both')
+	assert.match(on.hdrText, /Plain display canvas/, 'the header derives the canvas title')
+	// The footer's {{pageNumber}}/{{totalPages}} must be SUBSTITUTED, not literal —
+	// and the last sheet's number must be the last page.
+	assert.ok(!/\{\{/.test(on.ftrText), `no unsubstituted template var in the footer (got "${on.ftrText}")`)
+	assert.equal(on.ftrText, `${on.sheets} / ${on.sheets}`, 'the last footer numbers the last page')
+
+	const off = uniDrive.stripsOff
+	assert.equal(off.stripsBtnActive, false, 'toggling again removes them')
+	assert.equal(off.hdrs, 0)
+	assert.equal(off.sheets, d.sheets, 'and the deck returns to its original pagination')
+})
+
+test('strips cost content height, and the deck + TOC repaginate to match', { skip: browserSkip, timeout: 120_000 }, () => {
+	const { on, off, onAgain } = stripsDrive
+
+	assert.ok(on.hdrs >= 1 && on.ftrs >= 1, 'the declared handbook opens with its strips')
+	assert.equal(off.hdrs, 0, 'the reader can drop an author\'s running header too')
+	assert.ok(off.bodyH > on.bodyH,
+		`dropping the strips gives the content box its height back (${off.bodyH}px > ${on.bodyH}px)`)
+	assert.ok(on.sheets >= off.sheets,
+		`a smaller content box never yields fewer sheets (${on.sheets} >= ${off.sheets})`)
+	assert.equal(onAgain.sheets, on.sheets, 'and restoring them restores the pagination exactly')
+
+	// THE invariant the whole document mode hangs on: sheet.scrollHeight <= clientHeight.
+	// This is the assertion that bites if the strips are ever painted without being
+	// measured into the packer's budget — the reclaimed rows spill right here, and on
+	// a deck this dense they always will.
+	for (const [name, s] of [['strips on', on], ['strips off', off], ['restored', onAgain]])
+		assert.equal(s.overflowing, 0,
+			`no sheet overflows (${name}): ${JSON.stringify(s.overflowDetail)}`)
+
+	// And the payoff: whatever the strips did to pagination, the TOC tells the truth.
+	// tocResolved must be non-zero, or "zero lies" would mean "nothing was checked".
+	for (const [name, s] of [['strips on', on], ['strips off', off]]) {
+		assert.ok(s.tocRows.length > 0, `the TOC lists entries (${name})`)
+		assert.equal(s.tocResolved, s.tocRows.length,
+			`every TOC row resolves to a real anchored sheet (${name} — else the next check is vacuous)`)
+		assert.equal(s.tocLies, 0,
+			`every TOC page number matches the sheet its anchor actually landed on (${name})`)
+	}
+})
+
+test('a SPLIT code block carries its wrapper on both halves, and no copy button on either', { skip: browserSkip, timeout: 120_000 }, () => {
+	// Asserted on the split canvas, because this is the one deck where a fence really
+	// is cut across two sheets — the handbook's fences all fit whole, so it cannot
+	// exercise this at all.
+	//
+	// The wrapper must be mounted BEFORE the packer measures, so the packer sizes the
+	// fence the browser will actually render; that puts a wrapper in front of
+	// `cloneChain`, and the continuation half inherits it. The button is a different
+	// question and the answer is no: paper has no clipboard, so the deck mounts none
+	// at all — which is also why nothing has to hide one at print time.
+	const s = splitDrive.snap
+	assert.ok(s.fences >= 2, `the fence was split across sheets (${s.fences} halves)`)
+	assert.equal(s.bareFences, 0, 'every half carries its .code-block wrapper')
+	assert.equal(s.copyBtns, 0, 'and neither half carries a copy button')
+})
+
+test('a strips-toggled deck still prints 1:1 — the sheets ARE the pages', { skip: browserSkip, timeout: 120_000 }, () => {
+	// The screen/print match is the thing that was hard to earn here. The strips are
+	// ordinary DOM inside each sheet (never an @page margin box), so Chrome lays out
+	// nothing of its own: /Count must equal the sheet count the reader can see.
+	assert.equal(pdfPageCount(stripsDrive.pdf), stripsDrive.onAgain.sheets,
+		'the PDF has exactly the sheets on screen, strips and all')
+})
+
 test('an interactive canvas keeps the toggle and explains the refusal on click', { skip: browserSkip, timeout: 120_000 }, () => {
 	const f = uniDrive.formy
 	assert.equal(f.toggleHidden, false, 'the toggle still shows — hidden controls teach nothing')
@@ -689,7 +869,41 @@ const DECK_SNAPSHOT_JS = `
 			// THE invariant: a sheet even 3px too tall prints a sliver page.
 			overflowing: sheets.map((s, i) => ({ i, sh: s.scrollHeight, ch: s.clientHeight }))
 				.filter((x) => x.sh > x.ch),
-			coverIdx: sheets.findIndex((s) => s.classList.contains('sheet-cover')),
+			fences: document.querySelectorAll('.deck .sheet .md pre').length,
+		bareFences: [...document.querySelectorAll('.deck .sheet .md pre')]
+			.filter((p) => !p.parentElement.classList.contains('code-block')).length,
+		copyBtns: document.querySelectorAll('.deck .code-copy').length,
+		htmlCopyBtns: document.querySelectorAll('.doc-html .code-copy').length,
+		htmlFences: document.querySelectorAll('.doc-html .md pre').length,
+		// A PDF has no scrollbar, so a fence wider than its box is not "scrollable"
+		// — it is CLIPPED. Measured, never inferred from the CSS.
+		overflowingFences: [...document.querySelectorAll('.deck .sheet .md pre')]
+			.map((p, i) => ({ i, sw: p.scrollWidth, cw: p.clientWidth }))
+			.filter((x) => x.sw > x.cw + 1),
+		// Same guillotine, worse consequence: a clipped table loses whole COLUMNS.
+		// Only a table that would overflow is folded; one that fits keeps its natural
+		// compact layout, so assert the tagging as well as the absence of overflow.
+		tables: [...document.querySelectorAll('.deck .sheet .md table')].map((t) => ({
+			cols: t.rows[0] ? t.rows[0].cells.length : 0,
+			wide: t.classList.contains('wide'),
+			layout: getComputedStyle(t).tableLayout,
+			overflows: t.scrollWidth > t.clientWidth + 1,
+			// 1-based printed page, so the PDF assertion follows the table when
+			// pagination shifts instead of hard-coding a sheet number that will rot.
+			page: sheets.indexOf(t.closest('.sheet')) + 1,
+		})),
+		// The rhythm the deck lost when every element became its own .md fragment:
+		// the first-child/last-child reset zeroed both margins of every element.
+		mdRhythm: (() => {
+			const pick = (sel) => {
+				const el = document.querySelector('.deck .sheet .md ' + sel)
+				if (!el) return null
+				const cs = getComputedStyle(el)
+				return { top: parseFloat(cs.marginTop), bottom: parseFloat(cs.marginBottom) }
+			}
+			return { h2: pick('h2'), h3: pick('h3'), p: pick('p') };
+		})(),
+		coverIdx: sheets.findIndex((s) => s.classList.contains('sheet-cover')),
 			coverText: (document.querySelector('.sheet-cover') || {}).textContent || '',
 			tocIdx: sheets.findIndex((s) => !!s.querySelector('.toc-title')),
 			tocEntries: [...document.querySelectorAll('.toc-entry .toc-label')].map((e) => e.textContent),
@@ -703,7 +917,13 @@ const DECK_SNAPSHOT_JS = `
 			markerTwo: sheets.findIndex((s) => s.textContent.includes('MARKER-CHAPTER-TWO-BODY')),
 			hdrSecond: sheets[1] && sheets[1].querySelector('.sheet-hdr') ? sheets[1].querySelector('.sheet-hdr').textContent : '',
 			ftrSample: sheets[2] && sheets[2].querySelector('.sheet-ftr') ? sheets[2].querySelector('.sheet-ftr').textContent : '',
-			unsubstituted: /\\{\\{/.test(document.querySelector('.deck').textContent),
+			// Guarded like every other read here. Unguarded, a deck that has not
+			// rendered yet (a slow machine, a loaded suite) threw a TypeError from
+			// inside the root before hook — which fails EVERY test in the suite with
+			// "Cannot read properties of null", naming nothing that is actually wrong.
+			// A snapshot records what it found; assertions decide whether that is bad.
+			unsubstituted: /\\{\\{/.test((document.querySelector('.deck') || {}).textContent || ''),
+			deckPresent: !!document.querySelector('.deck'),
 			logos: [...document.querySelectorAll('.cover-logo, .back-logo')].map((i) => (i.getAttribute('src') || '').slice(0, 22)),
 			boxes: document.querySelectorAll('.chart-box').length,
 			plots: plots.length,
@@ -726,6 +946,50 @@ const DECK_SNAPSHOT_JS = `
 let deckDrive = null
 let splitDrive = null
 let handbookDrive = null
+
+/** The strips on a content-DENSE deck — the handbook, which DECLARES them, so it
+ *  opens strips-on and the toggle exercises the other direction too (the reader may
+ *  drop an author's running header, not only add one).
+ *
+ *  Density is the point. The plain canvas is too small to spill, so it cannot prove
+ *  the strips are measured INTO the packer's budget rather than painted on top of an
+ *  already-full page; only a deck with enough text to overflow can. This also prints,
+ *  because the whole claim is that paper agrees with the screen. */
+async function driveHandbookStrips() {
+	const url = `http://127.0.0.1:${K.port}/?token=${encodeURIComponent(K.token)}#/c/${encodeURIComponent('handbook.canvas.json')}`
+	const settle = async (evaluate, want) => {
+		const deadline = Date.now() + 20_000
+		for (;;) {
+			const ok = await evaluate(`(() => document.querySelectorAll('.deck .sheet').length >= 3
+				&& ${want ? '!!' : '!'}document.querySelector('.deck .sheet-hdr'))()`).catch(() => false)
+			if (ok || Date.now() > deadline)
+				break
+			await cdpSleep(200)
+		}
+		await cdpSleep(800)
+	}
+	return withChrome(CHROME, url, { onNewDocument: PROBE }, async ({ evaluate, send }) => {
+		await settle(evaluate, true) // declared strips → the deck opens with them on
+		const on = await evaluate(UNI_SNAPSHOT_JS)
+
+		await evaluate(`(() => { document.getElementById('stripsBtn').click(); return true })()`)
+		await settle(evaluate, false)
+		const off = await evaluate(UNI_SNAPSHOT_JS)
+
+		await evaluate(`(() => { document.getElementById('stripsBtn').click(); return true })()`)
+		await settle(evaluate, true)
+		const onAgain = await evaluate(UNI_SNAPSHOT_JS)
+
+		// Printed WITH the strips on: /Count must equal the sheets on screen.
+		const pdf = await send('Page.printToPDF', {
+			printBackground: true,
+			preferCSSPageSize: true,
+			displayHeaderFooter: false,
+			marginTop: 0, marginBottom: 0, marginLeft: 0, marginRight: 0,
+		})
+		return { on, off, onAgain, pdf: Buffer.from(pdf.data, 'base64') }
+	})
+}
 
 async function driveDeck(canvasFile, minSheets, chartCount) {
 	const url = `http://127.0.0.1:${K.port}/?token=${encodeURIComponent(K.token)}#/c/${encodeURIComponent(canvasFile)}`
@@ -772,9 +1036,113 @@ test('the deck renders cover → TOC → chapters → back cover, in order', { s
 })
 
 test('every sheet obeys the invariant: scrollHeight <= clientHeight', { skip: browserSkip, timeout: 120_000 }, () => {
+	// The snapshot guards its DOM reads, so a deck that never rendered must fail HERE,
+	// with a message that says so — not as a TypeError out of the before hook.
+	for (const [name, d] of [['deck', deckDrive], ['split', splitDrive], ['handbook', handbookDrive]])
+		assert.equal(d.snap.deckPresent, true, `${name}: the deck rendered at all`)
 	assert.deepEqual(deckDrive.snap.overflowing, [], 'no sheet overflows its page box')
 	assert.deepEqual(splitDrive.snap.overflowing, [], 'no split-fixture sheet overflows')
 	assert.deepEqual(handbookDrive.snap.overflowing, [], 'no handbook sheet overflows')
+})
+
+test('a fence WRAPS on paper: a PDF has no scrollbar, so an unwrapped line is a cut-off line', { skip: browserSkip, timeout: 120_000 }, () => {
+	// The handbook carries a fence far wider than the page, including a URL with no
+	// break opportunity in it — `overflow-wrap: anywhere`, not `break-word`, is what
+	// makes that one wrap too. On screen the continuous view still scrolls; on paper
+	// there is nowhere to scroll TO, so an overflowing fence is silently clipped at
+	// the sheet edge and the reader never learns the line was truncated.
+	assert.deepEqual(handbookDrive.snap.overflowingFences, [],
+		'no fence on paper is wider than its own box')
+	assert.ok(handbookDrive.snap.fences >= 8, 'the wide fences really are on the sheets')
+
+	// Wrapping makes fences taller, which repaginates the deck. The invariant above
+	// and this 1:1 check are what prove the packer measured the WRAPPED height: it
+	// measures inside a real `.sheet`, so it sees the same layout the printer does.
+	assert.equal(pdfPageCount(handbookDrive.pdf), handbookDrive.snap.sheetCount,
+		'the wrapped deck still prints exactly the sheets on screen')
+})
+
+test('a wide TABLE folds on paper rather than losing its columns', { skip: browserSkip, timeout: 120_000 }, () => {
+	// The nastiest of the three print-clip bugs: a fence loses the tail of a LINE,
+	// a table loses whole COLUMNS. The handbook's 11-column table printed with 7½ —
+	// `ws_clients`, `idle_seconds` and `version` were absent from the PDF entirely,
+	// with no ellipsis and no marker. The PDF assertion below is the one that would
+	// actually have caught it; this one pins the mechanism.
+	const t = handbookDrive.snap.tables
+	assert.ok(t.length >= 2, `the handbook has a narrow table AND a wide one (got ${t.length})`)
+
+	const wide = t.find((x) => x.cols >= 10)
+	const narrow = t.find((x) => x.cols <= 5)
+	assert.ok(wide && narrow, `both shapes are on paper: ${JSON.stringify(t)}`)
+
+	// Fixed layout is the only one that cannot overflow — it takes its widths from
+	// the page rather than the content.
+	assert.equal(wide.wide, true, 'the 11-column table is tagged wide')
+	assert.equal(wide.layout, 'fixed', 'and folds under fixed layout')
+	// ...and the table that FITS keeps its natural compact layout: fixed layout would
+	// stretch it across the sheet and give `id` a timestamp's width.
+	assert.equal(narrow.wide, false, 'a table that fits is left alone')
+	assert.equal(narrow.layout, 'auto', 'and keeps auto layout')
+
+	assert.deepEqual(t.filter((x) => x.overflows), [], 'NO table on paper overflows its box')
+})
+
+test('every column of a wide table survives into the printed PDF', { skip: browserSkip, timeout: 120_000 }, (t) => {
+	// THE assertion — made against the artifact the reader actually receives. A DOM
+	// check can pass while the printer still clips, so only the PDF's own text layer
+	// proves a column reached paper. This is the check that was missing, which is why
+	// three columns could vanish from every printed handbook and the suite stayed green.
+	if (!hasPoppler) {
+		t.diagnostic('pdftotext (poppler) not found — PDF column assertion skipped')
+		return
+	}
+	const wide = handbookDrive.snap.tables.find((x) => x.cols >= 10)
+	assert.ok(wide && wide.page > 0, 'located the wide table on a printed sheet')
+
+	const file = path.join(os.tmpdir(), `ic-table-${process.pid}.pdf`)
+	fs.writeFileSync(file, handbookDrive.pdf)
+	try {
+		const text = pdfPageText(file, wide.page)
+		// Folding splits a long header across lines ("last_acti" / "vity") and pdftotext
+		// emits cells in reading order, so a whole-word match would call a column missing
+		// that is plainly on the page. Match a prefix that survives the fold: the claim is
+		// that the column REACHED paper, not that it escaped hyphenation.
+		for (const col of ['id', 'workspace', 'pid', 'port', 'token', 'started', 'last_act', 'ws_clie', 'pending', 'idle', 'version'])
+			assert.ok(text.includes(col), `column "${col}" reached the PDF — it used to be clipped away entirely`)
+	} finally {
+		fs.rmSync(file, { force: true })
+	}
+})
+
+test('paper has vertical rhythm: headings are not glued to the prose around them', { skip: browserSkip, timeout: 120_000 }, () => {
+	// The regression this pins is subtle and was invisible to every other test. In
+	// the deck each markdown element becomes its OWN `.md.doc-frag` box, so it is at
+	// once `.md > :first-child` AND `.md > :last-child` — and that reset zeroed BOTH
+	// of its margins. Paper rendered with no spacing at all while the continuous view
+	// looked fine, because there one `.md` holds every child.
+	const r = handbookDrive.snap.mdRhythm
+	assert.ok(r.h2 && r.h3 && r.p, 'the handbook put an h2, an h3 and a paragraph on paper')
+	assert.ok(r.h2.top >= 24, `an h2 has real space above it (got ${r.h2.top}px)`)
+	assert.ok(r.h2.bottom >= 10, `and below it (got ${r.h2.bottom}px)`)
+	assert.ok(r.h3.top >= 20, `an h3 has real space above it (got ${r.h3.top}px)`)
+	assert.ok(r.p.top >= 10 && r.p.bottom >= 10, `paragraphs breathe (got ${r.p.top}/${r.p.bottom}px)`)
+	// These margins live inside flow-root fragments, so the packer counts them —
+	// which the overflow invariant above proves it did.
+})
+
+test('paper carries no copy button — the clipboard is a screen affordance', { skip: browserSkip, timeout: 120_000 }, () => {
+	// Meaningful only where fences actually exist on paper, or the assertion passes
+	// for the wrong reason.
+	for (const [name, d] of [['handbook', handbookDrive], ['split', splitDrive]]) {
+		assert.ok(d.snap.fences > 0, `${name}: has fences on paper to begin with`)
+		assert.equal(d.snap.copyBtns, 0, `${name}: no copy button anywhere on paper`)
+	}
+	// This is a paper rule, not a removal. Both views of a document canvas live in
+	// the DOM at once, so the SAME handbook proves the split: zero buttons on its
+	// sheets, one per fence in its continuous view.
+	const h = handbookDrive.snap
+	assert.ok(h.htmlFences > 0, 'the continuous view has fences')
+	assert.equal(h.htmlCopyBtns, h.htmlFences, 'one copy button per fence on screen')
 })
 
 test('the markdown handbook packs into sheets: real tables, lists, fences, an inlined SVG', { skip: browserSkip, timeout: 120_000 }, () => {

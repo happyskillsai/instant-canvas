@@ -172,6 +172,26 @@ test.before(async () => {
 					pageErrors: window.__pageErrors || [],
 					footerVer: (document.querySelector('.side-foot .ver') || {}).textContent || '',
 					mdInlineStyled: document.querySelectorAll('.md [style]').length,
+					// The graph kind's edge weight, straight off the figure builder. The
+					// schema promised encoding.value drove line width; the renderer drew
+					// every edge at width 1 and threw the weights away. Probe the figure
+					// rather than the pixels — a width is a number Plotly is handed, and
+					// asserting on ink here would prove nothing. (No backticks in here:
+					// this whole block is inside a template literal.)
+					graphWeighted: (() => {
+						const f = window.ic.chartFigure({ type: 'chart', kind: 'graph',
+							data: [{ s: 'a', t: 'b', w: 1 }, { s: 'b', t: 'c', w: 10 }, { s: 'c', t: 'd', w: 5 }],
+							encoding: { source: 's', target: 't', value: 'w' } });
+						const edges = f.data.filter((d) => d.mode === 'lines');
+						return { traces: f.data.length, edgeTraces: edges.length, widths: edges.map((e) => e.line.width) };
+					})(),
+					graphPlain: (() => {
+						const f = window.ic.chartFigure({ type: 'chart', kind: 'graph',
+							data: [{ s: 'a', t: 'b' }, { s: 'b', t: 'c' }],
+							encoding: { source: 's', target: 't' } });
+						const edges = f.data.filter((d) => d.mode === 'lines');
+						return { traces: f.data.length, edgeTraces: edges.length, widths: edges.map((e) => e.line.width) };
+					})(),
 					mdTasks: document.querySelectorAll('.md li.task').length,
 					mdChecked: document.querySelectorAll('.md li.task input[type=checkbox]:checked').length,
 					mdRightAligned: document.querySelectorAll('.md table .ta-right').length,
@@ -275,4 +295,23 @@ test('the kernel CSP is never violated, and Plotly injects no stylesheet', { ski
 	// its rules arrive from the vendored plotly.css <link>, which is 'self'.
 	assert.ok(snapshot.stub, 'the csp-shim stub is present')
 	assert.equal(snapshot.styleEls, 0, 'no <style> element reached the document')
+})
+
+test('a weighted graph draws its weights; an unweighted one is unchanged', { skip, timeout: 120_000 }, () => {
+	// The schema has always documented `graph.encoding.value` as "edge weight (line
+	// width)". The renderer never read it: every edge was drawn at width 1, so an
+	// agent shipped weights, got a green validate, and the data silently vanished.
+	const w = snapshot.graphWeighted
+	assert.ok(w.edgeTraces > 1, `weights produce more than one width band (got ${w.edgeTraces})`)
+	assert.equal(new Set(w.widths).size, w.widths.length, 'each band is a distinct width')
+	assert.equal(Math.min(...w.widths), 1, 'the lightest edge is the thinnest line')
+	assert.equal(Math.max(...w.widths), 6, 'the heaviest edge is the thickest line')
+
+	// Backward compatibility, and it is load-bearing: `options` merges traces BY INDEX,
+	// so an unweighted graph must still be exactly [edges, nodes] or every existing
+	// options patch aimed at the node trace would silently land on an edge band.
+	const p = snapshot.graphPlain
+	assert.equal(p.edgeTraces, 1, 'no weights → a single edge trace, as before')
+	assert.equal(p.traces, 2, 'so the node trace stays at index 1 for `options`')
+	assert.deepEqual(p.widths, [1], 'and keeps the original hairline width')
 })

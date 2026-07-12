@@ -2,6 +2,8 @@
 
 const test = require('node:test')
 const assert = require('node:assert/strict')
+const fs = require('node:fs')
+const path = require('node:path')
 const { catalog } = require('../lib/catalog')
 const schema = require('../lib/schema')
 const { validate } = require('../lib/validate')
@@ -23,7 +25,60 @@ test('bare catalog is the LEAN index: one-liners for everything, no schemas (pro
 	// The cap is the teeth behind "lean context over completeness". It was 6000 for
 	// 17 kinds; 26 kinds plus the sweep pointer need more room. Raise it only with
 	// a reason — never to let a bloated one-liner through.
-	assert.ok(JSON.stringify(lean).length < 6500, 'index stays small: ' + JSON.stringify(lean).length)
+	//
+	// Raised 6500 → 7500 for a reason worth stating, because it is the opposite of
+	// bloat: the index used to fit by CORRUPTING itself. `description.split('.')[0]`
+	// was not a sentence splitter, so the chart block reached agents as the single
+	// word "Chart." and confirm as "Confirmation card (e." — bytes saved by deleting
+	// the teaching. Whole sentences cost ~1.2 KB more and are the honest size of this
+	// surface. The guard below is what keeps that from becoming an excuse.
+	assert.ok(JSON.stringify(lean).length < 7500, 'index stays small: ' + JSON.stringify(lean).length)
+
+	// The defects that forced the rewrite, pinned so they cannot return: no entry may
+	// be a fragment, end mid-abbreviation, or carry an unbalanced paren. This is what
+	// actually guards the cap — a one-liner can only grow by SAYING more, not by being
+	// cut off somewhere new.
+	for (const [group, obj] of [['block', lean.blocks], ['field', lean.fieldTypes]]) {
+		for (const [name, line] of Object.entries(obj)) {
+			assert.ok(!/\s\w{1,2}\.$/.test(line), `${group} ${name} is cut at an abbreviation: ${JSON.stringify(line)}`)
+			const open = (line.match(/\(/g) || []).length
+			const close = (line.match(/\)/g) || []).length
+			assert.equal(open, close, `${group} ${name} has unbalanced parens: ${JSON.stringify(line)}`)
+		}
+	}
+	// "Chart." taught nothing at all — the terse opener must pull in the sentence that does.
+	assert.ok(lean.blocks.chart.length > 40 && /26 kinds/.test(lean.blocks.chart),
+		`the chart one-liner must actually teach: ${JSON.stringify(lean.blocks.chart)}`)
+})
+
+test('the lean index warns that FLAT validation keys are a silent no-op', () => {
+	// The index used to print `Per-field validation: {minLength,...}`, which reads as a
+	// flat key set. Written flat those keys are merely unknown properties: the canvas
+	// validates ok and the constraint does not exist. On a password field that is a
+	// rule the agent believes it shipped and the human never got — so the index must
+	// name the "validation" wrapper AND say what happens without it.
+	const lean = catalog()
+	assert.match(lean.validation, /"validation"/, 'the index names the wrapper key')
+	assert.match(lean.validation, /silently/, 'and says a flat rule silently does not exist')
+
+	// The warning is only worth carrying while it is TRUE. If flat keys ever become a
+	// hard error, this fails and the index text must be rewritten to match.
+	const flat = {
+		instantcanvas: 1, createdWith: PKG_VERSION, title: 't',
+		blocks: [{ type: 'form', destination: { kind: 'none' },
+			fields: [{ name: 'PW', label: 'PW', type: 'secret', minLength: 12 }] }],
+	}
+	const r = validate(flat)
+	assert.equal(r.ok, true, 'a flat rule still validates — which is exactly the trap')
+	assert.ok(r.warnings.some((w) => w.code === 'UNKNOWN_PROPERTY'), 'and is only a warning')
+
+	// Nested, the same rule is real.
+	const nested = JSON.parse(JSON.stringify(flat))
+	delete nested.blocks[0].fields[0].minLength
+	nested.blocks[0].fields[0].validation = { minLength: 12 }
+	const n = validate(nested)
+	assert.equal(n.ok, true)
+	assert.deepEqual(n.warnings, [], 'nested under "validation" it is a known, enforced rule')
 })
 
 test('catalog --full still exposes the complete contract', () => {
@@ -32,6 +87,11 @@ test('catalog --full still exposes the complete contract', () => {
 	assert.equal(Object.keys(full.chartKinds).length, 26)
 	assert.equal(Object.keys(full.fieldTypes).length, 16)
 	assert.ok(full.blocks.form.properties.destination)
+	// "--full dumps everything" was false: document mode and sweeps were reachable
+	// only by name, so an agent that pulled the WHOLE contract to learn what exists
+	// learned they do not. A catalog may be lean or complete; it may not be wrong.
+	assert.ok(full.document && full.document.properties.cover, 'document mode is in --full')
+	assert.ok(full.sweep, 'sweeps are in --full')
 	assert.ok(full.fieldCommonShape.properties.name.required)
 	assert.ok(full.fieldsetShape.properties.columns)
 })
@@ -107,4 +167,47 @@ test('every block example validates', () => {
 		assert.equal(res.ok, true, `${name} example validates: ${JSON.stringify(res.errors)}`)
 		assert.deepEqual(res.warnings, [], `${name} example has no warnings`)
 	}
+})
+
+// ---------------------------------------------------------------- SKILL.md ↔ CLI
+
+// SKILL.md is the agent's whole contract and NOTHING held it to the code, so it drifted:
+// it advertised `print` for canvases while omitting the `document` object that `print`
+// requires, and told agents bare `catalog` returned "schemas: all" when it returns none.
+// An agent cannot see the CLI — a wrong sentence here IS a bug. Pin the claims that,
+// if they rot, silently stop an agent from completing a task.
+const SKILL = fs.readFileSync(path.join(__dirname, '..', '..', '.agents', 'skills', 'instant-canvas', 'SKILL.md'), 'utf8')
+
+test('SKILL.md can actually get an agent to a printable canvas', () => {
+	// `print <canvas.json>` refuses a canvas with no `document` object, so a contract
+	// that never mentions it is a contract an agent cannot print from.
+	assert.match(SKILL, /"document"/, 'the envelope shows the document key')
+	assert.match(SKILL, /catalog document/, 'and points at its schema')
+	// Every key the section shows must be real, or the agent writes a canvas that fails.
+	const doc = schema.SHAPES.document.properties
+	for (const key of ['cover', 'toc', 'header', 'footer', 'theme', 'page'])
+		assert.ok(doc[key], `SKILL.md documents "${key}" — it must exist in the registry`)
+	assert.match(SKILL, /DOCUMENT_INTERACTIVE_BLOCK/, 'and warns that paper refuses form/confirm/sweep')
+	assert.match(SKILL, /\{\{pageNumber\}\}/, 'and names the only substituted variables')
+})
+
+test('SKILL.md does not misdescribe the catalog it tells agents to call', () => {
+	// It used to promise bare `catalog` returned "exact machine-readable schemas: all",
+	// contradicting both the code and its own step 1.
+	assert.ok(!/catalog \[name\][^\n]*schemas: all/.test(SKILL),
+		'the superseded "bare catalog returns all schemas" claim is gone')
+	assert.ok(!JSON.stringify(catalog()).includes('"properties"'),
+		'because bare catalog carries no schemas at all')
+	// Every catalog name SKILL.md offers must resolve, or the agent gets INVALID_SPEC.
+	for (const name of ['fieldset', 'sweep', 'document', 'envelope'])
+		assert.doesNotThrow(() => catalog(name), `SKILL.md offers \`catalog ${name}\` — it must resolve`)
+})
+
+test('SKILL.md names only flags the CLI actually has', () => {
+	const cli = fs.readFileSync(path.join(__dirname, '..', 'instantcanvas.js'), 'utf8')
+	for (const flag of ['--workspace', '--no-open', '--timeout', '--result', '--out', '--retrofit', '--full'])
+		assert.ok(cli.includes(flag.replace(/^--/, '')), `SKILL.md documents ${flag} — the CLI must accept it`)
+	// --retrofit permanently writes "unknown"; an agent that reaches for it on a canvas
+	// it just wrote destroys that file's provenance, and a stamp is never rewritten.
+	assert.match(SKILL, /--retrofit[\s\S]{0,400}?unknown/, '--retrofit is explained, not just listed')
 })

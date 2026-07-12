@@ -7,6 +7,7 @@ source:
   - scripts/lib/registry.js
   - scripts/lib/session.js
   - scripts/lib/scan.js
+  - scripts/lib/mdcanvas.js
   - scripts/lib/fsatomic.js
   - scripts/lib/browser.js
 ---
@@ -21,7 +22,7 @@ agent ──> CLI (instantcanvas.js) ──HTTP──> kernel (kernel.js) ──
               │ prints ONE JSON result         │ re-validates, writes           │ collects input
 ```
 
-The **agent** wrangles data into a canvas JSON file. The **CLI** validates it and asks the kernel to open it. The **kernel** is a persistent localhost server that renders the workspace in the browser and, for interactive canvases, accepts the human's submission and writes values to disk. The browser is a thin shell — all state lives in files and in the kernel.
+The **agent** wrangles data into a canvas JSON file — or points at a markdown file, which needs no wrangling and no canvas. The **CLI** validates it and asks the kernel to open it. The **kernel** is a persistent localhost server that renders the workspace in the browser and, for interactive canvases, accepts the human's submission and writes values to disk. The browser is a thin shell — all state lives in files and in the kernel.
 
 ## Kernel-per-workspace model
 
@@ -58,19 +59,23 @@ The token reaches the browser via `__IC_TOKEN__` placeholder substitution when t
 |---|---|
 | `GET /healthz` | Liveness + identity: `{ok, name, version, workspace, pid, pendingSessions}`. Tokenless. |
 | `GET /`, `GET /assets/*` | App shell and static files (path-normalized; traversal blocked). |
-| `GET /api/workspace` | Scanned canvas tree (see below). |
-| `GET /api/canvas?path=` | Parse + validate one canvas; markdown `src` files **and their workspace-local images** are inlined server-side (images as `data:` URIs — the browser never fetches); includes the active session if any. |
+| `GET /api/workspace` | Scanned tree of canvases **and markdown documents** (see below), with `count` and `docCount` reported apart. |
+| `GET /api/canvas?path=` | Parse + validate one canvas, **or** synthesise one for a markdown file (`lib/mdcanvas.js`). Markdown `src` files **and their workspace-local images** are inlined server-side (images as `data:` URIs — the browser never fetches); includes the active session if any. Reads `*.json` and markdown only — anything else is a 404 before it is opened, because a rejected file leaks its own first bytes through `JSON.parse` (see [gotchas/runtime.md](gotchas/runtime.md)). |
 | `POST /api/open` | CLI entry: display → broadcast `navigate`; interactive → create a session. |
 | `GET/POST /api/session/<id>[/submit|/cancel]` | Poll, submit (server-side re-validation + destination write), cancel. |
-| `POST /api/browse` | Folder-browser listing (dirs only, canvas counts). |
+| `POST /api/browse` | Folder-browser listing (dirs only). Each entry carries `canvases` and `docs` separately plus their total — a folder of markdown is worth opening, but its badge must not call them canvases. |
 | `POST /api/workspace/open` | Reuse-or-spawn a kernel for another folder; returns its tokenized URL. |
-| `POST /api/collection/delete` | Delete a depth-1 folder's canvas files (marker-verified only; folder removed only if empty; `(root)` refused). |
+| `POST /api/collection/delete` | Delete a depth-1 folder's canvas files (marker-verified only; folder removed only if empty; `(root)` refused). **Never deletes a markdown document**, which is why the sidebar offers no delete button for a collection that holds nothing else (see [gotchas/runtime.md](gotchas/runtime.md)). |
 | `POST /api/shutdown` | Graceful stop. |
 | `WS /ws?token=` | Hot-reload push channel. |
 
 ## Workspace scan
 
 `lib/scan.js` defines what a canvas *is*: a `*.json` file ≤ 2 MB whose parsed top level has `"instantcanvas": 1`. The marker doubles as the discriminator — `package.json` and friends are naturally excluded. Scan depth is the workspace root (collection `"(root)"`, listed first) plus one subfolder level; dot-entries and `node_modules` are skipped; everything sorts A→Z. **Filesystem = navigation**: the sidebar is literally this scan.
+
+The scan lists **two kinds of thing**, and every entry says which: `kind: "canvas"` or `kind: "document"`. A document is a `.md` / `.mdx` / `.markdown` file — the same allowlist a markdown `src` obeys — titled by its first H1, or by its file name when it has none (only a 64 KB prefix is read for the title; the scan runs on every file change). Canvases lead within each collection, documents follow, each A→Z. The tree reports the two separately: `count` still means canvases and nothing else — the collection-delete dialog promises by it, and deletion never touches a document — while `docCount` counts the rest.
+
+Why a markdown file is listed at all: it needs no author to be renderable. The runtime already owns a block that renders markdown from a path, so a `.md` that exists on disk and would render perfectly was nonetheless unreachable until an agent wrote a four-line wrapper around it. `lib/mdcanvas.js` writes that wrapper instead — see [the virtual canvas](canvas-schema.md#the-virtual-canvas-a-markdown-file-is-a-canvas).
 
 ## Sessions
 
@@ -81,7 +86,7 @@ The token reaches the browser via `__IC_TOKEN__` placeholder substitution when t
 The WebSocket server is hand-rolled RFC 6455 inside `kernel.js` (~100 lines: accept-key handshake, frame encode/decode, ping/pong, masked client frames) — no dependency. `fs.watch(root, {recursive: true})` with a 150 ms debounce feeds it (per-directory watcher fallback where recursive watch is unsupported); dot-dirs and `node_modules` are ignored. Broadcasts:
 
 - `{type: "workspace"}` — anything changed; the browser refetches the tree.
-- `{type: "canvas", path}` — a canvas file changed; the browser re-renders it if open.
+- `{type: "canvas", path}` — a canvas file **or a markdown document** changed; the browser re-renders it if open.
 - `{type: "navigate", path}` — an `open` happened; every connected browser routes there.
 - `{type: "session", id, status}` — a session resolved or expired.
 
