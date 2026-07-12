@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-07-12
+
 ### Security
 - **A file the runtime refused still leaked its own first bytes.** V8's `JSON.parse` error quotes the text it choked on, so any surface that read a path and reported the parse failure was an exfiltration channel: `validate .env` printed `Unexpected token 'D', "DB_PASSWOR"...` onto **stdout — the agent's context**, the one place this project exists to keep secrets out of, and `GET /api/canvas?path=.env` returned the same bytes in a 422. Redaction was no defense (it recognises `sk-`/`AKIA`/`ghp_` shapes, not `DB_PASSWORD`), and neither was confinement (`.env` is *inside* the workspace root — the same blind spot that let `src: ".env"` render in 0.3.0). Both surfaces now decide from the **extension** and never open the file: `assertReadable()` gates every CLI command that takes a path, and `loadCanvas` serves only `*.json` and markdown. Regression-tested across `open`/`print`/`stamp`/`validate` against `.env`, `.txt` and `.yaml`, asserting no byte of the file reaches stdout or stderr.
 
