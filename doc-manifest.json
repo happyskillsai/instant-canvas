@@ -333,9 +333,10 @@
         "The vendored Plotly build is not interchangeable with a published dist",
         "Description validators are strict and double-layered",
         "Never scaffold a skill by hand",
-        "The skill loads from a mirror path"
+        "The skill loads from a mirror path",
+        "Stamping the skill CHANGELOG means RENAMING `## [Unreleased]`, not adding a section under it"
       ],
-      "line_count": 46,
+      "line_count": 62,
       "links_to": [],
       "over_size": false,
       "parse_error": null,

@@ -44,3 +44,19 @@ SKILL.md frontmatter descriptions have an 80–180-char target, a 250-char soft 
 ## The skill loads from a mirror path
 
 At runtime the Skill tool may report the base directory as `.claude/skills/instant-canvas` (an agent-linked mirror) while the real, edited source lives in `.agents/skills/instant-canvas`. Edit and commit under `.agents/`; treat the `.claude/` path as read-only plumbing.
+
+## Stamping the skill CHANGELOG means RENAMING `## [Unreleased]`, not adding a section under it
+
+`happyskills release` reads the **first** `## [...]` heading in the skill bundle's `CHANGELOG.md` to find the version it is releasing. So the stamp is a rename: `## [Unreleased]` becomes `## [x.y.z] - YYYY-MM-DD`, in place, and the accumulated entries stay exactly where they are.
+
+The failure mode is what happens if you instead *insert* the new version below the old heading:
+
+```markdown
+## [Unreleased]          ← still first; not a semver
+
+## [0.4.0] - 2026-07-12  ← the release never gets here
+```
+
+The CLI parses `Unreleased`, cannot read it as a version, and stops. It then refuses with `MISSING_CHANGELOG_ENTRY` — *"CHANGELOG.md does not contain a ## [0.4.0] entry"* — which is false, and sends you looking for a missing entry that is sitting right there. The real tell is `next_step.context.current_top_entry: null`: it found **no** version heading at all. When a release complains about an entry you can see, check what is *above* it.
+
+This repo does keep a Keep-a-Changelog `## [Unreleased]` staging block in the skill bundle, because several agent sessions accumulate entries into it in parallel — that is worth keeping. It just has to be renamed, not out-ranked, at release time. (Restoring an empty `## [Unreleased]` above the released version afterwards is fine, and is what the repo does: the next release renames *that* heading in turn.)

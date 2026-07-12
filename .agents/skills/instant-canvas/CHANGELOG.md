@@ -7,6 +7,8 @@ package they were authored alongside.
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-07-12
+
 ### Added
 - **Markdown files need no canvas.** `open report.md` and `print report.md --out
   report.pdf` now work directly — no envelope to write, no `stamp`, no
