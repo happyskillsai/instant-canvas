@@ -80,6 +80,8 @@ Honest framing: this keeps secrets out of the conversation **during capture**. N
 6. **Open**: `$IC open <file> [--workspace <dir>]` — display canvases return immediately; form/confirm canvases **block** until the human responds in the browser.
 7. Parse the single JSON document on stdout (logs go to stderr) and continue from that metadata only.
 
+**The loop ends at `open`.** There is no step 8, and in particular there is no `print`: a PDF is a file in the user's repository, and you write one only when they asked for one. See [Printing](#printing-a-canvas-the-document-object).
+
 If `validate` or `open` reports `MISSING_CREATED_WITH`, just run `stamp` and carry on — it is a missing stamp, not a broken canvas, and it is yours to fix silently rather than something to raise with the user.
 
 ## Commands
@@ -126,7 +128,17 @@ stop [--workspace <dir>]
 
 ## Printing a canvas: the `document` object
 
+> ### Never print unless the user asked for a PDF
+>
+> **`open` is how you show something. `print` is how you produce a file, and it is not part of showing.** A request to visualize, chart, report on or "show me" data ends at `open` — the canvas is already on screen, and the reader has a print button in the browser (and Cmd+P) whenever they decide they want paper. Run `print` **only** when the user asked for a PDF, a printable, or a file to send someone.
+>
+> A PDF nobody asked for is not a free bonus. It is a multi-megabyte artifact written into the user's repository, next to their source, which they now have to notice, review and delete — and which will be silently rewritten every time you regenerate the canvas. Producing files the user did not request is the one way a read-only "show me my data" turns into an edit to their project.
+>
+> If you think a PDF would be useful, **say so and let them ask.**
+
 `print <file.md>` needs nothing. **`print <canvas.json>` refuses a canvas that has no `document` object** (`INVALID_SPEC`, exit 1) — this is the one envelope key you must add on purpose, and the whole reason to know it exists.
+
+Adding a `document` object is **not** a reason to print. It is what makes a canvas *printable* — it also gives it a cover, a theme and a contents page on screen, which is usually why you want one.
 
 ```jsonc
 "document": {
@@ -134,6 +146,7 @@ stop [--workspace <dir>]
              "logo": "assets/logo.svg",              // the small 48px MARK
              "background": {"src": "assets/hero.jpg"}},  // the COVER PHOTO — see below
   "toc":    {"title": "Contents", "depth": 2},      // the TOC is auto-generated anyway; this only tunes it
+                                                    // (headings + chapter names ONLY — a chart title is a caption)
   "header": {"left": "Q3 Report"},                  // left | center | right
   "footer": {"right": "{{pageNumber}} / {{totalPages}}"},
   "backCover": {"title": "Thank you", "background": {"src": "assets/back.jpg"}},  // independent of the front's
@@ -292,9 +305,13 @@ General: `line area bar pie(+donut) scatter heatmap radar funnel gauge candlesti
 
 Scientific/ML: `scatter3d surface contour density violin errorBars dendrogram silhouette splom`
 
+**Ship labels WHOLE — never pre-truncate them to make them fit.** How much of a category label survives on a crowded axis is *rendering*, and the runtime owns it: it elides a tick past **30 characters** and keeps the full string in the hover, and it measures the axis after the browser has chosen its tick angle so the labels can never collide with the legend. Cutting a name down to `"NutraDrip Service Pr…"` in the JSON to make room damages the data permanently — the hover, the tooltip and the file all lose it, and you have guessed at a width you cannot see. Send `"NutraDrip Service Providers"` and let the axis decide. The same goes for the rest of the contract: you wrangle data, the runtime lays it out.
+
 **Sweeps.** Any kind becomes a slider-driven parameter sweep: replace `data` with `"sweep": {"label"?, "frames": [{"label", "data"}, {"label", "data"}]}` — you precompute every frame, the slider steps through them. No code runs, nothing calls back to you. **At least two frames** (one is not a sweep, and is refused); send `data` as well and it is ignored with a warning. Not allowed in a `document` — paper cannot drag a slider. `$IC catalog sweep`.
 
 Pick from the one-line index (`$IC catalog` → `chartKinds`, with when-to-use guidance), then pull the winner's exact schema: `$IC catalog sankey` returns its encoding channels, expected data shape, and a complete example. Each kind validates deterministically — wrong or missing encoding keys come back as `ENCODING_KEY_NOT_IN_DATA` / `MISSING_REQUIRED_PROPERTY` with hints. Kinds that need external assets or JS callbacks (`map`, `custom`, …) are intentionally unsupported and listed with reasons under `unsupportedChartKinds`; the raw `options` escape hatch refines any supported kind.
+
+**Do not reach for `options` to fix a layout.** Long axis labels colliding with the legend is the classic case, and the runtime already solves it: it measures the axis after the browser has drawn it and reserves the room both need. Pinning `layout.margin.b` or `layout.legend` in `options` **turns that off** for the chart — your patch is the author's final word, so a hand-tuned margin inherits the very problem it was working around, and inherits it in every pane width you never saw. `options` is for refining a *figure* (a trace's text mode, a fixed height), not for fighting the layout engine.
 
 16 field types: `text textarea secret email url tel number date datetime select radio checkbox checkboxGroup range hidden readonly`. Common shape: `{name, label, type, required?, placeholder?, help?, default?, options?, validation?, ui?, span?}` with `validation: {minLength, maxLength, pattern, patternMessage, min, max, step, protocols}`. Env destinations require names matching `^[A-Za-z_][A-Za-z0-9_]*$`.
 

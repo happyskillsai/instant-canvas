@@ -49,6 +49,20 @@ Generalise it: when a test guards a *layout* rule, the fixture must contain the 
 
 Two of the paper-layout regressions above are invisible to a CSS-level check. A fence that overflows its box still *has* `overflow-wrap` in its cascade if a more specific rule beat it — so the wrap test asserts `pre.scrollWidth <= pre.clientWidth`, a measurement. And the deck's zeroed heading margins came from a rule that was present and correct (`.md h2{margin:34px 0 14px}`) being overridden by `.md > :first-child` — so the rhythm test reads `getComputedStyle(el).marginTop` and requires a real number. Grepping the stylesheet would have passed in both cases. Assert the computed value, in a real browser.
 
+## A BACKTICK in a comment inside an `evaluate()` block silently detonates the whole test file
+
+The browser probes are JavaScript passed to `evaluate()` as a **template literal**, so everything inside them — the code *and its comments* — lives between backticks. Writing a perfectly ordinary prose comment in there:
+
+```js
+// The author's `options` patch, read back off the live figure.   // ← WRONG, inside a template literal
+```
+
+…closes the template literal at the first backtick, and the file no longer parses. The damage is nothing like proportional to the typo: the runner cannot load `render.test.js` at all, so **every test in it disappears** and the failure surfaces as a bare `SyntaxError: missing ) after argument list` pointing at the `evaluate(` line — not at the comment, and not at anything resembling a test. The suite reports one failing "test" (the file) and 0 passes from it.
+
+Two things make this worse than it sounds. The suite still runs for ~10 s and prints a normal-looking summary, so *"it's just slow"* is the natural misread — the run has already failed. And the file it kills is the browser suite, which is exactly the suite that catches the bugs no server-side test can (see the top of this file). Losing it silently is losing the only assertions that matter for a visual change.
+
+Backticks are the project's own idiom for naming a symbol in prose, so the pull toward writing one is strong. Inside an `evaluate()` template, use plain words or single quotes, and say so at the top of the block — `render.test.js` carries the note *"(No backticks in here: this whole block is inside a template literal.)"* for exactly this reason. Same family as the NUL byte in `app.js` (see [gotchas/frontend.md](frontend.md)): a single character that makes a whole file stop being what you think it is, and reports it as something else entirely. **`node -c <file>` before running the suite is a two-second check that names the real problem.**
+
 ## A new required field makes every negative fixture pass for the wrong reason
 
 Adding a required envelope property (`createdWith`) instantly made `broken.canvas.json` fail *one more way*. Its tests kept passing — they assert `errorCount >= 3` and look for specific codes — so nothing went red, while the fixture had quietly stopped being a clean test of the six defects it was built around. A negative fixture must fail **only** on the defect it is named for; stamp it, or assert on the exact error-code set rather than a count. The same trap hits the positive direction harder: the four canvases in `examples/` were left unstamped when the field became required, so every shipped example failed `validate` and no test noticed, because nothing asserted that the examples validate. `provenance.test.js` now does.

@@ -53,6 +53,11 @@ const state = {
 	docStrips: null, // reader override for the running header/footer: null = auto (on iff declared), true/false = forced
 	docStripsOn: false, // what the last deck render actually did (drives the toggle button state)
 	docFit: null, // re-runs the deck scale fit; set by each document render
+	// Chart legend re-fits still in flight. A chart has its `.main-svg` the instant
+	// newPlot resolves, but its bottom margin is only correct one relayout later —
+	// so `print` must wait on this, not on a sleep, or it can photograph the deck
+	// mid-fit and ship a PDF whose legends sit on the tick labels.
+	fits: 0,
 	// The theme as the KERNEL resolved it — every key a literal hex string. Unlike
 	// the TOC and strip toggles above, a palette change is not a view preference:
 	// it is written back to a file, so the browser holds no private copy of the
@@ -261,7 +266,12 @@ function plotlyTemplate(p) {
 			font: { family: FONT, color: p.text, size: 12 },
 			xaxis: axis,
 			yaxis: axis,
-			legend: { orientation: 'h', x: 0.5, xanchor: 'center', y: -0.16, yanchor: 'top', font: { color: p.muted, size: 11 } },
+			// Anchored to the CONTAINER's bottom edge, never to the plot area's. A legend
+			// placed in paper coordinates (y: -0.16) sits a fraction of the PLOT's height
+			// below the axis line — and the plot shrinks as tick labels grow, so long
+			// rotated category labels walked straight through it. `fitLegendBelow()` then
+			// reserves the exact bottom margin both bands need, stacked.
+			legend: { orientation: 'h', x: 0.5, xanchor: 'center', xref: 'paper', y: 0, yanchor: 'bottom', yref: 'container', font: { color: p.muted, size: 11 } },
 			hoverlabel: { bgcolor: p.panel, bordercolor: p.border, font: { family: FONT, color: p.text, size: 12 } },
 			margin: { l: 56, r: 18, t: 10, b: 44 },
 			colorscale: { sequential: [[0, p.ramp], [1, p.color[0]]] },
@@ -1541,6 +1551,20 @@ function withAlpha(hex, a) {
 	return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`
 }
 
+// A category label is DATA the agent shipped whole; how much of it survives on an
+// axis is RENDERING, and therefore ours. Nothing was eliding anything, so agents
+// hand-truncated their own labels to make them fit ("NutraDrip Service Pr…" arrived
+// pre-cut in the JSON) — the data was being damaged to serve the layout, which is
+// exactly the inversion this project exists to prevent. Up to 30 characters is
+// shown whole; past that the TICK is elided, while the hover, the legend and the
+// file keep the full string.
+const TICK_MAX_CHARS = 30
+const shortTick = (v) => {
+	const s = String(v)
+	return s.length > TICK_MAX_CHARS ? s.slice(0, TICK_MAX_CHARS - 1) + '…' : s
+}
+const catTicks = (vals) => ({ tickmode: 'array', tickvals: vals, ticktext: vals.map(shortTick) })
+
 function chartFigure(block) {
 	const fmt = block.format || {}
 	const yFmt = (v) => fmtValue(v, fmt.y || 'number', fmt.currency)
@@ -1551,12 +1575,13 @@ function chartFigure(block) {
 	// Hover strings are rendered by Plotly's own mini-HTML parser; escape them.
 	const hs = (v) => esc(String(v === undefined || v === null ? '' : v))
 	const base = () => ({ template: plotlyTemplate(p), showlegend: false })
-	// The horizontal legend sits below the plot in paper coordinates, so it lands
-	// on top of an x-axis title unless pushed further down. `titled` says the
-	// caller sets one.
+	// The legend is pinned to the container's bottom edge by the template, and
+	// `fitLegendBelow()` measures the axis furniture after Plotly has chosen its
+	// tick angle and reserves the bottom margin both bands need. These numbers are
+	// only the FLOOR that holds until it runs. `titled` says the caller sets an
+	// x-axis title, which is one more thing stacked in that margin.
 	const legend = (show, titled) => ({
 		showlegend: show,
-		...(show ? { legend: { y: titled ? -0.3 : -0.18 } } : {}),
 		margin: { l: 56, r: 18, t: 10, b: show ? (titled ? 78 : 56) : titled ? 58 : 40 },
 	})
 	const colorbar = { outlinewidth: 0, thickness: 10, len: 0.82, tickfont: { color: p.muted, size: 10 } }
@@ -1597,7 +1622,8 @@ function chartFigure(block) {
 					...base(), ...legend(multi),
 					barmode: enc.stack ? 'stack' : 'group',
 					bargap: 0.35,
-					xaxis: { type: 'category' },
+					// The x values stay whole (the hover reads them); only the ticks elide.
+					xaxis: { type: 'category', ...catTicks(x) },
 					yaxis: { title: '' },
 					hovermode: 'x unified',
 				},
@@ -2248,8 +2274,32 @@ function currencySymbol(code) {
 }
 
 /** The generated figure, then the raw-Plotly escape hatch on top. */
+/** `options` is a RAW Plotly figure fragment, so a coordinate in it must mean what
+ *  it means in plain Plotly — and in plain Plotly a legend's `y` is in PAPER
+ *  coordinates, where a negative value is the idiom for "below the plot".
+ *
+ *  Our template moved the legend to `yref: 'container'` (see plotlyTemplate), and
+ *  container coordinates are CLAMPED to 0–1. So an author's hand-tuned
+ *  `legend: {y: -0.55}` silently clamped to 0 and their legend jumped to the
+ *  bottom edge of the box — a patch that had worked for a year, quietly relocated
+ *  by a default it never asked for and cannot see.
+ *
+ *  So a patch that positions the legend without naming its reference frame gets
+ *  Plotly's own default frame back. Naming `yref` explicitly still wins. */
+function restoreLegendRefs(fig, options) {
+	const patch = (options && options.layout && options.layout.legend) || {}
+	const legend = fig.layout.legend
+	if (!legend)
+		return fig
+	if (patch.y !== undefined && patch.yref === undefined)
+		legend.yref = 'paper'
+	if (patch.x !== undefined && patch.xref === undefined)
+		legend.xref = 'paper'
+	return fig
+}
+
 function chartFigureWithOptions(block) {
-	return applyOptions(chartFigure(block), block.options)
+	return restoreLegendRefs(applyOptions(chartFigure(block), block.options), block.options)
 }
 
 // ---------------------------------------------------------------- sweeps
@@ -2337,6 +2387,70 @@ function renderChartShell(block, idx) {
 // The generation counter lets a re-render abandon an in-flight mount loop.
 let mountGeneration = 0
 
+const LEGEND_GAP = 12 // px between the x-axis furniture and the legend above it
+const LEGEND_PAD = 8  // px between the legend and the bottom edge of the chart box
+
+/** Reserve the bottom margin the tick labels AND the legend need — stacked, not
+ *  overlapping.
+ *
+ *  Plotly's automargin registers each thing that wants room in the bottom margin
+ *  (the tick labels, the axis title, the legend) as an independent pusher and
+ *  takes the MAX of them, never the sum. So a stacked bar chart of twelve account
+ *  names rotated to -45° pushed ~90 px, the legend pushed ~30 px, the margin came
+ *  out 90 px — and the legend, which believed it had been given room, was drawn
+ *  straight through the labels. Nothing errors; you just get an unreadable chart.
+ *
+ *  The sum is ours to compute, and it can only be computed AFTER Plotly has
+ *  chosen its tick angle — which depends on the box width, which depends on the
+ *  pane. So this runs post-render and measures what the browser actually drew
+ *  (never what the layout asked for), then relayouts the bottom margin once. It
+ *  converges: the manual margin is a floor that already exceeds every push, so
+ *  the second measurement agrees with the first and this bails.
+ *
+ *  It is deliberately kind-agnostic — it reads the DOM, not the block — so every
+ *  chart with a legend below it is covered, including ones added later. */
+/** True when the canvas author reached into the bottom margin or the legend's
+ *  placement through the `options` escape hatch. `options` is applied LAST and is
+ *  authoritative — two systems fighting over one margin is worse than either
+ *  answer alone — so the auto-fit stands down and lets the author have it. */
+function legendPinned(block) {
+	const layout = (block && block.options && block.options.layout) || {}
+	const leg = layout.legend || {}
+	return (layout.margin && layout.margin.b !== undefined) ||
+		leg.x !== undefined || leg.y !== undefined || leg.yref !== undefined || leg.orientation !== undefined
+}
+
+async function fitLegendBelow(box, block) {
+	const fl = box._fullLayout
+	// A sweep stacks a slider under the legend and tunes these margins itself.
+	if (!fl || !fl.showlegend || !fl._size || (fl.sliders && fl.sliders.length))
+		return
+	// Only a legend that sits BELOW the plot can be walked into by the x labels.
+	if (!fl.legend || fl.legend.orientation !== 'h' || legendPinned(block))
+		return
+	const legendEl = box.querySelector('.legend')
+	const height = box.clientHeight
+	if (!legendEl || !height)
+		return
+	const size = fl._size
+	const boxTop = box.getBoundingClientRect().top
+	const axisLine = size.t + size.h // px from the box's top edge down to the x axis
+	let furniture = axisLine
+	for (const el of box.querySelectorAll('.xtick > text, .g-xtitle text'))
+		furniture = Math.max(furniture, el.getBoundingClientRect().bottom - boxTop)
+	const legendH = legendEl.getBoundingClientRect().height
+	const needed = Math.ceil((furniture - axisLine) + LEGEND_GAP + legendH + LEGEND_PAD)
+	const y = LEGEND_PAD / height // container coords: lift the legend off the bottom edge
+	if (Math.abs(needed - size.b) < 2 && Math.abs(y - fl.legend.y) < 0.002)
+		return
+	state.fits++
+	try {
+		await window.Plotly.relayout(box, { 'margin.b': needed, 'legend.y': y })
+	} finally {
+		state.fits--
+	}
+}
+
 function mountCharts(blocks, scope = document) {
 	const generation = ++mountGeneration
 	const boxes = [...scope.querySelectorAll('[data-chart]')]
@@ -2355,6 +2469,7 @@ function mountCharts(blocks, scope = document) {
 				} else {
 					const fig = chartFigureWithOptions(block)
 					await window.Plotly.newPlot(box, fig.data, fig.layout, PLOTLY_CONFIG)
+					await fitLegendBelow(box, block)
 				}
 			} catch (err) {
 				box.textContent = `Could not render this ${block.kind} chart.`
@@ -2363,7 +2478,11 @@ function mountCharts(blocks, scope = document) {
 			if (generation !== mountGeneration)
 				return
 			state.charts.push(entry)
-			const ro = new ResizeObserver(() => window.Plotly.Plots.resize(box))
+			// A narrower box re-rotates the tick labels, so the margin must be re-measured.
+			const ro = new ResizeObserver(async () => {
+				await window.Plotly.Plots.resize(box)
+				await fitLegendBelow(box, block)
+			})
 			ro.observe(box)
 			state.observers.push(ro)
 		}
@@ -2385,6 +2504,7 @@ async function rethemeCharts() {
 		} else {
 			const fig = chartFigureWithOptions(entry.block)
 			await window.Plotly.react(entry.el, fig.data, fig.layout, PLOTLY_CONFIG)
+			await fitLegendBelow(entry.el, entry.block)
 		}
 	}
 }
@@ -2536,6 +2656,22 @@ function htmlFragment(html, entryTitle, entries) {
 	return el
 }
 
+/** A TOC lists SECTIONS, and a chart title is a caption, not a section.
+ *
+ *  Block titles used to be pushed into the same entry list as the headings, so a
+ *  report with a numbered outline came out with its chart and table titles
+ *  interleaved between the numbered sections — four unnumbered rows under "4.
+ *  The numbers" that read as sections which had lost their numbers. Headings and
+ *  chapter names are the document's structure; block titles are not.
+ *
+ *  They are still the ONLY structure a canvas with no prose has, so they remain
+ *  the fallback: a chart gallery decked as paper keeps its contents page. The
+ *  moment a document declares a single heading it has declared its structure,
+ *  and the captions stand down. */
+function tocEntries(structure, captions) {
+	return structure.length ? structure : captions
+}
+
 /** Flatten the canvas into fragments + TOC entries. Chapters (pages) force a
  *  new sheet and contribute top-level entries. */
 function docFragments(canvas, doc) {
@@ -2545,7 +2681,8 @@ function docFragments(canvas, doc) {
 		: [{ name: null, blocks: canvas.blocks || [] }]
 	const flatBlocks = []
 	const fragments = []
-	const entries = []
+	const entries = []   // headings + chapter names — the document's structure
+	const captions = []  // chart/table titles — listed only when there is no structure
 	docAnchorSeq = 0
 	chapters.forEach((chapter, ci) => {
 		if (chapter.name) {
@@ -2570,15 +2707,15 @@ function docFragments(canvas, doc) {
 				fragments.push(...mdFragments(b, entries, depth))
 			} else if (b.type === 'chart') {
 				// A slot per view; the ONE chart box moves between slots on toggle.
-				const el = htmlFragment(chartSlotShell(b, 0), b.title, entries)
+				const el = htmlFragment(chartSlotShell(b, 0), b.title, captions)
 				const box = document.createElement('div')
 				box.className = 'chart-box' + (TALL_KINDS.has(b.kind) ? ' tall' : '')
 				el.querySelector('.chart-slot').appendChild(box)
 				fragments.push({ el, kind: null, chart: b })
 			} else if (b.type === 'kpi') {
-				fragments.push({ el: htmlFragment(renderKpi(b), null, entries), kind: null })
+				fragments.push({ el: htmlFragment(renderKpi(b), null, captions), kind: null })
 			} else if (b.type === 'table') {
-				const el = htmlFragment(renderTable(b), b.title, entries)
+				const el = htmlFragment(renderTable(b), b.title, captions)
 				fragments.push({ el, kind: 'rows' })
 			}
 		}
@@ -2590,7 +2727,7 @@ function docFragments(canvas, doc) {
 		f.el.querySelector('.chart-slot').dataset.slot = idx
 		f.el.querySelector('.chart-box').dataset.chart = idx
 	})
-	return { fragments, entries, flatBlocks }
+	return { fragments, entries: tocEntries(entries, captions), flatBlocks }
 }
 
 /** Chart card with an empty slot — used by both document views. The live plot
@@ -3115,8 +3252,13 @@ function moveChartsTo(rootEl, view) {
 		if (!slot || box.parentElement === slot)
 			continue
 		slot.appendChild(box)
-		if (box.classList.contains('js-plotly-plot'))
-			window.Plotly.Plots.resize(box)
+		// A sheet is narrower than the pane, so the ticks re-rotate and the bottom
+		// margin the legend needs changes with them.
+		if (box.classList.contains('js-plotly-plot')) {
+			const entry = state.charts.find((e) => e.el === box)
+			Promise.resolve(window.Plotly.Plots.resize(box))
+				.then(() => fitLegendBelow(box, entry && entry.block))
+		}
 	}
 }
 

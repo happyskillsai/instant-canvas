@@ -11,7 +11,7 @@ source:
 
 ## Everything inside the skill folder ships — keep everything else out
 
-`release`/`publish` bundles the **entire** `.agents/skills/instant-canvas/` folder; whatever you drop in there reaches every consumer and competes for their agents' context. This is exactly why the runtime was migrated out (2026-07-11): the skill folder now carries only the agent-facing contract — SKILL.md, skill.json, CHANGELOG.md, LICENSE, ~52 KB — and 100% of the logic ships as the `instant-canvas` npm package instead, fetched lazily by `npx`. Never add scripts, design notes, specs, test tooling, or dev docs to the skill folder; if a consumer needs it, it belongs in the npm package.
+`release`/`publish` bundles the **entire** `.agents/skills/instant-canvas/` folder; whatever you drop in there reaches every consumer and competes for their agents' context. This is exactly why the runtime was migrated out (2026-07-11): the skill folder now carries only the agent-facing contract — SKILL.md, skill.json, CHANGELOG.md, LICENSE, ~55 KB — and 100% of the logic ships as the `instant-canvas` npm package instead, fetched lazily by `npx`. Never add scripts, design notes, specs, test tooling, or dev docs to the skill folder; if a consumer needs it, it belongs in the npm package.
 
 ## The npm tarball is an allowlist — verify with `npm pack --dry-run`
 

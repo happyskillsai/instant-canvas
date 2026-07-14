@@ -320,6 +320,18 @@ test.before(async () => {
 			{ type: 'chart', kind: 'line', title: 'Trend', data: [{ x: 'a', y: 1, y2: 2 }, { x: 'b', y: 3, y2: 1 }], encoding: { x: 'x', y: ['y', 'y2'] } },
 		],
 	}))
+	// A canvas with NO prose at all: block titles are the only structure it has, so
+	// they are the one case where the TOC still lists them. Without this fixture the
+	// caption fallback is a claim no test can fail.
+	fs.writeFileSync(path.join(root, 'gallery.canvas.json'), JSON.stringify({
+		instantcanvas: 1,
+		createdWith: '0.1.0',
+		title: 'Chart gallery',
+		blocks: [
+			{ type: 'chart', kind: 'bar', title: 'Revenue by region', data: [{ r: 'EMEA', v: 3 }, { r: 'APAC', v: 5 }], encoding: { x: 'r', y: 'v' } },
+			{ type: 'chart', kind: 'line', title: 'Signups over time', data: [{ x: 'a', y: 1 }, { x: 'b', y: 4 }], encoding: { x: 'x', y: 'y' } },
+		],
+	}))
 	fs.copyFileSync(path.join(FIXTURES, 'document-split.canvas.json'), path.join(root, 'split.canvas.json'))
 	fs.copyFileSync(path.join(FIXTURES, 'document-handbook.canvas.json'), path.join(root, 'handbook.canvas.json'))
 	fs.copyFileSync(path.join(FIXTURES, 'handbook.md'), path.join(root, 'handbook.md'))
@@ -752,6 +764,25 @@ async function driveUniversalToggle() {
 		await cdpSleep(400)
 		const back = await evaluate(UNI_SNAPSHOT_JS)
 
+		// A canvas with no headings: the chart titles ARE its structure, so they are
+		// the TOC. (The reader's deck choice is sticky, so this opens as paper.)
+		await evaluate(`(() => { document.getElementById('viewDeck').click(); location.hash = '#/c/' + encodeURIComponent('gallery.canvas.json'); return true })()`)
+		deadline = Date.now() + 20_000
+		for (;;) {
+			const ready = await evaluate(`(() => window.ic.state.activeId === 'gallery.canvas.json'
+				&& document.querySelectorAll('.deck .sheet').length >= 1
+				&& !!document.querySelector('.toc-title'))()`).catch(() => false)
+			if (ready || Date.now() > deadline)
+				break
+			await cdpSleep(250)
+		}
+		await cdpSleep(600)
+		const gallery = await evaluate(UNI_SNAPSHOT_JS)
+		// The view choice is sticky across navigation, and the form assertions below
+		// were written against a continuous one. Put it back where they found it.
+		await evaluate(`(() => { document.getElementById('viewHtml').click(); return true })()`)
+		await cdpSleep(400)
+
 		// An interactive canvas: same toggle, but the deck side explains itself.
 		await evaluate(`(() => { location.hash = '#/c/' + encodeURIComponent('formy.canvas.json'); return true })()`)
 		deadline = Date.now() + 15_000
@@ -768,7 +799,7 @@ async function driveUniversalToggle() {
 		await cdpSleep(400)
 		const formyClicked = await evaluate(UNI_SNAPSHOT_JS)
 
-		return { classic, deck, tocOff, tocOn, stripsOn, stripsOff, back, formy, formyClicked }
+		return { classic, deck, tocOff, tocOn, stripsOn, stripsOff, back, gallery, formy, formyClicked }
 	})
 }
 
@@ -798,11 +829,27 @@ test('a reader-toggled deck derives its TOC and paints paper-light charts', { sk
 	const d = uniDrive.deck
 	assert.equal(d.tocTitle, 'Contents', 'a TOC was generated with zero config')
 	const labels = d.tocRows.map((r) => r.label)
-	for (const expected of ['Alpha Report', 'Beta Section', 'Trend'])
+	for (const expected of ['Alpha Report', 'Beta Section'])
 		assert.ok(labels.includes(expected), `auto-TOC lists "${expected}" (got: ${labels.join(' | ')})`)
+	// A chart title is a CAPTION, not a section. This canvas has headings, so they are
+	// its structure and the chart title stays out of the contents page.
+	assert.ok(!labels.includes('Trend'), `the chart title is not a TOC entry (got: ${labels.join(' | ')})`)
 	assert.ok(d.tocRows.every((r) => /^\d+$/.test(r.num)), 'auto-TOC entries carry page numbers')
 	// Paper is light even though the canvas declared no theme (and the app may be dark).
 	assert.equal(d.traceColor, '#6366f1', 'charts use the LIGHT palette, not the app palette')
+})
+
+test('with no headings, block titles ARE the structure — so the TOC lists them', { skip: browserSkip, timeout: 120_000 }, () => {
+	// The other half of the caption rule. Headings outrank block titles, but a chart
+	// gallery has no headings to outrank them — and a contents page listing nothing
+	// would be worse than one listing the charts. So the captions stand in, and only
+	// then. Without this, "drop the block titles" would have silently cost every
+	// prose-less deck its TOC.
+	const g = uniDrive.gallery
+	const labels = g.tocRows.map((r) => r.label)
+	assert.equal(g.tocTitle, 'Contents', 'a prose-less deck still gets a contents page')
+	assert.deepEqual(labels, ['Revenue by region', 'Signups over time'], `the chart titles are the TOC (got: ${labels.join(' | ')})`)
+	assert.ok(g.tocRows.every((r) => /^\d+$/.test(r.num)), 'and they carry page numbers like any other entry')
 })
 
 test('the TOC is the reader\'s: a topbar toggle removes and restores it, repacking the deck', { skip: browserSkip, timeout: 120_000 }, () => {
@@ -1261,11 +1308,17 @@ test('the markdown handbook packs into sheets: real tables, lists, fences, an in
 	assert.equal(pdfPageCount(handbookDrive.pdf), s.sheetCount, 'handbook prints 1:1')
 })
 
-test('TOC lists chapters, headings and block titles with their page numbers', { skip: browserSkip, timeout: 120_000 }, () => {
+test('TOC lists chapters and headings with their page numbers — never block titles', { skip: browserSkip, timeout: 120_000 }, () => {
 	const s = deckDrive.snap
-	for (const expected of ['Operations', 'Growth', 'Quarter at a glance', 'Cost detail', 'Cost by service', 'Signups trend', 'Cost per region'])
+	for (const expected of ['Operations', 'Growth', 'Quarter at a glance', 'Cost detail'])
 		assert.ok(s.tocEntries.includes(expected), `TOC lists "${expected}" (got: ${s.tocEntries.join(' | ')})`)
-	assert.ok(s.tocRows.length >= 7 && s.tocRows.every((r) => /^\d+$/.test(r.num)), `every entry carries a page number (${JSON.stringify(s.tocRows)})`)
+	// The bug this pins: chart and table titles were pushed into the same entry list
+	// as the headings, so a numbered outline came out with unnumbered caption rows
+	// wedged between its sections, reading as sections that had lost their numbers.
+	// A TOC lists structure; a caption is not structure.
+	for (const caption of ['Cost by service', 'Signups trend', 'Cost per region'])
+		assert.ok(!s.tocEntries.includes(caption), `block title "${caption}" stays out of the TOC (got: ${s.tocEntries.join(' | ')})`)
+	assert.ok(s.tocRows.length >= 4 && s.tocRows.every((r) => /^\d+$/.test(r.num)), `every entry carries a page number (${JSON.stringify(s.tocRows)})`)
 	// The numbers come from the deck's own pagination: a chapter's TOC number
 	// must equal the 1-based index of the sheet its chapter head landed on.
 	const numOf = (label) => Number((s.tocRows.find((r) => r.label === label) || {}).num)

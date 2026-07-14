@@ -159,10 +159,10 @@ const SHAPES = {
 		},
 	},
 	documentToc: {
-		description: 'Customizes the table of contents — the TOC itself is generated automatically (markdown headings plus the titles of chart and table blocks that have one, dotted leaders, page numbers from the deck\'s own pagination) whenever the document has anything to list, and the reader can toggle it in the browser. Numbers are exact on screen and via `npx -y @happyskillsai/instant-canvas print`; a manual paper/scale override in the browser print dialog can still repaginate.',
+		description: 'Customizes the table of contents — the TOC itself is generated automatically (from the document\'s markdown headings and its chapter names, with dotted leaders and page numbers from the deck\'s own pagination) whenever the document has anything to list, and the reader can toggle it in the browser. Numbers are exact on screen and via `npx -y @happyskillsai/instant-canvas print`; a manual paper/scale override in the browser print dialog can still repaginate.',
 		properties: {
 			title: { type: 'string', default: 'Contents', description: 'TOC heading.' },
-			depth: { type: 'number', enum: [1, 2, 3], default: 2, description: 'Markdown heading levels listed (h1..h{depth}). A chart or table block is listed when it carries a "title"; a kpi block has no title and is never listed.' },
+			depth: { type: 'number', enum: [1, 2, 3], default: 2, description: 'Markdown heading levels listed (h1..h{depth}). A chart or table block TITLE is a caption, not a section, and is NOT listed — give a chart its own heading in a markdown block if it belongs in the contents. The one exception: a canvas with no headings at all has no other structure, so its block titles become the TOC (a chart gallery keeps its contents page).' },
 		},
 	},
 	documentStrip: {
@@ -617,14 +617,14 @@ const BLOCKS = {
 			kind: { type: 'string', required: true, enum: [], description: 'Chart kind — run `catalog` for the one-line index, `catalog <kind>` for its schema.' }, // enum filled below
 			title: { type: 'string', description: 'Card title.', example: 'Signups' },
 			description: { type: 'string', description: 'Caption under the title.', example: 'Actual vs. target, last 4 months' },
-			data: { type: 'array', required: true, description: 'Inline data rows. Shape depends on kind: flat objects for most; {name, value, children} trees for treemap/sunburst; link rows for sankey/graph. Omit when "sweep" is present — its frames carry the rows.', example: [{ month: 'Apr', signups: 2000, target: 2200 }] },
+			data: { type: 'array', required: true, description: 'Inline data rows. Shape depends on kind: flat objects for most; {name, value, children} trees for treemap/sunburst; link rows for sankey/graph. Omit when "sweep" is present — its frames carry the rows. Ship category labels WHOLE — never pre-truncate one to make it fit an axis. How much of a label survives on a crowded axis is rendering, and the runtime owns it: a tick elides past 30 characters while the hover keeps the full string. Cutting a name down in the JSON destroys it everywhere, to guess at a width you cannot see.', example: [{ month: 'Apr', signups: 2000, target: 2200 }] },
 			// No itemShape: checkSweep() owns the nested errors, and recursing here
 			// would report every defect twice. Its schema is `catalog sweep`.
 			sweep: { type: 'object', description: 'Parameter sweep: a slider steps through precomputed frames. Replaces "data". See `catalog sweep`.' },
 			encoding: { type: 'object', description: 'Maps data keys to the kind\'s channels — exact schema via `catalog <kind>`. Optional only for treemap/sunburst (default name/value/children keys).' },
 			format: { type: 'object', itemShape: 'chartFormat', description: 'Value/axis/tooltip formatting.' },
 			donut: { type: 'boolean', default: false, description: 'Pie only: render as a donut.' },
-			options: { type: 'object', description: 'Raw Plotly figure fragment applied LAST as {"data":[...perTraceOverrides],"layout":{...}} — traces merge by index, so a patch refines the generated trace instead of replacing it. JSON only.', example: {} },
+			options: { type: 'object', description: 'Raw Plotly figure fragment applied LAST as {"data":[...perTraceOverrides],"layout":{...}} — traces merge by index, so a patch refines the generated trace instead of replacing it. JSON only. Do NOT reach for this to stop long axis labels colliding with the legend: the runtime measures the axis after render and reserves the room both need. Pinning "layout.margin.b" or "layout.legend" here TURNS THAT OFF for the chart (your patch is the author\'s final word), so a hand-tuned margin now owns the problem it was working around.', example: {} },
 		},
 		example: { type: 'chart', kind: 'line', title: 'Signups', data: [{ month: 'Apr', signups: 2000, target: 2200 }], encoding: { x: 'month', y: ['signups', 'target'] }, format: { y: 'number' } },
 	},

@@ -54,6 +54,29 @@ Shiki produces beautiful output by writing an inline `style=` on **every token**
 
 At load, Plotly's `addRelatedStyleRule` (`src/lib/dom.js`) creates `<style id="plotly.js-style-global">` and calls `insertRule()`. `style-src 'self'` blocks the stylesheet, so chrome degrades and the console fills with warnings — the bundle even ships the string *"Cannot addRelatedStyleRule, probably due to strict CSP…"*. Plotly's own escape hatch: if an element with that id already exists **and matches `.no-inline-styles`**, it returns early. `csp-shim.js` plants a `<div>` (never a `<style>`, so no stylesheet is created to block) and the rules arrive instead from the vendored `plotly.css` `<link>`, which is `'self'`. It must load **before** `plotly.min.js`. A second, content-hash-id'd `<style>` comes from maplibre's CSS, which esbuild inlines even with no map trace bundled — stub that id too.
 
+## Plotly's automargin takes the MAX of its pushers, never the sum
+
+Two things want room in the bottom margin: the x tick labels, and a horizontal legend below the plot. Plotly's automargin registers each as an **independent pusher** and reserves `max(pushes)` — not their sum. So twelve account names rotated to -45° pushed ~90 px, the legend pushed ~30 px, the margin came out 90 px, and **both were drawn into the same 90 px**: the legend sat on top of the labels. No error, no warning, no CSP violation — just an unreadable chart that every server-side test passed.
+
+The legend made it worse by being placed in **paper coordinates** (`y: -0.16`), which are a fraction of the *plot area's* height — and the plot area **shrinks as the labels grow**. The longer the labels, the further *up* the legend climbed into them. The fix has two halves, and both are needed:
+
+- **Anchor the legend to the container** (`yref: 'container', y: 0, yanchor: 'bottom'`), so its position stops depending on a plot area that is still being resized.
+- **Compute the sum yourself, after the render.** The tick angle depends on the box width, which depends on the pane, so the real geometry does not exist until Plotly has drawn — `fitLegendBelow()` measures the lowest tick label's bounding rect against the legend's, and relayouts `margin.b` once. It converges because the manual margin is a **floor** that already exceeds every automargin push, so the second measurement agrees with the first.
+
+Two consequences worth keeping. It reads the **DOM, not the block**, so it covers every kind with a legend below — including ones added later. And it deliberately **stands down** when the block's `options` pins `layout.margin.b` or `layout.legend`: that patch is applied last and is the author's final word, and two systems fighting over one margin is worse than either answer alone.
+
+The test asserts **intersecting rectangles in a real browser** (`render.test.js`), because that is the only place this bug exists — every layout number Plotly was handed looked correct. Against the old code it reports *6 of 8 tick labels overlapping the legend*.
+
+**The data-damage tell.** The agent that hit this had already worked around it *twice* in its own canvas: it hand-truncated the account names in the JSON (`"NutraDrip Service Pr…"`) and hand-patched `margin.b: 170` through `options`. When you find an agent editing its own data to fix a layout, the layout is the bug — the contract is missing something the runtime should have owned. Tick eliding is now the runtime's (30 chars, hover keeps the whole string), so nobody has to.
+
+## Changing a default in the template SILENTLY RELOCATES every `options` patch written against the old one
+
+The sibling trap to the fix above, and it was caught only because a test asserted the author's numbers rather than the picture. Moving the legend to `yref: 'container'` in `plotlyTemplate()` looked purely internal. It was not: **container coordinates are clamped to 0–1**, while paper coordinates are not — and a negative `y` is *the* Plotly idiom for "put the legend below the plot".
+
+So every canvas carrying a hand-tuned `options: {layout: {legend: {y: -0.55}}}` — written back when the default was `yref: 'paper'`, where it worked — had that `-0.55` **clamped to 0**, and its legend jumped to the bottom edge of the box. No error. The patch was still in the file, still being applied, and quietly meaning something else.
+
+The rule that follows is the whole point of the escape hatch: **`options` is a RAW Plotly fragment, so a value in it must mean what plain Plotly means — which makes every default our template overrides a value we have redefined under the author's feet.** `restoreLegendRefs()` therefore hands back Plotly's own reference frame to any patch that positions the legend without naming one (`y` with no `yref` → `yref: 'paper'`); an explicit `yref` still wins. Generalise it: before changing any default in the template, ask what an existing `options` patch expressed in the *old* default now means. The failure is silent, it lands in someone else's canvas, and it will not look like your change.
+
 ## Plotly cannot read CSS variables
 
 `color: var(--c1)` inside a Plotly figure resolves to nothing — it paints to SVG/canvas and never consults your stylesheet. Two concrete palettes (`LIGHT`/`DARK`) are compiled into `layout.template` by `plotlyTemplate()`, and the theme toggle rebuilds each figure on the other palette.

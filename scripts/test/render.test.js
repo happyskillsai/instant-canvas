@@ -83,6 +83,34 @@ const CANVAS = {
 		{ type: 'chart', kind: 'dendrogram', title: 'dendrogram',
 			data: [{ l: 'a', r: 'b', h: 1 }, { l: '#0', r: 'c', h: 2 }],
 			encoding: { left: 'l', right: 'r', height: 'h' } },
+		// Long category labels + a legend: the pair that collided. Plotly rotates these
+		// ticks to -45° and automargin grows the bottom margin to hold them — but it
+		// registers the tick labels and the legend as INDEPENDENT pushers and takes the
+		// max, not the sum, so a legend placed in paper coordinates was drawn straight
+		// through the labels. Two of these names are past the 30-char tick cap and must
+		// come back elided; one sits just under it and must come back whole.
+		{ type: 'chart', kind: 'bar', title: 'long labels',
+			data: [
+				{ account: 'cschwertner@northplainsdairy.example.com', Web: 1100, Robot: 130 },
+				{ account: 'harold@pureelementwater.example', Web: 980, Robot: 40 },
+				{ account: 'NutraDrip Service Providers', Web: 1740, Robot: 1230 },
+				{ account: 'garett.amsberry', Web: 690, Robot: 20 },
+				{ account: 'panowicz.ag', Web: 860, Robot: 15 },
+				{ account: 'dillan.olson', Web: 4416, Robot: 0 },
+				{ account: 'cole.kahnk.sp', Web: 3134, Robot: 0 },
+				{ account: 'mitch.mccain', Web: 1010, Robot: 5 },
+			],
+			encoding: { x: 'account', y: ['Web', 'Robot'], stack: true } },
+		// The same chart, but the author took the wheel through `options`. That patch is
+		// applied LAST and is authoritative, so the auto-fit must stand down rather than
+		// fight it — two systems arguing over one margin is worse than either answer.
+		{ type: 'chart', kind: 'bar', title: 'pinned labels',
+			data: [
+				{ account: 'cschwertner@northplainsdairy.example.com', Web: 1100, Robot: 130 },
+				{ account: 'dillan.olson', Web: 4416, Robot: 0 },
+			],
+			encoding: { x: 'account', y: ['Web', 'Robot'], stack: true },
+			options: { layout: { margin: { b: 170 }, legend: { orientation: 'h', x: 0, y: -0.55 } } } },
 		// a swept chart: slider + one figure per frame
 		{ type: 'chart', kind: 'errorBars', title: 'sweep',
 			encoding: { x: 'n', y: 'acc', error: 'sd', band: true },
@@ -172,6 +200,41 @@ test.before(async () => {
 					pageErrors: window.__pageErrors || [],
 					footerVer: (document.querySelector('.side-foot .ver') || {}).textContent || '',
 					mdInlineStyled: document.querySelectorAll('.md [style]').length,
+					// The axis/legend collision, measured as GEOMETRY in the real browser —
+					// the only place it exists. Every layout number Plotly was handed looked
+					// correct; the pixels were what disagreed.
+					axisLegend: (() => {
+						const card = [...document.querySelectorAll('.chart-title')]
+							.find((t) => t.textContent === 'long labels');
+						if (!card) return { found: false };
+						const box = card.parentElement.querySelector('.chart-box');
+						const legend = box.querySelector('.legend');
+						if (!legend) return { found: false };
+						const lr = legend.getBoundingClientRect();
+						const ticks = [...box.querySelectorAll('.xtick > text')];
+						const hits = ticks.filter((t) => {
+							const r = t.getBoundingClientRect();
+							return r.left < lr.right && r.right > lr.left && r.top < lr.bottom && r.bottom > lr.top;
+						});
+						return {
+							found: true,
+							ticks: ticks.length,
+							overlaps: hits.length,
+							// The legend must clear the LOWEST tick label, not merely miss the
+							// bounding boxes of the ones it happens not to sit under.
+							gap: Math.round(lr.top - Math.max(...ticks.map((t) => t.getBoundingClientRect().bottom))),
+							labels: ticks.map((t) => t.textContent),
+						};
+					})(),
+					// The author's own layout patch, read back off the live figure.
+					// (No backticks in here: this whole block is inside a template literal.)
+					pinned: (() => {
+						const card = [...document.querySelectorAll('.chart-title')]
+							.find((t) => t.textContent === 'pinned labels');
+						if (!card) return { found: false };
+						const fl = card.parentElement.querySelector('.chart-box')._fullLayout;
+						return { found: true, marginB: fl.margin.b, legendX: fl.legend.x, legendY: fl.legend.y };
+					})(),
 					// The graph kind's edge weight, straight off the figure builder. The
 					// schema promised encoding.value drove line width; the renderer drew
 					// every edge at width 1 and threw the weights away. Probe the figure
@@ -234,6 +297,37 @@ test('every chart in an adversarial canvas actually renders', { skip, timeout: 1
 test('a swept chart renders an interactive slider', { skip, timeout: 120_000 }, () => {
 	assert.ok(snapshot.sliders >= 1, 'the sweep block drew a Plotly slider')
 	assert.ok(snapshot.railed >= 1, 'the slider has a drag rail')
+})
+
+test('long axis labels never collide with the legend, and elide past 30 characters', { skip, timeout: 120_000 }, () => {
+	const a = snapshot.axisLegend
+	assert.ok(a.found, 'found the long-labelled bar chart and its legend')
+	// Meaningful only if the labels really are long enough to have been rotated into
+	// the legend's band — otherwise this passes for the wrong reason.
+	assert.ok(a.ticks >= 8, `all ${a.ticks} category ticks drew`)
+
+	// The bug, measured: tick label boxes intersecting the legend box.
+	assert.equal(a.overlaps, 0, `no tick label overlaps the legend (got ${a.overlaps} of ${a.ticks} overlapping: ${JSON.stringify(a.labels)})`)
+	assert.ok(a.gap >= 4, `the legend clears the lowest tick label by a real margin (gap: ${a.gap}px)`)
+
+	// Truncation is the runtime's job, so the agent can ship the name whole.
+	const elided = a.labels.filter((l) => l.endsWith('…'))
+	assert.equal(elided.length, 2, `both 30+ char names elide (got: ${JSON.stringify(a.labels)})`)
+	for (const l of elided)
+		assert.equal(l.length, 30, `an elided tick is exactly 30 characters ("${l}")`)
+	assert.ok(a.labels.includes('NutraDrip Service Providers'),
+		`a 26-char name is shown WHOLE — the point of raising the cap (got: ${JSON.stringify(a.labels)})`)
+})
+
+test('an `options` patch on the legend or the bottom margin outranks the auto-fit', { skip, timeout: 120_000 }, () => {
+	// `options` is applied last and is the author's final word. The auto-fit measures
+	// and relayouts AFTER the plot exists, which is exactly the position from which it
+	// could silently overwrite that word — so it checks first, and stands down.
+	const p = snapshot.pinned
+	assert.ok(p.found, 'found the chart whose author pinned its layout')
+	assert.equal(p.marginB, 170, 'the author\'s bottom margin survives the fit pass')
+	assert.equal(p.legendX, 0, 'and their legend x')
+	assert.equal(p.legendY, -0.55, 'and their legend y — the fit never touched this chart')
 })
 
 test('markdown renders as a document, with no inline styles for the CSP to drop', { skip, timeout: 120_000 }, () => {

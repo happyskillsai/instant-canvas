@@ -2,6 +2,56 @@
 
 ## [Unreleased]
 
+### Fixed
+- **Chart and table titles were listed in the table of contents as if they were sections.**
+  Block titles were pushed into the same entry list as the markdown headings, so a report
+  with a numbered outline printed a contents page with unnumbered caption rows wedged
+  between its sections — four of them between "4. The numbers" and "5. Engagement signals"
+  — reading as sections that had lost their numbers. A TOC lists **structure**, and a chart
+  title is a caption. Headings and chapter names are now the only entries.
+
+  They remain the fallback for a canvas that has **no prose at all**: a chart gallery's
+  block titles are the only structure it has, so it keeps its contents page. Declare one
+  heading and the captions stand down.
+
+- **Long category labels were drawn straight through the legend.** Plotly's automargin
+  registers the tick labels and the legend as *independent* pushers of the bottom margin
+  and takes the **max** of them, never the sum — so twelve account names rotated to -45°
+  reserved ~90 px, the legend (placed in paper coordinates, i.e. a fraction of a plot area
+  that shrinks as the labels grow) believed it had been given room, and the two were
+  painted on top of each other. Nothing errored.
+
+  The legend is now anchored to the **container's** bottom edge, and `fitLegendBelow()`
+  measures the axis furniture *after* the browser has chosen its tick angle — the only
+  moment the real geometry exists — and reserves the margin both bands need, stacked. It
+  reads the DOM rather than the block, so every chart with a horizontal legend is covered.
+  An `options` patch that pins the legend or the bottom margin still **outranks** it: the
+  escape hatch is applied last and is the author's final word.
+
+  Anchoring to the container had a trap of its own, caught by the test that asserts the
+  author's numbers rather than the picture: **container coordinates are clamped to 0–1**,
+  and a negative `y` is Plotly's idiom for "below the plot". So an existing
+  `options: {layout: {legend: {y: -0.55}}}` — correct against the old `yref: 'paper'`
+  default — clamped silently to `0` and the legend jumped to the bottom edge. `options` is
+  a *raw Plotly fragment*, so a coordinate in it must mean what plain Plotly means:
+  `restoreLegendRefs()` returns Plotly's own reference frame to any patch that positions
+  the legend without naming one. An explicit `yref` still wins.
+
+### Changed
+- **Axis tick labels now elide at 30 characters, and the runtime owns the eliding.**
+  Nothing used to shorten a label, so agents hand-truncated their own data to make it fit
+  (`"NutraDrip Service Pr…"` arriving pre-cut in the JSON) — damaging the data permanently
+  to serve a layout they could not see. A name up to 30 characters is now shown **whole**;
+  past that the *tick* elides while the hover, the legend and the file keep the full
+  string. Ship labels whole; the axis decides. (`bar`, `line`, `area`.)
+
+- **`print` is no longer part of showing a canvas.** SKILL.md now states plainly that
+  `open` shows and `print` produces a file, and that a PDF is written **only** when the
+  user asked for one — the reader has a print button in the browser for the rest. Agents
+  were routinely printing a multi-megabyte PDF into the user's repository beside the
+  canvas, unasked, on every "visualize this". The runtime never did this; the agent did,
+  and nothing in the contract told it not to.
+
 ## [0.5.3] - 2026-07-14
 
 ### Fixed

@@ -425,6 +425,9 @@ async function cmdPrint(args) {
 			ready = await evaluate(`(() => {
 				if (!window.ic || !window.ic.state.tree) return false;
 				if (!document.querySelectorAll('.deck .sheet').length) return false;
+				// A chart's legend sits on its tick labels until fitLegendBelow() has
+				// relayouted it, and .main-svg exists before that lands.
+				if (window.ic.state.fits) return false;
 				const boxes = [...document.querySelectorAll('.chart-box')];
 				return boxes.every((b) => b.querySelector('.main-svg') || b.querySelector('canvas'));
 			})()`).catch(() => false)

@@ -132,7 +132,7 @@
         "Validator behavior",
         "Catalog: progressive disclosure"
       ],
-      "line_count": 301,
+      "line_count": 303,
       "links_to": [
         "docs/architecture.md",
         "docs/cli.md",
@@ -187,10 +187,11 @@
         "Result contract (stdout of `open`)",
         "The agent workflow"
       ],
-      "line_count": 126,
+      "line_count": 130,
       "links_to": [
         "docs/architecture.md",
         "docs/canvas-schema.md",
+        "docs/frontend.md",
         "docs/gotchas/runtime.md",
         "docs/security.md"
       ],
@@ -231,7 +232,7 @@
         "CSP shim",
         "Icons and vendored assets"
       ],
-      "line_count": 106,
+      "line_count": 110,
       "links_to": [
         "docs/architecture.md",
         "docs/canvas-schema.md",
@@ -302,6 +303,8 @@
         "`html: false` escapes raw HTML, so \"not rendering\" it means showing it",
         "Shiki cannot be used for syntax highlighting, and it is not about size",
         "Plotly injects a `<style>` element unless you claim its id",
+        "Plotly's automargin takes the MAX of its pushers, never the sum",
+        "Changing a default in the template SILENTLY RELOCATES every `options` patch written against the old one",
         "Plotly cannot read CSS variables",
         "A linked SVG cannot be themed, so the brand mark is inlined",
         "Retheme with `Plotly.react`, never purge + newPlot",
@@ -327,7 +330,7 @@
         "A sheet 3 px too tall prints a silent sliver page",
         "Constraint API quirks around custom widgets"
       ],
-      "line_count": 205,
+      "line_count": 228,
       "links_to": [],
       "over_size": false,
       "parse_error": null,
@@ -458,6 +461,7 @@
         "Never poll `readAlive` in a before hook — it DELETES the kernel it fails to ping",
         "A fixture that never contains the hard case makes the bug unfailable",
         "Assert what the browser computed, never what the stylesheet says",
+        "A BACKTICK in a comment inside an `evaluate()` block silently detonates the whole test file",
         "A new required field makes every negative fixture pass for the wrong reason",
         "Subtests cannot reach parent-context servers (Node 24.0.x)",
         "A server inside the test-runner process is invisible to subprocesses (Node 24.0.x)",
@@ -469,8 +473,10 @@
         "Fake registry entries in shared state dirs look like leaks",
         "A green suite proves the schemas agree; nobody was testing the prose"
       ],
-      "line_count": 94,
-      "links_to": [],
+      "line_count": 108,
+      "links_to": [
+        "docs/gotchas/frontend.md"
+      ],
       "over_size": false,
       "parse_error": null,
       "path": "docs/gotchas/testing.md",
@@ -615,8 +621,9 @@
         "Security regressions",
         "Browser verification"
       ],
-      "line_count": 96,
+      "line_count": 100,
       "links_to": [
+        "docs/gotchas/frontend.md",
         "docs/gotchas/testing.md",
         "docs/releasing.md"
       ],
