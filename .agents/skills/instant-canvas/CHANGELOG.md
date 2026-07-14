@@ -7,6 +7,22 @@ package they were authored alongside.
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-07-14
+
+### Fixed
+- **A cover photo could print its title white-on-white, and `validate` said
+  nothing.** The legibility guard warned only when a cover `background` carried
+  **neither** a `scrim` **nor** an `ink`. That was wrong: **an `ink` is a bet on
+  the photograph** — it fixes the *text* and cannot see the pixels behind it, so
+  white is legible over a dark ridge and invisible over a bright one, and nothing
+  can tell which yours is. A white `ink` over a bright sky validated clean and
+  printed an unreadable cover.
+
+  **Set a `scrim`.** It is the only knob that makes the contrast certain — a known
+  wash between an image nobody inspected and text that must be read. The warning
+  (`COVER_TEXT_MAY_BE_ILLEGIBLE`) now fires whenever a background has no scrim,
+  and says why an ink is not enough. It remains a *warning*: if you know your
+  photograph is dark, set an ink and ignore it.
 ## [0.5.0] - 2026-07-14
 
 ### Added
