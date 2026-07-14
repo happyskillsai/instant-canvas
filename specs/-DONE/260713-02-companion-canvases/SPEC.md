@@ -1,6 +1,13 @@
 # Companion canvases, and `skills-config.json` as the workspace config
 
-**Status:** ready to execute
+**Status:** ✅ DONE — shipped in v0.5.0 (2026-07-14); corrections in v0.5.1 / v0.5.2
+
+> Two claims in this spec were **wrong and were corrected after implementation**, and both are
+> marked inline where they appear (§2.5, §5). They are left in place rather than quietly edited
+> away, because each one *caused a shipped bug*: the crop-direction error was harmless, but
+> *"a photo behind text needs a scrim **or** an ink"* was implemented literally and produced a
+> cover whose title printed white-on-white. **The `or` was the bug.** A spec that reads well and
+> is subtly wrong is more dangerous than one that is obviously incomplete.
 **Depends on:** HappySkills structured `skills-config` (shipped — see `specs/260713-01-skills-config-complex-values/REQUEST.md`)
 **Replaces:** `.instantcanvas.json` (introduced earlier in the same unreleased cycle; never published)
 
@@ -130,7 +137,7 @@ ships with it.
   "background": {
     "src":      "assets/hero.jpg",    // workspace-local or data: — never remote
     "size":     "cover",              // "cover" | "contain" | "<len>" | "<len> <len>"
-    "position": "center",             // "center" | "top left" | "50% 25%" | "20mm 40mm"
+    "position": "center",             // "center" | "top left" | "25% 50%" | "20mm 40mm"
     "scrim":    { "color": "#000000", "opacity": 0.35 },
     "ink":      "#ffffff"
   }
@@ -146,15 +153,22 @@ different crop, a different scrim.
 | Intent | Value |
 |---|---|
 | Full bleed, centred — **the default** | `{"src": "hero.jpg"}` |
-| Full bleed, keeping the top third (a face, a skyline) | `{"position": "50% 25%"}` |
+| Full bleed, keeping the left of the image (a face at the edge) | `{"position": "25% 50%"}` |
 | A 120 mm image parked bottom-right | `{"size": "120mm", "position": "right bottom"}` |
 | 80 mm wide, 20 mm from the left, 40 mm down | `{"size": "80mm", "position": "20mm 40mm"}` |
 
 Percentage `position` is the **focal point** mechanism, and it is worth understanding rather than
-copying: `"50% 25%"` does not mean "shift it down 25%" — it aligns *the point 25% down the image*
-with *the point 25% down the page*. That is exactly "which part survives the crop", which is the
-thing a non-A4 image actually needs. Defaults (`cover` + `center`) put a square photo on A4
-cropped equally top and bottom, which is the right answer when nobody has said otherwise.
+copying: `"25% 50%"` does not mean "shift it right by 25%" — it aligns *the point 25% across the
+image* with *the point 25% across the page*. That is exactly "which part survives the crop", which
+is the thing a non-A4 image actually needs.
+
+> **CORRECTED AFTER IMPLEMENTATION** — the first draft of this section said the defaults put a
+> square photo on A4 "cropped equally top and bottom". **They do not**, and the rendered PDFs
+> proved it. `cover` scales the image so it covers the box, and *which axis overflows* is decided
+> by aspect ratio: portrait A4 is 0.71 wide-to-tall, so any image **wider in aspect than that** —
+> a square (1.0) **and** every landscape photo — overflows **sideways** and is cropped left/right.
+> Only an image *taller* than the page is cropped top/bottom. Consequently the **first** number in
+> `position` is almost always the live one on portrait A4, and a `"50% 25%"` is inert there.
 
 Lengths accept `mm`, `px` and `%`. Millimetres are the honest unit on paper (the page geometry is
 already `"15mm"`), but px is allowed because people think in it.
@@ -169,9 +183,21 @@ white cover title would come with white body text on white paper. Hence two cove
   It also drives the muted line (author/date), derived as the same colour at reduced opacity —
   one knob, because a white `ink` with a grey author line is still unreadable.
 
-Neither is defaulted on: silently tinting somebody's photograph is rude. But the catalog and
-SKILL.md must say plainly that *a photo behind text needs a scrim or an ink, usually both* — and
-the reference demo must set them, because a demo that looks bad teaches the wrong thing.
+Neither is defaulted on: silently tinting somebody's photograph is rude. The catalog and SKILL.md
+must therefore say plainly that **a photo behind text needs a `scrim`** — and the reference demo
+must set one, because a demo that looks bad teaches the wrong thing.
+
+> **CORRECTED AFTER IMPLEMENTATION** — the first draft of this line read *"needs a scrim **or** an
+> ink, usually both"*, and that `or` was **implemented literally and shipped as a bug** (v0.5.0):
+> the validator warned only when *both* were absent, so a white `ink` over a bright sky validated
+> clean and printed a title that was white on near-white.
+>
+> **An `ink` is a bet on the photograph.** It fixes the *text* and cannot see the pixels behind it
+> — white is legible over a dark ridge and invisible over a bright one, and nothing in the runtime
+> decodes the image to tell which it got. Setting one *feels* like considering legibility while
+> actually gambling on it. A **scrim** is the only knob that makes the contrast certain, because it
+> is a known wash laid between an image nobody inspected and text that must be read. So the warning
+> fires whenever there is **no scrim**, ink or not (fixed in v0.5.1).
 
 **Mechanics.**
 - The image belongs on the `.sheet` box (`background-clip: border-box`), **not** the padded
@@ -310,7 +336,8 @@ object.
    resolution, skills-config), `cli.md`, `frontend.md` (one sidebar entry, the create-on-save
    notice, the background/scrim/ink layers), `gotchas` (the key-order trap), SKILL.md (the
    contract an agent reads: *"to give a markdown file a cover or a theme, write a companion
-   canvas that `enhances` it"* — plus *a photo behind text needs a scrim or an ink*).
+   canvas that `enhances` it"* — plus *a photo behind text needs a **scrim*** (an `ink` alone is a
+   bet on the photograph — see the correction in §2.5)).
 
 ## 5. Done when
 
@@ -321,9 +348,11 @@ object.
 - Saving a theme on an unenhanced `.md` creates the companion, and the UI said so first.
 - `.instantcanvas.json` appears nowhere in the repo.
 - A palette survives a CLI round-trip and its chip still lights up.
-- A **square** photo on an A4 cover fills the sheet edge to edge, cropped equally top and bottom;
-  `"position": "50% 25%"` visibly moves which part survives; a `size` in mm places it instead of
-  filling. The image is in the **PDF**, not only on screen, and the title is legible over it.
+- A **square** photo on an A4 cover fills the sheet edge to edge, cropped **left and right** (see
+  the correction in §2.5 — on portrait A4 a square, and every landscape photo, overflows sideways);
+  `"position": "25% 50%"` visibly moves which part survives; a `size` in mm places it instead of
+  filling. The image is in the **PDF**, not only on screen, and the title is legible over it —
+  which requires a **scrim**, not merely an `ink`.
 
 ## 6. The demo that proves it
 

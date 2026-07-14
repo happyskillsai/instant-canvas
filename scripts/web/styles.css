@@ -810,8 +810,18 @@ body.modal-open .main{overflow:hidden}
      image (the .sheet's own background)  →  scrim  →  logo/title/subtitle/meta/band.
    The cover's children sit above the scrim because they are positioned; the scrim is a
    plain absolutely-positioned wash with no z-index games needed beyond this one. */
-.cover-scrim{position:absolute;inset:0;pointer-events:none}
-.sheet.has-bg>*:not(.cover-scrim){position:relative;z-index:1}
+/* The scrim sits under every other child. DO NOT add `position: relative` here to make
+   z-index apply: `.sheet.has-bg > *` outranks `.cover-logo` and `.cover-band`, so it
+   OVERRIDES their `position: absolute` — the logo falls out of the top-left corner and
+   lands on the title, and the accent band stops being full-bleed (it gets inset by the
+   sheet's padding and lifts off the bottom edge). Both shipped that way in 0.5.0 and were
+   caught by LOOKING at a printed cover, not by any assertion.
+   It is unnecessary anyway: `.sheet` is a flex container, and **z-index applies to flex
+   items even when they are statically positioned** — so the title, subtitle and meta stack
+   above the scrim with no `position` at all, while the logo and band keep the `absolute`
+   that puts them where they belong. */
+.cover-scrim{position:absolute;inset:0;pointer-events:none;z-index:0}
+.sheet.has-bg>*:not(.cover-scrim){z-index:1}
 /* `ink` repaints the cover's text and NOTHING ELSE — theme.text would paint the whole
    document, which is why a cover-scoped token exists at all. The muted line (author,
    date) is derived from the same value at reduced opacity: one knob, because a white

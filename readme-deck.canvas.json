@@ -2,21 +2,21 @@
 	"instantcanvas": 1,
 	"createdWith": "0.4.0",
 	"enhances": "README.md",
-	"title": "InstantCanvas — README",
+	"title": "InstantCanvas \u2014 README",
 	"document": {
 		"cover": {
 			"title": "InstantCanvas",
-			"subtitle": "Death to the admin panel — a local, schema-driven canvas runtime for coding agents",
+			"subtitle": "Death to the admin panel \u2014 a local, schema-driven canvas runtime for coding agents",
 			"author": "HappySkills",
-			"date": "v0.4.0",
+			"date": "v0.5.2",
 			"logo": "assets/logo.png",
 			"background": {
-				"src": "demos/assets/cover-square.png",
+				"src": "assets/readme-cover.png",
 				"size": "cover",
-				"position": "25% 50%",
+				"position": "center",
 				"scrim": {
 					"color": "#0b0e14",
-					"opacity": 0.55
+					"opacity": 0.45
 				},
 				"ink": "#ffffff"
 			}
@@ -39,12 +39,12 @@
 		},
 		"backCover": {
 			"title": "Answers, not dashboards.",
-			"text": "The agent gathers the data, reasons about it, and delivers the answer on the fly — rendered visually, on demand.",
+			"text": "The agent gathers the data, reasons about it, and delivers the answer on the fly \u2014 rendered visually, on demand.",
 			"logo": "assets/logo.png",
 			"background": {
-				"src": "demos/assets/cover-square.png",
+				"src": "assets/readme-cover.png",
 				"size": "cover",
-				"position": "right bottom",
+				"position": "center",
 				"scrim": {
 					"color": "#0b0e14",
 					"opacity": 0.72

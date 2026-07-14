@@ -435,7 +435,7 @@ const SNAPSHOT_JS = `
 			csp: window.__csp || [],
 			styleEls: document.querySelectorAll('style').length,
 			offenders: [...document.querySelectorAll('.canvas [style]')]
-				.filter((el) => !el.closest('.chart-box') && !el.matches('.sheet,.deck,.deck-scale'))
+				.filter((el) => !el.closest('.chart-box') && !el.matches('.sheet,.deck,.deck-scale,.cover-scrim'))
 				.map((el) => el.className).slice(0, 5),
 		};
 	})()
@@ -992,6 +992,44 @@ const DECK_SNAPSHOT_JS = `
 			unsubstituted: /\\{\\{/.test((document.querySelector('.deck') || {}).textContent || ''),
 			deckPresent: !!document.querySelector('.deck'),
 			logos: [...document.querySelectorAll('.cover-logo, .back-logo')].map((i) => (i.getAttribute('src') || '').slice(0, 22)),
+			// A cover carrying a BACKGROUND — the state in which the furniture broke. Read
+			// the COMPUTED geometry, never the stylesheet: the rules were present and
+			// correct, and a more specific one silently beat them.
+			coverBg: (() => {
+				const c = document.querySelector('.sheet-cover')
+				if (!c) return null
+				const logo = c.querySelector('.cover-logo')
+				const band = c.querySelector('.cover-band')
+				const scrim = c.querySelector('.cover-scrim')
+				const title = c.querySelector('.cover-title')
+				const cs = getComputedStyle(c)
+				const box = c.getBoundingClientRect()
+				// NO REGEX LITERALS, AND NO BACKTICKS, IN HERE. This whole block is a JS
+				// template literal in the test file before it is handed to the browser, so a
+				// backslash-paren collapses on the way and /^url + escaped-paren/ arrives as
+				// an unterminated group — which threw inside the ROOT before hook and failed
+				// 45 tests, naming none of them (see gotchas/testing.md). A backtick in a
+				// comment ends the template outright. Plain string checks cross unharmed.
+				const bg = cs.backgroundImage || ''
+				return {
+					hasBgClass: c.classList.contains('has-bg'),
+					image: bg.indexOf('url(') === 0 && bg.indexOf('data:image') > -1,
+					size: cs.backgroundSize,
+					position: cs.backgroundPosition,
+					clip: cs.backgroundClip,
+					scrimPresent: !!scrim,
+					scrimZ: scrim ? getComputedStyle(scrim).zIndex : null,
+					// The two that regressed: both MUST stay absolutely positioned.
+					logoPosition: logo ? getComputedStyle(logo).position : null,
+					bandPosition: band ? getComputedStyle(band).position : null,
+					// …and the band must still reach the paper's edge, past the padding.
+					bandFullBleed: band ? (band.getBoundingClientRect().left <= box.left + 1
+						&& Math.abs(band.getBoundingClientRect().bottom - box.bottom) <= 1) : null,
+					// The logo must still be up in its corner, not down on the title.
+					logoNearTop: logo ? (logo.getBoundingClientRect().top - box.top) < 120 : null,
+					inkApplied: title ? getComputedStyle(title).color : null,
+				}
+			})(),
 			boxes: document.querySelectorAll('.chart-box').length,
 			plots: plots.length,
 			drawn: plots.filter((p) => p.querySelector('.main-svg')).length,
@@ -1004,7 +1042,7 @@ const DECK_SNAPSHOT_JS = `
 			csp: window.__csp || [],
 			styleEls: document.querySelectorAll('style').length,
 			offenders: [...document.querySelectorAll('.canvas [style]')]
-				.filter((el) => !el.closest('.chart-box') && !el.matches('.sheet,.deck,.deck-scale'))
+				.filter((el) => !el.closest('.chart-box') && !el.matches('.sheet,.deck,.deck-scale,.cover-scrim'))
 				.map((el) => el.className).slice(0, 5),
 		};
 	})()
@@ -1258,6 +1296,35 @@ test('the deck adds zero CSP violations, zero <style>, zero stray style=""', { s
 		assert.equal(d.snap.styleEls, 0, 'no <style> element')
 		assert.deepEqual(d.snap.offenders, [], 'no style="" outside chart internals and CSSOM geometry')
 	}
+})
+
+test('cover background: the image fills the sheet, and the FURNITURE stays where it belongs', { skip: browserSkip, timeout: 120_000 }, () => {
+	const c = deckDrive.snap.coverBg
+	assert.ok(c, 'the cover sheet rendered')
+
+	// The image reaches the paper's edge, past the 15mm padding the text lives in.
+	assert.equal(c.hasBgClass, true)
+	assert.equal(c.image, true, 'the kernel inlined it as a data: URI and the page painted it')
+	assert.equal(c.size, 'cover')
+	assert.equal(c.clip, 'border-box', 'a full bleed must reach the border box, not the content box')
+	assert.equal(c.scrimPresent, true)
+	assert.equal(c.scrimZ, '0', 'the scrim sits UNDER the text')
+	assert.match(c.inkApplied, /rgb\(255,\s*255,\s*255\)/, 'the cover-scoped ink repaints the title')
+
+	// THE REGRESSION THIS PINS. `.sheet.has-bg > *` outranks `.cover-logo` and
+	// `.cover-band`, so giving it `position: relative` (to make z-index apply) silently
+	// OVERRODE their `position: absolute`: the logo fell out of the top-left corner and
+	// landed on the title, and the accent band stopped being full-bleed — inset by the
+	// sheet's padding and lifted off the bottom edge. It shipped that way, and no
+	// assertion could see it: the CSS rules were all present and correct, and a more
+	// specific one beat them. Only a printed cover showed it.
+	//
+	// Asserted as COMPUTED geometry, never by grepping the stylesheet — the same rule the
+	// deck's zeroed heading margins taught.
+	assert.equal(c.logoPosition, 'absolute', 'the logo must keep its absolute corner')
+	assert.equal(c.bandPosition, 'absolute', 'and the accent band its absolute full bleed')
+	assert.equal(c.bandFullBleed, true, 'the band reaches the paper\'s left and bottom edges')
+	assert.equal(c.logoNearTop, true, 'the logo is up in its corner, not down on the title')
 })
 
 test('printToPDF: the sheets ARE the pages — /Count equals the DOM sheet count', { skip: browserSkip, timeout: 120_000 }, () => {

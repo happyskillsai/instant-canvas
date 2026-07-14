@@ -313,6 +313,7 @@
         "Never write a literal NUL into `app.js`",
         "Re-rendering on click detaches the element that was clicked",
         "Highlighting search matches by string-building is two bugs, not one",
+        "A `> *` rule to make z-index work OVERRODE `position: absolute` on the cover's furniture",
         "`api()` returns `{status, json}`, and reading the body off the wrapper fails SILENTLY",
         "Body scroll lock does nothing here",
         "A hover-revealed control does not exist on a touch screen",
@@ -326,7 +327,7 @@
         "A sheet 3 px too tall prints a silent sliver page",
         "Constraint API quirks around custom widgets"
       ],
-      "line_count": 186,
+      "line_count": 205,
       "links_to": [],
       "over_size": false,
       "parse_error": null,

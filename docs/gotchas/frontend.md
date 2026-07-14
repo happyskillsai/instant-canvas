@@ -106,6 +106,25 @@ The folder browser hit the same trap from the other direction, and it cost the f
 
 Wrapping matched terms in `<mark>` inside an HTML string needs the text escaped **first** and the marks injected **after** — and even then, a query of `amp` highlights the `amp` inside the `&amp;` of a canvas titled `Tom & Jerry`, rendering visible garbage. Separately, the query goes straight into a `RegExp`, so `c++` throws an unhandled `SyntaxError` unless every metacharacter is escaped. Both are silent until someone types the wrong thing. `appendHighlighted()` sidesteps the entire class by appending **text nodes and `<mark>` elements** instead of concatenating markup; only the regex-metacharacter escape (`escRe`) is still needed. The no-results message is set with `textContent`, so a query of `<script>` is shown, never parsed. `scripts/test/search.test.js` pins both.
 
+## A `> *` rule to make z-index work OVERRODE `position: absolute` on the cover's furniture
+
+The scrim has to sit under the cover's text, so the obvious rule is:
+
+```css
+.sheet.has-bg > *:not(.cover-scrim) { position: relative; z-index: 1 }   /* WRONG */
+```
+
+`z-index` needs a positioned element, so you add `position: relative`. And `.sheet.has-bg > *` (0,2,0) **outranks `.cover-logo` and `.cover-band`** (0,1,0) — so it silently replaced their `position: absolute`. The logo fell out of its top-left corner and landed **on top of the title**; the accent band stopped being full-bleed, inset by the sheet's padding and lifted off the bottom edge. Both shipped that way in 0.5.0.
+
+**The `position` was never needed.** `.sheet` is a flex container, and **`z-index` applies to flex items even when they are statically positioned** — so the title, subtitle and meta stack above the scrim with no `position` at all, while the logo and band keep the `absolute` that puts them where they belong:
+
+```css
+.cover-scrim { position: absolute; inset: 0; z-index: 0 }
+.sheet.has-bg > *:not(.cover-scrim) { z-index: 1 }      /* no position — flex items take z-index */
+```
+
+Two lessons. **A `> *` rule is a specificity bomb**: it silently outranks every single-class rule on its own children, and the thing it breaks is whatever they declared that you weren't thinking about. And this is the *third* bug in this file whose shape is **"the CSS rule was present and correct, and something more specific beat it"** — the `.md > :first-child` margin reset and the `max-width` table clip being the other two. The countermeasure is the same each time: **assert the computed value in a real browser, never grep the stylesheet.** `document.test.js` now reads `getComputedStyle(logo).position` and the band's own bounding rect against the sheet's, and both go red against the rule above.
+
 ## `api()` returns `{status, json}`, and reading the body off the wrapper fails SILENTLY
 
 The page's fetch helper returns an envelope — `{status, json}` — never the body. So this:
