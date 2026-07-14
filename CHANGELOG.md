@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-07-14
+
 ### Fixed
 - **Chart and table titles were listed in the table of contents as if they were sections.**
   Block titles were pushed into the same entry list as the markdown headings, so a report
