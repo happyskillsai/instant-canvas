@@ -106,7 +106,24 @@ The folder browser hit the same trap from the other direction, and it cost the f
 
 Wrapping matched terms in `<mark>` inside an HTML string needs the text escaped **first** and the marks injected **after** — and even then, a query of `amp` highlights the `amp` inside the `&amp;` of a canvas titled `Tom & Jerry`, rendering visible garbage. Separately, the query goes straight into a `RegExp`, so `c++` throws an unhandled `SyntaxError` unless every metacharacter is escaped. Both are silent until someone types the wrong thing. `appendHighlighted()` sidesteps the entire class by appending **text nodes and `<mark>` elements** instead of concatenating markup; only the regex-metacharacter escape (`escRe`) is still needed. The no-results message is set with `textContent`, so a query of `<script>` is shown, never parsed. `scripts/test/search.test.js` pins both.
 
-## A modal opened by keyboard has nowhere to restore focus to
+## `api()` returns `{status, json}`, and reading the body off the wrapper fails SILENTLY
+
+The page's fetch helper returns an envelope — `{status, json}` — never the body. So this:
+
+```js
+const json = await api('/api/theme/plan?path=…')
+if (json && json.ok) state.themePlan = json      // json.ok is ALWAYS undefined
+```
+
+…throws the answer away on every call, with no error anywhere: the truthy check simply never passes, and the caller falls back to whatever it does when the request "fails".
+
+It shipped in 0.5.0 and **killed two features outright**. The palette panel asks the kernel what Save *would* do, so it can announce the companion canvas it is about to create in the reader's repository (*"Save will create README.canvas.json"*) and disable Save on a canvas that cannot hold a theme at all (a form — `document` is invalid beside one). `GET /api/theme/plan` was correct, `planTheme()` was correct, `kernel.test.js` pinned both, and **every server-side test passed** — while the browser silently fell back to its generic wording: the file appeared with no warning, and Save stayed live on a form canvas that would refuse it.
+
+Two lessons, and the second is the one that generalises.
+
+**Destructure the envelope** (`const { status, json } = await api(…)`), and check the status — a helper whose shape you have to remember is a helper you will eventually misremember.
+
+And: **a feature whose only evidence is in the browser must be asserted in the browser.** The route was tested, the resolver was tested, the *contract* was tested. Nothing rendered the panel and read what it said. `palette.test.js` now drives the real page for both states and asserts the sentence a human would see — and both assertions go red against the old code, which is the only reason to trust them.
 
 `searchLastFocus = document.activeElement` is right when the reader *clicked* the trigger, and wrong for every keyboard path: `⌘K` and `/` fire with `document.body` focused, so closing hands focus back to `<body>` and strands the keyboard user at the top of the document. Fall back to the trigger element whenever the captured node is missing or is `body`. The browser test caught this because a programmatic `.click()` does not focus a button either — the same blind spot, from the other side.
 

@@ -329,16 +329,68 @@ test.before(async () => {
 		await sleep(2200)
 		const backToDeckable = await evaluate(`window.ic.state.docView`)
 
+		// ---- what SAVE says it will do, BEFORE the reader clicks it -------------------
+		// Driven in the real browser because that is the only place it can be wrong: the
+		// kernel's /api/theme/plan route was correct and every server-side test passed,
+		// while the PAGE threw the answer away (it read `.ok` off api()'s {status, json}
+		// wrapper). Both features were dead on arrival and nothing noticed.
+		await evaluate(`location.hash = '#/c/notes.md'`)
+		await sleep(1600)
+		await evaluate(`document.getElementById('paletteBtn').click()`)
+		await sleep(1400)
+		const planBareMd = await evaluate(`({
+			note: document.getElementById('palNote').textContent,
+			saveDisabled: document.getElementById('palSave').disabled,
+		})`)
+		await evaluate(`document.getElementById('paletteBtn').click()`) // close
+		await sleep(400)
+
+		await evaluate(`location.hash = '#/c/form.canvas.json'`)
+		await sleep(1600)
+		await evaluate(`document.getElementById('paletteBtn').click()`)
+		await sleep(1400)
+		const planForm = await evaluate(`({
+			note: document.getElementById('palNote').textContent,
+			saveDisabled: document.getElementById('palSave').disabled,
+			saveTitle: document.getElementById('palSave').title,
+			workspaceStillOffered: !document.getElementById('palWorkspace').disabled,
+		})`)
+
 		return {
 			opened, editor, solarized, picker, colorway, naming, saved, reopened,
 			dark, derivedDark,
 			detailPreset, detailCustom, detailModified, detailInEditor,
 			onPaper, offPaper, continuous,
 			stuckHtml, stuckDeckOnCanvas, stuckDeckOnMarkdown, onForm, backToDeckable,
+			planBareMd, planForm,
 		}
 	})
 
 	try { execFileSync(process.execPath, [CLI, 'stop', '--workspace', root], { stdio: 'ignore' }) } catch { /* best effort */ }
+})
+
+test('palette: Save SAYS what it will do — it names the file it is about to create', { skip, timeout: 120_000 }, () => {
+	// A colour click can make a FILE APPEAR in the reader's repository — the companion
+	// canvas that gives a markdown document an envelope. That is a good trade (a tracked,
+	// reviewable file beats an invisible dotfile) and precisely because it is a good trade
+	// it must not be a surprise.
+	const p = snap.planBareMd
+	assert.match(p.note, /Save will CREATE notes\.canvas\.json/,
+		'the panel must NAME the companion it is about to create, before the click')
+	assert.equal(p.saveDisabled, false, 'and Save is live — a .md can always be themed')
+})
+
+test('palette: Save is DISABLED on a canvas that cannot hold a theme, with the reason attached', { skip, timeout: 120_000 }, () => {
+	// `document` is invalid beside a form (DOCUMENT_INTERACTIVE_BLOCK — paper cannot
+	// submit), so this canvas has nowhere to keep a theme. The button stays VISIBLE and
+	// goes disabled — a hidden control teaches nothing — and "All documents" beside it
+	// still works, which is the honest way out.
+	const f = snap.planForm
+	assert.equal(f.saveDisabled, true, 'Save must be disabled, not merely fail on click')
+	assert.match(f.saveTitle, /cannot carry a "document"/, 'and the reason is on the button itself')
+	assert.match(f.note, /form canvas cannot hold its own theme/i, 'the footer says it too')
+	assert.match(f.note, /All documents/, 'and points at the door that IS open')
+	assert.equal(f.workspaceStillOffered, true, '"All documents" stays available — the form wears the workspace default')
 })
 
 test('palette: dark paper flips the whole SHEET, not just its tokens', { skip, timeout: 120_000 }, () => {

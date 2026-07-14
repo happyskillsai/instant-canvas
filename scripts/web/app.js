@@ -1019,8 +1019,14 @@ async function loadThemePlan() {
 	if (!state.activeId)
 		return
 	try {
-		const json = await api(`/api/theme/plan?path=${encodeURIComponent(state.activeId)}`)
-		if (json && json.ok)
+		// `api()` returns {status, json} — NOT the body. Reading `.ok` off the wrapper
+		// silently yielded undefined, so the plan was thrown away on every open and the
+		// panel fell back to its generic wording: a bare `.md` never announced the
+		// companion it was about to create, and Save stayed ENABLED on a form canvas that
+		// cannot hold a theme at all. Both features were dead on arrival in the browser
+		// while every server-side test passed, because the bug was in how the page ASKED.
+		const { status, json } = await api(`/api/theme/plan?path=${encodeURIComponent(state.activeId)}`)
+		if (status === 200 && json && json.ok)
 			state.themePlan = json
 	} catch { /* the note keeps its generic wording */ }
 }
