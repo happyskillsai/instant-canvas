@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-07-14
+
 ### Added
 - **The companion canvas: a markdown file can finally carry a cover, a theme, a running header — anything a document carries.** A `.md` has **no envelope**. It *is* the canvas: the runtime synthesises one in memory and never writes it, so there is nowhere to keep any of that. Everything a document might want beyond its prose lives in `document`, and a markdown file cannot hold one.
 
