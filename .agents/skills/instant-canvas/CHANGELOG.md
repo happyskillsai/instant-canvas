@@ -5,7 +5,47 @@ The agent-facing contract for InstantCanvas. The runtime ships as the
 and LICENSE, and agents drive the CLI through `npx`. Versions track the runtime
 package they were authored alongside.
 
-## [Unreleased]
+## [0.6.0] - 2026-07-14
+
+### Changed
+- **The contract changed this time — three rules, and they all say the same thing:
+  stop working around the runtime.** Each one was learned from a real report where an
+  agent, given no better option, damaged its own output to compensate for something the
+  runtime should have owned.
+
+- **Never `print` unless the user asked for a PDF.** `open` *shows* a canvas; `print`
+  *writes a file* into the user's repository. Agents were emitting a multi-megabyte PDF
+  beside every canvas they rendered, on every "visualize this" — unasked, and rewritten
+  on every regeneration. The runtime never did this (`open` has no print path at all);
+  nothing in the contract told agents not to. The agentic loop **ends at `open`**. A
+  reader who wants paper has a print button in the browser.
+
+- **Ship category labels WHOLE — never pre-truncate them to fit an axis.** A tick now
+  elides past **30 characters** on its own, and the hover, the legend and the file keep
+  the full string. Agents were cutting names down *in the JSON* (`"NutraDrip Service
+  Pr…"` arriving pre-cut) to make them fit a width they could not see — destroying the
+  data everywhere to serve a layout. How much of a label survives on a crowded axis is
+  *rendering*, and rendering is the runtime's.
+
+- **`options` is for refining a figure, not for fighting the layout engine — and using
+  it that way is now opt-out.** The runtime measures a chart's axis *after* the browser
+  has drawn it and reserves the bottom margin the tick labels and the legend both need.
+  Pinning `layout.margin.b` or `layout.legend` in `options` **turns that off** for the
+  chart, because the escape hatch is applied last and is the author's final word — so a
+  hand-tuned margin now inherits the very collision it was working around, at every pane
+  width you never saw.
+
+### Fixed
+- **A chart or table title is no longer listed in the table of contents.** A TOC lists
+  *structure*; a block title is a *caption*. Titles were being pushed into the same entry
+  list as the markdown headings, so a numbered report printed a contents page with
+  unnumbered caption rows wedged between its sections, reading as sections that had lost
+  their numbers. Give a chart its own heading if it belongs in the contents. One
+  exception, unchanged: a canvas with **no headings at all** has no other structure, so
+  its block titles become the TOC and a chart gallery keeps its contents page.
+
+- **Long axis labels no longer collide with the legend** (browser-side; nothing you write
+  changes). Worth knowing only because it is why the two rules above exist.
 
 ## [0.5.3] - 2026-07-14
 
