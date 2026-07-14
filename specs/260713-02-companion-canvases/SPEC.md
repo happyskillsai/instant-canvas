@@ -115,6 +115,83 @@ palette panel's footer note already names the file it is about to write; it must
 
 The same is true of `instantcanvas theme README.md --set '{…}'`.
 
+### 2.5 A cover is a sheet, so it can carry a background image
+
+A companion exists so a markdown file can finally have a *real* cover. Today `cover.logo` is a
+**48 × 48 mark** — a photograph put through it renders as a postage stamp, which is not a cover
+image by any definition. This is the furnishing that makes the companion worth having, so it
+ships with it.
+
+```jsonc
+"cover": {
+  "title": "Q3 Report",
+  "subtitle": "…",
+  "logo": "assets/logo.svg",          // unchanged — the small mark; now sits ON the image
+  "background": {
+    "src":      "assets/hero.jpg",    // workspace-local or data: — never remote
+    "size":     "cover",              // "cover" | "contain" | "<len>" | "<len> <len>"
+    "position": "center",             // "center" | "top left" | "50% 25%" | "20mm 40mm"
+    "scrim":    { "color": "#000000", "opacity": 0.35 },
+    "ink":      "#ffffff"
+  }
+}
+```
+
+`backCover.background` is the same shape and **entirely independent** — a different image, a
+different crop, a different scrim.
+
+**One concept, both use cases.** `size` + `position` is the CSS background model, and it covers
+"fill the sheet" and "place a sized image somewhere" without a second mechanism:
+
+| Intent | Value |
+|---|---|
+| Full bleed, centred — **the default** | `{"src": "hero.jpg"}` |
+| Full bleed, keeping the top third (a face, a skyline) | `{"position": "50% 25%"}` |
+| A 120 mm image parked bottom-right | `{"size": "120mm", "position": "right bottom"}` |
+| 80 mm wide, 20 mm from the left, 40 mm down | `{"size": "80mm", "position": "20mm 40mm"}` |
+
+Percentage `position` is the **focal point** mechanism, and it is worth understanding rather than
+copying: `"50% 25%"` does not mean "shift it down 25%" — it aligns *the point 25% down the image*
+with *the point 25% down the page*. That is exactly "which part survives the crop", which is the
+thing a non-A4 image actually needs. Defaults (`cover` + `center`) put a square photo on A4
+cropped equally top and bottom, which is the right answer when nobody has said otherwise.
+
+Lengths accept `mm`, `px` and `%`. Millimetres are the honest unit on paper (the page geometry is
+already `"15mm"`), but px is allowed because people think in it.
+
+**Legibility is not optional, and it does not solve itself.** A dark photo swallows the near-black
+cover title. It cannot be fixed with `theme.text`: that token paints the *whole document*, so a
+white cover title would come with white body text on white paper. Hence two cover-scoped knobs:
+
+- **`scrim`** — a flat wash between image and text. `{color, opacity}` rather than an 8-digit hex,
+  so the "colors are strict hex" rule that everything else obeys still holds.
+- **`ink`** — the cover's own text colour, overriding the theme **on the cover and nowhere else**.
+  It also drives the muted line (author/date), derived as the same colour at reduced opacity —
+  one knob, because a white `ink` with a grey author line is still unreadable.
+
+Neither is defaulted on: silently tinting somebody's photograph is rude. But the catalog and
+SKILL.md must say plainly that *a photo behind text needs a scrim or an ink, usually both* — and
+the reference demo must set them, because a demo that looks bad teaches the wrong thing.
+
+**Mechanics.**
+- The image belongs on the `.sheet` box (`background-clip: border-box`), **not** the padded
+  content box — a full bleed must reach the paper's edge, past the 15 mm margin. Text stays in
+  the padding. Z-order: image → scrim → `logo` / title / subtitle / author / accent band.
+- Set through **CSSOM** (`el.style.backgroundImage = 'url("data:…")'`), like every other colour:
+  the CSP forbids `style=""` but exempts programmatic assignment, and `img-src 'self' data:`
+  already permits the URI.
+- The kernel inlines it as a `data:` URI in the same pass that inlines `cover.logo`
+  (`resolveDocumentAssets`), with the same remote-asset refusal (`REMOTE_ASSET_BLOCKED`) — but a
+  **larger byte cap** than a logo, and an error rather than a silent truncation. A full-bleed
+  photo lands in the canvas payload *and* the PDF; nobody should ship a 40 MB PDF by accident.
+- `printBackground: true` is already set, so it prints. Verify it in the print test — a cover that
+  is on screen and absent from the PDF is the exact class of lie `document.test.js` exists to
+  catch.
+
+**Scoped out, deliberately:** background images on **content sheets**. A photo behind body text is
+unreadable, and a watermark is a different feature with different rules (tiling, opacity, "every
+page but the first"). Cover and back cover only.
+
 ---
 
 ## 3. `skills-config.json` replaces `.instantcanvas.json`
@@ -224,10 +301,16 @@ object.
 6. **`skill.json`** — declare `theme` + `palettes` with a schema **generated from `lib/theme.js`**,
    plus the drift test (§3.1).
 7. **Canonical palette comparison** (§3.4).
-8. **Docs** — `canvas-schema.md` (`enhances`), `architecture.md` (companion resolution,
-   skills-config), `cli.md`, `frontend.md` (one sidebar entry, the create-on-save notice),
-   `gotchas` (the key-order trap), SKILL.md (this is the contract an agent reads: *"to give a
-   markdown file a cover or a theme, write a companion canvas that `enhances` it"*).
+8. **Cover backgrounds** (§2.5) — `schema.js` (`documentCoverBackground` shape),
+   `validate.js` (length/position grammar, strict-hex scrim, the asset ladder + byte cap),
+   `kernel.resolveDocumentAssets` (inline `background.src`), `styles.css` + `app.js` (the
+   `.sheet` background, the scrim layer, cover-scoped `ink`), `catalog document`, and a print
+   test asserting the image reaches the PDF.
+9. **Docs** — `canvas-schema.md` (`enhances`, cover backgrounds), `architecture.md` (companion
+   resolution, skills-config), `cli.md`, `frontend.md` (one sidebar entry, the create-on-save
+   notice, the background/scrim/ink layers), `gotchas` (the key-order trap), SKILL.md (the
+   contract an agent reads: *"to give a markdown file a cover or a theme, write a companion
+   canvas that `enhances` it"* — plus *a photo behind text needs a scrim or an ink*).
 
 ## 5. Done when
 
@@ -238,3 +321,12 @@ object.
 - Saving a theme on an unenhanced `.md` creates the companion, and the UI said so first.
 - `.instantcanvas.json` appears nowhere in the repo.
 - A palette survives a CLI round-trip and its chip still lights up.
+- A **square** photo on an A4 cover fills the sheet edge to edge, cropped equally top and bottom;
+  `"position": "50% 25%"` visibly moves which part survives; a `size` in mm places it instead of
+  filling. The image is in the **PDF**, not only on screen, and the title is legible over it.
+
+## 6. The demo that proves it
+
+Rebuild the HappySkills-branded README deck from this session — companion canvas, brand palette
+from `happyskills.ai`, a real full-bleed cover — and read the PDF. That demo is what exposed the
+48 px logo as a non-answer in the first place; it is the acceptance test with the best eyesight.
