@@ -839,6 +839,61 @@ Some skills need setup values the author can't know in advance — a channel, a 
      "env":    { "SLACK_BOT_TOKEN": { "required": true, "secret": true, "description": "Slack bot token" } } }
    ```
 
+   A `config` field's `type` is one of `string`, `integer`, `number`, `boolean`, **`object`**, or **`array`**. An `env` var's type is scalar only — a `.env` value is always a string, so structured data belongs in `config`, never in `env`.
+
+   **App-managed fields — `prompt: false`.** Some settings are not something a human can type at an install prompt: a theme object, a named palette library, anything the skill's *own* UI authors. Declare them structured and mark them `prompt: false` — install will skip them (an object/array field is never prompted anyway) and the skill writes them itself with `skills-config set` (step 3 below). Without this, install becomes a wall of unanswerable questions.
+
+   ```json
+   "config": {
+     "theme":    { "type": "object", "default": {}, "prompt": false, "description": "Workspace default theme." },
+     "palettes": { "type": "object", "default": {}, "prompt": false, "description": "Named palette library." }
+   }
+   ```
+
+   **Declare a `schema` for every structured field — this is the single highest-value thing you do when designing complex config.** Without one, HappySkills stores the value verbatim and never looks inside (content opacity), which means *nothing* can tell an agent that `palettes.Acme.palette[2]` is not a hex colour. The agent finds out at runtime, from whatever error your code happens to throw, and it cannot reliably repair the value. With a schema, `skills-config set` **refuses** the bad write and `skills-config validate` reports **every** violation with its exact path and an imperative fix — so an agent fixes and re-runs until it converges. That loop is the whole point.
+
+   ```json
+   "palettes": {
+     "type": "object", "prompt": false, "default": {},
+     "schema": {
+       "patternProperties": {
+         ".*": {
+           "type": "object",
+           "required": ["accent", "palette"],
+           "additionalProperties": false,
+           "properties": {
+             "accent":  { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" },
+             "palette": { "type": "array", "minItems": 1, "maxItems": 8,
+                          "items": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" } }
+           }
+         }
+       }
+     }
+   }
+   ```
+
+   ```
+   ✖ palettes.Acme.palette[2] — "not-a-hex" does not match ^#[0-9a-fA-F]{6}$
+     → Replace it with a 6-digit hex colour, e.g. "#eb4a26".
+   ✖ palettes.Acme.eighth_token — unknown key; this skill's schema does not allow it
+     → Remove it, or check it for a typo. Allowed keys: accent, palette.
+   ```
+
+   **The schema is YOURS, and that is what makes it safe.** HappySkills does not invent a contract for your data — it enforces the one *you* declare, which ships inside your skill and versions with it. It therefore cannot go stale against your own code the way a validator on someone else's release cycle would. That is precisely why this does not violate content opacity: there is no second validator, just your contract, enforced on your behalf.
+
+   **Supported keywords** (a closed JSON-Schema subset — anything else is an authoring error, caught by `happyskills validate`): `type`, `enum`, `const`, `properties`, `required`, `additionalProperties`, `patternProperties`, `items`, `minItems`, `maxItems`, `pattern`, `minLength`, `maxLength`, `minimum`, `maximum`, `description`.
+
+   **Designing the schema — four rules that decide whether the loop actually converges:**
+
+   1. **Close the shape: `"additionalProperties": false`.** An open object silently accepts a typo'd key forever. Closing it turns `eighth_tokn` into a located error with the allowed keys listed.
+   2. **Constrain the leaves, not just the branches.** `"type": "string"` on a colour tells an agent almost nothing. `"pattern": "^#[0-9a-fA-F]{6}$"` tells it exactly what to write. Reach for `pattern`, `enum`, `minItems`/`maxItems`, `minimum`/`maximum` — every constraint you add is one more mistake the agent can fix by itself instead of shipping.
+   3. **Use `patternProperties` for a map with author-chosen keys** (a palette *library*, a named-profile map). Use `properties` + `required` for a fixed record (a theme). Getting this backwards is the most common mistake: a fixed record under `patternProperties` validates nothing useful.
+   4. **Keep the schema and your runtime validator in agreement — ideally make the schema the source of truth.** Two independently-maintained validators *will* diverge, and then a config that HappySkills accepts blows up in your code. If your skill already has a validator, derive it from the schema or delete it in favour of it.
+
+   **Keep it configuration, not application state.** A committed `skills-config.json` is meant to be read in a pull request. A theme, a palette library, a set of thresholds — fine. Documents, layouts, caches, edit history — not fine; those belong in your own storage. The CLI warns past 64 KB, which is the smell, not the rule.
+
+   `happyskills validate` warns (advisory, never blocking) when a structured field declares no schema — omitting one is a legitimate decision for a value that is genuinely opaque to everyone but your skill, but it should be a *decision*, not an oversight.
+
    **Constellation secrets — `sharedEnv`.** If you are authoring a **constellation** whose members share a secret (the common case — e.g. one API token read by the core and its satellites), declare `sharedEnv: true` on the **core** so install scaffolds ONE `./secrets/<core>.env` for all members instead of an identical file each. Opt-in, core-only, invalid on kits. See [constellation-pattern.md § 1.1](constellation-pattern.md) and `docs/skill-format.md` § 4.6 in the HappySkills source repo (not bundled with this skill).
 
    **Post-install manual setup — `setupGuide` (detect this proactively).** A required secret is only half the story: *how does the consumer obtain it?* When getting the credential needs **human-only steps the agent cannot do** — create a scoped API token in a provider dashboard, register an OAuth app, grant a lengthy permission list — attach a **`setupGuide`** (a path to a reference file that explains how) to that `env`/`config` entry:
@@ -857,13 +912,41 @@ Some skills need setup values the author can't know in advance — a channel, a 
    >
    > 1. **Find the project root.** Search upward from your current directory for the nearest `skills-config.json` or `skills-lock.json`, stopping at a `.git` boundary. That directory is the project root.
    > 2. **Read the config.** In that project root, read `skills-config.json` (then the global `~/.agents/skills-config.json`) under the key `<owner>/<name>`. Anything unset falls back to this skill's hardcoded defaults.
+   > 2b. **ABSENT ≠ CORRUPT — never `catch { return null }`.** A *missing* `skills-config.json` legitimately means "nothing configured yet" → fall back to defaults. A file that *exists but does not parse* means the consumer's settings are **unreadable**, and quietly treating that as "nothing configured" is a silent failure: the skill runs with the wrong settings and reports success. **Stat the path first**: absent → defaults; present-but-unparseable → **throw**, naming the file and telling the user to run `npx -y happyskills skills-config validate --json` (which reports the exact line, column, and how to fix it) — and to repair it **in place**, never to delete it, because it holds every configured skill's settings.
    > 3. **Resolve `envFile` against the directory of the `skills-config.json` that declared it — NOT your current directory.** Use the project file's `envFile` if it declares one; otherwise the global file's. The `envFile` value (e.g. `./secrets/x.env`) is relative to the directory holding the `skills-config.json` it came from: a value from the project file resolves against the project root (step 1); a value from the global `~/.agents/skills-config.json` resolves against `~/.agents`. Join it to that directory to get the real path — never to the directory you happen to be running from. **This is the one step that is easy to get wrong: resolving it against your current working directory makes the skill work from the project root but fail from any subdirectory. Anchor it to the declaring config file's own directory and it works from anywhere.**
    > 4. **Never read a secret's value into your own context.** Do not `Read`, `cat`, `echo`, or open the `envFile` to inspect a secret, and never inline a secret into a `fetch`/`curl`/command string. The value must pass straight from the `.env` into the process that needs it: run the skill's script or CLI with the `envFile` loaded into that child process's environment (e.g. `set -a; . ./secrets/<skill>.env; set +a; <tool> …`, or a `scripts/*.mjs` that reads `process.env`), so that only the subprocess — never you — ever sees the token. An ambient environment variable of the same name takes precedence over the file.
    > 5. **Check presence, not value.** Use the `secretsPresent` flag from `skills-config get` to decide whether you can run (CLI-less, test that the variable is non-empty) — never print or echo it. If a required secret is missing, **STOP** and tell the user exactly which variable to set and in which file.
 
-3. **Design the skill so a subprocess — never the model — consumes the credential.** If your skill calls an authenticated API or CLI, ship a thin wrapper (as the `cloudflare` skill's `scripts/cf.js` and this repo's `database/migrate.js` both do): it reads the secret from its own `process.env`, uses it, and prints **only** results — the token's value never crosses the shell or the context boundary. The agent handles names and a present/absent check; the value stays inside the child process. This is the same secret-hiding contract the repo already applies to its own credentials — do not hand-roll a different one, and never let the agent bridge the `.env` and the API call by reading the value itself.
+3. **Consumer-side write: `skills-config set` — never hand-edit the JSON.** When your skill (or its UI) needs to *persist* a setting — the user clicks "Save palette" — write it through the CLI. It is atomic, key-scoped and locked: every other skill's block, your other keys, and `envFile` all survive untouched, and a concurrent `install` cannot erase your write.
 
-Reads are CLI-preferred, file-fallback (so a skill stays portable and works with no CLI installed); all writes go through the CLI. The fallback above is the **same** logic `skills-config get` runs — one recipe, two ways to reach it, never a bespoke resolver per skill. Secrets live only in the `.env` the `envFile` points at — never in `skills-config.json`, never in the skill folder (HappySkills already excludes `.env`).
+   ```bash
+   # scalar
+   npx -y happyskills skills-config set <owner>/<name> format --value a4 --json
+   # object / array — the only way to set a structured field
+   npx -y happyskills skills-config set <owner>/<name> theme --json-value '{"preset":"forest"}' --json
+   # large value — pipe it rather than quoting it into a shell
+   cat palettes.json | npx -y happyskills skills-config set <owner>/<name> palettes --json-value - --json
+   # remove
+   npx -y happyskills skills-config unset <owner>/<name> theme --json
+   ```
+
+   `set` writes the **whole key** — it does not deep-merge into the previous value. Do your own read-modify-write: `get`, change the one entry, `set` the result back.
+
+   **Choose the scope deliberately.** By default the write lands in the project's `skills-config.json`. Two flags exist for when that is wrong, and picking the right one is a design decision, not a detail:
+
+   | Flag | Writes to | Use when |
+   |---|---|---|
+   | *(none)* | The nearest project's `skills-config.json` | The setting is about **this project** |
+   | `--global` | `~/.agents/skills-config.json` | The setting is about **this user** — brand colors, a default theme. It should follow them into every project, and it is the right answer for a tool launched from an arbitrary directory. |
+   | `--root <dir>` | `<dir>/skills-config.json`, created if absent | You know the workspace root and the cwd is not a HappySkills project (a tool run via `npx` from anywhere) |
+
+   **`set` refuses to write a key you declared `secret: true`** (`FORBIDDEN_FIELD`). That is not a limitation to work around — `skills-config.json` is committed, and a secret in it is a leak. Secrets go in the `envFile`, always.
+
+   **The consumer file is checkable: `happyskills skills-config validate --json`.** It reports every problem with its exact location (the field path; for a syntax error the line, column, and the offending source line) and a `fix` for each — including a hard error if a declared secret has ended up in the committed file. Every read and write refuses with `VALIDATION_FAILED` while the file is corrupt, so a broken file fails loudly instead of silently resolving to "nothing configured". Point users at `validate` rather than at a text editor, and **never** repair it by deleting the file: it holds *every* skill's settings, not just yours.
+
+4. **Design the skill so a subprocess — never the model — consumes the credential.** If your skill calls an authenticated API or CLI, ship a thin wrapper (as the `cloudflare` skill's `scripts/cf.js` and this repo's `database/migrate.js` both do): it reads the secret from its own `process.env`, uses it, and prints **only** results — the token's value never crosses the shell or the context boundary. The agent handles names and a present/absent check; the value stays inside the child process. This is the same secret-hiding contract the repo already applies to its own credentials — do not hand-roll a different one, and never let the agent bridge the `.env` and the API call by reading the value itself.
+
+Reads and writes are both **CLI-preferred, file-fallback** — a skill stays portable and works with no CLI installed. The read fallback above is the **same** logic `skills-config get` runs; if you must write without the CLI, do what `set` does: read the file, replace only your own `<owner>/<name>` key, and write it back atomically (write a temp file, then rename) so a reader never sees a torn file and no other skill's block is disturbed. One recipe, two ways to reach it, never a bespoke resolver per skill. Secrets live only in the `.env` the `envFile` points at — never in `skills-config.json`, never in the skill folder (HappySkills already excludes `.env`).
 
 ---
 

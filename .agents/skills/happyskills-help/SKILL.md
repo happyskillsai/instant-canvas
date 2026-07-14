@@ -31,6 +31,7 @@ The user's request is: `$ARGUMENTS`
 | "which agents are supported", "does it work with Cursor", "how many agents" | Feature Routing (Section 3) — read [references/feature-map.md](references/feature-map.md) for the multi-agent answer. |
 | "invite someone to my workspace", "manage workspace members", "grant access", "set permissions", "list members", "create a group" | Opt-in satellite (`happyskills-collab`). Go to **Section 3.5** — identify the satellite from its table and offer to install it directly. |
 | "how am I using HappySkills", "show my usage stats", "my install or search history", "how many people installed my skills", "downloads of my skills", "reach of my skills" | Opt-in satellite (`happyskills-stats`). Go to **Section 3.5** — identify the satellite from its table and offer to install it directly. |
+| "configure a skill", "change a skill's settings", "how do I set X's channel or model or theme", "where do a skill's secrets go", "how do I give a skill my API key", "my skills-config.json is broken" | Core hand-off: *"That's `happyskills` (core) — say it directly (e.g. `'configure acme/slack-notify'`) and it will handle it."* Core owns `skills-config` (`get`/`set`/`unset`/`validate`). Do not hand-edit `skills-config.json` yourself. |
 | "sign in", "log in", "log me in", "how do I authenticate" | Authentication (Section 4) |
 | "I found a bug", "give feedback", "feedback", "feature request", "I wish HappySkills could", "thank the team", "compliment", "I have a suggestion for HappySkills", "report a bug", "report this" | Feedback (Section 5) |
 | Any other "how / what / why / which" question about HappySkills | Read [references/family-overview.md](references/family-overview.md) and [references/feature-map.md](references/feature-map.md), then answer. |
@@ -65,7 +66,7 @@ HappySkills' LLM interface is a **family** of focused skills in two tiers. Expla
 
 | Bundled skill | What it does |
 |---|---|
-| `happyskills` (core) | install, update, list, and remove skills; sign in; configure agents |
+| `happyskills` (core) | install, update, list, and remove skills; sign in; configure agents; **configure an installed skill** (its settings and where its secrets live) |
 | `happyskills-design` | design, audit, and update skills and kits |
 | `happyskills-publish` | publish and release skills to the registry |
 | `happyskills-sync` | sync local skills with the registry — pull, diff, resolve conflicts |

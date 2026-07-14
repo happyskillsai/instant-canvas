@@ -1,6 +1,6 @@
 {
 	"name": "happyskills",
-	"version": "2.6.1",
+	"version": "2.7.0",
 	"requires": {
 		"happyskills": ">=0.49.0"
 	},
@@ -112,6 +112,21 @@
 				"login",
 				"logout",
 				"whoami"
+			]
+		},
+		{
+			"id": "configure-installed-skills",
+			"summary": "read and change the settings of an installed skill (its config values and where its secrets live)",
+			"intents": [
+				"configure a skill",
+				"change a skill's settings",
+				"what is this skill set to",
+				"set a skill's channel or model or theme",
+				"where do this skill's secrets go",
+				"remove a skill's setting"
+			],
+			"commands": [
+				"skills-config"
 			]
 		},
 		{

@@ -1,5 +1,14 @@
 # Changelog
 
+## [2.7.0] - 2026-07-13
+
+### Added
+- **Core now OWNS the `skills-config` command** (new `configure-installed-skills` capability in `skill.json`, plus `SKILL.md` § 10 and a full reference in `references/cli-reference.md`). Until now no skill in the constellation declared it: `happyskills schema` reported `owner_skill: null`, so no agent routed to it and nobody knew how to pilot it. Adds a routing-table row ("configure a skill", "change a skill's settings", "where do a skill's secrets go") and quick-reference rows for `skills-config get` / `set` / `unset` / `validate`.
+- **The write path.** `set`/`unset` persist one config key atomically (key-scoped and locked, so a concurrent `install` cannot erase it). Rules the agent must follow: `--value` for scalars, `--json-value` for objects/arrays (`--json-value -` reads a large value from stdin); choose the scope deliberately and say which was chosen (`--global` for a user-level preference that follows the user across projects; `--root <dir>` when the working directory is not a HappySkills project).
+- **Never put a secret in `skills-config.json`.** That file is committed; the CLI refuses a key the skill declared `secret: true` with `FORBIDDEN_FIELD`, and the agent must not route around it. `get` returns secret *names* and a present/absent boolean by design — never read a secret's value into context.
+- **Corrupt-file repair protocol.** On `VALIDATION_FAILED` against `skills-config.json`, run `skills-config validate --json`, apply the located fixes **in place**, and **never delete the file** — it holds *every* configured skill's settings, so "starting clean" destroys configuration the agent does not own. Every result carries the exact location (field path; line/column/source line for a syntax error) and an imperative `fix`.
+- **Schema-violation loop.** When a skill declares a `schema` for a config field, `set` refuses a bad value and returns `error.details[]` with a `path` (e.g. `palettes.Acme.palette[2]`) and a `fix` per violation. Apply every fix and retry until it converges — do not hand-edit the file to route around it, since `validate` enforces the same schema.
+
 ## [2.6.1] - 2026-07-08
 
 ### Added

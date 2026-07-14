@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.8.4] - 2026-07-13
+
+### Fixed
+- **Route configuration intents to core.** The routing table covered "configure agents" but never *configure a skill*, so a user asking "how do I set X's theme?", "where do this skill's secrets go?" or "my skills-config.json is broken" was routed nowhere. Those intents now hand off to `happyskills` (core), which owns `skills-config` (`get` / `set` / `unset` / `validate`). The family-roster row for core now names configuring an installed skill.
+
 ## [0.8.3] - 2026-07-08
 
 ### Added

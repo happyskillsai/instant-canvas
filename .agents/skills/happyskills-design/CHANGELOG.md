@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.14.0] - 2026-07-13
+
+### Added
+- **How to design COMPLEX configuration** (`references/skill-authoring.md` § Configuration). A `config` field's `type` may now be `object` or `array`, not just a scalar — so a skill can declare a setting that has no scalar form (a theme, a named palette library). An `env` var stays scalar-only: a `.env` value is always a string. A field authored by the skill's **own UI** rather than by a human at an install prompt declares **`prompt: false`** and is skipped at install (an object/array field is never prompted regardless) — without it, installing such a skill was a wall of unanswerable questions.
+- **The opt-in author-declared `schema`** — the single highest-value thing an author does when designing complex config. Without one, HappySkills stores the value verbatim and never looks inside, so nothing can tell an agent that `palettes.Acme.palette[2]` is not a hex colour; it finds out at runtime and cannot reliably repair it. With one, `skills-config set` **refuses** the bad write and `skills-config validate` reports **every** violation with an exact path and an imperative fix, so an agent repairs and re-runs until it converges. **This does not violate content opacity:** the schema ships *inside* the skill and versions *with* it, so it cannot drift from the skill's real contract the way a validator on HappySkills' release cycle would. There is no second validator — one schema, declared once, enforced on the author's behalf.
+- **Four design rules that decide whether the repair loop converges:** close the shape (`additionalProperties: false`) so a typo'd key becomes a located error rather than silent acceptance; constrain the **leaves**, not just the branches (`"type": "string"` on a colour tells an agent nothing — `"pattern": "^#[0-9a-fA-F]{6}$"` tells it exactly what to write); use `patternProperties` for an author-keyed map and `properties` + `required` for a fixed record (getting this backwards is the common mistake); and keep the schema as the **single source of truth** rather than maintaining a second validator that will diverge.
+- **The consumer-side write path** — `skills-config set` / `unset`: atomic, key-scoped, locked, whole-key semantics (no deep-merge — do your own read-modify-write), the scope decision table (`--global` / `--root`), and that `set` refuses a key declared `secret: true`. Plus `skills-config validate`, which checks the consumer file itself.
+
+### Changed
+- **Hardened the canonical config-resolution recipe: ABSENT ≠ CORRUPT (new step 2b).** A *missing* `skills-config.json` means "nothing configured yet" → fall back to defaults. A file that *exists but does not parse* means the consumer's settings are **unreadable**, and quietly treating that as "nothing configured" is a silent failure — the skill runs with the wrong settings and reports success. Never `catch { return null }`: stat the path first, and on a present-but-unparseable file **throw**, naming the file and pointing at `happyskills skills-config validate`, and telling the user to repair it in place rather than delete it.
+- Drew the **configuration vs application-state** boundary: `skills-config.json` is committed and meant to be read in a pull request. A theme, a palette library, thresholds — fine. Documents, layouts, caches, edit history — not fine. The CLI warns past 64 KB, which is the smell, not the rule.
+
 ## [0.13.5] - 2026-07-08
 
 ### Added

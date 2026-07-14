@@ -1,6 +1,6 @@
 {
 	"name": "happyskills-design",
-	"version": "0.13.5",
+	"version": "0.14.0",
 	"type": "skill",
 	"description": "HappySkills skill design and quality — author new skills, audit existing ones, update from session learnings, and create kits with full Claude Code spec + HappySkills conventions.",
 	"authors": [

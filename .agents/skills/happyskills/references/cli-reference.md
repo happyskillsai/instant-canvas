@@ -518,6 +518,115 @@ npx happyskills config agents --list --json           # full agent table
 
 ---
 
+## skills-config
+
+Per-skill **consumer** configuration — the settings an installed skill reads at runtime. Not to be confused with `config` above, which configures the HappySkills CLI itself.
+
+The author declares a `config`/`env` schema in the skill's `skill.json`; the consumer's values live in a committed, project-root `skills-config.json` keyed by `owner/name`. Secrets never go in that file — they live in the `.env` it points at.
+
+**Read the effective config:**
+
+```bash
+npx happyskills skills-config get owner/name --json
+```
+
+Deep-merges three layers, nearest wins: project `skills-config.json` ⊕ global `~/.agents/skills-config.json` ⊕ the skill's author defaults.
+
+```json
+{ "data": {
+    "skill": "acme/slack-notify",
+    "config": { "channel": "#deploys", "max_chars": 500 },
+    "envFile": "./secrets/slack-notify.env",
+    "requiredSecrets": ["SLACK_BOT_TOKEN"],
+    "secretsPresent": true } }
+```
+
+`requiredSecrets` are **names only**, plus a present/absent boolean. The CLI never returns a secret value — and neither should you. A secret is consumed by the subprocess that needs it, straight from the `.env`; it never passes through your context.
+
+**Write one config key:**
+
+```bash
+# scalar — coerced to the field's declared type
+npx happyskills skills-config set owner/name channel --value "#deploys" --json
+
+# object / array — the ONLY way to set a structured field
+npx happyskills skills-config set owner/name theme --json-value '{"preset":"forest"}' --json
+
+# large value — read the JSON from stdin instead of quoting it in the shell
+cat palettes.json | npx happyskills skills-config set owner/name palettes --json-value - --json
+
+# remove a key
+npx happyskills skills-config unset owner/name theme --json
+```
+
+```json
+// set
+{ "data": { "skill": "acme/canvas", "key": "theme", "scope": "project",
+            "file": "./skills-config.json", "value": { "preset": "forest" } } }
+// unset
+{ "data": { "skill": "acme/canvas", "key": "theme", "scope": "project",
+            "file": "./skills-config.json", "removed": true } }
+```
+
+**Where it writes:**
+
+| Flag | Target | When |
+|---|---|---|
+| *(none)* | Walks up from the cwd to the nearest `skills-config.json` / `skills-lock.json`, stopping at a `.git` boundary | The normal case — you are inside a project |
+| `--root <dir>` | `<dir>/skills-config.json`, **created if absent** | The working directory is not a HappySkills project (a tool run via `npx` from an arbitrary folder) |
+| `--global` | `~/.agents/skills-config.json` | A **user-level** preference that should follow the user across every project (brand colors, a default theme) — not a per-project setting |
+
+Writes are atomic, key-scoped, and locked: every other skill's block, the skill's other keys, and `envFile` all survive untouched, and two concurrent writes cannot lose each other.
+
+**What `set` refuses, and why:**
+
+| Error code | Cause | What to do |
+|---|---|---|
+| `FORBIDDEN_FIELD` | The key is declared `secret: true` | Never commit it. Write the value to the `envFile` reported by `get`, or export it as an env var. |
+| `INVALID_PARAM` | The skill declares no config field by that name | Only declared fields can be set. Read the skill's `skill.json` `config` block. |
+| `INVALID_VALUE` | Malformed JSON, or the value's type contradicts the declared type (e.g. an array for an `object` field), or `--value` was used on a structured field | Fix the value, or switch to `--json-value` for an object/array. |
+
+**The contents of an object/array value are stored verbatim and never validated.** HappySkills checks the *shape* (an `object`-typed field got an object); what is *inside* it is the skill's own contract to police. Do not expect the CLI to catch a bad colour or an unknown key — it will not, by design.
+
+**Check the file — `validate`:**
+
+```bash
+npx happyskills skills-config validate --json     # takes NO owner/name — it checks the whole file
+```
+
+```json
+{ "ok": false,
+  "data": { "file": "./skills-config.json", "exists": true, "valid": false,
+            "counts": { "errors": 1, "warnings": 0 },
+            "results": [ {
+              "rule": "parse", "severity": "error", "line": 5, "column": 5,
+              "source": "    }\n    ^",
+              "message": "skills-config.json is not valid JSON: …",
+              "fix": "This is a trailing comma — JSON does not allow a comma after the last entry…"
+            } ] },
+  "error": { "code": "VALIDATION_FAILED", "details": [ … ] },
+  "next_step": { "action": "fix_validation_errors", "context": { "validation_errors": [ … ] } } }
+```
+
+Every result answers both questions an agent needs: **where** (`field` path; and for a syntax error `line`, `column`, and the `source` line with a caret under the exact character) and **how to fix it** (`fix`, an imperative instruction). What it checks:
+
+| Rule | Severity | Meaning |
+|---|---|---|
+| `parse` | error | Not valid JSON. Carries line/column/source and names the actual mistake (trailing comma, single quotes, unquoted key, comment). |
+| `secret_in_config` | error | **A credential is sitting in a committed file.** Remove it, move it to the `envFile`, and **rotate it** — treat it as compromised. |
+| `root_type` / `key_format` / `entry_type` / `unknown_entry_key` / `config_type` | error | The file's shape is wrong. An entry is `{ "envFile"?, "config"? }` under an `owner/name` key — nothing else. |
+| `value_type` | error | A value contradicts the type the skill declared (e.g. a string where an `object` is required). |
+| `env_file_path` / `env_file_type` | error | `envFile` must be a project-relative path — an absolute path breaks on every other machine. |
+| `undeclared_field` | warning | The skill declares no such field. Probably a typo. |
+| `skill_not_installed` | warning | Can't check the entry against a schema. Not an error — a config may legitimately precede its skill. |
+| `env_file_missing` / `env_file_not_ignored` | warning | The secrets file is absent, or **is not gitignored** (one commit from a leak). |
+
+**Repairing a corrupt file — the one rule that matters:** fix the syntax **in place**. **Never delete the file and never rewrite it wholesale.** It holds the settings of *every* configured skill; deleting it to "start clean" destroys other skills' configuration irrecoverably. Any command that reads or writes the file will refuse with `VALIDATION_FAILED` until it parses — that refusal is the guard, not an obstacle to route around.
+
+**Reading without the CLI.** A skill may read `skills-config.json` directly (walk up from the cwd; then `~/.agents/skills-config.json`; then the skill's own defaults). This is a supported contract, not a fallback that might be taken away — it is what lets a skill work in a context where the CLI is not installed.
+
+---
+
 ## Error Recovery
 
 | Error Code | Recovery |

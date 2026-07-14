@@ -43,7 +43,7 @@ Honest framing: this keeps secrets out of the conversation **during capture**. N
 ## The agentic loop (progressive disclosure — pull only what you need)
 
 1. **Browse lean**: `$IC catalog` prints a compact index — one-liners for every block, chart kind, and field type, plus when to use each. No schemas. Skip this step if you already know what you want.
-2. **Pull exact schemas, one at a time**: `$IC catalog <name>` where name is a block (`chart`, `form`, …), a **chart kind** (`sankey`, `heatmap`, `scatter`, …), a field type (`secret`, `range`, …), `fieldset`, `sweep`, `document`, or `envelope`. Each returns that thing's full contract: encoding/properties, data shape, and a complete working example. Do NOT use `catalog --full` unless you truly need everything.
+2. **Pull exact schemas, one at a time**: `$IC catalog <name>` where name is a block (`chart`, `form`, …), a **chart kind** (`sankey`, `heatmap`, `scatter`, …), a field type (`secret`, `range`, …), `fieldset`, `sweep`, `document`, `theme`, or `envelope`. Each returns that thing's full contract: encoding/properties, data shape, and a complete working example. Do NOT use `catalog --full` unless you truly need everything.
 3. **Write** the canvas: `<name>.canvas.json` with `"instantcanvas": 1` at the top level, inside the user's workspace.
 4. **Stamp it**: `$IC stamp <file>` writes `"createdWith"` — the version of the runtime — into the file. Run it once on every canvas you create. Never type that value yourself: you cannot know the runtime's version, and a wrong stamp is worse than none. Stamping again is a safe no-op.
 5. **Validate deterministically**: `$IC validate <file>`. On exit 1, read `errors[]` — each has `code`, `path`, `message`, and usually a `hint` ("Did you mean …") and a correct `example`. Fix and re-validate until `{"ok": true}`. `open` also refuses invalid canvases with the same errors.
@@ -58,7 +58,9 @@ If `validate` or `open` reports `MISSING_CREATED_WITH`, just run `stamp` and car
 open <canvas.json | file.md> [--workspace <dir>] [--no-open] [--timeout <s>] [--result <file>]
 print <canvas.json | file.md> --out <file.pdf> [--workspace <dir>]   # → PDF (needs a local Chrome)
 stamp <canvas.json> [--workspace <dir>] [--retrofit]                 # canvases only
-validate <canvas.json> [--workspace <dir>]                           # canvases only
+validate <canvas.json | .instantcanvas.json> [--workspace <dir>]     # not markdown
+theme <canvas.json | file.md> [--set '<json>'] [--clear] [--all]     # see Colors below
+theme --save <name> --set '<json>'  |  theme --list
 catalog [name] [--full]   # no name → lean index (NO schemas); <name> → one schema; --full → everything
 status [--workspace <dir>]
 stop [--workspace <dir>]
@@ -100,7 +102,7 @@ stop [--workspace <dir>]
   "toc":    {"title": "Contents", "depth": 2},      // the TOC is auto-generated anyway; this only tunes it
   "header": {"left": "Q3 Report"},                  // left | center | right
   "footer": {"right": "{{pageNumber}} / {{totalPages}}"},
-  "theme":  {"accent": "#0054fe"},                  // STRICT hex only — "red"/"rgb(…)" is INVALID_COLOR
+  "theme":  {"preset": "slate", "accent": "#0054fe"},  // see Colors below — STRICT hex, "red"/"rgb(…)" is INVALID_COLOR
   "page":   {"size": "A4", "orientation": "portrait", "margin": "15mm"}
 }
 ```
@@ -111,6 +113,70 @@ stop [--workspace <dir>]
 - **`{{pageNumber}}` / `{{totalPages}}`** are the only substituted variables; any other `{{var}}` renders literally (and warns).
 - **Page numbers in a PDF must be declared.** A human reading on screen can toggle a header/footer on themselves, but that choice lives in their browser and `print` never sees it. If the PDF *you* generate must carry page numbers, put them in `"footer"` yourself.
 - **`"pages"` become chapters**, each starting on a new sheet.
+
+## Colors: `document.theme`
+
+Pick a **preset** and stop — it supplies an accent *and* a matching chart colorway. Then override any token on top of it. `$IC catalog theme` for the contract.
+
+- **Light paper**: `default` `slate` `ocean` `forest` `plum` `ember` `mono` `sepia` `tableau` `okabe` `carbon` `nord` `solarized` `material`
+- **Dark paper**: `midnight` `graphite` `abyss` `moss` `dracula` `tokyo` `solarized-dark` `okabe-dark`
+
+```jsonc
+"theme": {
+  "preset": "forest",              // the starting point
+  "accent": "#0054fe",             // + any token: accent paper surface text muted border link
+  "palette": ["#0054fe", "#00b4d8"] // the chart colorway (1–8)
+}
+```
+
+- **The theme colors the charts too**, so a document and its plots agree. An `accent` with no `palette` of its own leads the colorway. In `palette`, **one color is likewise a lead** the preset fills out (so pinning a brand color doesn't paint every series the same blue) — **two or more *are* the colorway**, exactly as given. A chart's raw `options` still wins over everything.
+- **Strict hex only** (`#rgb` / `#rrggbb`) — these values are assigned into live CSS, so `"red"` and `"rgb(…)"` are `INVALID_COLOR`.
+- **Dark paper prints dark.** The deck *is* the printed page and `print` renders backgrounds, so a dark preset makes a full-bleed dark PDF — right for something read on a screen, expensive for something put on paper. Nothing stops you; choose it on purpose.
+- **"Dark" is not a flag, it is a paper color.** The sheet's whole dark set (code syntax, card surfaces, chart template) is derived from the luminance of the resolved `paper`. So `{"preset": "forest", "paper": "#101010"}` is a dark document, with no second key saying so.
+- **Choosing on grounds other than taste**: `okabe`, `okabe-dark` and `carbon` are colorblind-safe; `mono` is the only preset that survives a black-and-white printer.
+- **The reader can change all of this in the browser** (a palette control in the topbar, in document view) and **save** it — which writes it back into this object. Unlike the TOC and header/footer toggles, it is not a view preference: it persists, so `print` sees it. Do not be surprised to find a `theme` you did not write.
+
+### Setting colors from the CLI — `$IC theme`
+
+**Use this rather than hand-writing config.** A canvas you authored, you can theme by writing `document.theme` yourself (`validate` checks every color). But a native `.md` has no canvas to write into: its theme lives in `.instantcanvas.json`, and that file is **ignored when it fails to parse** — a typo there produces no error and no visible change, which is indistinguishable from the feature not existing. `theme` validates, writes to the right file, and tells a running browser to repaint.
+
+```bash
+$IC theme report.md                      # what is it wearing, and which file decides? (writes nothing)
+$IC theme report.md --set '{"preset":"forest","accent":"#0054fe"}'
+$IC theme report.md --clear              # remove it
+$IC theme report.md --set '{...}' --all  # make it the workspace default for EVERY document
+$IC theme --save "Acme" --set '{...}'    # save a reusable named palette (appears in the browser's picker)
+$IC theme --list                         # every preset + every saved palette, as JSON
+$IC validate .instantcanvas.json         # if you did hand-write it, check it
+```
+
+**Where it lands is decided for you**, by the same rule the browser uses: a canvas that declares `document` gets its own `document.theme` (spliced in as text — the rest of the file is untouched); a native `.md`, *or a canvas with no `document` object*, goes to `.instantcanvas.json`. The runtime never writes a `document` object into a canvas that lacks one, because `document` also makes the deck that canvas's default view and is refused on a form/confirm/sweep canvas — setting a color must not change what a canvas *is*.
+
+**The brand-colors workflow** (user says *"style this in our company colors"*):
+
+1. Get the colors (from their site, their brand guide, wherever). You need an `accent` at minimum; a `palette` of 3–5 makes the charts theirs too.
+2. `$IC theme --save "Acme" --set '{"accent":"#e4002b","palette":["#e4002b","#001689","#f4a900"],"link":"#001689"}'` — saves it once, reusable, and it shows up in the user's picker.
+3. `$IC theme <their-doc> --set '{...same...}'` to apply it (add `--all` to brand every document in the workspace).
+4. Non-hex is **refused**, not silently dropped: a color you scraped as `crimson` or `rgb(228,0,43)` comes back as `INVALID_THEME` with the offending path. Convert to hex first.
+
+### `.instantcanvas.json`
+
+What the commands above write, and what you may write by hand (then `validate` it):
+
+```jsonc
+{
+  "instantcanvas": 1,
+  "theme": {"preset": "slate"},                                    // default for every document
+  "documents": {"docs/report.md": {"theme": {"preset": "sepia"}}}, // per-file, wins over it
+  "palettes": {                                                    // the workspace's own palettes,
+    "Acme": {"accent": "#e4002b", "palette": ["#e4002b", "#001689", "#f4a900"]}
+  }                                                                // offered in the browser beside the presets
+}
+```
+
+`palettes` is a **library, not a set of new preset names.** Applying one copies its colors into the document's `theme`, so a canvas never carries a `"preset": "Acme"` reference it cannot resolve on its own — and never repaints itself against someone else's workspace.
+
+Precedence: `canvas document.theme` → `.instantcanvas.json documents[path].theme` → `.instantcanvas.json theme` → default. The canvas always has the last word, so the runtime never writes a `document` object into a canvas that lacks one (that would change what the canvas *is* — `document` makes the deck its default view and is refused on a form/confirm/sweep canvas). It writes to `.instantcanvas.json` instead.
 
 ## Block quick reference
 

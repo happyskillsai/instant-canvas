@@ -331,7 +331,7 @@ Before publishing a skill:
 node_modules, .git, .env, .env.*, .DS_Store, .tmp, *.log
 ```
 
-> **Per-install configuration lives OUTSIDE the skill, in `skills-config.json`.** A configurable skill declares a `config`/`env` schema in `skill.json` and reads the consumer's values from the project-root `skills-config.json` (the sibling of `skills-lock.json`) — never from a file inside the skill folder, which the next `update` would wipe. See [skill-authoring.md § Configuration](skill-authoring.md) for the schema and the canonical read snippet. Secret **values** never belong in `skills-config.json` (which is committed) — they live in the gitignored `.env` its `envFile` points at.
+> **Per-install configuration lives OUTSIDE the skill, in `skills-config.json`.** A configurable skill declares a `config`/`env` schema in `skill.json` and reads the consumer's values from the project-root `skills-config.json` (the sibling of `skills-lock.json`) — never from a file inside the skill folder, which the next `update` would wipe. A `config` field may hold a structured value (`type: "object"` / `"array"`), and a field the skill's own UI authors rather than a human at an install prompt should declare `prompt: false`; the skill then persists it with `happyskills skills-config set` (never by hand-editing the JSON). See [skill-authoring.md § Configuration](skill-authoring.md) for the schema, the canonical read snippet, and the write path. Secret **values** never belong in `skills-config.json` (which is committed) — they live in the gitignored `.env` its `envFile` points at, and `skills-config set` refuses to write a key you declared `secret: true`.
 
 ---
 

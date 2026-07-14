@@ -1,13 +1,13 @@
 {
 	"lockVersion": 2,
-	"generatedAt": "2026-07-12T12:21:47.070Z",
+	"generatedAt": "2026-07-13T15:06:57.543Z",
 	"skills": {
 		"happyskillsai/happyskills": {
-			"version": "2.6.1",
-			"ref": "refs/tags/v2.6.1",
-			"commit": "62f98c603802deefe7631fdae4fd09da531ec2437948c6e0e56eb73c894c888a",
+			"version": "2.7.0",
+			"ref": "refs/tags/v2.7.0",
+			"commit": "1974ae3bb5ee9c4bcad9be748c6fd022b55b43b9c0185673d92e9ccd6f85c9e1",
 			"integrity": "sha256-ed03de3baa3b6613f0077bce26c32f8019e9cc0db5619862fd8fb44de883f2a2",
-			"base_commit": "62f98c603802deefe7631fdae4fd09da531ec2437948c6e0e56eb73c894c888a",
+			"base_commit": "1974ae3bb5ee9c4bcad9be748c6fd022b55b43b9c0185673d92e9ccd6f85c9e1",
 			"base_integrity": "sha256-ed03de3baa3b6613f0077bce26c32f8019e9cc0db5619862fd8fb44de883f2a2",
 			"requested_by": [
 				"__root__"
@@ -22,13 +22,14 @@
 			"type": "skill"
 		},
 		"happyskillsai/happyskills-design": {
-			"version": "0.13.5",
-			"ref": "refs/tags/v0.13.5",
-			"commit": "37e2f9c566860259f7e2f9211eb264ce229e608d76e08c674b20c0daa963925f",
+			"version": "0.14.0",
+			"ref": "refs/tags/v0.14.0",
+			"commit": "269be16ffa1a8958abfe07a5836936d02acb26519a93d17679c720f7876aaeaf",
 			"integrity": "sha256-a15722605076b6ad845da2bf98d63d9546b67412dab48a846bdcd8cc7da14d20",
-			"base_commit": "37e2f9c566860259f7e2f9211eb264ce229e608d76e08c674b20c0daa963925f",
+			"base_commit": "269be16ffa1a8958abfe07a5836936d02acb26519a93d17679c720f7876aaeaf",
 			"base_integrity": "sha256-a15722605076b6ad845da2bf98d63d9546b67412dab48a846bdcd8cc7da14d20",
 			"requested_by": [
+				"__root__",
 				"happyskillsai/happyskills"
 			],
 			"dependencies": {},
@@ -74,13 +75,14 @@
 			"type": "skill"
 		},
 		"happyskillsai/happyskills-help": {
-			"version": "0.8.3",
-			"ref": "refs/tags/v0.8.3",
-			"commit": "33873080cb602f591be07fa65b0d3891fdde4e6545bce0cd0c428ff14968241c",
+			"version": "0.8.4",
+			"ref": "refs/tags/v0.8.4",
+			"commit": "7de763d2c82ab8bb9d0f961b2aa2e475c4921f5fad119ed03966b17dfba4759d",
 			"integrity": "sha256-ec5a72de4cde1b2b9f760f1bc6bf12ebea36026963b6121e76e5c51e98487e57",
-			"base_commit": "33873080cb602f591be07fa65b0d3891fdde4e6545bce0cd0c428ff14968241c",
+			"base_commit": "7de763d2c82ab8bb9d0f961b2aa2e475c4921f5fad119ed03966b17dfba4759d",
 			"base_integrity": "sha256-ec5a72de4cde1b2b9f760f1bc6bf12ebea36026963b6121e76e5c51e98487e57",
 			"requested_by": [
+				"__root__",
 				"happyskillsai/happyskills"
 			],
 			"dependencies": {},
