@@ -166,7 +166,7 @@ stop [--workspace <dir>]
 }
 ```
 
-**A photo behind text needs a `scrim` or an `ink`, usually both.** A dark photo swallows the near-black title; a light one swallows a white subtitle. Neither is defaulted on — silently tinting your photograph would be presumptuous — so it is on you. And you **cannot fix it with `theme.text`**: that token paints the *whole document*, so a white cover title would come with white body text on white paper. `ink` is cover-scoped, and it drives the muted author/date line too.
+**A photo behind text needs a `scrim`. An `ink` alone is a bet on the photograph.** An `ink` fixes the *text* and cannot see the pixels behind it — white is legible over a dark photo and invisible over a bright one, and nothing can tell which yours is. A `scrim` is a known wash laid between an image nobody inspected and text that must be read, so it is the one that makes the contrast certain. **Set both**: the scrim for certainty, the ink for the colour. Omit the scrim and the validator warns (`COVER_TEXT_MAY_BE_ILLEGIBLE`) — it stays a warning, because an author who knows their photo is dark may ignore it. And you **cannot fix it with `theme.text`**: that token paints the *whole document*, so a white cover title would come with white body text on white paper.
 
 `size` + `position` is the CSS background model, and it covers both use cases without a second mechanism:
 

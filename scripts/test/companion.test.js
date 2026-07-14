@@ -289,6 +289,91 @@ test('themestore: a sweep canvas is refused for the same reason a form is', () =
 		(err) => err.code === 'THEME_NEEDS_DOCUMENT')
 })
 
+// ------------------------------------------------------------------ cover backgrounds
+
+const COVER = (background) => ({
+	instantcanvas: 1, createdWith: '0.4.0', title: 'Deck',
+	document: { cover: { title: 'Deck', background } },
+	blocks: [{ type: 'markdown', text: 'hi' }],
+})
+
+test('cover background: an INK WITHOUT A SCRIM is a bet on the photograph, and it warns', () => {
+	const root = tmpRoot()
+	fs.mkdirSync(path.join(root, 'assets'))
+	fs.writeFileSync(path.join(root, 'assets/hero.png'), 'x')
+
+	// THE BUG THIS PINS, found by driving the published CLI from a clean machine: the first
+	// cut warned only when scrim AND ink were both absent, reasoning that setting either
+	// meant the author had considered legibility. A white `ink` over a bright dawn sky, no
+	// scrim, therefore validated **ok with zero warnings** — and printed a title that was
+	// white on near-white. The author HAD considered it, and was wrong: `ink` fixes the text
+	// and cannot see the pixels behind it.
+	const inkOnly = validate(COVER({ src: 'assets/hero.png', ink: '#ffffff' }), { root })
+	assert.equal(inkOnly.ok, true, 'still legal — this is a judgment call, never an error')
+	const w = inkOnly.warnings.find((x) => x.code === 'COVER_TEXT_MAY_BE_ILLEGIBLE')
+	assert.ok(w, 'an ink alone must NOT silence the warning')
+	assert.match(w.message, /cannot see the pixels behind it/, 'and it says why an ink is not enough')
+
+	// Neither knob at all: same warning, different sentence.
+	assert.ok(warns(validate(COVER({ src: 'assets/hero.png' }), { root })).includes('COVER_TEXT_MAY_BE_ILLEGIBLE'))
+
+	// A SCRIM is the one thing that makes the contrast certain — a known quantity laid
+	// between a photo we cannot inspect and text we can. With one, we stop nagging.
+	const scrimmed = validate(COVER({
+		src: 'assets/hero.png', ink: '#ffffff', scrim: { color: '#000000', opacity: 0.4 },
+	}), { root })
+	assert.equal(scrimmed.ok, true)
+	assert.ok(!warns(scrimmed).includes('COVER_TEXT_MAY_BE_ILLEGIBLE'), 'a scrim silences it')
+
+	// And a scrim alone is enough too — the ink is the optional half.
+	assert.ok(!warns(validate(COVER({ src: 'assets/hero.png', scrim: { color: '#000000', opacity: 0.4 } }), { root }))
+		.includes('COVER_TEXT_MAY_BE_ILLEGIBLE'))
+})
+
+test('cover background: the size/position grammar and the strict-hex scrim', () => {
+	const root = tmpRoot()
+	fs.mkdirSync(path.join(root, 'assets'))
+	fs.writeFileSync(path.join(root, 'assets/hero.png'), 'x')
+	const ok = (bg) => validate(COVER({ src: 'assets/hero.png', scrim: { color: '#000', opacity: 0.4 }, ...bg }), { root })
+
+	// The four shapes the catalog promises, all legal.
+	for (const size of ['cover', 'contain', '120mm', '80mm 40mm', '50%', '300px'])
+		assert.equal(ok({ size }).ok, true, `size ${JSON.stringify(size)} must be legal`)
+	for (const position of ['center', 'top left', 'right bottom', '25% 50%', '20mm 40mm'])
+		assert.equal(ok({ position }).ok, true, `position ${JSON.stringify(position)} must be legal`)
+
+	// And the refusals, each naming the axis it is about.
+	assert.ok(codes(ok({ size: 'fill' })).includes('INVALID_SPEC'), '"fill" is not a CSS background size')
+	assert.ok(codes(ok({ size: '120' })).includes('INVALID_SPEC'), 'a bare number is not a length')
+	assert.ok(codes(ok({ position: 'middle' })).includes('INVALID_SPEC'))
+
+	// The scrim is {color, opacity} rather than an 8-digit hex precisely so the strict-hex
+	// rule every other color obeys still holds here.
+	assert.ok(codes(validate(COVER({ src: 'assets/hero.png', scrim: { color: 'rgba(0,0,0,.4)', opacity: 0.4 } }), { root }))
+		.includes('INVALID_COLOR'))
+	assert.ok(codes(validate(COVER({ src: 'assets/hero.png', scrim: { color: '#000000', opacity: 2 } }), { root }))
+		.includes('INVALID_SPEC'), 'opacity is 0–1')
+	assert.ok(codes(validate(COVER({ src: 'assets/hero.png', ink: 'white' }), { root }))
+		.includes('INVALID_COLOR'), 'ink reaches live CSS through CSSOM — strict hex only')
+})
+
+test('cover background: an oversize photo is an ERROR, never a silent truncation', () => {
+	const root = tmpRoot()
+	fs.mkdirSync(path.join(root, 'assets'))
+	// Just over the cap. A full-bleed image is paid for TWICE — in the canvas payload and in
+	// the PDF — so nobody should ship a 40 MB PDF by accident. A logo that is too big is
+	// silently dropped (no logo beats a broken image); a cover is the document's face.
+	const { MAX_COVER_IMAGE_BYTES } = require('../lib/markdownsrc')
+	fs.writeFileSync(path.join(root, 'assets/huge.png'), Buffer.alloc(MAX_COVER_IMAGE_BYTES + 1))
+	const r = validate(COVER({ src: 'assets/huge.png', scrim: { color: '#000', opacity: 0.4 } }), { root })
+	const e = r.errors.find((x) => x.code === 'ASSET_TOO_LARGE')
+	assert.ok(e, 'oversize is refused, not truncated')
+	assert.match(e.hint, /paid for twice|resize|re-compress/i, 'and the error teaches the fix')
+
+	// Remote is refused by the same ladder the logo obeys — the runtime never fetches.
+	assert.ok(codes(validate(COVER({ src: 'https://example.com/hero.jpg' }), { root })).includes('REMOTE_ASSET_BLOCKED'))
+})
+
 // ------------------------------------------------------------------ precedence
 
 test('themestore: precedence is three levels — the document outranks the workspace default', () => {

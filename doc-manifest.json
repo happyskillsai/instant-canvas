@@ -370,7 +370,7 @@
         "Stamping the skill CHANGELOG means RENAMING `## [Unreleased]`, not adding a section under it",
         "DO NOT hand-write the skill bundle's CHANGELOG — the publish step owns it"
       ],
-      "line_count": 80,
+      "line_count": 86,
       "links_to": [],
       "over_size": false,
       "parse_error": null,

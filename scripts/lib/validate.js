@@ -778,9 +778,28 @@ function checkCoverBackground(bg, base, ctx) {
 	// The warning that earns its keep: a photo behind a near-black title is unreadable,
 	// and nothing downstream will notice. We do not default a scrim on — silently tinting
 	// somebody's photograph would be rude — so we say so instead.
-	if (typeof bg.src === 'string' && scrim === undefined && bg.ink === undefined)
-		ctx.warn('COVER_TEXT_MAY_BE_ILLEGIBLE', base, 'This cover puts text over an image with neither a "scrim" nor an "ink" — a dark photo swallows the near-black title, and a light one swallows a white subtitle.', {
-			hint: 'Add a "scrim" ({color, opacity}) to wash the image behind the text, an "ink" to repaint the cover\'s own text (theme.text would repaint the WHOLE document), or usually both.',
+	// AN `ink` ALONE IS A BET ON THE PHOTOGRAPH, and this warning fires without a SCRIM
+	// rather than without both — which is not what the first cut did, and the difference is
+	// a cover that shipped unreadable.
+	//
+	// The original guard warned only when scrim AND ink were both absent, on the reasoning
+	// that setting either one meant the author had thought about legibility. Driving the
+	// published CLI from a clean machine disproved it in one shot: a white `ink` over a
+	// bright dawn sky, no scrim, validated **ok: true with zero warnings** and printed a
+	// title that was white on near-white. The author HAD thought about it — and was wrong,
+	// because `ink` fixes the text and cannot see the pixels behind it. White ink is perfect
+	// on a dark ridge and invisible on a bright one, and the validator cannot decode the
+	// image to tell which it got.
+	//
+	// A SCRIM is the only thing that makes the bet safe: it is a known quantity laid between
+	// a photo we cannot inspect and text we can. So that is what we ask for. It stays a
+	// WARNING, never an error — an author who knows their photograph is dark may set an ink
+	// and ignore this, which is exactly the judgment call a warning is for.
+	if (typeof bg.src === 'string' && scrim === undefined)
+		ctx.warn('COVER_TEXT_MAY_BE_ILLEGIBLE', base, bg.ink === undefined
+			? 'This cover puts text over an image with no "scrim" and no "ink" — a dark photo swallows the near-black title, and a light one swallows a white subtitle.'
+			: 'This cover sets an "ink" but no "scrim". An ink cannot see the pixels behind it: white text is legible over a dark photo and invisible over a bright one, and nothing here can tell which this image is.', {
+			hint: 'Add a "scrim" ({color, opacity}) — a flat wash between the image and the text is the only thing that makes the contrast certain. Keep the "ink" as well: the two together are what a photographic cover normally needs.',
 			example: BACKGROUND_EXAMPLE,
 		})
 }
