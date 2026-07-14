@@ -7,6 +7,13 @@ package they were authored alongside.
 
 ## [Unreleased]
 
+## [0.5.3] - 2026-07-14
+
+### Fixed
+- **Browser-side only — the agent-facing contract is unchanged.** A cover with a
+  `background` image put its `logo` on top of the title and lost the full bleed on
+  its accent band (a CSS specificity trap). Nothing you write changes; the version
+  tracks the runtime package it ships beside.
 ## [0.5.2] - 2026-07-14
 
 ### Fixed
