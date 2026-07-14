@@ -7,6 +7,82 @@ package they were authored alongside.
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-07-14
+
+### Added
+- **A markdown file can finally carry a cover, a theme, or a running header — give
+  it a COMPANION canvas.** A `.md` has **no envelope**: it *is* the canvas, and
+  the runtime synthesises one in memory it never writes. Everything a document
+  wants beyond its prose lives in `document`, and a markdown file could not hold
+  one. So give it a canvas of its own — one new envelope key, `enhances`:
+
+  ```jsonc
+  // README.canvas.json, beside README.md
+  {"instantcanvas": 1, "enhances": "README.md",
+   "document": {"cover": {…}, "theme": {…}},
+   "blocks": [{"type": "markdown", "src": "README.md"}]}
+  ```
+
+  It is an **ordinary canvas** — nothing new to validate, and every `document`
+  furnishing works. What you need to know:
+  - **The companion is what runs.** Keep pointing at the `.md`: `open README.md`
+    and `print README.md` both render the companion, and the sidebar shows one
+    entry. Never open the companion by name.
+  - **Carry a `markdown` block whose `src` is the file you enhance**, or the
+    companion renders its own blocks instead of the document's prose (a warning).
+  - **One companion per document** — two is `DUPLICATE_ENHANCES`, naming both.
+  - `enhances` is the binding, not the filename: `<base>.canvas.json` is only a
+    convention, and renaming the file changes nothing.
+  - `theme <file.md> --set '{…}'` **creates the companion for you**, and names the
+    file before writing it. Usually the easiest way in.
+- **Cover backgrounds — a cover is a sheet, so it can carry a photo.**
+  `cover.logo` is a 48 × 48 *mark*; a photograph through it is a postage stamp.
+  `cover.background` is the real cover image, full bleed to the paper's edge, and
+  `backCover.background` is the same shape and independent.
+  ```jsonc
+  "background": {"src": "assets/hero.jpg", "size": "cover", "position": "25% 50%",
+                 "scrim": {"color": "#000000", "opacity": 0.35}, "ink": "#ffffff"}
+  ```
+  - **A photo behind text needs a `scrim` or an `ink`, usually both.** A dark photo
+    swallows the near-black title, and `theme.text` cannot fix it — that token
+    paints the *whole* document, so a white cover title would come with white body
+    text on white paper. Neither is defaulted on; the validator warns instead.
+  - Percentage `position` is a **focal point**, not an offset — it picks what
+    survives the crop, and it only moves the axis the image actually *overflows*.
+    On portrait A4 that is almost always the **horizontal** one (a square photo and
+    a landscape photo both overflow sideways).
+  - It reaches the **PDF**, not just the screen. Oversize is a hard
+    `ASSET_TOO_LARGE`, never a silent truncation.
+- **`theme` — the door to the color system.** A user asks for their brand colors;
+  now you can set them. `theme <file>` reports what a document is wearing and which
+  file decides it; `--set '{…}'` writes it; `--all --set '{…}'` sets the workspace
+  default; `--save "<name>"` stores a reusable palette that appears in the reader's
+  picker; `--list` prints every preset and saved palette, so you never guess a name.
+  A color that is not strict hex is **refused** (`INVALID_THEME`), never silently
+  dropped — convert `crimson` / `rgb(…)` to hex first.
+- **Document colors are a system: 22 presets** — 14 on light paper, 8 on dark —
+  each supplying an accent *and* a matching chart colorway, with any of seven tokens
+  overriding on top. `okabe` / `okabe-dark` / `carbon` are colorblind-safe; `mono` is
+  the only one that survives a black-and-white printer. **Dark paper prints dark.**
+  `$IC catalog theme`.
+
+### Changed
+- **Where a theme lands is always the document's own envelope**, and the routing is
+  now complete: a canvas that declares `document` is written in place; a **markdown
+  file** gets its **companion** (created if absent); a **display** canvas with no
+  `document` gains one (it will then open as paper). A canvas holding a **form, a
+  confirm, or a sweep** is **refused** — `THEME_NEEDS_DOCUMENT` — because `document`
+  is invalid beside an interactive block, and setting a color must never make your
+  own canvas stop validating. Such a canvas wears the workspace default.
+- **The workspace config is `skills-config.json`**, the project's own committed
+  config, keyed `happyskillsai/instant-canvas` — holding the workspace default
+  `theme` and the `palettes` library. Write it with `theme --all` / `theme --save`;
+  never hand-write it. If it is ever corrupt, fix the syntax **in place, never by
+  deleting the file** — it holds every skill's settings.
+- **Precedence is three levels**: the document's own theme → the workspace default →
+  the built-in default. The document always has the last word.
+- `validate` now also checks the colors inside `skills-config.json`.
+
 ## [0.4.0] - 2026-07-12
 
 ### Added

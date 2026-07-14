@@ -69,7 +69,13 @@ The failure mode is what happens if you instead *insert* the new version below t
 
 The CLI parses `Unreleased`, cannot read it as a version, and stops. It then refuses with `MISSING_CHANGELOG_ENTRY` — *"CHANGELOG.md does not contain a ## [0.4.0] entry"* — which is false, and sends you looking for a missing entry that is sitting right there. The real tell is `next_step.context.current_top_entry: null`: it found **no** version heading at all. When a release complains about an entry you can see, check what is *above* it.
 
-The repo keeps an empty `## [Unreleased]` heading above the released version, and the next release renames *that* heading in turn.
+**This fired for real on v0.5.0**, with the predicted false message. The bundle's changelog sat at rest with an empty `## [Unreleased]` on top (which is correct between releases), the publish flow *inserted* `## [0.5.0]` below it rather than renaming it, and `release` refused with *"CHANGELOG.md does not contain a ## [0.5.0] entry"* — while the entry was sitting on the very next line. Knowing the gotcha was not enough; the shape of the edit is what matters.
+
+So the sequence is three steps, and the middle one is the one that gets skipped:
+
+1. **Rename** `## [Unreleased]` → `## [x.y.z] - YYYY-MM-DD`. **At release time no `## [Unreleased]` may sit above it** — it is the first heading the CLI reads, and it is not a semver.
+2. **Publish.**
+3. **Restore** an empty `## [Unreleased]` above the released version, for the next cycle.
 
 ## DO NOT hand-write the skill bundle's CHANGELOG — the publish step owns it
 
