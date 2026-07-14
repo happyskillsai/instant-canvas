@@ -1,6 +1,6 @@
 {
 	"name": "@happyskillsai/instant-canvas",
-	"version": "0.5.1",
+	"version": "0.5.2",
 	"publishConfig": {
 		"access": "public"
 	},

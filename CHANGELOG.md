@@ -2,6 +2,26 @@
 
 ## [Unreleased]
 
+## [0.5.2] - 2026-07-14
+
+### Fixed
+- **The palette panel threw away the plan, and two features were dead on arrival in the
+  browser.** `api()` returns an envelope — `{status, json}` — never the body.
+  `loadThemePlan()` read `.ok` off the wrapper, so the truthy check never passed and the
+  answer was discarded on every open, with no error anywhere. What that killed:
+  - **A bare `.md` never announced the companion it was about to create.** The whole point
+    of the notice is that a colour click makes a *file appear in the reader's repository* —
+    a good trade only if nobody has to discover it afterwards. The file simply appeared.
+  - **Save stayed enabled on a form canvas that cannot hold a theme at all.** Instead of a
+    disabled button carrying its reason, the reader clicked and got a 409.
+
+  `GET /api/theme/plan` was correct, `planTheme()` was correct, `kernel.test.js` pinned
+  both, and **every server-side test passed** — because nothing rendered the panel and read
+  what it said. `palette.test.js` now drives the real page for both states and asserts the
+  sentence a human would see; both assertions go red against the old code, which is the only
+  reason to trust them. **A feature whose only evidence is in the browser must be asserted
+  in the browser.**
+
 ## [0.5.1] - 2026-07-14
 
 ### Fixed
