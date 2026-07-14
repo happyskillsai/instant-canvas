@@ -2,6 +2,37 @@
 
 ## [Unreleased]
 
+## [0.5.3] - 2026-07-14
+
+### Fixed
+- **A cover with a background image put its logo on top of the title, and its accent band
+  in the wrong place.** To stack the scrim under the cover's text, `.sheet.has-bg > *`
+  was given `position: relative` (z-index needs a positioned element). That selector
+  **outranks `.cover-logo` and `.cover-band`**, so it silently replaced their
+  `position: absolute`: the logo fell out of its top-left corner and landed on the title,
+  and the accent band stopped being full-bleed — inset by the sheet's padding and lifted
+  off the bottom edge.
+
+  The `position` was never needed: `.sheet` is a flex container, and **z-index applies to
+  flex items even when statically positioned**, so the text stacks above the scrim with no
+  `position` at all while the logo and band keep the `absolute` that puts them where they
+  belong.
+
+  This is the third defect in this codebase of the shape *"the CSS rule was present and
+  correct, and something more specific beat it"*. Nothing in the suite could see it —
+  `document.test.js` had never rendered a cover **with** a background. It does now, and
+  asserts the **computed** geometry (the logo's position, the band's rect against the
+  sheet's edges); both go red against the old rule.
+
+### Changed
+- The README deck ships a real cover image instead of the synthetic 4×4 test grid that
+  existed only to make the crop provable.
+- The two shipped specs move to `specs/-DONE`. The companion spec's two wrong claims are
+  flagged **inline** rather than edited away — one of them (*"a photo behind text needs a
+  scrim **or** an ink"*) was implemented literally and caused the white-on-white cover
+  fixed in 0.5.1. A spec that reads well and is subtly wrong is more dangerous than one
+  that is obviously incomplete.
+
 ## [0.5.2] - 2026-07-14
 
 ### Fixed
