@@ -7,6 +7,14 @@ package they were authored alongside.
 
 ## [Unreleased]
 
+## [0.5.2] - 2026-07-14
+
+### Fixed
+- **Browser-side only — the agent-facing contract is unchanged.** The palette
+  panel discarded the answer to *"what would Save do?"*, so a markdown file never
+  announced the companion canvas it was about to create, and Save stayed enabled
+  on a form canvas that cannot hold a theme. Nothing an agent writes is affected;
+  the version tracks the runtime package it ships beside.
 ## [0.5.1] - 2026-07-14
 
 ### Fixed
