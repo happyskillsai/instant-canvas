@@ -1,6 +1,6 @@
 {
 	"name": "instant-canvas",
-	"version": "0.5.0",
+	"version": "0.5.1",
 	"description": "Local canvas runtime for coding agents: renders canvas JSON (markdown, KPIs, tables, 26 chart kinds incl. 3D and ML plots, forms) and plain .md files as-is, prints them to PDF, and collects input/secrets straight to local files.",
 	"type": "skill",
 	"license": "BSD-3-Clause",

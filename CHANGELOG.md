@@ -2,6 +2,35 @@
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-07-14
+
+### Fixed
+- **A cover photo could print its title white-on-white, and `validate` said nothing.**
+  The legibility guard warned only when a cover `background` carried **neither** a
+  `scrim` **nor** an `ink`, on the reasoning that setting either one meant the author had
+  thought about it. That reasoning is wrong, and driving the published 0.5.0 CLI from a
+  clean machine disproved it in one shot: a white `ink` over a bright dawn sky, no scrim,
+  validated `ok: true` with **zero warnings** — and printed a cover whose title was white
+  on near-white.
+
+  **An `ink` is a bet on the photograph.** It fixes the *text* and cannot see the pixels
+  behind it: white is legible over a dark ridge and invisible over a bright one, and
+  nothing in the runtime decodes the image to tell which it got. The author *had*
+  considered legibility — and was wrong. A **scrim** is the only knob that makes the
+  contrast certain, because it is a known wash laid between an image nobody inspected and
+  text that must be read.
+
+  So the warning now fires whenever a background has **no scrim**, and says why an ink is
+  not enough. It stays a **warning, never an error**: an author who knows their photograph
+  is dark may set an ink and ignore it, which is exactly the judgment a warning exists for.
+  Corrected on all four surfaces an agent reads — `schema.js`, the catalog, SKILL.md, and
+  the docs.
+- **The cover background had no contract tests at all** — only a print-time assertion that
+  the image reached the PDF, which is why the above shipped. It now has them: the
+  illegibility guard in all four states, the `size`/`position` grammar, the strict-hex
+  scrim, the 0–1 opacity, `ASSET_TOO_LARGE`, and `REMOTE_ASSET_BLOCKED`. The new test goes
+  red against the old logic.
+
 ## [0.5.0] - 2026-07-14
 
 ### Added
