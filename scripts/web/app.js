@@ -42,6 +42,10 @@ const state = {
 	wsAlive: false,
 	docView: 'deck', // current view: 'deck' or 'html'; default per canvas set on navigation
 	docCanvasId: null, // which canvas docView belongs to — resets on navigation
+	// The reader's OWN view choice, once they make one: it outlives navigation, so
+	// browsing a folder as paper stays paper. null = nobody chose, follow each
+	// canvas's own default (deck iff it declares `document`).
+	docViewChoice: null,
 	docLand: false, // true while the current canvas is rendered through the deck machinery
 	docToc: null, // reader override for the TOC: null = auto (on when there is content), true/false = forced
 	docTocOn: false, // what the last deck render actually did (drives the toggle button state)
@@ -49,6 +53,16 @@ const state = {
 	docStrips: null, // reader override for the running header/footer: null = auto (on iff declared), true/false = forced
 	docStripsOn: false, // what the last deck render actually did (drives the toggle button state)
 	docFit: null, // re-runs the deck scale fit; set by each document render
+	// The theme as the KERNEL resolved it — every key a literal hex string. Unlike
+	// the TOC and strip toggles above, a palette change is not a view preference:
+	// it is written back to a file, so the browser holds no private copy of the
+	// rules, only the answer.
+	canvasTheme: null, // resolved tokens + colorway currently painted
+	themeDeclared: null, // what the canvas/config actually SAYS (preset + overrides), for the picker
+	themeSource: 'default', // 'canvas' | 'workspace' | 'default' — where the above came from
+	themeDirty: false, // previewing an unsaved theme
+	themePresets: null, // /api/theme/presets, fetched once
+	palView: 'pick', // the colors panel: 'pick' a palette, or 'edit' one into existence
 }
 
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
@@ -267,40 +281,92 @@ function currentTheme() {
 	return matchMedia('(prefers-color-scheme:dark)').matches ? 'dark' : 'light'
 }
 
-/** LIGHT composed with the document's brand colors. Plotly cannot read CSS
- *  variables, so the brand colorway must be compiled into the template — the
- *  --doc-* tokens alone would leave every chart indigo (the second sink). */
+/** The document's resolved theme — every key already a literal hex string, composed
+ *  by the kernel (lib/theme.js) from the preset, the workspace config and the
+ *  canvas. The page never sees a preset name, so there is no second copy of the
+ *  color rules here to drift from the first. */
+function docTheme() {
+	return state.canvasTheme && typeof state.canvasTheme === 'object' ? state.canvasTheme : null
+}
+
+/** The Plotly template for a sheet. Plotly cannot read CSS variables — it paints
+ *  to canvas/SVG — so the theme has to be COMPILED into the template. The --doc-*
+ *  tokens alone would leave every chart indigo on a forest-green document. */
 function documentPalette(t) {
 	const theme = t && typeof t === 'object' ? t : {}
-	const color = Array.isArray(theme.palette) && theme.palette.length ? theme.palette
-		: theme.accent ? [theme.accent, ...LIGHT.color.slice(1)]
-			: LIGHT.color
-	return { ...LIGHT, color, ramp: color[0] === LIGHT.color[0] ? LIGHT.ramp : withAlpha(color[0], 0.12) }
+	// Dark paper composes over the DARK template, not the light one. It is not enough to
+	// pass the theme's own text/border through: `down` (a falling candle) and `ramp` (the
+	// low end of a heatmap) have no token, and the light versions of both disappear into
+	// a dark sheet.
+	const base = theme.mode === 'dark' ? DARK : LIGHT
+	const color = Array.isArray(theme.palette) && theme.palette.length ? theme.palette : base.color
+	return {
+		...base,
+		color,
+		text: theme.text || base.text,
+		muted: theme.muted || base.muted,
+		border: theme.border || base.border,
+		panel: theme.surface || base.panel,
+		ramp: color[0] === base.color[0] ? base.ramp : withAlpha(color[0], 0.12),
+	}
 }
+
+/** Has anyone actually asked for a theme, or is this the built-in default? The kernel
+ *  always sends a fully resolved theme, so the resolved object cannot answer this — only
+ *  what the file (or the reader's unsaved edit) DECLARED can. */
+const themeIsDeclared = () => Object.keys(state.themeDeclared || {}).length > 0
 
 function palette() {
-	// Sheets are paper: a document canvas charts on LIGHT plus its brand
-	// colorway regardless of the app theme (sheets are always light). The app
-	// chrome around the deck still follows the app theme via CSS variables.
-	const doc = state.canvasDoc && state.canvasDoc.document
-	if (doc && typeof doc === 'object')
-		return documentPalette(doc.theme)
-	// A reader-toggled deck (no `document` declared) is still paper: light, no brand.
+	// Sheets are paper: a document charts on its own theme over a light sheet,
+	// regardless of the app theme. The app chrome AROUND the deck still follows
+	// the app theme via CSS variables.
 	if (state.docLand)
-		return documentPalette(null)
-	return currentTheme() === 'dark' ? DARK : LIGHT
+		return documentPalette(docTheme())
+
+	// Off the deck the APP theme owns the ink — a dark app must not draw dark axis text
+	// on a dark panel — but the document still owns its brand COLORWAY, or changing the
+	// palette in the continuous view would visibly do nothing to the charts. Only when a
+	// theme was actually declared: the default's colorway is the light one, and forcing
+	// it here would hand a dark app the light palette it deliberately does not use.
+	const base = currentTheme() === 'dark' ? DARK : LIGHT
+	const t = docTheme()
+	if (!themeIsDeclared() || !t || !Array.isArray(t.palette) || !t.palette.length)
+		return base
+	return { ...base, color: t.palette, ramp: withAlpha(t.palette[0], 0.12) }
 }
 
-/** Brand tokens reach the page as CSS custom properties set through CSSOM —
- *  the CSP drops style="" attributes but exempts programmatic assignment.
- *  Colors were validated to strict hex, and are still treated as opaque
- *  strings handed to setProperty, never interpolated into markup. */
-function applyDocumentTheme(el, doc) {
-	const t = (doc && doc.theme) || {}
-	if (t.accent)
-		el.style.setProperty('--doc-accent', t.accent)
-	const colors = Array.isArray(t.palette) && t.palette.length ? t.palette : t.accent ? [t.accent] : []
-	colors.slice(0, 8).forEach((c, i) => el.style.setProperty('--doc-c' + (i + 1), c))
+/** Theme tokens reach the page as CSS custom properties set through CSSOM — the
+ *  CSP drops style="" attributes but exempts programmatic assignment. Colors were
+ *  validated to strict hex (twice: by the canvas validator, and again at the
+ *  /api/theme boundary), and are still treated as opaque strings handed to
+ *  setProperty, never interpolated into markup. */
+const DOC_TOKENS = ['accent', 'paper', 'surface', 'text', 'muted', 'border', 'link']
+
+function applyDocumentTheme(el, theme) {
+	const t = theme && typeof theme === 'object' ? theme : {}
+	// Dark paper needs more than dark tokens: the sheet's SEMANTIC colors — the code
+	// syntax palette, the card surfaces, the accent wash — are a whole second set, and
+	// the light ones are illegible on it (near-black keywords on near-black paper). CSS
+	// carries both sets; this attribute chooses. The kernel derived it from the paper
+	// color itself, so a canvas that merely says {"paper": "#101010"} gets it too.
+	if (t.mode === 'dark')
+		el.setAttribute('data-paper', 'dark')
+	else
+		el.removeAttribute('data-paper')
+
+	for (const key of DOC_TOKENS) {
+		if (typeof t[key] === 'string' && t[key])
+			el.style.setProperty('--doc-' + key, t[key])
+		else
+			el.style.removeProperty('--doc-' + key)
+	}
+	// The COLORWAY is deliberately not written here. It used to be, as --doc-c1..c8,
+	// and no CSS rule anywhere ever read one of them — eight dead custom properties
+	// set on every themed document since document mode shipped. The colorway's only
+	// real sink is the Plotly template (see documentPalette), because Plotly paints to
+	// canvas/SVG and cannot read var() at all; nothing in the DOM chrome of a sheet is
+	// colored by series. If a KPI or a table ever needs series color, write the vars
+	// then, next to the rule that reads them.
 }
 
 $('themeBtn').addEventListener('click', () => {
@@ -344,6 +410,582 @@ $('stripsBtn').addEventListener('click', () => {
 		return
 	state.docStrips = !state.docStripsOn
 	renderCanvas()
+})
+
+// ------------------------------------------------------- document colors
+//
+// The palette control is deliberately NOT a third reader toggle. The TOC and the
+// strips live in memory and die with the tab, because they are opinions about how
+// to look at a document. A theme is part of the document — it has to survive a
+// reload, reach `print` (which is a headless Chrome that never sees a reader
+// toggle), and be readable by the agent that wrote the canvas. So it is persisted,
+// and the trade is made explicit in the UI: preview freely, save on purpose.
+//
+// Nothing here knows what a preset IS. The kernel resolves every theme to literal
+// hex (lib/theme.js) and the page paints what it is handed — one copy of the rules,
+// on the side that also has to validate them.
+
+/** Preview a theme without writing it: repaint the CSS tokens and recolor the charts in
+ *  place. `rethemeCharts` re-renders rather than tearing down, for the same WebGL-context
+ *  reason the app theme toggle does.
+ *
+ *  The two halves are paced differently on purpose. Tokens are a handful of setProperty
+ *  calls, so they land on the same frame as the reader's pointer. Recoloring the charts
+ *  is a Plotly re-render of every figure on the sheet — and a color field fires `input`
+ *  on every pointer move inside the browser's picker, so doing it per event means
+ *  dozens of full re-renders during one drag. It coalesces to the end of the gesture,
+ *  which is soon enough to read as live and cheap enough to stay smooth. */
+let rethemeTimer = null
+function previewTheme(resolved) {
+	state.canvasTheme = resolved
+	// Whichever root is on screen — the deck's `.doc-mode` or the continuous view's
+	// plain `.canvas`. Both take the brand; only the deck takes the paper.
+	const rootEl = document.querySelector('.canvas')
+	if (rootEl)
+		applyDocumentTheme(rootEl, resolved)
+	clearTimeout(rethemeTimer)
+	rethemeTimer = setTimeout(rethemeCharts, 90)
+}
+
+/** Resolve a declared theme the way the kernel would, so the preview and the saved
+ *  result cannot disagree. The ONE piece of resolution the browser does — and it
+ *  reads the preset table the kernel served, rather than keeping its own. */
+function resolveLocally(declared) {
+	const presets = (state.themePresets && state.themePresets.presets) || []
+	const base = presets.find((p) => p.name === (declared.preset || 'default')) || presets[0]
+	if (!base)
+		return state.canvasTheme
+	const out = { ...base.tokens, preset: base.name, palette: base.palette.slice() }
+	for (const key of DOC_TOKENS) {
+		if (declared[key])
+			out[key] = declared[key]
+	}
+	if (!declared.link)
+		out.link = out.accent
+	// Mirrors lib/theme.js exactly: one color leads, two or more ARE the colorway,
+	// and a lone accent leads when no palette is declared at all.
+	const way = Array.isArray(declared.palette) ? declared.palette : []
+	if (way.length > 1)
+		out.palette = way.slice()
+	else if (way.length === 1)
+		out.palette = [way[0], ...base.palette.slice(1)]
+	else if (declared.accent)
+		out.palette = [declared.accent, ...base.palette.slice(1)]
+
+	// And the mode, read off the FINAL paper — the same rule, from the same color. Miss
+	// this and a preview of a dark palette keeps the light sheet's code syntax until the
+	// round trip lands, which is the "a preview that disagrees with the kernel is a lie
+	// about what Save will do" failure, in the flesh.
+	out.mode = isDarkPaper(out.paper) ? 'dark' : 'light'
+	return out
+}
+
+/** Perceptual (Rec. 709) luminance — mirrors lib/theme.js `isDarkPaper`, and must. */
+function isDarkPaper(hex) {
+	const h = String(hex || '').replace('#', '')
+	const full = h.length === 3 ? h.split('').map((c) => c + c).join('') : h
+	const n = parseInt(full, 16)
+	if (!Number.isFinite(n) || full.length !== 6)
+		return false
+	return (0.2126 * ((n >> 16) & 255) + 0.7152 * ((n >> 8) & 255) + 0.0722 * (n & 255)) / 255 < 0.5
+}
+
+/**
+ * Apply a change to the declared theme and repaint.
+ *
+ * `structural` rebuilds the panel's markup; without it, only values and states are
+ * synced in place. That distinction is not an optimization — it is the difference
+ * between a working color picker and a broken one. A native <input type="color">
+ * fires `input` CONTINUOUSLY while the reader moves around inside the browser's color
+ * popup, and the popup is anchored to that input ELEMENT. Rebuilding the token grid on
+ * each of those events replaced the very node the popup hung from, so the popup shut
+ * itself the instant you clicked a color — you got the color, and lost the picker,
+ * every time. A live edit must therefore never replace a node.
+ */
+function setDeclared(patch, { structural = false } = {}) {
+	state.themeDeclared = { ...state.themeDeclared, ...patch }
+	// An override equal to the preset's own value is noise in the user's file.
+	for (const key of Object.keys(patch)) {
+		if (patch[key] === null || patch[key] === undefined)
+			delete state.themeDeclared[key]
+	}
+	state.themeDirty = true
+	previewTheme(resolveLocally(state.themeDeclared))
+	if (structural)
+		renderPalettePanel()
+	else
+		syncPalettePanel()
+}
+
+async function ensurePresets() {
+	if (state.themePresets)
+		return state.themePresets
+	const { status, json } = await api('/api/theme/presets')
+	if (status !== 200 || !json || !json.ok)
+		return null
+	// Every token the kernel names, never a hand-listed subset: a token missing here
+	// resolves to undefined in the local preview, which the CSS fallbacks hide until it
+	// is saved into a palette or compiled into a chart template.
+	const keys = json.tokens || DOC_TOKENS
+	json.presets.forEach((p) => {
+		p.tokens = {}
+		for (const k of keys)
+			p.tokens[k] = p[k]
+	})
+	state.themePresets = json
+	return json
+}
+
+const PAL_SOURCE_LABEL = {
+	canvas: 'from this canvas',
+	workspace: 'from .instantcanvas.json',
+	default: 'default',
+}
+
+/** Chip markup, shared by the built-in presets and the workspace's own palettes. */
+function paletteChips(list, activeName, { removable = false } = {}) {
+	return list.map((p) => `
+		<button class="pal-chip${p.name === activeName ? ' active' : ''}" type="button" role="radio"
+			aria-checked="${p.name === activeName ? 'true' : 'false'}" data-preset="${esc(p.name)}"
+			title="${esc(p.description || p.label)}">
+			<span class="pal-chip-sw" aria-hidden="true">${p.palette.slice(0, 4).map((c) => `<i data-bg="${esc(c)}"></i>`).join('')}</span>
+			<span class="pal-chip-name">${esc(p.label)}</span>
+			${removable ? `<span class="pal-chip-x" role="button" tabindex="0" data-delpal="${esc(p.name)}" title="Delete this palette" aria-label="Delete ${esc(p.label)}">×</span>` : ''}
+		</button>`).join('')
+}
+
+/** A saved palette is matched by VALUE, not by name: applying one materializes its
+ *  colors into the theme (it leaves no `preset` reference behind — see lib/wsconfig.js),
+ *  so "which chip is active" can only be answered by comparing what the colors ARE. */
+function activeCustomName(declared) {
+	const custom = (state.themePresets && state.themePresets.custom) || []
+	const hit = custom.find((p) => JSON.stringify(p.theme) === JSON.stringify(declared))
+	return hit ? hit.name : null
+}
+
+/**
+ * Build the panel's markup. Structural only — call it when the SHAPE changes (a
+ * different preset, a colorway gaining or losing a swatch, a palette saved). Never on
+ * a live color edit: see setDeclared() for what replacing a node costs there.
+ *
+ * The token rows always carry their reset "×", shown or hidden by an attribute rather
+ * than by existing or not. That is what lets a live edit reveal it without a rebuild.
+ */
+function renderPalettePanel() {
+	const info = state.themePresets
+	if (!info)
+		return
+	const cur = state.canvasTheme || {}
+	const custom = info.custom || []
+
+	// Grouped by paper, because that is the choice a reader has usually already made
+	// before they open this panel. `mode` is derived from the paper color, so a custom
+	// palette with dark paper sorts itself.
+	const isDark = (p) => p.mode === 'dark'
+	$('palPresets').innerHTML = paletteChips(info.presets.filter((p) => !isDark(p)), null)
+	$('palPresetsDark').innerHTML = paletteChips(info.presets.filter(isDark), null)
+	// With "+" always in the header, an empty list has nothing left to teach — the way
+	// to make a palette is visible whether or not you have one.
+	$('palCustomWrap').hidden = custom.length === 0
+	$('palCustom').innerHTML = paletteChips(custom, null, { removable: true })
+	// CSP forbids style="", so swatch colors are assigned through CSSOM.
+	for (const el of $('palettePanel').querySelectorAll('i[data-bg]'))
+		el.style.background = el.getAttribute('data-bg')
+
+	$('palTokens').innerHTML = DOC_TOKENS.map((tok) => `
+		<label class="pal-tok">
+			<input type="color" data-tok="${esc(tok)}" value="${esc(cur[tok] || '#000000')}" aria-label="${esc(tok)}">
+			<span class="pal-tok-name">${esc(tok)}</span>
+			<button class="pal-tok-x" type="button" data-clear="${esc(tok)}" hidden
+				title="Back to the preset's ${esc(tok)}" aria-label="Reset ${esc(tok)}">×</button>
+		</label>`).join('')
+
+	const way = (cur.palette || []).slice(0, info.maxPalette)
+	$('palWay').innerHTML = way.map((c, i) => `
+		<span class="pal-sw">
+			<input type="color" data-way="${i}" value="${esc(c)}" aria-label="Series ${i + 1}">
+			${way.length > 2 ? `<button class="pal-sw-x" type="button" data-waydel="${i}" title="Remove this series color" aria-label="Remove series ${i + 1}">×</button>` : ''}
+		</span>`).join('')
+		+ (way.length < info.maxPalette
+			? '<button class="pal-way-add" type="button" data-wayadd title="Add a series color" aria-label="Add a series color">+</button>'
+			: '')
+
+	showPaletteView()
+	syncPalettePanel()
+}
+
+/**
+ * Swap the panel between picking a palette and authoring one.
+ *
+ * ONE SCREEN, ONE SAVE. The document's footer belongs to the pick screen and is hidden
+ * in the editor. Leaving it up in both sounded principled — "the footer always means the
+ * document" — and was plainly wrong the moment it rendered: two identical primary
+ * buttons, both reading "Save", one writing the document and one writing the workspace,
+ * stacked twelve pixels apart. Which is the ambiguity this redesign exists to remove.
+ *
+ * The source label ("from this canvas") goes with it: it describes where the DOCUMENT's
+ * theme came from, which is not a question the editor is answering.
+ */
+function showPaletteView() {
+	const editing = state.palView === 'edit'
+	$('palPick').hidden = editing
+	$('palEdit').hidden = !editing
+	$('palBack').hidden = !editing
+	$('palAdd').hidden = editing
+	$('palFoot').hidden = editing
+	$('palNote').hidden = editing
+	$('palSource').hidden = editing
+	$('palDetail').hidden = editing // the editor IS the detail, in editable form
+	$('palTitle').textContent = editing ? 'New palette' : 'Document colors'
+}
+
+/**
+ * Author a palette, starting from whatever is on screen.
+ *
+ * Starting from the current colors is the whole trick: a reader gets here by liking
+ * something and wanting to change it, not by wanting a blank slate. If one of the
+ * workspace's own palettes is what they are looking at, its name comes with it — so
+ * saving overwrites that palette rather than silently forking a near-duplicate, and
+ * "edit an existing palette" needs no separate affordance at all.
+ */
+function openPaletteEditor() {
+	state.palView = 'edit'
+	$('palName').value = activeCustomName(state.themeDeclared || {}) || ''
+	renderPalettePanel()
+	$('palName').focus()
+}
+
+$('palAdd').addEventListener('click', openPaletteEditor)
+$('palBack').addEventListener('click', () => {
+	state.palView = 'pick'
+	renderPalettePanel()
+})
+
+/**
+ * Reflect the current theme into the panel WITHOUT touching the DOM's shape: values,
+ * active chips, the reset buttons, the source label. Safe to call on every `input`
+ * event from a color field, which is the entire point of its existence.
+ */
+function syncPalettePanel() {
+	const info = state.themePresets
+	if (!info || $('palettePanel').hidden)
+		return
+	const declared = state.themeDeclared || {}
+	const cur = state.canvasTheme || {}
+	const activeCustom = activeCustomName(declared)
+	// A materialized custom palette must not ALSO light up a preset chip.
+	const activePreset = activeCustom ? null : (declared.preset || 'default')
+
+	$('palSource').textContent = state.themeDirty ? 'unsaved' : (PAL_SOURCE_LABEL[state.themeSource] || '')
+	$('palSource').classList.toggle('dirty', state.themeDirty)
+
+	for (const chip of $('palettePanel').querySelectorAll('.pal-chip')) {
+		const name = chip.getAttribute('data-preset')
+		const on = chip.closest('#palCustom') ? name === activeCustom : name === activePreset
+		chip.classList.toggle('active', on)
+		chip.setAttribute('aria-checked', on ? 'true' : 'false')
+	}
+
+	// The element the reader is currently inside is left alone: the browser's color
+	// popup owns it until they are done with it, and writing to its value mid-drag is
+	// us arguing with the person using it.
+	const busy = document.activeElement
+	for (const input of $('palTokens').querySelectorAll('input[data-tok]')) {
+		const tok = input.getAttribute('data-tok')
+		if (input !== busy && cur[tok])
+			input.value = cur[tok]
+		const x = input.parentElement.querySelector('.pal-tok-x')
+		if (x)
+			x.hidden = !declared[tok]
+	}
+	for (const input of $('palWay').querySelectorAll('input[data-way]')) {
+		const c = (cur.palette || [])[Number(input.getAttribute('data-way'))]
+		if (input !== busy && c)
+			input.value = c
+	}
+
+	// The editor's button names what it will actually do. A name that already exists
+	// OVERWRITES that palette, and the reader is entitled to know before pressing it —
+	// silently forking a second "My brand" is how a palette list rots.
+	const typed = $('palName').value.trim()
+	const overwrites = (info.custom || []).some((p) => p.name === typed)
+	$('palSaveAs').disabled = !typed
+	$('palSaveAs').textContent = overwrites ? 'Update' : 'Save'
+	$('palEditNote').textContent = overwrites
+		? `Replaces the palette "${typed}" in this workspace. Documents already using its colors keep them.`
+		: 'Every change previews live. Saving keeps these colors in the workspace, ready for any document in it.'
+
+	$('palNote').textContent = state.themeSource === 'canvas'
+		? 'Saves into this canvas\'s "document.theme".'
+		: 'This document has no "document" object, so the theme is saved to .instantcanvas.json.'
+
+	renderPaletteDetail()
+}
+
+/**
+ * Name what the document is actually wearing.
+ *
+ * Three answers, and the third is the one that matters: a preset with token overrides on
+ * top is NOT that preset any more, and a panel that keeps its chip lit and says nothing
+ * else is lying about what you are looking at.
+ */
+function paletteIdentity(declared) {
+	const info = state.themePresets
+	const customName = activeCustomName(declared)
+	if (customName)
+		return { name: customName, tag: 'your palette', desc: 'Saved in this workspace, and offered on every document in it.' }
+
+	const preset = (info.presets || []).find((p) => p.name === (declared.preset || 'default')) || (info.presets || [])[0]
+	if (!preset)
+		return { name: '', tag: '', desc: '' }
+
+	const changed = Object.keys(declared).filter((k) => k !== 'preset')
+	if (!changed.length)
+		return { name: preset.label, tag: 'preset', desc: preset.description }
+	return {
+		name: preset.label,
+		tag: 'preset + your changes',
+		desc: `Starts from ${preset.label}, with ${changed.length === 1 ? changed[0] : `${changed.length} colors`} of your own on top. Save it as a palette to reuse it.`,
+	}
+}
+
+/** The selection, spelled out: what it is called, what it is FOR, and every color in it.
+ *  Rebuilt wholesale on every sync — safe, unlike the token grid, because nothing here is
+ *  focusable and no native picker is anchored to it. */
+function renderPaletteDetail() {
+	const cur = state.canvasTheme || {}
+	const id = paletteIdentity(state.themeDeclared || {})
+	if (!id.name) {
+		$('palDetail').hidden = true
+		return
+	}
+	$('palDetail').hidden = state.palView === 'edit'
+	$('palDetailName').textContent = id.name
+	$('palDetailTag').textContent = id.tag
+	// `print` renders backgrounds, so a dark deck really does print as a full-bleed dark
+	// page. Better to say so here than to let the reader find out at the printer.
+	$('palDetailDesc').textContent = cur.mode === 'dark'
+		? `${id.desc} Dark paper prints dark — lovely on screen, heavy on ink.`
+		: id.desc
+
+	const sw = (color, label) => `<i class="pal-d-sw" data-bg="${esc(color)}" title="${esc(label)} ${esc(color)}"></i>`
+	$('palDetailTokens').innerHTML = DOC_TOKENS.filter((t) => cur[t]).map((t) => sw(cur[t], t)).join('')
+	$('palDetailWay').innerHTML = (cur.palette || []).map((c, i) => sw(c, `Series ${i + 1}:`)).join('')
+	// CSP forbids style="", so the swatch colors go in through CSSOM.
+	for (const el of $('palDetail').querySelectorAll('i[data-bg]'))
+		el.style.background = el.getAttribute('data-bg')
+}
+
+/** The colorway the reader is about to edit, MATERIALIZED. Until they touch it, the
+ *  declared theme may name no palette at all (the preset supplies one) — and an edit
+ *  to a colorway that is not there cannot be expressed. So the first touch pins the
+ *  whole resolved colorway, and every later edit is exact. */
+function currentWay() {
+	const declared = state.themeDeclared || {}
+	if (Array.isArray(declared.palette) && declared.palette.length > 1)
+		return declared.palette.slice()
+	return ((state.canvasTheme && state.canvasTheme.palette) || []).slice()
+}
+
+function applyDeclared(declared) {
+	state.themeDeclared = declared
+	state.themeDirty = true
+	previewTheme(resolveLocally(declared))
+	renderPalettePanel()
+}
+
+// One handler, both grids: light paper and dark paper are two lists of the same thing.
+const onPresetClick = (e) => {
+	const chip = e.target.closest('[data-preset]')
+	if (!chip)
+		return
+	// Picking a preset drops the token overrides: the chip you clicked is then what
+	// you actually get. Keeping them would make the preset a lie.
+	applyDeclared({ preset: chip.getAttribute('data-preset') })
+}
+$('palPresets').addEventListener('click', onPresetClick)
+$('palPresetsDark').addEventListener('click', onPresetClick)
+
+$('palCustom').addEventListener('click', (e) => {
+	const del = e.target.closest('[data-delpal]')
+	if (del) {
+		e.stopPropagation() // the × sits inside the chip; deleting must not also apply it
+		return deletePalette(del.getAttribute('data-delpal'))
+	}
+	const chip = e.target.closest('[data-preset]')
+	if (!chip)
+		return
+	const hit = (state.themePresets.custom || []).find((p) => p.name === chip.getAttribute('data-preset'))
+	// Applying a saved palette copies its COLORS in, leaving no reference behind — so
+	// the canvas stays readable on its own and cannot be repainted by someone else's
+	// workspace config. See lib/wsconfig.js.
+	if (hit)
+		applyDeclared({ ...hit.theme })
+})
+
+$('palTokens').addEventListener('input', (e) => {
+	const tok = e.target.getAttribute && e.target.getAttribute('data-tok')
+	if (tok)
+		setDeclared({ [tok]: e.target.value })
+})
+$('palTokens').addEventListener('click', (e) => {
+	const clear = e.target.closest('[data-clear]')
+	if (clear)
+		setDeclared({ [clear.getAttribute('data-clear')]: null })
+})
+
+$('palWay').addEventListener('input', (e) => {
+	const i = e.target.getAttribute && e.target.getAttribute('data-way')
+	if (i === null || i === undefined)
+		return
+	const next = currentWay()
+	next[Number(i)] = e.target.value
+	setDeclared({ palette: next })
+})
+// Adding or removing a swatch changes the panel's SHAPE, so these two rebuild it —
+// unlike the `input` handler above, which must not.
+$('palWay').addEventListener('click', (e) => {
+	const del = e.target.closest('[data-waydel]')
+	if (del) {
+		const next = currentWay()
+		next.splice(Number(del.getAttribute('data-waydel')), 1)
+		// Two is the floor: a one-color palette is a LEAD, not a colorway (the preset
+		// refills the rest), so removing down to one would silently undo itself.
+		return setDeclared({ palette: next.length > 1 ? next : null }, { structural: true })
+	}
+	if (e.target.closest('[data-wayadd]')) {
+		const next = currentWay()
+		if (next.length < state.themePresets.maxPalette)
+			next.push(next[next.length - 1] || '#6366f1')
+		setDeclared({ palette: next }, { structural: true })
+	}
+})
+
+$('palName').addEventListener('input', () => { $('palSaveAs').disabled = !$('palName').value.trim() })
+$('palName').addEventListener('keydown', (e) => { if (e.key === 'Enter') savePalette() })
+$('palSaveAs').addEventListener('click', () => savePalette())
+
+/** Save the colors on screen as a workspace palette. What is captured is the RESOLVED
+ *  theme, not the declared one: a palette that said only `{preset: "forest"}` would be
+ *  a pointer, not a palette — and would change under the reader if the preset ever did. */
+async function savePalette() {
+	const name = $('palName').value.trim()
+	if (!name)
+		return
+	const cur = state.canvasTheme || {}
+	const theme = {}
+	for (const tok of DOC_TOKENS)
+		theme[tok] = cur[tok]
+	theme.palette = (cur.palette || []).slice()
+
+	const { status, json } = await api('/api/theme/palette', { method: 'POST', body: JSON.stringify({ name, theme }) })
+	if (status !== 200 || !json || !json.ok) {
+		toast((json && json.error && json.error.message) || `Could not save the palette (HTTP ${status}).`, 5000)
+		return
+	}
+	state.themePresets.custom = json.custom
+	$('palName').value = ''
+	// Back to the list, where the palette they just made is now a chip they can see —
+	// the confirmation IS the new chip, lit, rather than a toast about a file path.
+	state.palView = 'pick'
+	// The document now sits on the palette it just saved, so that chip lights up.
+	applyDeclared(theme)
+	toast(`Palette "${name}" saved. It is now offered on every document in this workspace.`, 3500)
+}
+
+async function deletePalette(name) {
+	const { status, json } = await api('/api/theme/palette', { method: 'POST', body: JSON.stringify({ name, theme: null }) })
+	if (status !== 200 || !json || !json.ok) {
+		toast((json && json.error && json.error.message) || `Could not delete the palette (HTTP ${status}).`, 5000)
+		return
+	}
+	// Deleting the library entry does NOT repaint the document: its colors were copied
+	// in, and they are still what the document says. Nothing to undo.
+	state.themePresets.custom = json.custom
+	renderPalettePanel()
+	toast(`Palette "${name}" deleted.`, 2600)
+}
+
+async function saveTheme(scope) {
+	const body = JSON.stringify({ path: state.activeId, theme: state.themeDeclared, scope })
+	const { status, json } = await api('/api/theme', { method: 'POST', body })
+	if (status !== 200 || !json || !json.ok) {
+		const err = json && json.error
+		toast(err ? err.message : `Could not save the theme (HTTP ${status}).`, 5000)
+		return
+	}
+	state.canvasTheme = json.theme
+	state.themeDeclared = json.themeDeclared || {}
+	state.themeSource = json.themeSource || 'default'
+	state.themeDirty = false
+	renderPalettePanel()
+	toast(`Colors saved to ${json.wrote}.`, 3000)
+}
+
+$('palSave').addEventListener('click', () => saveTheme($('palWorkspace').checked ? 'workspace' : 'document'))
+
+$('palReset').addEventListener('click', async () => {
+	// A theme the CANVAS declares cannot be reset from here — the canvas is the
+	// author's contract, and the kernel says so with a 409 rather than editing it
+	// out from under them.
+	if (state.themeSource === 'canvas' && !state.themeDirty) {
+		toast('This canvas declares its own "document.theme". Remove it from the canvas to fall back to the default.', 5000)
+		return
+	}
+	if (state.themeDirty) {
+		await renderCanvas() // discard the preview: the file is the truth
+		openPalette(true)
+		return
+	}
+	const { status, json } = await api('/api/theme', { method: 'POST', body: JSON.stringify({ path: state.activeId, theme: null }) })
+	if (status !== 200 || !json || !json.ok) {
+		toast((json && json.error && json.error.message) || `Could not reset the theme (HTTP ${status}).`, 5000)
+		return
+	}
+	await renderCanvas()
+	openPalette(true)
+})
+
+async function openPalette(keepOpen) {
+	if (!keepOpen && !$('palettePanel').hidden)
+		return closePalette()
+	if (!await ensurePresets())
+		return toast('Could not load the color presets.', 4000)
+	// Always opens on the list. The editor is somewhere you go on purpose, and being
+	// dropped back into it because that is where you happened to be last is disorienting.
+	state.palView = 'pick'
+	$('palettePanel').hidden = false // before the render: syncPalettePanel() no-ops while hidden
+	renderPalettePanel()
+	$('paletteBtn').setAttribute('aria-expanded', 'true')
+	$('paletteBtn').classList.add('active')
+}
+
+function closePalette() {
+	$('palettePanel').hidden = true
+	$('paletteBtn').setAttribute('aria-expanded', 'false')
+	$('paletteBtn').classList.remove('active')
+}
+
+$('paletteBtn').addEventListener('click', () => openPalette(false))
+
+// Close on an outside click — and decide what "outside" means in the CAPTURE phase,
+// which is the whole point. The panel's own handlers re-render it (a preset chip
+// rebuilds the chip grid), and they run on the way UP, before this listener does. By
+// then the clicked chip has been replaced and `e.target` is a DETACHED node, whose
+// .closest('#palettePanel') is null — so every click inside the panel read as a click
+// outside it, and picking a preset slammed the panel shut. Capture runs before any of
+// that, while the target is still in the tree it was clicked in.
+let clickWasInsidePalette = false
+document.addEventListener('click', (e) => {
+	clickWasInsidePalette = !!(e.target.closest('#palettePanel') || e.target.closest('#paletteBtn'))
+}, true)
+document.addEventListener('click', () => {
+	if (!$('palettePanel').hidden && !clickWasInsidePalette)
+		closePalette()
+})
+document.addEventListener('keydown', (e) => {
+	if (e.key === 'Escape' && !$('palettePanel').hidden)
+		closePalette()
 })
 
 // Cmd+P must print the DECK even from the continuous view: print CSS already
@@ -413,7 +1055,9 @@ function renderTree() {
 		`${ng} group${ng === 1 ? '' : 's'}`,
 	].join(' · ')
 	fullRootPath = state.tree.root
-	$('rootpath').title = state.tree.root
+	// On the group, not the path: a title on both would nest two tooltips, and the
+	// hover target the reader aims at is the whole control.
+	$('rootpathGroup').title = `${state.tree.root}\n\nClick to copy this path`
 	fitRootPath()
 	const watchEl = $('watchPath')
 	watchEl.textContent = rootBase
@@ -442,6 +1086,17 @@ function fitRootPath() {
 	el.textContent = '…' + fullRootPath.slice(lo)
 }
 new ResizeObserver(fitRootPath).observe($('rootpath'))
+
+// Copy the FULL path, never what is on screen: fitRootPath elides the head to fit the
+// topbar, so the visible string is routinely "…/scratchpad/ws" — pasting that into a
+// terminal is worse than useless. One listener on the group, because both halves are
+// the same action. The flash always lands on the icon button: `flashCopied` swaps the
+// button's innerHTML for a tick, and the path button's innerHTML *is* the path.
+$('rootpathGroup').addEventListener('click', async () => {
+	if (!fullRootPath)
+		return
+	flashCopied($('rootpathCopy'), await copyText(fullRootPath))
+})
 
 async function deleteCollection(name) {
 	const group = state.tree && state.tree.collections.find((c) => c.name === name)
@@ -570,7 +1225,8 @@ function flashCopied(btn, ok) {
 	btn._copyTimer = setTimeout(() => {
 		btn.classList.remove('copied', 'failed')
 		btn.innerHTML = icon('copy')
-		btn.setAttribute('aria-label', 'Copy code')
+		// Not every copy button copies code: the one on the workspace path says so.
+		btn.setAttribute('aria-label', btn.dataset.copyLabel || 'Copy code')
 	}, 1600)
 }
 
@@ -2314,6 +2970,16 @@ function moveChartsTo(rootEl, view) {
 	}
 }
 
+/** Set a paper-only control's enabled state and say WHY when it is off. */
+function paperControl(id, { loaded, enabled, reason, on, label }) {
+	const el = $(id)
+	el.hidden = !loaded
+	el.disabled = !enabled
+	el.title = enabled ? label : reason
+	// An "active" ring on a control you cannot press is a lie about the current view.
+	el.classList.toggle('active', enabled && on)
+}
+
 function syncViewToggle() {
 	// The view is presentation, so the toggle shows for EVERY loaded canvas —
 	// including ones that cannot deck, whose deck button explains itself on
@@ -2322,12 +2988,45 @@ function syncViewToggle() {
 	const blocked = loaded && deckBlockers(state.canvasDoc).length > 0
 	$('viewToggle').hidden = !loaded
 	$('printBtn').hidden = !state.docLand
-	// The TOC toggle only makes sense while paper is on screen with something to list.
-	$('tocBtn').hidden = !(state.docLand && state.docView === 'deck' && state.docEntries > 0)
-	$('tocBtn').classList.toggle('active', state.docTocOn)
-	// The strips need no content to derive from — every deck can carry them.
-	$('stripsBtn').hidden = !(state.docLand && state.docView === 'deck')
-	$('stripsBtn').classList.toggle('active', state.docStripsOn)
+
+	// The TOC and the running strips are properties of PAPER: off the deck there is no
+	// sheet to put a header on and no page numbers for a TOC to cite. They stay in place
+	// and go disabled rather than vanishing — the same rule the deck button beside them
+	// already follows. A control that disappears teaches nothing, and one that
+	// disappears *under the cursor* moves every other control while you reach for it.
+	//
+	// COLORS are not in that group, and lumping them in was a mistake. A theme is a
+	// property of the DOCUMENT, not of the deck: the continuous view takes the same
+	// accent, links and chart colorway (it declines only the paper, which would paint
+	// black on black in a dark app). So the palette stays live wherever a canvas is.
+	const onPaper = state.docLand && state.docView === 'deck'
+	const notPaper = 'switch to Document view to use this'
+
+	paperControl('tocBtn', {
+		loaded,
+		enabled: onPaper && state.docEntries > 0,
+		on: state.docTocOn,
+		label: 'Table of contents on/off',
+		// Two different reasons it cannot be pressed, and the reader deserves the right one.
+		reason: onPaper ? 'Table of contents — this document has no headings to list' : `Table of contents — ${notPaper}`,
+	})
+	paperControl('stripsBtn', {
+		loaded,
+		enabled: onPaper, // the strips need no content to derive from: every deck can carry them
+		on: state.docStripsOn,
+		label: 'Running header & footer on/off — repaginates the deck',
+		reason: `Running header & footer — ${notPaper}`,
+	})
+	paperControl('paletteBtn', {
+		loaded,
+		enabled: loaded, // colors belong to the document, and both views wear them
+		on: !$('palettePanel').hidden,
+		label: 'Document colors — preset and tokens',
+		reason: '',
+	})
+	if (!loaded)
+		closePalette()
+
 	$('viewDeck').classList.toggle('active', loaded && state.docView === 'deck')
 	$('viewDeck').classList.toggle('vt-off', blocked)
 	$('viewDeck').setAttribute('aria-disabled', blocked ? 'true' : 'false')
@@ -2346,6 +3045,10 @@ function switchDocView(view) {
 		}
 	}
 	state.docView = view
+	// Clicking the toggle is the reader saying which view they want to READ IN, not
+	// which view this one canvas gets. It therefore follows them to the next document
+	// — the alternative made "read this folder as paper" a click per file.
+	state.docViewChoice = view
 	const rootEl = document.querySelector('.doc-mode')
 	if (rootEl) {
 		// Both views already exist: the switch is a class flip + chart move.
@@ -2378,7 +3081,7 @@ async function renderDocumentView(main, canvas) {
 	setPageRule(geo)
 	main.innerHTML = '<div class="canvas doc-mode"><div class="deck"><div class="deck-scale"></div></div></div>'
 	const rootEl = main.querySelector('.doc-mode')
-	applyDocumentTheme(rootEl, doc)
+	applyDocumentTheme(rootEl, docTheme())
 	const deckEl = main.querySelector('.deck')
 	const scaleEl = main.querySelector('.deck-scale')
 
@@ -2522,14 +3225,24 @@ async function renderCanvas() {
 	const canvas = json.canvas
 	state.canvasDoc = canvas
 	state.session = json.session || null
+	// The theme lands BEFORE anything paints: palette() feeds every chart template,
+	// so a theme applied afterwards would mean a repaint the reader can see. The
+	// file is always the truth here — a hot reload correctly discards an unsaved
+	// preview, because the disk just disagreed with it.
+	state.canvasTheme = json.theme || null
+	state.themeDeclared = json.themeDeclared || {}
+	state.themeSource = json.themeSource || 'default'
+	state.themeDirty = false
 
-	// The view is presentation: any display canvas can render as paper. A
-	// declared `document` opens as the deck; everything else opens continuous,
-	// with the topbar toggle switching either way.
+	// The view is presentation: any display canvas can render as paper. A declared
+	// `document` opens as the deck and everything else opens continuous — but only
+	// until the reader says otherwise. Their choice (state.docViewChoice) outranks the
+	// canvas's default and survives navigation, so browsing a folder of markdown as
+	// paper does not mean clicking the toggle once per file.
 	const declared = canvas.document && typeof canvas.document === 'object'
 	if (state.docCanvasId !== state.activeId) {
 		state.docCanvasId = state.activeId
-		state.docView = declared || FORCE_DECK ? 'deck' : 'html'
+		state.docView = state.docViewChoice || (declared || FORCE_DECK ? 'deck' : 'html')
 		state.docToc = null // the TOC choice is per canvas
 		state.docStrips = null // and so is the header/footer choice
 	}
@@ -2538,7 +3251,9 @@ async function renderCanvas() {
 			await renderDocumentView(main, canvas)
 			return
 		}
-		state.docView = 'html' // undeckable content arrived (hot reload); fall back
+		// Undeckable content (a form, a sweep) — fall back for THIS canvas without
+		// forgetting the choice, so the next deckable document is paper again.
+		state.docView = 'html'
 	}
 	state.docLand = false
 
@@ -2565,6 +3280,12 @@ async function renderCanvas() {
 		${canvasHead(canvas)}
 		${tabs}${inner}
 	</div>`
+	// The continuous view carries the document's BRAND too — accent, links, and the
+	// chart colorway. Not its paper: this is a screen view and it still follows the
+	// app's light/dark theme, so forcing a document's paper and text tokens here would
+	// paint black on black in a dark app. Without this the palette control would be a
+	// picker that visibly does nothing off the deck.
+	applyDocumentTheme(main.querySelector('.canvas'), docTheme())
 	mountCodeCopy(main)
 	mountCharts(blocks)
 	wireInteractive(blocks)
@@ -3439,6 +4160,13 @@ function connectWs() {
 		let msg
 		try { msg = JSON.parse(ev.data) } catch { return }
 		if (msg.type === 'workspace') {
+			// The preset list is cached for the session, and the workspace's own palettes
+			// live in it. An agent running `instantcanvas theme --save` writes one straight
+			// to disk, so the cache has to be dropped or the reader's picker would keep
+			// showing a library that no longer matches the file it came from.
+			state.themePresets = null
+			if (!$('palettePanel').hidden)
+				openPalette(true)
 			const { json } = await api('/api/workspace')
 			if (json && json.ok) {
 				state.tree = json

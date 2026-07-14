@@ -32,7 +32,14 @@ test('bare catalog is the LEAN index: one-liners for everything, no schemas (pro
 	// word "Chart." and confirm as "Confirmation card (e." — bytes saved by deleting
 	// the teaching. Whole sentences cost ~1.2 KB more and are the honest size of this
 	// surface. The guard below is what keeps that from becoming an excuse.
-	assert.ok(JSON.stringify(lean).length < 7500, 'index stays small: ' + JSON.stringify(lean).length)
+	//
+	// Raised 7500 → 8000 for the theme presets. This is new SURFACE, not a longer way
+	// of saying what was already here: an agent that cannot see the preset names has
+	// no way to learn a color system exists, and would keep hand-mixing five-color
+	// schemes — the exact failure `catalog --full` had when `document` and `sweep`
+	// were reachable only by name. The names are the payload; the entry itself is one
+	// line and points at `catalog theme` for the rest.
+	assert.ok(JSON.stringify(lean).length < 8000, 'index stays small: ' + JSON.stringify(lean).length)
 
 	// The defects that forced the rewrite, pinned so they cannot return: no entry may
 	// be a fragment, end mid-abbreviation, or carry an unbalanced paren. This is what

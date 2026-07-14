@@ -5,6 +5,9 @@ source:
   - scripts/kernel.js
   - scripts/instantcanvas.js
   - scripts/lib/registry.js
+  - scripts/lib/jsonedit.js
+  - scripts/lib/wsconfig.js
+  - scripts/lib/themestore.js
 ---
 
 # Gotchas — Runtime (kernel & CLI)
@@ -36,6 +39,37 @@ An interactive `open` backgrounded with `&` dies when its shell is cleaned up, b
 ## Adding one field by re-serializing rewrites the whole file
 
 `stamp` injects a single `createdWith` line. The obvious implementation — `JSON.parse`, add the key, `JSON.stringify(obj, null, indent)` — turned a one-line change into a **148-line diff** on `report.canvas.json`, and flattened a deliberately minified 33 000-line demo into something unrecognisable. A canvas belongs to the user; a tool that reformats it on touch is a tool they stop trusting. `spliceStamp()` therefore inserts the field as *text* after the marker, mirroring the file's own colon spacing and deciding newline-vs-inline from what follows the marker, then **re-parses the result and diffs it against the original** before writing — a splice that changed anything but `createdWith` is discarded in favour of the re-serialize fallback. Any future "just add a property" command should do the same.
+
+## A NESTED property cannot be spliced with a regex
+
+The rule above ("never re-serialize to add one field") held when the browser's palette control needed to write `document.theme` back into a canvas — but the technique did not. `spliceStamp` finds its insertion point with a regex because `"instantcanvas": 1` is a **known literal at a known place**: the first member of the top-level object. `"theme"` is neither. It can appear inside a string, inside a chart block's `data`, inside a *different* object, or inside a `document` that is itself minified on one line — and a regex has no idea which match it just found.
+
+`lib/jsonedit.js` therefore walks the JSON grammar (strings, with escapes; balanced braces and brackets; bare literals) to locate the exact span of `document`'s value, and then of `theme`'s inside it. It adopts the file's own indent unit and colon spacing, and a minified `document` object gets a minified theme — matching the neighbourhood is the entire point of splicing rather than re-serializing. The verification is the same and non-negotiable: **re-parse the candidate, diff it against the original, and discard a splice that changed anything but `document.theme`** — it returns `null`, and the caller writes the theme to `.instantcanvas.json` instead. A splice that cannot be *proven* correct is never trusted, because the file it would corrupt is the user's.
+
+## Setting a color must not change what a canvas IS
+
+`POST /api/theme` cannot simply write `document.theme` wherever the reader happened to be. On a canvas with **no `document` object**, creating one would do far more than set a color: the presence of `document` is what makes the deck a canvas's **default view**, and it is refused outright (`DOCUMENT_INTERACTIVE_BLOCK`) on a canvas holding a `form`, a `confirm` or a sweep. So a reader picking an accent on a dashboard would have silently converted it into a document — or turned a perfectly valid form canvas into one the validator now rejects. The theme therefore goes *beside* the canvas, in `.instantcanvas.json`, and only a canvas that **already** declares `document` is written into.
+
+The mirror case is the reset. A theme the canvas itself declares is the author's contract, so removing it from the browser is refused with a 409 (`THEME_DECLARED_IN_CANVAS`) rather than quietly editing the agent's file out from under it. **The general rule: a reader-facing write may change what a file *says*, never what it *is*.**
+
+## Three forgiving layers compose into a feature that does not exist
+
+`.instantcanvas.json` is where a native `.md` keeps its theme, and hand-writing it was **writing blind**. Not because anything was broken — because three separately correct decisions stacked:
+
+1. **`wsconfig.read()` swallows a parse error on purpose.** A malformed config must not take a workspace down; the reader still wants to read their documents.
+2. **`theme.resolve()` drops anything that is not strict hex.** It runs on hand-edited files the validator never saw, and a bad color must not reach `setProperty` just because it arrived by the unvalidated door.
+3. **`fs.watch` handling skips dotfiles.** `onFsEvent` filters them, as it must — nobody wants a hot reload per `.git` write.
+
+Each is defensible alone. Together, an agent that wrote the user's brand colors into that file with one typo got **no error, no warning, and no repaint** — which from the outside is indistinguishable from the feature not existing. `crimson` instead of `#dc143c` was dropped in silence; a trailing comma made the whole file vanish in silence; a perfectly *correct* write did nothing visible in an open browser because a dotfile changing is not an event.
+
+Four things had to land together, and none of them makes any of the three layers stricter:
+
+- **`instantcanvas theme` writes the file, so nobody has to hand-write it** (see [cli.md](../cli.md)) — and it writes through `theme.check()`, which **refuses** exactly what `resolve()` would have quietly dropped.
+- **`validate .instantcanvas.json`** makes the config a checkable contract, so a file that *was* hand-written can be interrogated.
+- **`POST /api/refresh`** lets a writer that is not the kernel tell a live kernel to repaint, which is the only way a dotfile write reaches an open browser.
+- The browser **drops its cached preset list** on the resulting `workspace` broadcast, or an agent's freshly saved palette would be missing from the reader's own picker.
+
+**The rule worth keeping: a layer that is forgiving because it must be needs a strict door somewhere else.** Every "we tolerate junk here" is a promise that some other surface will name the junk out loud — otherwise tolerance is just silence, and silence is the one failure mode an agent cannot debug.
 
 ## A validator error is a wall of red in someone's browser
 

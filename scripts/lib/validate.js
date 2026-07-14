@@ -6,6 +6,7 @@ const { ENVELOPE, BLOCKS, FIELD_TYPES, CHART_KINDS, UNSUPPORTED_CHARTS, SHAPES, 
 const { PKG_VERSION, CREATED_WITH_RE } = require('./pkgmeta')
 const { insideRoot } = require('./paths')
 const { MARKDOWN_EXTENSIONS, IMAGE_MIME, NOT_A_FILE_RE, hasMarkdownExtension, stripFrontmatter, readMarkdownText, scanMarkdownSource } = require('./markdownsrc')
+const { TOKEN_KEYS: THEME_TOKEN_KEYS, MIN_PALETTE, MAX_PALETTE } = require('./theme')
 
 // ---------------------------------------------------------------- helpers
 
@@ -601,12 +602,18 @@ function checkDocument(canvas, ctx) {
 					example: { theme: { accent: '#0054fe' } },
 				})
 		}
-		checkColor(theme.accent, 'document.theme.accent')
+		// Every single-color token, not just the accent: they all reach setProperty.
+		// An unknown `preset` needs no check here — it is an enum in the registry, so
+		// checkObject already refuses it with the same "did you mean" hint. Adding a
+		// second check would report one typo as two errors.
+		for (const key of THEME_TOKEN_KEYS)
+			checkColor(theme[key], `document.theme.${key}`)
+
 		if (Array.isArray(theme.palette)) {
-			if (theme.palette.length < 1 || theme.palette.length > 8)
-				ctx.error('INVALID_SPEC', 'document.theme.palette', `A palette holds 1 to 8 colors, got ${theme.palette.length}.`, {
+			if (theme.palette.length < MIN_PALETTE || theme.palette.length > MAX_PALETTE)
+				ctx.error('INVALID_SPEC', 'document.theme.palette', `A palette holds ${MIN_PALETTE} to ${MAX_PALETTE} colors, got ${theme.palette.length}.`, {
 					got: theme.palette.length,
-					expected: '1–8 hex colors',
+					expected: `${MIN_PALETTE}–${MAX_PALETTE} hex colors`,
 					example: { theme: { palette: ['#0054fe', '#00b4d8'] } },
 				})
 			theme.palette.forEach((c, i) => {

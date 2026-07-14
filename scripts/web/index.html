@@ -11,13 +11,22 @@
 <div class="app">
 	<div class="topbar">
 		<div class="brand"><svg class="logo" viewBox="0 0 100 100" aria-hidden="true"><defs><clipPath id="ic-logo-clip"><rect width="100" height="100" rx="12"/></clipPath></defs><g clip-path="url(#ic-logo-clip)"><rect class="ic-logo-accent" width="100" height="100" fill="#0054fe"/><path class="ic-logo-base" fill="#00184d" d="M50 0A17.5 17.5 0 0 1 56.006 3.926L96.074 43.994A17.5 17.5 0 0 1 100 50L100 100L0 100L0 0Z"/></g></svg> InstantCanvas</div>
-		<span class="rootpath" id="rootpath" title="The workspace folder this kernel serves and watches">…</span>
+		<!-- The workspace path is the one string a reader routinely wants OUT of this app
+		     and into a terminal or a file dialog, and it is exactly the string that is too
+		     long to retype and too elided to read off the screen. So the whole group copies
+		     it: the path itself is the click target, and the button on the end is there to
+		     say so — an affordance a bare <span> could never advertise. -->
+		<div class="rootpath-group" id="rootpathGroup" title="The workspace folder this kernel serves and watches — click to copy its full path">
+			<button class="rootpath" id="rootpath" type="button" data-copy-label="Copy workspace path" aria-label="Copy workspace path">…</button>
+			<button class="rootpath-copy" id="rootpathCopy" type="button" data-copy-label="Copy workspace path" aria-label="Copy workspace path"><svg class="lucide" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg></button>
+		</div>
 		<div class="view-toggle" id="viewToggle" hidden role="group" aria-label="Canvas view">
 			<button class="vt-btn active" id="viewDeck" title="Document view (prints 1:1)" aria-label="Document view"><svg class="lucide" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></svg></button>
 			<button class="vt-btn" id="viewHtml" title="Continuous view" aria-label="Continuous view"><svg class="lucide" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 6H3"/><path d="M15 12H3"/><path d="M17 18H3"/></svg></button>
 		</div>
 		<button class="tbtn icon" id="tocBtn" hidden title="Table of contents on/off" aria-label="Toggle table of contents"><svg class="lucide" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h.01"/><path d="M3 18h.01"/><path d="M3 6h.01"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M8 6h13"/></svg></button>
 		<button class="tbtn icon" id="stripsBtn" hidden title="Running header &amp; footer on/off — repaginates the deck" aria-label="Toggle running header and footer"><svg class="lucide" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M3 9h18"/><path d="M3 15h18"/></svg></button>
+		<button class="tbtn icon" id="paletteBtn" hidden title="Document colors — preset and tokens" aria-label="Document colors" aria-haspopup="dialog" aria-expanded="false"><svg class="lucide" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22a1 1 0 0 1 0-20 10 9 0 0 1 10 9 5 5 0 0 1-5 5h-2.25a1.75 1.75 0 0 0-1.4 2.8l.3.4a1.75 1.75 0 0 1-1.4 2.8z"/><circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/></svg></button>
 		<button class="tbtn icon" id="themeBtn" title="Toggle theme"><svg class="lucide" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2v2"/><path d="M14.837 16.385a6 6 0 1 1-7.223-7.222c.624-.147.97.66.715 1.248a4 4 0 0 0 5.26 5.259c.589-.255 1.396.09 1.248.715"/><path d="M16 12a4 4 0 0 0-4-4"/><path d="m19 5-1.256 1.256"/><path d="M20 12h2"/></svg></button>
 		<button class="tbtn icon" id="stopBtn" title="Stop kernel"><svg class="lucide" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2v10"/><path d="M18.4 6.6a9 9 0 1 1-12.77.04"/></svg></button>
 	</div>
@@ -45,6 +54,105 @@
      is the PDF, so its trigger floats bottom-right, unmissable, only in document
      mode. Opens the native print dialog (where "Save as PDF" lives). -->
 <button class="print-fab" id="printBtn" hidden title="Print or save as PDF (⌘P) — the sheets are the pages" aria-label="Print or save as PDF"><svg class="lucide" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><path d="M6 9V3a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v6"/><rect x="6" y="14" width="12" height="8" rx="1"/></svg></button>
+
+<!-- Document colors. Unlike the TOC and header/footer toggles — which are pure
+     reader preferences and live only in memory — a palette change is PERSISTED,
+     because a native .md has no other way to carry a brand and a canvas's theme is
+     part of its contract. Hence the explicit Save: previewing is free, writing to
+     the user's file is a decision they make. `data-tok`/`data-preset` carry the
+     wiring; the CSP forbids inline handlers. -->
+<!--
+  TWO SCREENS, because there are two jobs and conflating them made both unclear.
+
+  PICK  — choose a palette for this document. A grid of presets, then the workspace's
+          own palettes. Nothing else.
+  EDIT  — author the colors. Tokens, the chart colorway, and a name to save them under.
+
+  The first version put both on one screen, and it taught nobody anything: two buttons
+  read "Save" — one wrote the document, one wrote the workspace library — while the
+  editor that produced the colors you were naming sat *below* the name field, inside a
+  collapsed disclosure labelled "Tokens". Making a palette meant scrolling past the
+  thing you were naming, opening a disclosure, tuning, scrolling back up, then guessing
+  which Save was which.
+
+  Now: the round "+" in the header is the one and only "make a palette", and it swaps
+  the body for the editor. The footer never moves and always means THE DOCUMENT — the
+  one thing that is true in both screens.
+-->
+<div class="pal" id="palettePanel" hidden role="dialog" aria-label="Document colors">
+	<div class="pal-head">
+		<button class="pal-back" id="palBack" type="button" hidden aria-label="Back to palettes" title="Back">
+			<svg class="lucide" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
+		</button>
+		<span class="pal-title" id="palTitle">Document colors</span>
+		<span class="pal-src" id="palSource"></span>
+		<button class="pal-add" id="palAdd" type="button" aria-label="New palette" title="Create a palette from these colors">
+			<svg class="lucide" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="M12 5v14"/></svg>
+		</button>
+	</div>
+
+	<div class="pal-scroll">
+		<div id="palPick">
+			<!-- Grouped by the one property that changes what the document IS rather than
+			     merely how it is tinted. A reader looking for a dark deck is not browsing
+			     hues; they have already decided, and mixing the two lists would make them
+			     read fourteen names they do not want. -->
+			<span class="pal-way-label">Light paper</span>
+			<div class="pal-presets" id="palPresets" role="radiogroup" aria-label="Light presets"></div>
+			<div class="pal-section">
+				<span class="pal-way-label">Dark paper</span>
+				<div class="pal-presets" id="palPresetsDark" role="radiogroup" aria-label="Dark presets"></div>
+			</div>
+			<!-- Omitted entirely when the workspace has saved none: with the "+" always in
+			     the header, an empty list has nothing left to teach, and a section header
+			     over nothing is just noise. -->
+			<div class="pal-section" id="palCustomWrap" hidden>
+				<span class="pal-way-label">Your palettes</span>
+				<div class="pal-presets" id="palCustom" role="radiogroup" aria-label="Your palettes"></div>
+			</div>
+		</div>
+
+		<div id="palEdit" hidden>
+			<div class="pal-tokens" id="palTokens"></div>
+			<div class="pal-way">
+				<span class="pal-way-label">Chart colorway</span>
+				<div class="pal-way-swatches" id="palWay"></div>
+			</div>
+			<div class="pal-saveas">
+				<input class="pal-name" id="palName" type="text" maxlength="40" autocomplete="off"
+					placeholder="Name this palette…" aria-label="Palette name">
+				<button class="pal-btn primary" id="palSaveAs" type="button">Save</button>
+			</div>
+			<p class="pal-note" id="palEditNote">Every change previews live. Saving keeps these colors in the workspace, ready for any document in it.</p>
+		</div>
+	</div>
+
+	<!-- What the current selection actually IS. Pinned outside the scroller, so reading it
+	     never costs a scroll, and it is the only place a preset's guidance is legible —
+	     "colorblind-safe", "survives a black-and-white printer" were prose no one would
+	     ever find, because they lived in a `title` tooltip on a chip. -->
+	<div class="pal-detail" id="palDetail" hidden>
+		<div class="pal-detail-head">
+			<span class="pal-detail-name" id="palDetailName"></span>
+			<span class="pal-detail-tag" id="palDetailTag"></span>
+		</div>
+		<p class="pal-detail-desc" id="palDetailDesc"></p>
+		<div class="pal-detail-row"><span class="pal-detail-key">Tokens</span><span class="pal-detail-sws" id="palDetailTokens"></span></div>
+		<div class="pal-detail-row"><span class="pal-detail-key">Charts</span><span class="pal-detail-sws" id="palDetailWay"></span></div>
+	</div>
+
+	<!-- The document's footer belongs to the PICK screen and is hidden in the editor.
+	     Keeping it up in both looked principled ("the footer always means the document")
+	     and was wrong the moment it was on screen: two identical primary buttons, both
+	     reading "Save", one writing the document and one writing the workspace. Exactly
+	     the ambiguity this redesign exists to remove. One screen, one Save. -->
+	<div class="pal-foot" id="palFoot">
+		<button class="pal-btn" id="palReset" type="button">Reset</button>
+		<label class="pal-scope"><input type="checkbox" id="palWorkspace"> <span>All documents</span></label>
+		<button class="pal-btn primary" id="palSave" type="button">Save</button>
+	</div>
+	<p class="pal-note" id="palNote"></p>
+</div>
 
 <!-- Frosted-glass canvas search. Mounted once, hidden until opened; the index is
      the workspace tree the sidebar already holds, so opening it fetches nothing. -->

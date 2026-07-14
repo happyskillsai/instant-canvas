@@ -1,6 +1,6 @@
 ---
-description: How the CLI, per-workspace kernel, and browser fit together — process model, registry, sessions, hot reload, and the security perimeter.
-tags: [architecture, kernel, sessions, websocket, security]
+description: How the CLI, per-workspace kernel, and browser fit together — process model, registry, sessions, hot reload, theme resolution, and the security perimeter.
+tags: [architecture, kernel, sessions, websocket, theme, security]
 source:
   - scripts/kernel.js
   - scripts/lib/paths.js
@@ -8,6 +8,10 @@ source:
   - scripts/lib/session.js
   - scripts/lib/scan.js
   - scripts/lib/mdcanvas.js
+  - scripts/lib/theme.js
+  - scripts/lib/themestore.js
+  - scripts/lib/wsconfig.js
+  - scripts/lib/jsonedit.js
   - scripts/lib/fsatomic.js
   - scripts/lib/browser.js
 ---
@@ -60,12 +64,16 @@ The token reaches the browser via `__IC_TOKEN__` placeholder substitution when t
 | `GET /healthz` | Liveness + identity: `{ok, name, version, workspace, pid, pendingSessions}`. Tokenless. |
 | `GET /`, `GET /assets/*` | App shell and static files (path-normalized; traversal blocked). |
 | `GET /api/workspace` | Scanned tree of canvases **and markdown documents** (see below), with `count` and `docCount` reported apart. |
-| `GET /api/canvas?path=` | Parse + validate one canvas, **or** synthesise one for a markdown file (`lib/mdcanvas.js`). Markdown `src` files **and their workspace-local images** are inlined server-side (images as `data:` URIs — the browser never fetches); includes the active session if any. Reads `*.json` and markdown only — anything else is a 404 before it is opened, because a rejected file leaks its own first bytes through `JSON.parse` (see [gotchas/runtime.md](gotchas/runtime.md)). |
+| `GET /api/canvas?path=` | Parse + validate one canvas, **or** synthesise one for a markdown file (`lib/mdcanvas.js`). Markdown `src` files **and their workspace-local images** are inlined server-side (images as `data:` URIs — the browser never fetches); includes the active session if any, and the **resolved theme** (below). Reads `*.json` and markdown only — anything else is a 404 before it is opened, because a rejected file leaks its own first bytes through `JSON.parse` (see [gotchas/runtime.md](gotchas/runtime.md)). |
 | `POST /api/open` | CLI entry: display → broadcast `navigate`; interactive → create a session. |
 | `GET/POST /api/session/<id>[/submit|/cancel]` | Poll, submit (server-side re-validation + destination write), cancel. |
 | `POST /api/browse` | Folder-browser listing (dirs only). Each entry carries `canvases` and `docs` separately plus their total — a folder of markdown is worth opening, but its badge must not call them canvases. |
 | `POST /api/workspace/open` | Reuse-or-spawn a kernel for another folder; returns its tokenized URL. |
 | `POST /api/collection/delete` | Delete a depth-1 folder's canvas files (marker-verified only; folder removed only if empty; `(root)` refused). **Never deletes a markdown document**, which is why the sidebar offers no delete button for a collection that holds nothing else (see [gotchas/runtime.md](gotchas/runtime.md)). |
+| `GET /api/theme/presets` | The twenty-two named presets (fourteen on light paper, eight on dark) — prose and **every** resolved token, not just the two a chip renders (below) — plus the workspace's own `custom` palettes, the token list, and the palette cap. What the browser's palette control renders its chips from. |
+| `POST /api/theme` | Persist the theme the reader picked: `{path, theme, scope?}`. Strict-checked, then routed to the canvas or to `.instantcanvas.json` (below). |
+| `POST /api/theme/palette` | Save or delete one of the workspace's own palettes: `{name, theme}` (`theme: null` deletes). Same strict-hex check; guarded by name length, a 24-palette cap, and a 409 against shadowing a built-in preset (below). |
+| `POST /api/refresh` | Repaint: `broadcast({type:"workspace"})` plus `broadcast({type:"canvas", path})` when a path is given. **Writes nothing.** The CLI's `theme` command writes theme files itself and then nudges a live kernel with this — a canvas write rides `fs.watch`, but `.instantcanvas.json` is a dotfile the watcher skips (below). |
 | `POST /api/shutdown` | Graceful stop. |
 | `WS /ws?token=` | Hot-reload push channel. |
 
@@ -77,6 +85,38 @@ The scan lists **two kinds of thing**, and every entry says which: `kind: "canva
 
 Why a markdown file is listed at all: it needs no author to be renderable. The runtime already owns a block that renders markdown from a path, so a `.md` that exists on disk and would render perfectly was nonetheless unreachable until an agent wrote a four-line wrapper around it. `lib/mdcanvas.js` writes that wrapper instead — see [the virtual canvas](canvas-schema.md#the-virtual-canvas-a-markdown-file-is-a-canvas).
 
+## Document theme: resolved server-side, once
+
+`lib/theme.js` is the single source of truth for the document color system — twenty-two named presets (fourteen on light paper, eight on dark), seven single-color tokens, and the chart colorway (see [canvas-schema.md](canvas-schema.md) for the contract). The kernel resolves a theme **before the browser sees it**: `loadCanvas` composes preset ← token overrides into concrete hex and returns `theme` (every key a literal `#rrggbb`), `themeDeclared` (what the file actually says, so the palette control can show the reader their own words back) and `themeSource` (`canvas` | `workspace` | `default`) alongside the canvas — for the markdown branch as well as the canvas branch.
+
+Resolving here rather than in the page buys two things. The browser never learns what a preset *is*, so the layering rules exist in exactly one place instead of being half-taught to the validator and half to `app.js`. And `print` — which is the same page in a headless Chrome — inherits the answer for free, with nothing to re-implement and nothing to drift.
+
+The one crack in that is `GET /api/theme/presets`, which the browser *does* resolve against, locally, to preview an edit before the round trip. Which is why `presetList()` ships every preset **fully resolved** — all seven tokens, not just the accent and paper a chip actually draws. Shipping the two a chip renders was enough right up until it wasn't: the local preview resolved `text`/`muted`/`border`/`surface` to `undefined`, the CSS fallbacks hid it, and the undefined tokens surfaced only once they were *persisted* into a custom palette or compiled into a chart template (see [gotchas/frontend.md](gotchas/frontend.md)).
+
+**Precedence, weakest to strongest:** built-in default < `.instantcanvas.json` `theme` < `.instantcanvas.json` `documents[rel].theme` < the canvas's own `document.theme`. The canvas always has the last word: a theme an agent wrote into a canvas is part of that canvas's contract, and a workspace default must not silently repaint it.
+
+`lib/wsconfig.js` owns `.instantcanvas.json` at the workspace root. It exists because a native `.md` has nowhere to keep a theme — the `.md` *is* the canvas, its envelope is synthesised in memory and never written, and we do not write to the user's prose. The config is that missing envelope, kept beside the workspace instead of inside the file. It is **not** a canvas: `scan.js`'s skip-dotfiles rule already keeps it out of the sidebar, and a malformed config is ignored rather than fatal — the reader still wants to read their documents.
+
+That forgiveness is right and it is exactly why the file also needs a *loud* door. Nothing renders a config error, the watcher never sees the file change, and `read()` swallows the parse failure, so a hand-written typo used to be perfectly silent. Two things fix that without making a broken config fatal: `instantcanvas theme` writes the file so it never has to be hand-written, and `instantcanvas validate .instantcanvas.json` holds it to the same `theme.check()` the browser's Save goes through (see [cli.md](cli.md)).
+
+### Where a saved theme lands — `lib/themestore.js`, the one write path
+
+**A theme has two doors and must have one implementation.** A reader clicks Save in the palette control; an agent runs `instantcanvas theme` (see [cli.md](cli.md)). Where the theme *lands* is not a preference either of them gets to hold — it is a consequence of what the document **is** — so the routing rules, the strict-hex boundary, and the palette guards live in `lib/themestore.js` (`applyTheme`, `applyPalette`, `themeFor`, `paletteList`, and a `ThemeError` carrying a `code` and optional `errors[]`). The kernel's `saveTheme` / `savePalette` / `themeFor` / `customPaletteList` are thin wrappers that translate a `ThemeError` into a status code and nothing more; they no longer reach for `wsconfig`, `jsonedit` or `fsatomic` themselves. The CLI calls the same four functions with no kernel in the loop at all. Two doors that can disagree about which file owns a color are two different products.
+
+`applyTheme` strict-checks the theme (`theme.check()` refuses rather than sanitizes — this boundary persists into a file the agent later reads back as truth) and then routes it by **what the document is**, not by preference:
+
+- a canvas that **already declares `document`** → its own `document.theme`, spliced in as *text* by `lib/jsonedit.js` so the rest of the file survives byte for byte;
+- a native `.md`, **or a canvas with no `document` object** → `.instantcanvas.json`;
+- `scope: "workspace"` overrides both and writes the workspace-wide default.
+
+The second rule is the careful one. Writing a `document` object into a canvas that lacks one would do far more than set a color — `document` is what makes the deck a canvas's *default view*, and it is refused outright on a canvas holding a `form`, a `confirm` or a sweep. **Picking an accent must not quietly change what a canvas is** (see [gotchas/runtime.md](gotchas/runtime.md)). A splice that cannot be *proven* correct falls back to the config rather than guessing, and resetting a canvas-declared theme is a 409 `THEME_DECLARED_IN_CANVAS`: the canvas is the author's contract, and neither the reader nor the agent gets to delete it from outside the file. The response re-reads from disk and reports what is now *there* — the only answer that cannot lie to the palette control about its own state.
+
+### The workspace's own palettes
+
+`.instantcanvas.json` also holds a `palettes` library — named theme objects (`wsconfig.readPalettes()` / `setPalette()`), written through `POST /api/theme/palette` or `instantcanvas theme --save <name>` and offered in the browser beside the built-in chips. `themestore.applyPalette` adds the guards the config file cannot: a name of 1–40 characters, a cap of 24 palettes, `theme.check()` refusing anything that is not strict hex (`INVALID_THEME`, the same trust boundary as a document's theme — neither the browser nor the agent is a trusted author of a color), and **`PALETTE_NAME_TAKEN`** on a name that collides with a built-in preset, because a custom `forest` shadowing the real one would make every chip in the picker ambiguous. The guard is one `ThemeError`; only its rendering differs — a 409 on the route, exit 1 with an error object at the CLI.
+
+**A custom palette is a library, not a preset.** Applying one *materializes* its colors into the document's theme rather than writing a `"preset": "My brand"` reference — so a canvas never carries a name it cannot resolve on its own, `validate` stays a pure function of the file, and a canvas mailed elsewhere does not repaint itself against a stranger's workspace config. That is a schema decision as much as a kernel one; [canvas-schema.md](canvas-schema.md#custom-palettes-a-library-not-a-preset-name) carries the reasoning and its two consequences (the picker matches a chip by *value*; deleting a library entry repaints nothing).
+
 ## Sessions
 
 `lib/session.js` holds pending interactive exchanges: `{id (16-byte base64url), canvasPath, timeoutSeconds (default 600), expiresAt, result}`. One active session per canvas path — a new `open` supersedes the old one (which resolves as `cancelled` so its poller exits cleanly). Expiry is lazy (checked on read) plus a 5 s sweep that broadcasts `{type: "session", status: "timeout"}` so an open browser shows the expired state. Results are built redacted (see [security.md](security.md)) and resolve exactly once.
@@ -85,8 +125,10 @@ Why a markdown file is listed at all: it needs no author to be renderable. The r
 
 The WebSocket server is hand-rolled RFC 6455 inside `kernel.js` (~100 lines: accept-key handshake, frame encode/decode, ping/pong, masked client frames) — no dependency. `fs.watch(root, {recursive: true})` with a 150 ms debounce feeds it (per-directory watcher fallback where recursive watch is unsupported); dot-dirs and `node_modules` are ignored. Broadcasts:
 
-- `{type: "workspace"}` — anything changed; the browser refetches the tree.
-- `{type: "canvas", path}` — a canvas file **or a markdown document** changed; the browser re-renders it if open.
+- `{type: "workspace"}` — anything changed; the browser refetches the tree **and drops its cached `state.themePresets`**. The preset list is fetched once per session and the workspace's own palettes ride in it, so an agent running `theme --save` would otherwise leave the reader's picker showing a library that no longer matches the file it came from.
+- `{type: "canvas", path}` — a canvas file **or a markdown document** changed; the browser re-renders it if open. `saveTheme` broadcasts it by hand as well, because a theme may have landed in `.instantcanvas.json` — a dotfile the watcher ignores — and the deck must still repaint.
+
+**`POST /api/refresh` exists for the same dotfile blind spot, one process further out.** The CLI's `theme` command writes to disk directly and needs no kernel to do it; but if a kernel *is* live, the file it just changed may be one `fs.watch` will never report. So it fires both broadcasts by hand, best-effort — no kernel running is the normal case, not an error — and the browser repaints as if a human had picked the color. Without it, an agent theming a native `.md` would leave the file correct on disk and the open browser wrong, which is the exact failure the command was built to end.
 - `{type: "navigate", path}` — an `open` happened; every connected browser routes there.
 - `{type: "session", id, status}` — a session resolved or expired.
 

@@ -21,6 +21,8 @@ const { virtualCanvasFor } = require('./lib/mdcanvas')
 const { Sessions } = require('./lib/session')
 const envfile = require('./lib/envfile')
 const jsonfile = require('./lib/jsonfile')
+const themeLib = require('./lib/theme')
+const themestore = require('./lib/themestore')
 const { DEFAULT_URL_PROTOCOLS } = require('./lib/schema')
 const { PKG_VERSION } = require('./lib/pkgmeta')
 
@@ -142,7 +144,7 @@ function loadCanvas(rel) {
 		if (!canvas)
 			return { status: 404, body: { ok: false, message: `Document not found: ${rel}` } }
 		resolveMarkdownSrc(canvas, { native: true })
-		return { status: 200, body: { ok: true, path: rel, canvas, warnings: [] }, canvas }
+		return { status: 200, body: { ok: true, path: rel, canvas, warnings: [], ...themeFor(rel, null) }, canvas }
 	}
 
 	// A canvas is a *.json (lib/scan.js says so), and this route must read nothing
@@ -169,7 +171,84 @@ function loadCanvas(rel) {
 	const canvas = JSON.parse(raw)
 	resolveMarkdownSrc(canvas)
 	resolveDocumentAssets(canvas)
-	return { status: 200, body: { ok: true, path: rel, canvas, warnings: result.warnings }, canvas }
+	const declared = canvas.document && typeof canvas.document === 'object' ? canvas.document.theme : undefined
+	return { status: 200, body: { ok: true, path: rel, canvas, warnings: result.warnings, ...themeFor(rel, declared) }, canvas }
+}
+
+/**
+ * The theme the browser should paint this document with, resolved to concrete hex.
+ *
+ * Precedence, weakest to strongest:
+ *   built-in default  <  config.theme  <  config.documents[rel].theme  <  canvas.document.theme
+ *
+ * Resolving here rather than in the page means the browser never learns what a
+ * preset is, and `print` — the same page in a headless Chrome — inherits the
+ * answer for free. `themeSource` tells the palette control where the theme it is
+ * showing came from, and therefore where a change should be written back.
+ */
+const themeFor = (rel, declared) => themestore.themeFor(ROOT, rel, declared)
+
+/**
+ * Persist a theme the reader picked in the browser.
+ *
+ * The routing rules — which file a theme lands in, and why — live in lib/themestore.js,
+ * because the CLI's `theme` command has to make exactly the same decision. Two doors, one
+ * implementation: a reader clicking Save and an agent running `instantcanvas theme` must
+ * not be able to disagree about where a theme belongs.
+ */
+function saveTheme(res, rel, body) {
+	const load = loadCanvas(rel)
+	if (load.status !== 200)
+		return sendJson(res, load.status, load.body)
+
+	const scope = body.scope === 'workspace' ? 'workspace' : 'document'
+	let wrote, target
+	try {
+		({ wrote, target } = themestore.applyTheme(ROOT, rel, body.theme === null ? null : body.theme, { scope }))
+	} catch (err) {
+		if (err instanceof themestore.ThemeError) {
+			const status = err.code === 'THEME_DECLARED_IN_CANVAS' ? 409 : 400
+			return sendJson(res, status, { ok: false, error: { code: err.code, message: err.message, ...(err.errors ? { errors: err.errors } : {}) } })
+		}
+		return sendJson(res, 500, { ok: false, error: { code: 'WRITE_FAILED', message: err.message } })
+	}
+
+	const wroteRel = path.relative(ROOT, wrote).split(path.sep).join('/')
+	klog('theme', body.theme === null ? 'reset' : (body.theme.preset || 'custom'), '\u2192', wroteRel, `(${rel})`)
+	// The canvas write is picked up by fs.watch, but `.instantcanvas.json` is a
+	// dotfile the watcher skips — broadcast either way so the deck repaints at once.
+	broadcast({ type: 'canvas', path: rel })
+
+	// Report what is now ON DISK, not what we meant to put there: the splice can
+	// fall back to the config, and a workspace default can be shadowed. Re-reading
+	// is the only answer that cannot lie to the palette control about its state.
+	const after = loadCanvas(rel)
+	const state = after.status === 200 ? after.body : {}
+	return sendJson(res, 200, { ok: true, wrote: wroteRel, target, theme: state.theme, themeDeclared: state.themeDeclared, themeSource: state.themeSource })
+}
+
+/** The workspace's saved palettes, resolved for the picker exactly like a preset. */
+const customPaletteList = () => themestore.paletteList(ROOT)
+
+/** Save (or delete) one of the workspace's own palettes. Rules live in lib/themestore.js. */
+function savePalette(res, body) {
+	let wrote, name
+	try {
+		({ wrote, name } = themestore.applyPalette(ROOT, body.name, body.theme === null ? null : body.theme))
+	} catch (err) {
+		if (err instanceof themestore.ThemeError) {
+			const status = err.code === 'PALETTE_NAME_TAKEN' || err.code === 'TOO_MANY_PALETTES' ? 409 : 400
+			return sendJson(res, status, { ok: false, error: { code: err.code, message: err.message, ...(err.errors ? { errors: err.errors } : {}) } })
+		}
+		return sendJson(res, 500, { ok: false, error: { code: 'WRITE_FAILED', message: err.message } })
+	}
+
+	klog('palette', body.theme === null ? 'removed' : 'saved', JSON.stringify(name))
+	return sendJson(res, 200, {
+		ok: true,
+		wrote: path.relative(ROOT, wrote).split(path.sep).join('/'),
+		custom: customPaletteList(),
+	})
 }
 
 /**
@@ -471,6 +550,38 @@ async function route(req, res, url) {
 			return sendJson(res, load.status, load.body)
 		const active = activeSessionFor(rel)
 		return sendJson(res, 200, { ...load.body, session: active ? { id: active.id, expiresAt: active.expiresAt } : null })
+	}
+
+	if (method === 'GET' && p === '/api/theme/presets')
+		return sendJson(res, 200, {
+			ok: true,
+			presets: themeLib.presetList(),
+			custom: customPaletteList(),
+			tokens: themeLib.TOKEN_KEYS,
+			maxPalette: themeLib.MAX_PALETTE,
+		})
+
+	if (method === 'POST' && p === '/api/theme') {
+		const body = await readBody(req)
+		return saveTheme(res, relCanvasPath(String(body.path || '')), body)
+	}
+
+	if (method === 'POST' && p === '/api/theme/palette') {
+		const body = await readBody(req)
+		return savePalette(res, body)
+	}
+
+	// Repaint. The CLI writes theme files directly (no kernel required), but a write to
+	// `.instantcanvas.json` is invisible to fs.watch — the watcher skips dotfiles — so an
+	// agent theming a native .md would leave the open browser showing the old colors, with
+	// nothing to say the command had worked.
+	if (method === 'POST' && p === '/api/refresh') {
+		const body = await readBody(req)
+		const rel = relCanvasPath(String(body.path || ''))
+		broadcast({ type: 'workspace' })
+		if (rel)
+			broadcast({ type: 'canvas', path: rel })
+		return sendJson(res, 200, { ok: true })
 	}
 
 	if (method === 'POST' && p === '/api/open') {

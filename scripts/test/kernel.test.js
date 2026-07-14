@@ -241,6 +241,142 @@ test('kernel: GET /api/canvas returns parsed canvas or validation errors', async
 	assert.equal(out.json.errors[0].code, 'PATH_OUTSIDE_WORKSPACE')
 })
 
+test('kernel: /api/canvas hands the page a theme resolved to concrete hex', async () => {
+	// The browser never learns what a preset is: it paints what it is handed.
+	const r = await httpReq({ port: K.port, path: '/api/canvas?path=report.canvas.json', headers: K.auth })
+	assert.equal(r.status, 200)
+	assert.equal(r.json.themeSource, 'default')
+	assert.match(r.json.theme.accent, /^#[0-9a-f]{6}$/i)
+	assert.ok(Array.isArray(r.json.theme.palette) && r.json.theme.palette.length >= 1)
+
+	const presets = await httpReq({ port: K.port, path: '/api/theme/presets', headers: K.auth })
+	assert.equal(presets.status, 200)
+	assert.ok(presets.json.presets.some((p) => p.name === 'forest'))
+})
+
+test('kernel: a theme for a native .md lands in .instantcanvas.json — it has no canvas to hold one', async () => {
+	const save = await httpReq({
+		port: K.port, method: 'POST', path: '/api/theme', headers: K.auth,
+		body: { path: 'guide.md', theme: { preset: 'sepia' } },
+	})
+	assert.equal(save.status, 200)
+	assert.equal(save.json.target, 'workspace')
+	assert.equal(save.json.wrote, '.instantcanvas.json')
+	assert.equal(save.json.theme.paper, '#fbf7ef', 'sepia restyles the paper itself')
+
+	// The markdown file itself is never written.
+	assert.ok(!fs.readFileSync(path.join(K.root, 'guide.md'), 'utf8').includes('sepia'))
+
+	const back = await httpReq({ port: K.port, path: '/api/canvas?path=guide.md', headers: K.auth })
+	assert.equal(back.json.themeSource, 'workspace')
+	assert.equal(back.json.theme.accent, '#92400e')
+
+	// And it resets cleanly.
+	const reset = await httpReq({ port: K.port, method: 'POST', path: '/api/theme', headers: K.auth, body: { path: 'guide.md', theme: null } })
+	assert.equal(reset.status, 200)
+	assert.equal(reset.json.themeSource, 'default')
+})
+
+test('kernel: a canvas that declares "document" is written IN PLACE, byte-for-byte outside the theme', async () => {
+	const rel = 'doc.canvas.json'
+	const raw = `{
+\t"instantcanvas": 1,
+\t"createdWith": "${PKG_VERSION}",
+\t"title": "Doc",
+\t"document": {
+\t\t"page": {"size": "A4"}
+\t},
+\t"blocks": [{"type": "markdown", "text": "hi"}]
+}
+`
+	fs.writeFileSync(path.join(K.root, rel), raw)
+	const save = await httpReq({
+		port: K.port, method: 'POST', path: '/api/theme', headers: K.auth,
+		body: { path: rel, theme: { preset: 'forest', accent: '#0054fe' } },
+	})
+	assert.equal(save.status, 200)
+	assert.equal(save.json.target, 'canvas')
+	assert.equal(save.json.wrote, rel)
+
+	const after = fs.readFileSync(path.join(K.root, rel), 'utf8')
+	assert.ok(after.includes('\t\t"page": {"size": "A4"}'), 'the rest of the file did not move')
+	assert.deepEqual(JSON.parse(after).document.theme, { preset: 'forest', accent: '#0054fe' })
+	// A lone accent leads the colorway, so the document and its charts agree.
+	assert.equal(save.json.theme.palette[0], '#0054fe')
+
+	// A canvas-declared theme is the author's contract: the reader cannot delete it
+	// from here, and the kernel says so rather than editing it out from under them.
+	const reset = await httpReq({ port: K.port, method: 'POST', path: '/api/theme', headers: K.auth, body: { path: rel, theme: null } })
+	assert.equal(reset.status, 409)
+	assert.equal(reset.json.error.code, 'THEME_DECLARED_IN_CANVAS')
+})
+
+test('kernel: a canvas with NO document object keeps its shape — the theme goes beside it', async () => {
+	// Writing `document` in would do far more than set a color: it makes the deck the
+	// canvas's default view, and is refused outright on a form/confirm/sweep canvas.
+	const before = fs.readFileSync(path.join(K.root, 'report.canvas.json'), 'utf8')
+	const save = await httpReq({
+		port: K.port, method: 'POST', path: '/api/theme', headers: K.auth,
+		body: { path: 'report.canvas.json', theme: { preset: 'plum' } },
+	})
+	assert.equal(save.status, 200)
+	assert.equal(save.json.target, 'workspace')
+	assert.equal(fs.readFileSync(path.join(K.root, 'report.canvas.json'), 'utf8'), before, 'the canvas is untouched')
+	assert.equal(JSON.parse(before).document, undefined)
+
+	await httpReq({ port: K.port, method: 'POST', path: '/api/theme', headers: K.auth, body: { path: 'report.canvas.json', theme: null } })
+})
+
+test('kernel: a workspace keeps its own palettes, offered beside the built-in presets', async () => {
+	const theme = { accent: '#0054fe', palette: ['#0054fe', '#00b4d8', '#ff8800'] }
+	const save = await httpReq({ port: K.port, method: 'POST', path: '/api/theme/palette', headers: K.auth, body: { name: 'My brand', theme } })
+	assert.equal(save.status, 200)
+	assert.equal(save.json.wrote, '.instantcanvas.json')
+	const mine = save.json.custom.find((p) => p.name === 'My brand')
+	assert.ok(mine)
+	assert.deepEqual(mine.palette, theme.palette, 'three colors mean three colors — no preset refill')
+
+	const presets = await httpReq({ port: K.port, path: '/api/theme/presets', headers: K.auth })
+	assert.ok(presets.json.custom.some((p) => p.name === 'My brand'))
+	assert.ok(presets.json.presets.some((p) => p.name === 'tableau'), 'the built-ins are still there')
+
+	// A custom palette that shadowed a built-in would make every chip ambiguous.
+	const clash = await httpReq({ port: K.port, method: 'POST', path: '/api/theme/palette', headers: K.auth, body: { name: 'forest', theme } })
+	assert.equal(clash.status, 409)
+	assert.equal(clash.json.error.code, 'PALETTE_NAME_TAKEN')
+
+	// Same trust boundary as /api/theme: the browser is not trusted with a color.
+	const bad = await httpReq({ port: K.port, method: 'POST', path: '/api/theme/palette', headers: K.auth, body: { name: 'evil', theme: { accent: 'javascript:alert(1)' } } })
+	assert.equal(bad.status, 400)
+	assert.equal(bad.json.error.code, 'INVALID_THEME')
+	const unnamed = await httpReq({ port: K.port, method: 'POST', path: '/api/theme/palette', headers: K.auth, body: { name: '  ', theme } })
+	assert.equal(unnamed.status, 400)
+
+	const gone = await httpReq({ port: K.port, method: 'POST', path: '/api/theme/palette', headers: K.auth, body: { name: 'My brand', theme: null } })
+	assert.equal(gone.status, 200)
+	assert.equal(gone.json.custom.length, 0)
+})
+
+test('kernel: /api/theme refuses a color that is not strict hex, and writes nothing', async () => {
+	// The browser is not trusted: these values are assigned into live CSS via CSSOM,
+	// which would happily accept "javascript:alert(1)".
+	const r = await httpReq({
+		port: K.port, method: 'POST', path: '/api/theme', headers: K.auth,
+		body: { path: 'guide.md', theme: { accent: 'javascript:alert(1)' } },
+	})
+	assert.equal(r.status, 400)
+	assert.equal(r.json.error.code, 'INVALID_THEME')
+	assert.equal(r.json.error.errors[0].path, 'theme.accent')
+	assert.ok(!fs.existsSync(path.join(K.root, '.instantcanvas.json'))
+		|| !JSON.stringify(wsRead(K.root)).includes('javascript'), 'nothing hostile reached the disk')
+
+	// And it is refused for a file that is neither a canvas nor markdown.
+	const env = await httpReq({ port: K.port, method: 'POST', path: '/api/theme', headers: K.auth, body: { path: '.env', theme: { preset: 'mono' } } })
+	assert.equal(env.status, 404)
+})
+
+const wsRead = (root) => require('../lib/wsconfig').read(root)
+
 test('kernel: a markdown file renders as a canvas nobody wrote, degraded for a reader with no author', async () => {
 	const r = await httpReq({ port: K.port, path: '/api/canvas?path=guide.md', headers: K.auth })
 	assert.equal(r.status, 200)

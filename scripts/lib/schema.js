@@ -7,6 +7,7 @@
 // enum, default, itemShape (name of a SHAPES entry), description, example.
 
 const { PKG_VERSION } = require('./pkgmeta')
+const { PRESET_NAMES: THEME_PRESET_NAMES } = require('./theme')
 
 const VERSION = 1
 
@@ -163,10 +164,17 @@ const SHAPES = {
 		},
 	},
 	documentTheme: {
-		description: 'Brand colors, strict hex only (#rgb or #rrggbb) — the values are injected into live CSS and chart templates, so nothing looser validates.',
+		description: 'The document\'s color system. Start from a named "preset" and stop there, or override any token on top of it. Colors are strict hex only (#rgb or #rrggbb) — the values are injected into live CSS and chart templates, so nothing looser validates. The reader can also change all of this from a palette control in the browser, which writes its choice back here.',
 		properties: {
-			accent: { type: 'string', description: 'Accent color for headings, rules and the cover.', example: '#0054fe' },
-			palette: { type: 'array', description: '1–8 hex colors used for chart series inside the document.', example: ['#0054fe', '#00b4d8'] },
+			preset: { type: 'string', enum: THEME_PRESET_NAMES, default: 'default', description: 'Named starting point — supplies an accent, a chart colorway, and (for the dark presets and a few light ones) the paper itself. Every other key overrides it.' },
+			accent: { type: 'string', description: 'Headings, rules, links and the cover.', example: '#0054fe' },
+			palette: { type: 'array', description: '1–8 hex colors — the chart colorway. ONE color is a lead: the preset supplies the rest, so pinning your brand color does not paint every series the same blue. TWO or more ARE the colorway, exactly as given.', example: ['#0054fe', '#00b4d8'] },
+			paper: { type: 'string', description: 'The sheet background. A DARK value here switches the whole sheet to its dark set (code syntax, card surfaces, chart template) — that is derived from this color, not declared, so a dark preset and a hand-written dark "paper" behave identically. Note `print` renders backgrounds: dark paper prints dark.', example: '#ffffff' },
+			surface: { type: 'string', description: 'Card and panel background inside a sheet.', example: '#ffffff' },
+			text: { type: 'string', description: 'Body text.', example: '#1a1d24' },
+			muted: { type: 'string', description: 'Secondary text, axis labels, captions.', example: '#6b7280' },
+			border: { type: 'string', description: 'Rules, table and card borders, chart gridlines.', example: '#e6e8ec' },
+			link: { type: 'string', description: 'Link color. Follows "accent" when omitted.', example: '#0054fe' },
 		},
 	},
 	documentPage: {
@@ -185,7 +193,7 @@ const SHAPES = {
 			header: { type: 'object', itemShape: 'documentStrip', description: 'Running header on every content sheet.' },
 			footer: { type: 'object', itemShape: 'documentStrip', description: 'Running footer on every content sheet.' },
 			backCover: { type: 'object', itemShape: 'documentBackCover', description: 'Closing sheet.' },
-			theme: { type: 'object', itemShape: 'documentTheme', description: 'Brand colors (strict hex).' },
+			theme: { type: 'object', itemShape: 'documentTheme', description: 'Color system — a named preset, plus any token override (strict hex). Reader-overridable in the browser, which writes its choice back into this object.' },
 			page: { type: 'object', itemShape: 'documentPage', description: 'Paper size, orientation and margin.' },
 		},
 	},

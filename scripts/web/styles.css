@@ -50,7 +50,10 @@
    with the app theme and deliberately live outside the three theme blocks
    above. Per-canvas values from document.theme (validated strict hex) override
    them via CSSOM setProperty in applyDocumentTheme(). */
-.doc-mode{ --doc-accent:#6366f1 }
+.doc-mode{
+	--doc-accent:#6366f1; --doc-paper:#ffffff; --doc-surface:#ffffff; --doc-text:#1a1d24;
+	--doc-muted:#6b7280; --doc-border:#e6e8ec; --doc-link:#6366f1;
+}
 
 *{box-sizing:border-box}
 
@@ -83,10 +86,26 @@ button{font:inherit;cursor:pointer}
 .brand .logo{width:20px;height:20px;flex:0 0 auto;display:block}
 .brand .logo .ic-logo-base{fill:var(--logo-base)}
 .brand .logo .ic-logo-accent{fill:var(--logo-accent)}
-.rootpath{color:var(--muted);font-size:12.5px;padding:3px 8px;border:1px solid var(--border);
-	border-radius:7px;background:var(--panel-2);flex:1;min-width:60px;
+/* Path + copy button, joined into one control: the border and radius that used to sit
+   on the path itself move to the group, so the two read as a single object rather than
+   a label with a button parked next to it. The path keeps `flex:1` INSIDE the group —
+   fitRootPath() binary-searches how much of the head to elide against its clientWidth,
+   so it must remain the element that absorbs the topbar's spare width. */
+.rootpath-group{display:flex;align-items:stretch;flex:1;min-width:80px;
+	border:1px solid var(--border);border-radius:7px;background:var(--panel-2);overflow:hidden}
+.rootpath-group:hover{border-color:var(--inp-border-hover)}
+.rootpath{color:var(--muted);font-size:12.5px;padding:3px 8px;border:none;background:none;
+	flex:1;min-width:0;text-align:left;
 	white-space:nowrap;overflow:hidden;text-overflow:clip;
-	font-family:ui-monospace,SFMono-Regular,Menlo,monospace;cursor:default}
+	font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+.rootpath:hover{color:var(--text)}
+.rootpath-copy{flex:0 0 auto;display:inline-flex;align-items:center;padding:0 8px;
+	border:none;border-left:1px solid var(--border);background:none;color:var(--muted)}
+.rootpath-copy:hover{background:var(--panel);color:var(--text)}
+.rootpath:focus-visible,.rootpath-copy:focus-visible{outline:none;box-shadow:inset 0 0 0 2px var(--accent-soft)}
+.rootpath-copy .lucide{width:14px;height:14px;display:block}
+.rootpath-copy.copied{color:var(--green)}
+.rootpath-copy.failed{color:var(--red)}
 .spacer{flex:1}
 .tbtn{display:inline-flex;align-items:center;gap:6px;padding:6px 11px;border-radius:8px;
 	border:1px solid var(--border);background:var(--panel);color:var(--text);
@@ -95,6 +114,12 @@ button{font:inherit;cursor:pointer}
 .tbtn.primary{background:var(--accent);color:#fff;border-color:transparent}
 .tbtn.icon{padding:6px 9px}
 .tbtn.active{background:var(--accent-soft);color:var(--accent)}
+/* Paper-only controls (TOC, running strips, colors) stay in the bar off the deck and
+   go dim instead of vanishing — a control that disappears teaches nothing, and one
+   that disappears under the cursor moves every other control while you reach for it.
+   Their `title` says which view they need; the cursor says they are not pressable. */
+.tbtn:disabled{opacity:.35;cursor:not-allowed}
+.tbtn:disabled:hover{background:var(--panel)}
 
 .body{display:flex;flex:1;min-height:0}
 /* sidebar */
@@ -607,22 +632,67 @@ body.modal-open .main{overflow:hidden}
 .doc-mode.printing .deck{display:block;position:absolute;left:-100000px;top:0}
 .chart-slot{display:flow-root}
 
-/* Paper is always light: the LIGHT token set is forced here so every block
-   rendered inside a sheet ignores the app theme (dark app, white paper).
-   Mirrors the :root light block above — keep in step with it. --accent maps
-   to the document's brand accent. */
+/* A sheet is PAPER, and it ignores the app theme entirely: a dark app still shows a white
+   sheet unless the DOCUMENT asked for a dark one. That is what this block forces — the
+   light token set, mirroring the :root light block above (keep them in step).
+
+   Each token the document's theme can restyle is wired to its --doc-* counterpart (set
+   through CSSOM by applyDocumentTheme, since the CSP forbids style=""). The literal
+   fallbacks are what an unthemed sheet has always used, so a document with no theme
+   renders byte-identically to before.
+
+   The semantic colors — green/amber/red and the syntax palette — are NOT the author's to
+   rebrand: they mean something. But they do have to be legible, so dark paper swaps them
+   for their dark counterparts wholesale; see the [data-paper="dark"] block below. */
 .sheet{
-	--bg:#f4f5f8; --panel:#ffffff; --panel-2:#fafbfc; --text:#1a1d24; --muted:#6b7280;
-	--border:#e6e8ec; --border-2:#eef0f3; --accent:var(--doc-accent); --accent-soft:#eef0fe;
+	--bg:#f4f5f8; --panel:var(--doc-surface,#ffffff); --panel-2:#fafbfc;
+	--text:var(--doc-text,#1a1d24); --muted:var(--doc-muted,#6b7280);
+	--border:var(--doc-border,#e6e8ec); --border-2:#eef0f3;
+	--accent:var(--doc-accent,#6366f1); --accent-soft:#eef0fe;
 	--green:#10b981; --amber:#f59e0b; --red:#ef4444;
 	--code-kw:#6d28d9; --code-str:#047857; --code-num:#b45309; --code-fn:#0e7490;
 	--code-var:#be185d; --code-cmt:#6b7280; --code-meta:#4b5563; --code-add:#065f46; --code-del:#b91c1c;
 	color-scheme:light;
 	position:relative;box-sizing:border-box;overflow:hidden;
 	display:flex;flex-direction:column;flex-shrink:0;
-	background:#fff;color:var(--text);
+	background:var(--doc-paper,#fff);color:var(--text);
 	box-shadow:0 2px 6px rgba(16,20,30,.14),0 18px 44px rgba(16,20,30,.18);
 }
+/* DARK PAPER. The --doc-* tokens above already carry the paper, ink, border and surface;
+   what they cannot carry is the sheet's SEMANTIC layer — the code syntax palette, the
+   card wash, the accent tint — because those are not the author's to rebrand and have no
+   token. They are simply the wrong SET on dark paper: a #6d28d9 keyword on a #12151c
+   sheet is invisible. So both sets live here and the paper picks one.
+
+   `data-paper` is set by applyDocumentTheme from the theme's `mode`, which the kernel
+   derives from the paper COLOR (lib/theme.js `isDarkPaper`) rather than from any flag —
+   so a canvas that merely declares {"paper": "#101010"}, or a reader who drags the paper
+   swatch to near-black, gets all of this without knowing it exists.
+
+   Values mirror the app's own :root[data-theme="dark"] block — keep them in step. */
+.doc-mode[data-paper="dark"] .sheet{
+	--bg:#0e1014; --panel-2:#1b1f29; --border-2:#1f242e; --accent-soft:#20233a;
+	--green:#34d399; --amber:#fbbf24; --red:#f87171;
+	--code-kw:#c4b5fd; --code-str:#6ee7b7; --code-num:#fcd34d; --code-fn:#67e8f9;
+	--code-var:#f9a8d4; --code-cmt:#8b93a1; --code-meta:#9aa3b0; --code-add:#6ee7b7; --code-del:#fca5a5;
+	color-scheme:dark;
+	/* A dark sheet on a dark deck backdrop needs a rim, not a drop shadow: the shadow it
+	   used to cast is invisible, and without an edge the page has no boundary at all. */
+	box-shadow:0 0 0 1px rgba(255,255,255,.07),0 18px 44px rgba(0,0,0,.5);
+}
+
+/* Links take --doc-link, which falls back to the accent (one decision, two tokens). */
+.sheet .md a{color:var(--doc-link,var(--doc-accent,#6366f1))}
+
+/* The continuous view takes the BRAND (accent, links, and — via the Plotly template —
+   the chart colorway) but NOT the paper: it is a screen view and still follows the
+   app's light/dark theme, so forcing a document's paper and text tokens on it would
+   paint black on black in a dark app. Both continuous renders are covered: the
+   `.doc-html` half of a document that has been decked, and a plain `.canvas` that never
+   entered document land at all. Without the second, the palette control would be a
+   picker that visibly does nothing on most of the canvases you open. */
+.doc-mode .doc-html,.canvas:not(.doc-mode){--accent:var(--doc-accent,#6366f1)}
+.doc-mode .doc-html .md a,.canvas:not(.doc-mode) .md a{color:var(--doc-link,var(--doc-accent,#6366f1))}
 /* flow-root: edge margins stay INSIDE the body/fragment boxes, so cumulative
    measurement in the packer sees exactly what the fixed sheet will contain. */
 .sheet-body{flex:1 1 auto;min-height:0;display:flow-root}
@@ -764,7 +834,132 @@ body.modal-open .main{overflow:hidden}
    The sheets ARE the pages. Chrome hiding is gated on a deck being present so
    printing a classic (non-document) canvas is untouched. The @page size rule
    is injected per-canvas via a constructed stylesheet (CSSOM) in app.js. */
+/* ------------------------------------------------------- document colors
+   App chrome, not paper: the popover follows the APP theme (it must stay legible
+   over a dark UI while it edits a light document), and it never prints. Anchored
+   under the topbar rather than floated, so it cannot cover the sheet it recolors. */
+.pal{position:fixed;top:52px;right:16px;z-index:55;width:min(340px,calc(100vw - 32px));
+	background:var(--panel);border:1px solid var(--border);border-radius:14px;
+	box-shadow:0 18px 48px rgba(0,0,0,.24);padding:14px;
+	animation:csm-pop .12s ease-out}
+.pal[hidden]{display:none}
+@media (prefers-reduced-motion:reduce){.pal{animation:none}}
+
+.pal-head{display:flex;align-items:center;gap:8px;margin-bottom:12px}
+.pal-title{flex:1;min-width:0;font-size:13px;font-weight:650;letter-spacing:-.005em}
+.pal-src{font-size:11px;color:var(--muted);font-family:ui-monospace,Menlo,monospace;white-space:nowrap}
+.pal-src.dirty{color:var(--amber);font-weight:600}
+
+/* The ONE way to make a palette, and it looks like one: a filled round + in the header,
+   not a text field buried under a disclosure. It is the whole answer to "how do I add my
+   own colors?", so it is never hidden and never conditional. */
+.pal-add,.pal-back{display:inline-flex;align-items:center;justify-content:center;
+	width:24px;height:24px;flex:0 0 auto;padding:0;cursor:pointer;border-radius:50%}
+.pal-add{background:var(--accent);border:none;color:#fff}
+.pal-add:hover{filter:brightness(1.1)}
+.pal-add[hidden],.pal-back[hidden]{display:none}
+.pal-add .lucide{width:14px;height:14px}
+.pal-back{background:none;border:1px solid var(--border);color:var(--muted);margin-left:-2px}
+.pal-back:hover{border-color:var(--muted);color:var(--text)}
+.pal-back .lucide{width:14px;height:14px}
+
+/* Fourteen presets plus a library of custom ones is taller than any topbar popover
+   should be. The chips scroll; the footer (Save/Reset) stays put, because a control
+   you must scroll to find is a control you will not find. */
+.pal-scroll{max-height:min(52vh,440px);overflow-y:auto;margin:-2px -4px 0;padding:2px 4px 0}
+
+.pal-presets{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.pal-section{margin-top:12px}
+.pal-chip{position:relative;display:flex;align-items:center;gap:8px;padding:7px 9px;cursor:pointer;
+	background:var(--panel-2);border:1px solid var(--border);border-radius:9px;color:var(--text);
+	font-family:inherit;font-size:12px;text-align:left}
+.pal-chip:hover{border-color:var(--muted)}
+.pal-chip.active{border-color:var(--accent);background:var(--accent-soft);color:var(--accent);font-weight:600}
+.pal-chip-sw{display:inline-flex;flex-shrink:0;border-radius:3px;overflow:hidden}
+.pal-chip-sw i{width:7px;height:14px;display:block}
+.pal-chip-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* Only on hover/focus: a delete affordance sitting permanently on every saved palette
+   reads as clutter, and invites the mis-click it is hardest to undo. */
+.pal-chip-x{position:absolute;right:4px;top:50%;transform:translateY(-50%);
+	display:none;align-items:center;justify-content:center;width:16px;height:16px;
+	border-radius:5px;color:var(--muted);font-size:13px;line-height:1;background:var(--panel)}
+.pal-chip:hover .pal-chip-x,.pal-chip-x:focus-visible{display:inline-flex}
+.pal-chip-x:hover{color:var(--red);background:var(--panel)}
+
+/* The editor is a screen, not a drawer: the tokens get room to breathe rather than
+   being squeezed under a disclosure at the bottom of a list they were meant to define. */
+.pal-tokens{display:grid;grid-template-columns:1fr 1fr;gap:7px 4px}
+.pal-tok{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);min-width:0}
+.pal-tok-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pal-tok-x{flex-shrink:0;width:16px;height:16px;line-height:1;padding:0;cursor:pointer;
+	background:none;border:none;color:var(--muted);font-size:14px}
+.pal-tok-x:hover{color:var(--red)}
+
+.pal-way{margin-top:12px}
+.pal-way-label{display:block;font-size:11px;font-weight:600;letter-spacing:.04em;
+	text-transform:uppercase;color:var(--muted);margin-bottom:6px}
+.pal-way-swatches{display:flex;gap:5px;flex-wrap:wrap;align-items:center}
+.pal-sw{position:relative;display:inline-flex}
+.pal-sw-x{position:absolute;top:-5px;right:-5px;display:none;align-items:center;justify-content:center;
+	width:14px;height:14px;padding:0;border:1px solid var(--border);border-radius:50%;
+	background:var(--panel);color:var(--muted);font-size:10px;line-height:1}
+.pal-sw:hover .pal-sw-x,.pal-sw-x:focus-visible{display:inline-flex}
+.pal-sw-x:hover{color:var(--red);border-color:var(--red)}
+.pal-way-add{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;
+	padding:0;cursor:pointer;border:1px dashed var(--border);border-radius:6px;
+	background:none;color:var(--muted);font-size:14px;line-height:1}
+.pal-way-add:hover{border-color:var(--accent);color:var(--accent)}
+
+/* The name and its Save are the LAST thing in the editor, after the colors they name —
+   the first version put them above the editor, so you named colors you had not made yet. */
+.pal-saveas{display:flex;gap:6px;margin-top:16px;padding-top:14px;border-top:1px solid var(--border-2)}
+.pal-name{flex:1;min-width:0;padding:5px 8px;font-family:inherit;font-size:12px;
+	color:var(--text);background:var(--panel-2);border:1px solid var(--border);border-radius:8px}
+.pal-name:focus{outline:none;border-color:var(--accent)}
+.pal-name::placeholder{color:var(--muted)}
+.pal-btn:disabled{opacity:.45;cursor:not-allowed}
+.pal-btn:disabled:hover{border-color:var(--border)}
+
+/* A native color input is a chrome-heavy box in every browser; strip it back to
+   the swatch itself so a row of them reads as a palette rather than a form. */
+.pal input[type=color]{-webkit-appearance:none;appearance:none;flex-shrink:0;
+	width:22px;height:22px;padding:0;cursor:pointer;background:none;
+	border:1px solid var(--border);border-radius:6px}
+.pal input[type=color]::-webkit-color-swatch-wrapper{padding:0}
+.pal input[type=color]::-webkit-color-swatch{border:none;border-radius:5px}
+.pal input[type=color]::-moz-color-swatch{border:none;border-radius:5px}
+
+/* What the current selection IS, pinned below the scroller so reading it never costs a
+   scroll. It is also the only legible home for a preset's guidance — "colorblind-safe",
+   "survives a black-and-white printer" — which otherwise lives in a `title` tooltip on a
+   chip, where nobody will ever meet it. */
+.pal-detail{margin-top:12px;padding-top:12px;border-top:1px solid var(--border-2)}
+.pal-detail[hidden]{display:none}
+.pal-detail-head{display:flex;align-items:baseline;gap:7px}
+.pal-detail-name{font-size:12.5px;font-weight:650;letter-spacing:-.005em}
+.pal-detail-tag{font-size:10px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;
+	color:var(--muted);border:1px solid var(--border);border-radius:999px;padding:1px 6px}
+.pal-detail-desc{margin:5px 0 9px;font-size:11.5px;line-height:1.45;color:var(--muted)}
+.pal-detail-row{display:flex;align-items:center;gap:8px;margin-top:5px}
+.pal-detail-key{flex:0 0 42px;font-size:10px;font-weight:600;letter-spacing:.04em;
+	text-transform:uppercase;color:var(--muted)}
+.pal-detail-sws{display:flex;gap:3px;flex-wrap:wrap;min-width:0}
+.pal-d-sw{width:16px;height:16px;display:block;border-radius:4px;border:1px solid var(--border)}
+
+.pal-foot{display:flex;align-items:center;gap:8px;margin-top:14px;padding-top:12px;
+	border-top:1px solid var(--border-2)}
+/* `display:flex` beats the UA's `[hidden]{display:none}`, so hiding it needs saying. */
+.pal-foot[hidden]{display:none}
+.pal-scope{flex:1;display:flex;align-items:center;gap:5px;font-size:11.5px;color:var(--muted);cursor:pointer}
+.pal-btn{padding:6px 12px;cursor:pointer;background:var(--panel-2);color:var(--text);
+	border:1px solid var(--border);border-radius:8px;font-family:inherit;font-size:12px;font-weight:600}
+.pal-btn:hover{border-color:var(--muted)}
+.pal-btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.pal-btn.primary:hover{filter:brightness(1.08)}
+.pal-note{margin:10px 0 0;font-size:11px;line-height:1.45;color:var(--muted)}
+
 @media print{
+	.pal{display:none !important}
 	html{print-color-adjust:exact;-webkit-print-color-adjust:exact}
 	.print-fab{display:none !important}
 	/* No `.code-copy` rule here on purpose: the deck mounts no copy button at all

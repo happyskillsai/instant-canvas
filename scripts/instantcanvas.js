@@ -26,6 +26,9 @@ const { insideRoot } = require('./lib/paths')
 const { withChrome, findChrome } = require('./lib/cdp')
 const { PKG_VERSION, UNKNOWN_VERSION } = require('./lib/pkgmeta')
 const { hasMarkdownExtension } = require('./lib/markdownsrc')
+const themeLib = require('./lib/theme')
+const themestore = require('./lib/themestore')
+const wsconfig = require('./lib/wsconfig')
 
 const VERSION = PKG_VERSION
 const KERNEL = path.join(__dirname, 'kernel.js')
@@ -49,8 +52,17 @@ Commands:
       discovery). A canvas needs an envelope-level "document" object; a
       markdown file derives its paper defaults and needs nothing.
   validate <canvas.json>       Validate a canvas file, print JSON verdict.
+  theme <canvas.json|file.md>  Show the document's resolved colors and which file
+      [--set '<json>']         decides them. --set writes a theme (into the canvas's
+      [--clear] [--all]        "document.theme" if it has one, else into
+                               .instantcanvas.json); --clear removes it; --all makes
+                               it the workspace default for every document.
+  theme --save <name>          Save a reusable named palette into .instantcanvas.json
+      --set '<json>'           — it appears in the browser's picker. --clear deletes it.
+  theme --list                 Every preset and every saved palette, as JSON.
   catalog [name] [--full]      Lean index; <name> = block | chart kind | field
-                               type | fieldset | envelope for ONE full schema.
+                               type | fieldset | sweep | document | theme |
+                               envelope for ONE full schema.
   status [--workspace <dir>]   Report the workspace kernel state.
   stop [--workspace <dir>]     Stop the workspace kernel.
 
@@ -98,6 +110,11 @@ function parseArgs(argv) {
 		if (a === '--no-open') args.noOpen = true
 		else if (a === '--retrofit') args.retrofit = true
 		else if (a === '--full') args.full = true
+		else if (a === '--list') args.list = true
+		else if (a === '--clear') args.clear = true
+		else if (a === '--all') args.all = true
+		else if (a === '--set') args.set = argv[++i]
+		else if (a === '--save') args.save = argv[++i]
 		else if (a === '--workspace') args.workspace = argv[++i]
 		else if (a === '--timeout') args.timeout = Number(argv[++i])
 		else if (a === '--result') args.result = argv[++i]
@@ -542,6 +559,15 @@ function cmdValidate(args) {
 	if (hasMarkdownExtension(abs))
 		specError('INVALID_SPEC', `${path.basename(abs)} is a markdown document, not a canvas — there is no contract to validate. Just \`open\` it.`)
 	assertReadable(abs, 'validate')
+
+	// The workspace config is a contract too, and it is the one that fails SILENTLY:
+	// `wsconfig.read()` swallows a parse error so a malformed file cannot take the
+	// workspace down, and the kernel's watcher skips dotfiles. A hand-written config with
+	// a typo therefore produces no error, no warning, and no visible change anywhere —
+	// which is indistinguishable from the feature not existing. This is where an agent
+	// gets to find out.
+	if (path.basename(abs) === wsconfig.CONFIG_NAME)
+		return validateWorkspaceConfig(abs)
 	let raw
 	try {
 		raw = fs.readFileSync(abs, 'utf8')
@@ -562,6 +588,197 @@ function cmdCatalog(args) {
 			specError('INVALID_SPEC', err.message)
 		throw err
 	}
+}
+
+/** Hold `.instantcanvas.json` to the same contract the browser's Save goes through. */
+function validateWorkspaceConfig(abs) {
+	const errors = []
+	const add = (p, message) => errors.push({ code: 'INVALID_THEME', path: p, message })
+
+	let cfg
+	try {
+		cfg = JSON.parse(fs.readFileSync(abs, 'utf8'))
+	} catch (err) {
+		// Deliberately does not quote the file's bytes back: the same rule that keeps
+		// `validate .env` from printing a secret into the agent's context.
+		out({ ok: false, errorCount: 1, errors: [{ code: 'INVALID_JSON', path: '', message: `${wsconfig.CONFIG_NAME} is not valid JSON (${err.name}). The runtime IGNORES a config it cannot parse, so a document keeps its old colors and nothing reports why.` }], warnings: [] }, 1)
+	}
+	if (!cfg || typeof cfg !== 'object' || Array.isArray(cfg))
+		out({ ok: false, errorCount: 1, errors: [{ code: 'INVALID_SPEC', path: '', message: `${wsconfig.CONFIG_NAME} must be a JSON object.` }], warnings: [] }, 1)
+
+	const isObj = (v) => !!v && typeof v === 'object' && !Array.isArray(v)
+	const checkTheme = (theme, at) => {
+		if (!isObj(theme))
+			return add(at, 'A theme must be an object.')
+		for (const e of themeLib.check(theme))
+			add(`${at}.${e.path.replace(/^theme\.?/, '')}`.replace(/\.$/, ''), e.message)
+	}
+
+	if (cfg.theme !== undefined)
+		checkTheme(cfg.theme, 'theme')
+
+	if (cfg.documents !== undefined) {
+		if (!isObj(cfg.documents))
+			add('documents', 'A map of workspace-relative paths to {"theme": {...}}.')
+		else {
+			for (const [rel, entry] of Object.entries(cfg.documents)) {
+				if (!isObj(entry) || entry.theme === undefined)
+					add(`documents["${rel}"]`, 'Each entry is {"theme": {...}}.')
+				else
+					checkTheme(entry.theme, `documents["${rel}"].theme`)
+			}
+		}
+	}
+
+	if (cfg.palettes !== undefined) {
+		if (!isObj(cfg.palettes))
+			add('palettes', 'A map of palette names to theme objects.')
+		else {
+			for (const [name, theme] of Object.entries(cfg.palettes)) {
+				if (themeLib.PRESET_NAMES.includes(name.toLowerCase()))
+					add(`palettes["${name}"]`, `"${name}" is a built-in preset. A palette that shadows one makes every chip in the picker ambiguous.`)
+				checkTheme(theme, `palettes["${name}"]`)
+			}
+		}
+	}
+
+	const result = { ok: errors.length === 0, errorCount: errors.length, errors, warnings: [] }
+	log(result.ok
+		? `✓ ${wsconfig.CONFIG_NAME} is valid`
+		: `✗ ${wsconfig.CONFIG_NAME}: ${errors.length} error(s)\n` + errors.map((e) => `  [${e.code}] ${e.path} — ${e.message}`).join('\n'))
+	out(result, result.ok ? 0 : 1)
+}
+
+// ---------------------------------------------------------------- theme
+
+/**
+ * Set a document's colors, or save a workspace palette, from the command line.
+ *
+ * The door an agent needs and did not have. A canvas it authored, it could always theme
+ * by writing `document.theme` itself — `validate` type-checks every color and the browser
+ * hot-reloads. But a native `.md` has no canvas to write into: its theme belongs in
+ * `.instantcanvas.json`, and hand-writing that file was writing BLIND. Nothing validated
+ * it, `wsconfig.read()` swallows a parse error, and the kernel's watcher skips dotfiles —
+ * so a typo produced no error, no warning, and no visible change. An agent would set the
+ * user's brand colors, see nothing happen, and have no way to find out why.
+ *
+ * So: validated (the same `check()` the browser's Save goes through), routed by the same
+ * rules (lib/themestore.js — two doors, one implementation), and it tells a live kernel to
+ * repaint, which a file write alone cannot do for a dotfile.
+ */
+async function cmdTheme(args) {
+	const root = resolveWorkspace(args)
+
+	if (args.list) {
+		out({
+			status: 'themes',
+			presets: themeLib.presetList().map((p) => ({ name: p.name, mode: p.mode, label: p.label, description: p.description, accent: p.accent, paper: p.paper, palette: p.palette })),
+			palettes: themestore.paletteList(root).map((p) => ({ name: p.name, mode: p.mode, theme: p.theme })),
+			tokens: themeLib.TOKEN_KEYS,
+			workspace: root,
+			timestamp: now(),
+		}, 0)
+	}
+
+	let theme
+	if (args.clear)
+		theme = null
+	else if (args.set !== undefined) {
+		try {
+			theme = JSON.parse(args.set)
+		} catch (err) {
+			specError('INVALID_JSON', `--set is not valid JSON: ${err.message}`, {
+				hint: 'Pass a theme object, e.g. --set \'{"preset":"forest","accent":"#0054fe"}\'. Quote it for the shell.',
+			})
+		}
+	}
+
+	// --save <name>: the workspace's palette library, which is what makes a brand reusable
+	// across every document AND makes it appear in the browser's picker.
+	if (args.save !== undefined) {
+		if (theme === undefined)
+			specError('INVALID_SPEC', 'theme --save <name> needs the colors too: add --set \'{...}\' (or --clear to delete the palette).')
+		let saved
+		try {
+			saved = themestore.applyPalette(root, args.save, theme)
+		} catch (err) {
+			if (err instanceof themestore.ThemeError)
+				specError(err.code, err.message, err.errors ? { errors: err.errors } : {})
+			throw err
+		}
+		await nudgeKernel(root)
+		const rel = path.relative(root, saved.wrote).split(path.sep).join('/')
+		log(`palette ${JSON.stringify(saved.name)} ${theme === null ? 'deleted from' : 'saved to'} ${rel}`)
+		out({
+			status: theme === null ? 'palette-deleted' : 'palette-saved',
+			palette: saved.name,
+			wrote: rel,
+			...(theme === null ? {} : { theme: themeLib.resolve(theme) }),
+			timestamp: now(),
+		}, 0)
+	}
+
+	const file = args._[0]
+	if (!file)
+		specError('INVALID_SPEC', 'theme needs a canvas or markdown file — or --list, or --save <name> --set \'{...}\'.')
+	const abs = path.resolve(root, file)
+	assertReadable(abs, 'theme')
+	if (!insideRoot(root, abs))
+		specError('PATH_OUTSIDE_WORKSPACE', `${file} is outside the workspace root (${root}). Pass --workspace to widen it.`)
+	if (!fs.existsSync(abs))
+		specError('MISSING_SOURCE', `No such file: ${file}`)
+	const rel = path.relative(root, abs).split(path.sep).join('/')
+
+	// No --set and no --clear: report, do not write. "What is this document wearing, and
+	// which file decides it?" is a question worth being able to ask.
+	if (theme === undefined) {
+		const declared = declaredThemeOf(root, rel)
+		const state = themestore.themeFor(root, rel, declared)
+		out({ status: 'theme', canvas: rel, ...state, workspace: root, timestamp: now() }, 0)
+	}
+
+	let wrote, target
+	try {
+		({ wrote, target } = themestore.applyTheme(root, rel, theme, { scope: args.all ? 'workspace' : 'document' }))
+	} catch (err) {
+		if (err instanceof themestore.ThemeError)
+			specError(err.code, err.message, err.errors ? { errors: err.errors } : {})
+		throw err
+	}
+
+	await nudgeKernel(root, rel)
+	const wroteRel = path.relative(root, wrote).split(path.sep).join('/')
+	log(`theme ${theme === null ? 'cleared' : (theme.preset || 'custom')} → ${wroteRel}`)
+	const state = themestore.themeFor(root, rel, declaredThemeOf(root, rel))
+	out({ status: 'themed', canvas: rel, wrote: wroteRel, target, ...state, timestamp: now() }, 0)
+}
+
+/** What the CANVAS itself declares, if anything — the strongest voice in the precedence chain. */
+function declaredThemeOf(root, rel) {
+	if (hasMarkdownExtension(rel))
+		return null
+	try {
+		const canvas = JSON.parse(fs.readFileSync(path.resolve(root, rel), 'utf8'))
+		return canvas && canvas.document && typeof canvas.document === 'object' ? canvas.document.theme : null
+	} catch {
+		return null
+	}
+}
+
+/**
+ * Tell a running kernel to repaint. A canvas write is picked up by fs.watch — but
+ * `.instantcanvas.json` is a DOTFILE, and the watcher skips those, so a theme written for
+ * a native .md would sit on disk while the browser kept showing the old colors. Silent,
+ * and indistinguishable from "the command did nothing".
+ *
+ * Best effort by design: no kernel running is the normal case, not an error.
+ */
+async function nudgeKernel(root, rel) {
+	try {
+		const entry = await registry.readAlive(root)
+		if (entry)
+			await apiRequest(entry, 'POST', '/api/refresh', { path: rel || '' })
+	} catch { /* the browser will catch up on its next load */ }
 }
 
 async function cmdStatus(args) {
@@ -606,6 +823,7 @@ async function main() {
 		case 'print': return cmdPrint(args)
 		case 'stamp': return cmdStamp(args)
 		case 'validate': return cmdValidate(args)
+		case 'theme': return cmdTheme(args)
 		case 'catalog': return cmdCatalog(args)
 		case 'status': return cmdStatus(args)
 		case 'stop': return cmdStop(args)

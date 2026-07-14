@@ -4,11 +4,14 @@
 // `npx -y @happyskillsai/instant-canvas catalog`. Progressive disclosure by design:
 //   catalog            → lean index: one-liners only, no schemas
 //   catalog <name>     → ONE full schema (block, chart kind, field type,
-//                        'fieldset', 'sweep', 'document', 'envelope')
+//                        'fieldset', 'sweep', 'document', 'theme', 'envelope')
 //   catalog --full     → everything at once (large; avoid unless needed)
 
 const { VERSION, ENVELOPE, BLOCKS, FIELD_TYPES, CHART_KINDS, UNSUPPORTED_CHARTS, SHAPES } = require('./schema')
 const { PKG_VERSION } = require('./pkgmeta')
+const { presetList } = require('./theme')
+
+const THEME_PRESETS = presetList()
 
 function renderProperty(spec) {
 	const out = { type: Array.isArray(spec.type) ? spec.type.join(' | ') : spec.type }
@@ -131,7 +134,7 @@ function lead(text) {
 function leanIndex() {
 	return {
 		version: VERSION,
-		usage: 'This is the lean index. Pull ONE full schema at a time with `catalog <name>` (a block, a chart kind, a field type, "fieldset", "sweep", "document", or "envelope"). `catalog --full` dumps everything (large).',
+		usage: 'This is the lean index. Pull ONE full schema at a time with `catalog <name>` (a block, a chart kind, a field type, "fieldset", "sweep", "document", "theme", or "envelope"). `catalog --full` dumps everything (large).',
 		markdownFiles: 'A .md/.mdx/.markdown file that ALREADY EXISTS needs no canvas: `open <file.md>` renders it, `print <file.md> --out <f.pdf>` prints it. Author a canvas only for data you wrangled, or to put markdown beside other blocks.',
 		envelope: 'Every canvas: {"instantcanvas":1,"createdWith":<written by `stamp`, never by you>,"title":...,then "blocks":[...] XOR "pages":[{"name","blocks"}]} — `catalog envelope`',
 		blocks: oneLiners(BLOCKS, (b) => lead(b.description)),
@@ -140,6 +143,7 @@ function leanIndex() {
 		fieldTypes: oneLiners(FIELD_TYPES, (f) => lead(f.description)),
 		chartSweep: 'Any chart kind becomes a parameter sweep with {"sweep":{"label"?,"frames":[{"label","data"}]}} instead of "data": a slider steps through frames you precompute — `catalog sweep`',
 		documentMode: 'Envelope "document":{...} renders the canvas as print-ready paper sheets (cover, contents, header/footer, back cover, brand theme; display blocks only) that print 1:1 — `catalog document`',
+		documentTheme: `Document colors, charts included: "document":{"theme":{"preset":"forest|dracula|okabe|…"}} — ${THEME_PRESETS.length} presets, ${THEME_PRESETS.filter((p) => p.mode !== 'dark').length} on light paper and ${THEME_PRESETS.filter((p) => p.mode === 'dark').length} on dark (dark paper prints dark); each brings a chart colorway, and any token (accent, paper, text, …) overrides it. A native .md, which has no canvas, keeps its theme in .instantcanvas.json — \`catalog theme\` for the names`,
 		formLayout: 'Group fields with {"type":"fieldset","legend","columns":1-3,"fields":[...]} inside fields[]; per-field "span" widens, "ui":"buttons"|"pills" restyles select/radio/checkboxGroup — `catalog fieldset`',
 		validation: 'Per-field rules NEST under "validation": {"type":"secret","validation":{minLength,maxLength,pattern,patternMessage,min,max,step,protocols}} — enforced live and server-side. Flat on the field they are unknown properties: the canvas still validates and the rule silently does not exist.',
 	}
@@ -165,10 +169,11 @@ function fullCatalog() {
 		fieldTypes,
 		fieldCommonShape: renderShape(SHAPES.field),
 		fieldsetShape: renderFieldsetShape(),
-		// `--full` means full. These two were reachable only by name, so an agent that
+		// `--full` means full. These were reachable only by name, so an agent that
 		// pulled the whole contract to see what existed concluded document mode and
 		// sweeps did not — the one mistake a catalog must never cause.
 		document: catalog('document'),
+		theme: catalog('theme'),
 		sweep: catalog('sweep'),
 	}
 }
@@ -198,6 +203,7 @@ function catalog(name) {
 				'A running header/footer is DERIVED when you declare none: the reader turns one on from the browser (canvas title, "{{pageNumber}} / {{totalPages}}"), and can equally turn a declared one off. That choice lives in their browser, so `print` never sees it — if the PDF *you* generate must carry page numbers, declare "header"/"footer" yourself. Either way the strips cost content height: they are measured into every sheet, so adding them can add a page and renumber the TOC.',
 				'On paper, code fences WRAP rather than scroll (a PDF has no scrollbar, so an overflowing line would simply be cut off) and carry no copy button. A table too wide for the page FOLDS its cells for the same reason, so no column is ever dropped. Long lines and wide tables are both safe to ship — do not pre-trim either to "make it fit".',
 				'cover.logo / backCover.logo must be a workspace-local image file (inlined server-side) or a data:image/ URI — remote URLs are never fetched.',
+				'"theme" is a named preset plus any token override, and it colors the charts too — `catalog theme`. The reader can change it in the browser and save it, which writes it back into this object; a native .md, which has no canvas, keeps its theme in `.instantcanvas.json` instead.',
 				'The TOC is generated automatically from headings and block titles whenever there is anything to list; the `toc` key only customizes it (title, depth) and the reader can toggle it in the browser. Its page numbers come from the deck\'s own pagination: exact on screen and via `npx -y @happyskillsai/instant-canvas print`; a manual paper or scale override in the browser print dialog can still repaginate.',
 			],
 			example: {
@@ -208,7 +214,7 @@ function catalog(name) {
 					cover: { title: 'Q3 Report', subtitle: 'Revenue and growth', author: 'Finance team', date: 'July 2026' },
 					toc: { depth: 2 },
 					footer: { left: 'Q3 Report', right: 'Page {{pageNumber}} of {{totalPages}}' },
-					theme: { accent: '#0054fe' },
+					theme: { preset: 'slate', accent: '#0054fe' },
 					page: { size: 'A4' },
 				},
 				blocks: [
@@ -216,6 +222,25 @@ function catalog(name) {
 					{ type: 'chart', kind: 'line', title: 'Signups', data: [{ month: 'Apr', signups: 2000 }, { month: 'May', signups: 2600 }], encoding: { x: 'month', y: 'signups' } },
 				],
 			},
+		}
+	if (name === 'theme')
+		return {
+			theme: true,
+			...renderShape(SHAPES.documentTheme),
+			presets: THEME_PRESETS.map((p) => ({ name: p.name, mode: p.mode, description: p.description, accent: p.accent, paper: p.paper, palette: p.palette })),
+			notes: [
+				'Pick a preset and stop. Each supplies an accent and a matching chart colorway and needs nothing else from you. They come in two groups: 14 on LIGHT paper and 8 on DARK ("midnight", "graphite", "abyss", "moss", "dracula", "tokyo", "solarized-dark", "okabe-dark"). Choosing on grounds other than taste: "okabe" and "okabe-dark" and "carbon" are colorblind-safe, and "mono" is the only preset that survives a black-and-white printer.',
+				'DARK PAPER PRINTS DARK. The deck IS the printed page and `print` renders backgrounds, so a dark preset produces a full-bleed dark PDF — right for a document that will be read on a screen, expensive for one that will be put on paper. Nothing stops you; just choose it on purpose.',
+				'"Dark" is not a flag you set, it is a paper color you chose: the sheet\'s whole dark set (code syntax, card surfaces, chart template) is derived from the LUMINANCE of the resolved "paper". So {"preset": "forest", "paper": "#101010"} is a dark document, and a custom palette with dark paper is too, without anything having to say so twice.',
+				'Any token overrides the preset on top of it. An "accent" with no "palette" of its own also LEADS the colorway, so the document and its charts agree about the brand color. In "palette" itself, ONE color is likewise a lead the preset fills out; TWO or more ARE the colorway, exactly as given — which is how a deliberate three-color chart is expressed.',
+				'A workspace can also carry its OWN palettes, in `.instantcanvas.json` under "palettes": {"My brand": {"accent": "#0054fe", "palette": [...]}}. They are offered in the browser beside the built-ins. They are a LIBRARY, not new preset names: applying one copies its colors into "document.theme", so a canvas never carries a reference it cannot resolve on its own, and never repaints itself against someone else\'s workspace.',
+				'TO SET COLORS, USE THE `theme` COMMAND — do not hand-write the config. `theme <file> --set \'{"preset":"forest","accent":"#0054fe"}\'` writes to the right file (a canvas\'s own "document.theme" if it declares "document", else `.instantcanvas.json`), validates first, and repaints an open browser. `theme --save "Acme" --set \'{...}\'` stores a reusable named palette; `theme --list` prints every preset and saved palette; `theme <file>` alone reports what a document is wearing and which file decides it. The reason this matters: `.instantcanvas.json` is IGNORED when it fails to parse (a broken config must not take a workspace down), so a hand-written typo produces no error and no visible change — `validate .instantcanvas.json` is how you find out.',
+				'A color that is not strict hex is REFUSED at the write boundary (INVALID_THEME), never silently dropped — so a brand color you scraped as "crimson" or "rgb(228,0,43)" must be converted to hex first, and you will be told rather than left reporting success on a theme that did not take.',
+				'Colors are strict hex (#rgb or #rrggbb) and nothing else — they are assigned into live CSS via CSSOM, which would happily accept "javascript:alert(1)". Named colors and rgb() are refused with INVALID_COLOR.',
+				'The reader can change all of this from the browser (a palette control in the topbar, in document view) and SAVE it — which writes it back here, into "document.theme". Unlike the TOC and header/footer toggles, this is not a view preference: it persists, and `print` therefore sees it.',
+				'A canvas with NO "document" object, and a native .md (which has no canvas at all), keep their theme in `.instantcanvas.json` at the workspace root instead: {"instantcanvas":1,"theme":{...},"documents":{"docs/report.md":{"theme":{...}}}}. Precedence: canvas document.theme > .instantcanvas.json documents[path].theme > .instantcanvas.json theme > default. Write that file yourself to brand a markdown file you never wrapped in a canvas.',
+			],
+			example: { document: { theme: { preset: 'slate', accent: '#0054fe' } } },
 		}
 	if (name === 'sweep')
 		return {

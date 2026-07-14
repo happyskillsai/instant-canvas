@@ -20,6 +20,7 @@ const STATE_DIR = process.env.INSTANTCANVAS_STATE_DIR
 const registry = require('../lib/registry')
 const { validate } = require('../lib/validate')
 const { catalog } = require('../lib/catalog')
+const { PRESET_NAMES: THEME_PRESET_NAMES } = require('../lib/theme')
 const { PKG_VERSION } = require('../lib/pkgmeta')
 const { withChrome, findChrome, sleep: cdpSleep } = require('./helpers/cdp')
 
@@ -215,6 +216,39 @@ test('catalog document: one schema with agent notes; its example validates clean
 	assert.deepEqual(r.warnings, [])
 })
 
+test('catalog theme: the presets are IN the contract, and the lean index says they exist', () => {
+	const t = catalog('theme')
+	assert.equal(t.theme, true)
+	assert.ok(t.properties.preset.enum.includes('forest'), 'the preset is an enum, so a typo is caught with a hint')
+	for (const tok of ['accent', 'paper', 'surface', 'text', 'muted', 'border', 'link', 'palette'])
+		assert.ok(t.properties[tok], `the ${tok} token is documented`)
+
+	// An agent cannot use a preset it cannot see. Names + colorways ship in the schema.
+	assert.equal(t.presets.length, THEME_PRESET_NAMES.length)
+	for (const name of ['forest', 'sepia', 'tableau', 'okabe', 'solarized'])
+		assert.ok(t.presets.some((p) => p.name === name), `${name} is offered`)
+	const forest = t.presets.find((p) => p.name === 'forest')
+	assert.match(forest.accent, /^#[0-9a-f]{6}$/i)
+	assert.ok(forest.palette.length >= 1)
+
+	// The two rules an agent would otherwise have to discover by being surprised.
+	assert.ok(t.notes.some((n) => /LEADS the colorway/.test(n)), 'a lone accent leads the colorway')
+	assert.ok(t.notes.some((n) => /\.instantcanvas\.json/.test(n)), 'a native .md keeps its theme elsewhere')
+
+	const r = validate(JSON.stringify({
+		instantcanvas: 1, createdWith: '0.0.0', title: 'T',
+		...t.example,
+		blocks: [{ type: 'markdown', text: 'hi' }],
+	}), { provenance: 'warn' })
+	assert.equal(r.ok, true, JSON.stringify(r.errors))
+
+	// Reachable by browsing, not only by knowing the word "theme" already.
+	const lean = catalog()
+	assert.match(lean.documentTheme, /forest/)
+	assert.match(lean.documentTheme, /catalog theme/)
+	assert.ok(catalog('--full').theme, '`--full` means full')
+})
+
 test('lean index carries the document pointer and stays a one-liner', () => {
 	const lean = catalog()
 	assert.equal(typeof lean.documentMode, 'string')
@@ -377,11 +411,16 @@ const PROBE = `
 const SNAPSHOT_JS = `
 	(() => {
 		const rootEl = document.querySelector('.canvas.doc-mode');
+		const sheet = document.querySelector('.sheet');
 		const gd = document.querySelector('.js-plotly-plot');
 		const cs = rootEl ? getComputedStyle(rootEl) : null;
 		return {
 			docMode: !!rootEl,
 			accent: cs ? cs.getPropertyValue('--doc-accent').trim() : null,
+			// The sheet's own computed ink, which is what a reader actually sees.
+			sheetText: sheet ? getComputedStyle(sheet).color : null,
+			sheetBg: sheet ? getComputedStyle(sheet).backgroundColor : null,
+			// Written for years, read by nothing. Proves the dead vars stay dead.
 			c2: cs ? cs.getPropertyValue('--doc-c2').trim() : null,
 			traceColors: gd && gd._fullData ? gd._fullData.map((t) => t.line && t.line.color) : [],
 			// Same resolution as the app's currentTheme(): forced attribute, else the
@@ -475,9 +514,19 @@ test('document theme: --doc-* tokens land via CSSOM and charts paint the brand p
 	const s = themeSnap.light
 	assert.equal(s.docMode, true, 'the canvas rendered in document mode')
 	assert.equal(s.accent, '#0054fe', 'computed --doc-accent carries the brand accent')
-	assert.equal(s.c2, '#00b4d8', 'palette slot tokens are set')
-	// The second sink: Plotly cannot read CSS variables, so the brand palette
-	// must arrive compiled into the template — trace colors prove it did.
+
+	// The sheet resolves the token set for real — an unthemed document still gets the
+	// literals the paper has always used, because they are the var() fallbacks.
+	assert.equal(s.sheetText, 'rgb(26, 29, 36)', 'paper ink is the LIGHT text token')
+	assert.equal(s.sheetBg, 'rgb(255, 255, 255)', 'paper is white when the theme does not say otherwise')
+
+	// The colorway is NOT a CSS sink. --doc-c1..c8 were written on every themed
+	// document for two releases and read by no rule anywhere; nothing in a sheet's DOM
+	// chrome is colored by series. Pinned empty so they cannot creep back unread.
+	assert.equal(s.c2, '', 'the colorway does not reach CSS')
+
+	// It reaches Plotly instead — the ONLY sink it has, because Plotly paints to
+	// canvas/SVG and cannot read var() at all. Trace colors prove it arrived compiled.
 	assert.deepEqual(s.traceColors, ['#0054fe', '#00b4d8'])
 })
 
@@ -548,8 +597,10 @@ const UNI_SNAPSHOT_JS = `
 			htmlActive: document.getElementById('viewHtml').classList.contains('active'),
 			fabHidden: document.getElementById('printBtn').hidden,
 			tocBtnHidden: document.getElementById('tocBtn').hidden,
+			tocBtnDisabled: document.getElementById('tocBtn').disabled,
 			tocBtnActive: document.getElementById('tocBtn').classList.contains('active'),
 			stripsBtnHidden: document.getElementById('stripsBtn').hidden,
+			stripsBtnDisabled: document.getElementById('stripsBtn').disabled,
 			stripsBtnActive: document.getElementById('stripsBtn').classList.contains('active'),
 			docMode: !!document.querySelector('.doc-mode'),
 			deckDisplay: deck ? getComputedStyle(deck).display : null,
@@ -752,8 +803,15 @@ test('a reader-toggled deck derives its TOC and paints paper-light charts', { sk
 test('the TOC is the reader\'s: a topbar toggle removes and restores it, repacking the deck', { skip: browserSkip, timeout: 120_000 }, () => {
 	const d = uniDrive.deck
 	assert.equal(d.tocBtnHidden, false, 'the TOC button shows in document view')
+	assert.equal(d.tocBtnDisabled, false)
 	assert.equal(d.tocBtnActive, true, 'and reads ON while the TOC is present')
-	assert.equal(uniDrive.classic.tocBtnHidden, true, 'no TOC button in the continuous view')
+	// A TOC is a property of PAPER — there are no page numbers for it to cite in the
+	// continuous view. The button therefore goes DISABLED there rather than vanishing:
+	// a control that disappears teaches nothing, and one that disappears under the
+	// cursor shuffles every other control in the bar while the reader reaches for it.
+	assert.equal(uniDrive.classic.tocBtnHidden, false, 'the TOC button stays in the bar in the continuous view')
+	assert.equal(uniDrive.classic.tocBtnDisabled, true, 'but cannot be pressed there')
+	assert.equal(uniDrive.classic.tocBtnActive, false, 'and wears no "on" ring it could not honour')
 
 	const off = uniDrive.tocOff
 	assert.equal(off.tocTitle, '', 'toggling removed the TOC sheet')
@@ -769,8 +827,12 @@ test('the TOC is the reader\'s: a topbar toggle removes and restores it, repacki
 
 test('the running header/footer is the reader\'s: derived with zero config, toggled from the topbar', { skip: browserSkip, timeout: 120_000 }, () => {
 	const d = uniDrive.deck
-	assert.equal(uniDrive.classic.stripsBtnHidden, true, 'no strips button in the continuous view')
+	// Same rule as the TOC: there is no sheet to put a running header ON in the
+	// continuous view, so the control stays put and goes dim rather than vanishing.
+	assert.equal(uniDrive.classic.stripsBtnHidden, false, 'the strips button stays in the bar in the continuous view')
+	assert.equal(uniDrive.classic.stripsBtnDisabled, true, 'but cannot be pressed there')
 	assert.equal(d.stripsBtnHidden, false, 'the strips button shows in document view')
+	assert.equal(d.stripsBtnDisabled, false)
 	assert.equal(d.stripsBtnActive, false, 'an undeclared canvas starts with no strips')
 	assert.equal(d.hdrs, 0, 'and renders none')
 	assert.equal(d.ftrs, 0)

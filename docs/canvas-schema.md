@@ -1,10 +1,13 @@
 ---
-description: The canvas JSON contract — envelope, six block types, 26 chart kinds, 16 field types, fieldset layout, validation rules, and the progressive-disclosure catalog.
-tags: [schema, validation, catalog, charts, forms]
+description: The canvas JSON contract — envelope, six block types, 26 chart kinds, 16 field types, fieldset layout, the document theme, validation rules, and the progressive-disclosure catalog.
+tags: [schema, validation, catalog, charts, forms, theme]
 source:
   - scripts/lib/schema.js
   - scripts/lib/validate.js
   - scripts/lib/catalog.js
+  - scripts/lib/theme.js
+  - scripts/lib/themestore.js
+  - scripts/lib/wsconfig.js
   - scripts/lib/markdownsrc.js
   - scripts/lib/mdcanvas.js
   - scripts/lib/pkgmeta.js
@@ -140,7 +143,8 @@ Validation: `data` becomes optional (and is warned about if sent anyway); `frame
   "header":    { "left"?, "center"?, "right"? },                 // every content sheet
   "footer":    { "left"?, "center"?, "right"? },                 // {{pageNumber}}/{{totalPages}} substituted
   "backCover": { "title"?, "text"?, "logo"? },
-  "theme":     { "accent"?, "palette"? },                        // strict hex only
+  "theme":     { "preset"?, "accent"?, "palette"?, "paper"?, "surface"?,
+                 "text"?, "muted"?, "border"?, "link"? },        // strict hex only
   "page":      { "size"?: "A4"|"letter", "orientation"?, "margin"?: "15mm" }
 }
 ```
@@ -148,12 +152,61 @@ Validation: `data` becomes optional (and is warned about if sent anyway); `frame
 Shapes are registry-driven (`SHAPES.document*` in `schema.js`); `checkDocument` in `validate.js` adds the value rules the registry cannot express:
 
 - **`DOCUMENT_INTERACTIVE_BLOCK`** — a `form` or `confirm` block, or a chart carrying `sweep`, is refused in a **declared** document canvas: paper cannot submit or drag. The hints teach the fixes (drop the block / remove `document` / ship the one frame you want as plain `data`). An *undeclared* interactive canvas is fine — its deck toggle is muted in the browser and clicking it explains the same refusal in a toast instead of a validation error.
-- **`INVALID_COLOR`** — theme colors must match `^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$`. The values are assigned into live CSS via CSSOM, which was observed accepting the literal string `javascript:alert(1)` — nothing looser than strict hex may pass. The palette holds 1–8 colors.
+- **`INVALID_COLOR`** — **every** theme color — each of the seven tokens and each palette entry, not just the accent — must match `^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$`. They all reach `setProperty`, and CSSOM was observed accepting the literal string `javascript:alert(1)`, so nothing looser than strict hex may pass. The palette holds 1–8 colors. An unknown `preset` is *not* checked here: it is an `enum` in the registry, so the generic machinery already refuses it as `INVALID_ENUM_VALUE` with a "did you mean" hint — a second bespoke check reported one typo as two errors.
 - **`UNKNOWN_TEMPLATE_VAR`** (warning) — an unknown `{{var}}` in a header/footer string renders literally; only `{{pageNumber}}` and `{{totalPages}}` are substituted.
 - `page.margin` must be a millimeter length (`^\d+(\.\d+)?mm$`) — sheet geometry is computed in millimeters.
 - `cover.logo`/`backCover.logo` follow the markdown asset ladder: remote URLs are `REMOTE_ASSET_BLOCKED` (same message, same hint), the extension must be in `IMAGE_MIME`, `insideRoot` confines the path, existence is checked when the root is known; a `data:image/` URI passes through as-is. The kernel inlines logo files as `data:` URIs (`resolveDocumentAssets`, sharing `inlineImageFile` with markdown image inlining) and drops a logo it cannot inline rather than serving a broken image.
 
 **TOC page numbers come from the deck's own pagination.** Because sheets are literal page boxes, the packer knows exactly which sheet every heading and block title landed on, and the TOC prints those numbers with dotted leaders. They are exact on screen, for `instantcanvas print`, and for Cmd+P at default settings. The honest caveat (which originally kept numbers out entirely — revisited at the user's request): a human who manually overrides paper size or scale *in the print dialog* can make Chrome repaginate, and printed numbers cannot follow. The `notes` in `catalog document` carry this caveat for agents.
+
+## The theme: one color system, two sinks
+
+`lib/theme.js` (`catalog theme`) owns the document's colors, and it is the *only* place the rules live — the kernel resolves a declared theme to concrete hex before the browser ever sees it (see [architecture.md](architecture.md)). A theme is a **named preset plus any token override**, and stopping at the preset is the expected case:
+
+- **22 presets, fourteen of them on light paper.** Eight are the house set — `default` (the indigo the runtime has always shipped), `slate`, `ocean`, `forest`, `plum`, `ember`, `mono`, `sepia` — and six are palettes an audience already reads: `tableau` (Tableau 10), `okabe` (Okabe-Ito), `carbon` (IBM Carbon), `nord`, `solarized` (Solarized Light), `material`. The second six exist because a reader asking for *"the Tableau colors"* is not asking to be designed for: they are asking for the palette their audience has been reading for a decade, and having to hand-type five hex codes to get it is friction with nothing on the other side of it. The remaining eight are on dark paper — see below. Each preset supplies an accent and a five-color chart colorway.
+- **7 single-color tokens**: `accent` (headings, rules, links, the cover), `paper` (the sheet), `surface` (cards inside it), `text`, `muted`, `border`, `link`. Plus `palette`, the 1–8-color chart colorway.
+
+Three properties are the only grounds other than taste for preferring one preset to another, so the catalog names them out loud. **`sepia` and `solarized` restyle the paper itself** — a warm off-white sheet with brown ink, and Solarized Light's cream sheet with slate ink, carried faithfully; the other light presets paint on white. **`mono` is the only preset that survives a black-and-white printer.** And **`okabe`, `okabe-dark` and `carbon` are colorblind-safe by construction**: Okabe-Ito's hues were chosen (Okabe & Ito, 2008) to stay distinct under all three common types of color blindness, and Carbon does the same at higher contrast, which suits a denser deck. A chart that must not be misread picks one of those and stops thinking about it.
+
+**Paper comes in two colors, and eight of the presets are dark**: `midnight` `graphite` `abyss` `moss` `dracula` `tokyo` `solarized-dark` `okabe-dark` (the last preserving the colorblind-safe guarantee for a reader who does not want a white sheet). Two things about them are worth stating precisely.
+
+First, **"dark" is not a flag — it is a paper color.** Nothing in the contract declares a theme dark. `resolve()` reads it off the *luminance of the resolved `paper`* (`isDarkPaper`, Rec. 709, so that `#0000ff` is dark and `#ffff00` is not), and everything downstream follows from that one value: the sheet's dark token set, its code syntax palette, its card surfaces, and the Plotly template charts compose over. Which means `{"preset": "forest", "paper": "#101010"}` is a dark document, and so is a custom palette whose paper happens to be dark, with no second key restating what the first already said. The alternative — a `mode` field — is a fact that can contradict the color beside it.
+
+Second, **the deck IS the printed page, and `print` renders backgrounds**, so a dark preset produces a full-bleed dark PDF. That is the right answer for a document meant to be read on a screen and an expensive one for a document meant to be put on paper. Nothing prevents it; the catalog and the browser both say it out loud, because the alternative is finding out at the printer.
+
+What a dark preset may *not* do is assume the app's dark chrome. A sheet is paper: it ignores the app's light/dark theme entirely, and a dark app still shows a white sheet unless the *document* asked for a dark one.
+
+Two composition rules are subtle enough that the catalog states them out loud:
+
+1. **An `accent` with no `palette` of its own leads the colorway.** Without this, pinning just the accent gives you a blue heading over a green first series — the document and its charts visibly disagreeing about what the brand color is. An explicit `palette` outranks it: it is the more specific statement of the same intent.
+2. **ONE color is a lead; TWO or more are the colorway, exactly as given.** A single-entry `palette` says *"this is my brand color, use it first"* — the preset supplies series 2–5, because pinning one swatch must not paint every series the same blue. From two entries on, the array **is** the colorway and nothing is appended to it. The earlier rule (any short palette extended from the preset up to five) made a deliberate three-color palette inexpressible — it silently grew back to five — and it made the browser's colorway editor lie: removing a swatch refilled itself from the preset the moment the reader let go. `resolve()` in `lib/theme.js` and `resolveLocally()` in the browser implement this identically, and must: the browser previews an unsaved edit with its copy, and a preview that disagrees with the kernel is a lie about what Save is going to do.
+
+`resolve()` is deliberately **forgiving** — anything that is not strict hex is dropped rather than passed through, because it also runs on a hand-edited config the validator never sees, and a bad color must not reach `setProperty` just because it arrived by the unvalidated door. Its strict counterpart `check()` guards the `POST /api/theme` write boundary and **refuses rather than sanitizes**: that boundary persists into a file the agent later reads back as truth. Anything `check()` accepts must survive `validate` afterwards, and a test asserts exactly that.
+
+### `.instantcanvas.json`: where a document with no envelope keeps its theme
+
+A native `.md` has nowhere to put a `document.theme` — the `.md` *is* the canvas, its envelope is synthesised in memory and never written, and we do not write to the user's prose. So the theme goes beside the workspace instead of inside the file (`lib/wsconfig.js`):
+
+```jsonc
+{"instantcanvas": 1,
+ "theme": {"preset": "forest"},                              // default for every document
+ "documents": {"docs/report.md": {"theme": {"preset": "sepia"}}},  // per-file, wins over it
+ "palettes": {"My brand": {"accent": "#0054fe", "palette": ["#0054fe", "#00c2a8"]}}}  // a library
+```
+
+It carries the marker but is **not a canvas**: `scan.js` skips dotfiles, so it never appears in the sidebar, and a malformed config is ignored rather than fatal. Precedence, weakest to strongest: built-in default < `theme` < `documents[rel].theme` < the canvas's `document.theme`. **The canvas always has the last word** — an agent's declared theme is part of its contract, and a workspace default must not silently repaint it.
+
+**An agent brands a markdown file with `instantcanvas theme`, and should not hand-write this file at all** (see [cli.md](cli.md)). Everything that makes the config forgiving makes hand-writing it *blind*: nothing validated it, `wsconfig.read()` swallows a parse error on purpose, and the watcher skips dotfiles — so a typo produced no error, no warning, and no repaint, which is what "the feature does not exist" looks like from the outside. `theme report.md --set '{…}'` writes the same file through the strict `check()` boundary the browser's Save uses, routes it by what the document *is* rather than where the agent happened to be pointing, and nudges a live kernel to repaint. And the file is now a checkable contract in its own right: **`validate .instantcanvas.json`** type-checks `theme`, every `documents["path"].theme` and every `palettes["name"]`, and refuses a palette name that shadows a built-in preset.
+
+### Custom palettes: a library, not a preset name
+
+`palettes` maps a name to a theme object — any of the seven tokens, plus a `palette` — and the browser offers them as chips beside the built-in presets. `lib/wsconfig.js` reads and writes them (`readPalettes()` / `setPalette()`), and `lib/themestore.js` is the write boundary both doors go through — the kernel's `POST /api/theme/palette` (`{name, theme}`, with `theme: null` deleting one) and the CLI's `theme --save <name> --set '{…}'` — guarded by the same strict-hex `theme.check()` as a document's theme (`INVALID_THEME`) for the same reason: this is a file the agent later reads back as truth. A name is 1–40 characters and a workspace holds at most 24 of them. Saving one from the CLI is how a brand an agent reverse-engineered once becomes a name every other document in the workspace can wear, and it shows up in the reader's picker the moment it lands. A name that collides with a built-in preset is a **409 `PALETTE_NAME_TAKEN`** — a custom `forest` shadowing the real one would make every chip in the picker ambiguous, and `catalog theme` ambiguous with it: the same name would mean two different sets of colors depending on whose workspace you opened it in.
+
+The load-bearing decision is what *applying* one does. **A custom palette is a library entry, not a new preset name: applying it MATERIALIZES its colors into `document.theme` rather than leaving a `"preset": "My brand"` reference behind.** A canvas is a self-contained contract, and three things depend on that. An agent reading the file must see the actual colors, not a name it cannot resolve. `validate` must stay a pure function of the file — a preset name that only exists in someone's workspace config makes validity depend on the machine you run it on. And a canvas mailed to someone else must not silently repaint itself against *their* `.instantcanvas.json`, or come up unstyled because their workspace never heard of "My brand". The library is for reuse while you author; the canvas keeps the answer.
+
+Two consequences follow directly, and both are the feature rather than a cost. The picker matches the active custom chip **by value** — a deep compare of the declared theme against each library entry — because there is no name left in the document to match on. And **deleting a library entry does not repaint the documents that used it**: their colors were copied in, and they are still what those documents say. There is nothing to undo and nothing to cascade.
+
+## Field types (16)
 
 `text textarea secret email url tel number date datetime select radio checkbox checkboxGroup range hidden readonly`
 
@@ -168,15 +221,15 @@ Common shape: `{name, label, type, required?, placeholder?, help?, default?, opt
 
 `validate(source, {root})` collects **all** errors in one pass — never fail-fast, never throws for spec problems. Every error carries `code`, `path` (e.g. `pages[1].blocks[0].encoding.y[1]`), `message`, and usually `got`, `expected`, a Levenshtein/alias-driven `hint` ("Did you mean \"range\"?"), and a correct `example`. Unknown properties are **warnings**, not errors. `INVALID_JSON` includes line/column. This is the deterministic half of the agentic loop: the agent writes, the validator names the exact defect and its fix, the agent retries until `{"ok": true}`.
 
-Error codes: `INVALID_JSON, INVALID_SPEC, UNSUPPORTED_VERSION, MISSING_CREATED_WITH(warn in the kernel), INVALID_CREATED_WITH(warn in the kernel), UNKNOWN_BLOCK_TYPE, UNKNOWN_FIELD_TYPE, UNKNOWN_PROPERTY(warn), MISSING_REQUIRED_PROPERTY, INVALID_PROPERTY_TYPE, INVALID_ENUM_VALUE, DUPLICATE_FIELD_NAME, MULTIPLE_INTERACTIVE_BLOCKS, DOCUMENT_INTERACTIVE_BLOCK, INVALID_COLOR, UNKNOWN_TEMPLATE_VAR(warn), ENCODING_KEY_NOT_IN_DATA, INVALID_ENV_KEY, PATH_OUTSIDE_WORKSPACE, MISSING_SOURCE, REMOTE_ASSET_BLOCKED, MDX_NOT_RENDERED(warn), RAW_HTML_NOT_RENDERED(warn)` — plus runtime codes surfaced by the CLI/kernel: `SECRET_RETURN_BLOCKED, WRITE_FAILED, SESSION_TIMEOUT, KERNEL_UNREACHABLE, CHROME_REQUIRED, BROWSER_OPEN_FAILED(warn), INTERNAL_ERROR`.
+Error codes: `INVALID_JSON, INVALID_SPEC, UNSUPPORTED_VERSION, MISSING_CREATED_WITH(warn in the kernel), INVALID_CREATED_WITH(warn in the kernel), UNKNOWN_BLOCK_TYPE, UNKNOWN_FIELD_TYPE, UNKNOWN_PROPERTY(warn), MISSING_REQUIRED_PROPERTY, INVALID_PROPERTY_TYPE, INVALID_ENUM_VALUE, DUPLICATE_FIELD_NAME, MULTIPLE_INTERACTIVE_BLOCKS, DOCUMENT_INTERACTIVE_BLOCK, INVALID_COLOR, UNKNOWN_TEMPLATE_VAR(warn), ENCODING_KEY_NOT_IN_DATA, INVALID_ENV_KEY, PATH_OUTSIDE_WORKSPACE, MISSING_SOURCE, REMOTE_ASSET_BLOCKED, MDX_NOT_RENDERED(warn), RAW_HTML_NOT_RENDERED(warn)` — plus runtime codes surfaced by the CLI/kernel: `SECRET_RETURN_BLOCKED, WRITE_FAILED, SESSION_TIMEOUT, KERNEL_UNREACHABLE, CHROME_REQUIRED, BROWSER_OPEN_FAILED(warn), INVALID_THEME, THEME_DECLARED_IN_CANVAS, INVALID_PALETTE_NAME, PALETTE_NAME_TAKEN, TOO_MANY_PALETTES, INTERNAL_ERROR`. The five theme codes are **write boundaries, never a canvas's shape** — they are raised by `lib/themestore.js`, which is to say by both doors into it: the browser's `POST /api/theme` / `POST /api/theme/palette` and the CLI's `theme` command, reported as an HTTP status on one and an exit-1 error object on the other. `INVALID_THEME` means a theme was refused rather than sanitized (and it is also what `validate .instantcanvas.json` reports for a bad color in the config); `THEME_DECLARED_IN_CANVAS` means a reset was refused because the canvas — not the config — is what declares the theme (see [architecture.md](architecture.md)). The three palette codes concern the workspace's own library, never a document.
 
 ## Catalog: progressive disclosure
 
 The catalog is designed so an agent pulls **only the information it needs, when it needs it**:
 
 1. `catalog` (bare) — a **~7 KB lean index**: one-liners for every block, every chart kind (with when-to-use), every field type, plus layout/validation pointers. No schemas — a test asserts no `"properties"` key appears and caps the payload at 7.5 KB. It opens with `markdownFiles`, because the cheapest canvas is the one an agent never writes: a `.md` that already exists is opened, not wrapped.
-2. `catalog <name>` — ONE full contract: a block, a chart kind, a field type, `fieldset`, `sweep`, `document`, or `envelope`. Chart kinds return summary, when-to-use, data shape, typed encoding, and a working example.
-3. `catalog --full` — the everything dump, for the rare case it is genuinely needed. It means *everything*: `document` and `sweep` were once reachable only by name, so an agent that pulled the whole contract to learn what existed concluded they did not.
+2. `catalog <name>` — ONE full contract: a block, a chart kind, a field type, `fieldset`, `sweep`, `document`, `theme`, or `envelope`. Chart kinds return summary, when-to-use, data shape, typed encoding, and a working example. `catalog theme` returns the token shape *plus* every preset with its swatches, so an agent can pick one without a second call.
+3. `catalog --full` — the everything dump, for the rare case it is genuinely needed. It means *everything*: `document` and `sweep` were once reachable only by name, so an agent that pulled the whole contract to learn what existed concluded they did not. `theme` was added to the dump for the same reason, the day it existed.
 
 The one-liners are generated from each registry `description`, and generating them is not free of judgment: the first implementation cut at the first `.`, which is not a sentence boundary — the chart block reached agents as the word *"Chart."* and confirm as *"Confirmation card (e."*. `lead()` takes whole sentences, and the cap exists to force concision on the *source* descriptions, never to be met by truncating them. That is why the size test is paired with one that rejects any fragment, cut abbreviation, or unbalanced paren.
 

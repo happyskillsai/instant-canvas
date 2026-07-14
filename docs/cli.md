@@ -4,6 +4,7 @@ tags: [cli, commands, agent-workflow]
 source:
   - scripts/instantcanvas.js
   - scripts/lib/cdp.js
+  - scripts/lib/themestore.js
 ---
 
 # CLI
@@ -20,7 +21,10 @@ Entry point: `npx -y @happyskillsai/instant-canvas <command>`, run from any dire
 open <canvas.json | file.md> [--workspace <dir>] [--no-open] [--timeout <s>] [--result <file>]
 print <canvas.json | file.md> --out <file.pdf> [--workspace <dir>]
 stamp <canvas.json> [--workspace <dir>] [--retrofit]
-validate <canvas.json>
+theme <canvas.json | file.md> [--set '<json>'] [--clear] [--all] [--workspace <dir>]
+theme --save <name> --set '<json>' | --clear
+theme --list
+validate <canvas.json | .instantcanvas.json>
 catalog [name] [--full]
 status [--workspace <dir>]
 stop [--workspace <dir>]
@@ -43,6 +47,8 @@ Prints a **document canvas** (envelope-level `document` object — any other can
 
 `print notes.md --out notes.pdf` needs no `document` object and no canvas: a markdown file *is* the document, and the deck derives every default it would have declared (A4, 15 mm, a TOC from its own headings). Because a display canvas opens continuous, the print URL carries `?view=deck` — the browser builds paper on arrival rather than print reaching into the page to click the toggle for itself.
 
+**The PDF carries the document's colors, and it costs `print` nothing to do so.** The theme is resolved server-side (see [architecture.md](architecture.md)), so a fresh page load in headless Chrome is handed the same concrete hex a reader's browser gets — including a theme the reader picked in the palette control and saved, and including a `.md`'s theme pinned in `.instantcanvas.json`. What `print` never sees are the *reader* toggles (TOC, running strips): those live in memory and die with the tab. That asymmetry is the whole design — a theme persists precisely so that it prints.
+
 - **The only Chrome-dependent command.** Discovery reuses `findChrome`; no Chrome → `CHROME_REQUIRED` (exit 2) naming `CHROME_PATH` as the override. An explicit `CHROME_PATH` pointing at a missing binary is an error, never a silent fallback.
 - Chrome launches `--headless=new --enable-gpu` — **never** the tests' swiftshader profile, which silently blanks 3D charts in printed output. 3D kinds need a working GPU for `print`; Cmd+P from the real browser always works. (Verified on macOS/Apple Silicon; a GPU-less CI box may still print blank 3D.)
 - `--out` resolves through `insideRoot`; outside the workspace → `PATH_OUTSIDE_WORKSPACE` (the CLI has no confirmation handshake — that flow is browser-only).
@@ -53,10 +59,36 @@ The only writer of `createdWith` (see [canvas-schema.md](canvas-schema.md)). It 
 
 Two properties are load-bearing. It is **idempotent**: an existing stamp is returned as `{"changed": false}` and the file is not touched, so a canvas keeps the version that bore it forever. And it **splices the field in as text**, mirroring the file's own indentation and colon spacing, rather than re-serializing the parsed object — a canvas belongs to the user, and re-serializing turned a one-line addition into a 148-line reformat (a minified canvas stays minified). The splice is re-parsed and diffed against the original before it is written; anything unexpected falls back to a full re-serialize. `--retrofit` writes `"unknown"` instead of the running version, for files created before stamping existed.
 
+The kernel learned the same lesson one level deeper when the browser gained a palette control: `lib/jsonedit.js` splices `document.theme` back into a canvas as text, and a *nested* member cannot be found by regex the way a top-level marker can (see [gotchas/runtime.md](gotchas/runtime.md)).
+
+### theme
+
+**The door an agent needed and did not have.** A user asks for a report in the company's brand colors; the agent reverse-engineers them from the website and now has to *set* them. For a canvas it authored that always worked — write `document.theme`, `validate` type-checks every color, the browser hot-reloads. But a native `.md` has no canvas to write into: its theme lives in `.instantcanvas.json`, and hand-writing that file was writing **blind**. Nothing validated it, `wsconfig.read()` swallows a parse error *by design* (a broken config must not take a workspace down), and the kernel's watcher skips dotfiles. A typo therefore produced no error, no warning, and no visible change — indistinguishable from the feature not existing. `theme` is that file made addressable, validated, and visible.
+
+```
+theme report.md                                   # what is it wearing, and which file decides?
+theme report.md --set '{"preset":"forest"}'       # write it
+theme report.md --set '{"accent":"#e4002b","palette":["#e4002b","#001689"]}'
+theme report.md --clear                           # remove it
+theme --all --set '{"preset":"sepia"}'            # the workspace default, for every document
+theme --save 'Acme' --set '{"accent":"#e4002b"}'  # a reusable named palette; --clear deletes it
+theme --list                                      # every preset and every saved palette
+```
+
+Bare (no `--set`, no `--clear`) it **writes nothing** and reports: `{"status":"theme","canvas","theme","themeDeclared","themeSource"}` — the resolved concrete hex, what the file actually *says*, and which of `canvas` | `workspace` | `default` decided it. A write answers with `{"status":"themed","wrote","target","theme",…}`, where `wrote` is the file that changed and `target` is `canvas` or `workspace`; `--save` answers `{"status":"palette-saved"|"palette-deleted","palette","wrote",…}`; `--list` answers `{"status":"themes","presets":[…],"palettes":[…],"tokens":[…]}` — every preset with its mode, description, accent, paper and colorway, so **an agent never has to guess a preset name**, and every palette the workspace has saved.
+
+Three properties make it trustworthy:
+
+- **It routes exactly like the browser's Save, because it *is* the browser's Save.** The rule — a canvas that already declares `document` gets its own `document.theme` spliced in as text; a native `.md`, or a canvas with **no** `document` object, gets `.instantcanvas.json`; a `document` object is never created — lives in `lib/themestore.js` and is called by both doors (see [architecture.md](architecture.md)). A reader clicking Save and an agent running `theme` must not be able to disagree about where a theme belongs. `--all` (scope `workspace`) overrides the routing and writes the default for every document; `--clear` on a canvas that declares its own theme is refused with `THEME_DECLARED_IN_CANVAS` rather than editing the author's contract out from under them.
+- **A non-hex color is refused at the boundary, never silently dropped.** `theme.resolve()` is deliberately forgiving — it also runs on hand-edited configs — so it would have quietly discarded a brand color scraped as `crimson`, leaving the agent to report success on a theme that did not take. `themeLib.check()` is its strict counterpart and the same one `POST /api/theme` goes through: `INVALID_THEME`, the offending path, and **nothing written**.
+- **It repaints an open browser.** The CLI writes the files itself — no kernel required, and none is spawned — then best-effort `POST /api/refresh` to a *live* kernel (see [architecture.md](architecture.md)). Necessary because a canvas write rides `fs.watch` while `.instantcanvas.json` is a dotfile the watcher filters out: without the nudge a themed `.md` would sit correct on disk while the open browser kept showing the old colors.
+
+Exit 0 clean; exit 1 on `INVALID_THEME`, `INVALID_JSON` (the `--set` string itself), `INVALID_PALETTE_NAME`, `PALETTE_NAME_TAKEN` (the name is a built-in preset), `TOO_MANY_PALETTES`, `THEME_DECLARED_IN_CANVAS`, `PATH_OUTSIDE_WORKSPACE`, `MISSING_SOURCE`.
+
 ### validate / catalog / status / stop
 
-- `validate` prints the validator verdict (`{ok, errorCount, errors, warnings}`), exit 0/1, with a compact human rendering on stderr.
-- `catalog` is the progressive-disclosure surface — lean index bare, one schema by name, `--full` for everything (see [canvas-schema.md](canvas-schema.md)).
+- `validate` prints the validator verdict (`{ok, errorCount, errors, warnings}`), exit 0/1, with a compact human rendering on stderr. **It also validates `.instantcanvas.json`** — `theme`, `documents["path"].theme` and `palettes["name"]` through the same `theme.check()` the browser's Save uses, plus a refusal of any palette name that shadows a built-in preset. The config is a contract like any other, and it is the one that used to fail *silently*; this is where an agent gets to find out. An unparseable config reports `INVALID_JSON` and deliberately **does not quote the file's bytes back** — the same rule that stops `validate .env` printing a secret into the agent's context (see [security.md](security.md)).
+- `catalog` is the progressive-disclosure surface — lean index bare, one schema by name (a block, a chart kind, a field type, `fieldset`, `sweep`, `document`, **`theme`**, or `envelope`), `--full` for everything (see [canvas-schema.md](canvas-schema.md)). `catalog theme` is the document color system: the token shape *and* every preset with its swatches, prose and light/dark mode, so picking one costs no second call.
 - `status` reports `{running, root, port, pid, startedAt, version}`.
 - `stop` shuts the kernel down and is idempotent.
 
@@ -86,5 +118,7 @@ Secret values appear in **no** variant — see [security.md](security.md).
 Step 4 is the one step the agent cannot fake, and skipping it is self-correcting rather than silent: `validate` and `open` both refuse an unstamped canvas with `MISSING_CREATED_WITH`, whose `hint` is the `stamp` command itself. The agent repairs it inside its own loop; the user never sees it.
 
 **To show a markdown file that already exists, skip all six steps**: `open report.md`. There is no wrapper to write, nothing to stamp, and nothing to validate. The loop above is for data the agent wrangled into a contract; a `.md` is already the data.
+
+Colors are the one thing a `.md` cannot carry for itself, and `theme` is the whole answer: `theme --list` to see what exists, `theme report.md --set '{…}'` to brand it, `theme --save '<name>'` once so the same brand is one word away for every document afterwards — and, if the config was ever hand-written, `validate .instantcanvas.json` to find out whether it says what its author thought it said.
 
 Convention: use the project root as the workspace for a whole session and subfolders as sidebar sections; separate workspaces only when the user genuinely wants isolation.
