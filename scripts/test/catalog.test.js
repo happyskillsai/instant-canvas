@@ -39,7 +39,14 @@ test('bare catalog is the LEAN index: one-liners for everything, no schemas (pro
 	// schemes — the exact failure `catalog --full` had when `document` and `sweep`
 	// were reachable only by name. The names are the payload; the entry itself is one
 	// line and points at `catalog theme` for the rest.
-	assert.ok(JSON.stringify(lean).length < 8000, 'index stays small: ' + JSON.stringify(lean).length)
+	//
+	// Raised 8000 → 8400 for the COMPANION canvas, on exactly that argument and no
+	// other. An agent that cannot see `enhances` here has no way to learn that a
+	// markdown file can carry a cover at all — it would go on believing a .md is
+	// unbrandable, which is what it was until this shipped. One line, and it points at
+	// `catalog envelope`. The cap is not a budget to spend: it is what stops the next
+	// entry from being written as a paragraph.
+	assert.ok(JSON.stringify(lean).length < 8400, 'index stays small: ' + JSON.stringify(lean).length)
 
 	// The defects that forced the rewrite, pinned so they cannot return: no entry may
 	// be a fragment, end mid-abbreviation, or carry an unbalanced paren. This is what
@@ -196,6 +203,70 @@ test('SKILL.md can actually get an agent to a printable canvas', () => {
 		assert.ok(doc[key], `SKILL.md documents "${key}" — it must exist in the registry`)
 	assert.match(SKILL, /DOCUMENT_INTERACTIVE_BLOCK/, 'and warns that paper refuses form/confirm/sweep')
 	assert.match(SKILL, /\{\{pageNumber\}\}/, 'and names the only substituted variables')
+})
+
+test('SKILL.md teaches the COMPANION, and every key it shows is real', () => {
+	// The whole feature is unreachable to an agent that is not told it exists: without
+	// `enhances`, a markdown file simply cannot carry a cover, and the agent has no way to
+	// discover otherwise. This is the claim that, if it rots, silently removes the feature.
+	assert.ok(schema.ENVELOPE.properties.enhances, '`enhances` is an envelope key')
+	assert.match(SKILL, /"enhances"/, 'SKILL.md shows the enhances key')
+	assert.match(SKILL, /companion/i, 'and names the concept an agent has to search for')
+	// The rule an agent must not get wrong: point at the .md, not at the companion.
+	assert.match(SKILL, /the companion is what runs/i, 'and states that the companion supersedes its document')
+
+	// Every cover-background key SKILL.md shows must exist, or an agent writes a canvas
+	// that fails validation on a key it read in its own contract.
+	const bg = schema.SHAPES.documentCoverBackground.properties
+	for (const key of ['src', 'size', 'position', 'scrim', 'ink'])
+		assert.ok(bg[key], `SKILL.md documents cover.background.${key} — it must exist in the registry`)
+	for (const key of ['color', 'opacity'])
+		assert.ok(schema.SHAPES.documentScrim.properties[key], `SKILL.md documents scrim.${key}`)
+	assert.ok(schema.SHAPES.documentCover.properties.background, 'cover carries a background')
+	assert.ok(schema.SHAPES.documentBackCover.properties.background, 'and so does the back cover, independently')
+
+	// The legibility rule is the one thing a cover photo CANNOT be left to discover: a dark
+	// photo swallows a near-black title, and neither knob is defaulted on.
+	assert.match(SKILL, /scrim.{0,40}ink|ink.{0,40}scrim/is, 'SKILL.md names both legibility knobs')
+})
+
+test('SKILL.md does not still teach the way that no longer exists', () => {
+	// The question this answers: after a refactor, is the agent's contract only aware of the
+	// NEW way — or is it carrying both, and liable to reach for a file that is gone?
+	//
+	// `.instantcanvas.json` and its `documents` map were deleted outright. An agent that
+	// still reads about them would write a config nothing reads, see no error (there is no
+	// file to be wrong), and report success on a theme that never took — which is exactly
+	// the silent failure the whole redesign was meant to end. So: they must appear NOWHERE.
+	assert.ok(!/instantcanvas\.json/.test(SKILL), 'the dead config is not still being taught')
+	assert.ok(!/"documents"\s*:/.test(SKILL), 'nor its per-path documents map')
+
+	// And the surviving config must be named correctly, or the agent cannot find it.
+	assert.match(SKILL, /skills-config\.json/, 'the workspace config is named')
+	assert.match(SKILL, /happyskillsai\/instant-canvas/, 'under the owner/name key it actually lives at')
+})
+
+test('SKILL.md names only error codes the runtime can actually emit', () => {
+	// A code an agent is told to expect, that no surface ever raises, teaches it to handle a
+	// case that cannot happen — and worse, implies the real failure is something else.
+	const emitted = [
+		fs.readFileSync(path.join(__dirname, '..', 'lib', 'validate.js'), 'utf8'),
+		fs.readFileSync(path.join(__dirname, '..', 'lib', 'themestore.js'), 'utf8'),
+		fs.readFileSync(path.join(__dirname, '..', 'lib', 'skillsconfig.js'), 'utf8'),
+		fs.readFileSync(path.join(__dirname, '..', 'instantcanvas.js'), 'utf8'),
+	].join('\n')
+
+	// Every SCREAMING_SNAKE token SKILL.md presents as a code must exist in the runtime.
+	// An underscore is what distinguishes a CODE from prose emphasis ("DEFAULT", "NEVER").
+	const named = [...new Set(SKILL.match(/\b[A-Z]{3,}(?:_[A-Z]+)+\b/g) || [])]
+	assert.ok(named.length >= 5, 'SKILL.md does name error codes')
+	for (const code of named)
+		assert.ok(emitted.includes(code), `SKILL.md names ${code} — no surface emits it`)
+
+	// And the codes the companion work introduced are among them, because an agent that
+	// hits one and has never heard of it cannot repair itself.
+	for (const code of ['THEME_NEEDS_DOCUMENT', 'DUPLICATE_ENHANCES', 'ASSET_TOO_LARGE'])
+		assert.ok(SKILL.includes(code), `SKILL.md must teach ${code}`)
 })
 
 test('SKILL.md does not misdescribe the catalog it tells agents to call', () => {

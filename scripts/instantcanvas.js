@@ -28,7 +28,8 @@ const { PKG_VERSION, UNKNOWN_VERSION } = require('./lib/pkgmeta')
 const { hasMarkdownExtension } = require('./lib/markdownsrc')
 const themeLib = require('./lib/theme')
 const themestore = require('./lib/themestore')
-const wsconfig = require('./lib/wsconfig')
+const skillsconfig = require('./lib/skillsconfig')
+const { companionFor } = require('./lib/companion')
 
 const VERSION = PKG_VERSION
 const KERNEL = path.join(__dirname, 'kernel.js')
@@ -51,13 +52,17 @@ Commands:
       screen ARE the PDF pages. Requires Chrome (CHROME_PATH overrides
       discovery). A canvas needs an envelope-level "document" object; a
       markdown file derives its paper defaults and needs nothing.
-  validate <canvas.json>       Validate a canvas file, print JSON verdict.
+  validate <canvas.json |      Validate a canvas file, print JSON verdict. Also checks the
+           skills-config.json>  colors inside skills-config.json (theme + palettes).
   theme <canvas.json|file.md>  Show the document's resolved colors and which file
-      [--set '<json>']         decides them. --set writes a theme (into the canvas's
-      [--clear] [--all]        "document.theme" if it has one, else into
-                               .instantcanvas.json); --clear removes it; --all makes
-                               it the workspace default for every document.
-  theme --save <name>          Save a reusable named palette into .instantcanvas.json
+      [--set '<json>']         decides them. --set writes a theme into the document's
+      [--clear] [--all]        own envelope: a canvas's "document.theme", or — for a
+                               markdown file, which has no envelope — its COMPANION
+                               canvas (<base>.canvas.json, CREATED if absent, and
+                               named before it is written). --clear removes it; --all
+                               makes it the workspace default for every document, in
+                               skills-config.json.
+  theme --save <name>          Save a reusable named palette into skills-config.json
       --set '<json>'           — it appears in the browser's picker. --clear deletes it.
   theme --list                 Every preset and every saved palette, as JSON.
   catalog [name] [--full]      Lean index; <name> = block | chart kind | field
@@ -270,7 +275,7 @@ async function cmdOpen(args) {
 	// for it. There is nothing to validate, and nothing for the agent to write.
 	if (!hasMarkdownExtension(rel)) {
 		// Never launch UI for an invalid canvas.
-		const verdict = validate(fs.readFileSync(canvasAbs, 'utf8'), { root })
+		const verdict = validate(fs.readFileSync(canvasAbs, 'utf8'), { root, self: rel })
 		log(renderHuman(verdict, rel))
 		if (!verdict.ok)
 			out({
@@ -363,12 +368,15 @@ async function cmdPrint(args) {
 
 	assertReadable(canvasAbs, 'print')
 
-	// A markdown file needs no `document` object to be paper: the deck derives
-	// every default it would have declared (A4/15mm, TOC from its own headings).
+	// A markdown file needs no `document` object to be paper: the deck derives every
+	// default it would have declared (A4/15mm, TOC from its own headings) — and if it has a
+	// COMPANION, the kernel serves that instead, so the cover and the theme reach the PDF
+	// without `print` knowing anything about it. That uniformity is the point: a reader who
+	// sees a cover on screen and no cover in the PDF has been lied to.
 	const isDoc = hasMarkdownExtension(rel)
 	if (!isDoc) {
 		const raw = fs.readFileSync(canvasAbs, 'utf8')
-		const verdict = validate(raw, { root })
+		const verdict = validate(raw, { root, self: rel })
 		log(renderHuman(verdict, rel))
 		if (!verdict.ok)
 			out({
@@ -560,14 +568,12 @@ function cmdValidate(args) {
 		specError('INVALID_SPEC', `${path.basename(abs)} is a markdown document, not a canvas — there is no contract to validate. Just \`open\` it.`)
 	assertReadable(abs, 'validate')
 
-	// The workspace config is a contract too, and it is the one that fails SILENTLY:
-	// `wsconfig.read()` swallows a parse error so a malformed file cannot take the
-	// workspace down, and the kernel's watcher skips dotfiles. A hand-written config with
-	// a typo therefore produces no error, no warning, and no visible change anywhere —
-	// which is indistinguishable from the feature not existing. This is where an agent
-	// gets to find out.
-	if (path.basename(abs) === wsconfig.CONFIG_NAME)
-		return validateWorkspaceConfig(abs)
+	// The workspace config is a contract too — but it is no longer OURS. It is
+	// `skills-config.json`, the project's native committed config, and HappySkills owns its
+	// shape (and validates it far better than we could: exact line, column, and a fix).
+	// We check only what is ours: the colors inside our own `owner/name` block.
+	if (path.basename(abs) === skillsconfig.CONFIG_NAME)
+		return validateSkillsConfig(abs)
 	let raw
 	try {
 		raw = fs.readFileSync(abs, 'utf8')
@@ -575,7 +581,9 @@ function cmdValidate(args) {
 		out({ ok: false, errorCount: 1, errors: [{ code: 'INVALID_SPEC', path: '', message: `Cannot read file: ${abs}` }], warnings: [] }, 1)
 	}
 	const root = args.workspace ? resolveWorkspace(args) : process.cwd()
-	const result = validate(raw, { root })
+	// `self` lets the validator know which file it is looking at, which is the only way it
+	// can tell "another canvas already enhances this document" from "I am that canvas".
+	const result = validate(raw, { root, self: path.relative(root, abs).split(path.sep).join('/') })
 	log(renderHuman(result, path.basename(abs)))
 	out(result, result.ok ? 0 : 1)
 }
@@ -590,62 +598,67 @@ function cmdCatalog(args) {
 	}
 }
 
-/** Hold `.instantcanvas.json` to the same contract the browser's Save goes through. */
-function validateWorkspaceConfig(abs) {
+/**
+ * Hold the colors inside `skills-config.json` to the same contract the browser's Save
+ * goes through.
+ *
+ * The file itself is HappySkills' — its shape, its parse errors, its other skills' blocks
+ * — and `npx -y happyskills skills-config validate` checks all of that far better than we
+ * could, down to the line, the column and the fix. What is OURS is what is inside our own
+ * `owner/name` block: the colors. So that is what this checks, and the message points at
+ * the other command for everything else.
+ *
+ * A file that does not parse is reported WITHOUT quoting its bytes back — the same rule
+ * that keeps `validate .env` from printing a secret into the agent's context. It applies
+ * here even though a config holds no secrets, because the byte-echo channel is a property
+ * of the ERROR PATH, not of the file behind it, and a discipline with an exception is not
+ * a discipline.
+ */
+function validateSkillsConfig(abs) {
 	const errors = []
 	const add = (p, message) => errors.push({ code: 'INVALID_THEME', path: p, message })
+	const FIX = 'Run `npx -y happyskills skills-config validate --json` for the file\'s own shape (it reports the exact line and a fix). NEVER delete this file to "start clean" — it holds every skill\'s settings.'
 
 	let cfg
 	try {
 		cfg = JSON.parse(fs.readFileSync(abs, 'utf8'))
 	} catch (err) {
-		// Deliberately does not quote the file's bytes back: the same rule that keeps
-		// `validate .env` from printing a secret into the agent's context.
-		out({ ok: false, errorCount: 1, errors: [{ code: 'INVALID_JSON', path: '', message: `${wsconfig.CONFIG_NAME} is not valid JSON (${err.name}). The runtime IGNORES a config it cannot parse, so a document keeps its old colors and nothing reports why.` }], warnings: [] }, 1)
+		out({ ok: false, errorCount: 1, errors: [{ code: 'INVALID_JSON', path: '', message: `${skillsconfig.CONFIG_NAME} is not valid JSON (${err.name}), so every setting in it — including other skills' — is unreadable. ${FIX}` }], warnings: [] }, 1)
 	}
 	if (!cfg || typeof cfg !== 'object' || Array.isArray(cfg))
-		out({ ok: false, errorCount: 1, errors: [{ code: 'INVALID_SPEC', path: '', message: `${wsconfig.CONFIG_NAME} must be a JSON object.` }], warnings: [] }, 1)
+		out({ ok: false, errorCount: 1, errors: [{ code: 'INVALID_SPEC', path: '', message: `${skillsconfig.CONFIG_NAME} must be a JSON object. ${FIX}` }], warnings: [] }, 1)
 
 	const isObj = (v) => !!v && typeof v === 'object' && !Array.isArray(v)
-	const checkTheme = (theme, at) => {
+	const entry = cfg[skillsconfig.SKILL_KEY]
+	const config = isObj(entry) && isObj(entry.config) ? entry.config : {}
+	const at = (k) => `${JSON.stringify(skillsconfig.SKILL_KEY)}.config.${k}`
+
+	const checkTheme = (theme, p) => {
 		if (!isObj(theme))
-			return add(at, 'A theme must be an object.')
+			return add(p, 'A theme must be an object.')
 		for (const e of themeLib.check(theme))
-			add(`${at}.${e.path.replace(/^theme\.?/, '')}`.replace(/\.$/, ''), e.message)
+			add(`${p}.${e.path.replace(/^theme\.?/, '')}`.replace(/\.$/, ''), e.message)
 	}
 
-	if (cfg.theme !== undefined)
-		checkTheme(cfg.theme, 'theme')
+	if (config.theme !== undefined)
+		checkTheme(config.theme, at('theme'))
 
-	if (cfg.documents !== undefined) {
-		if (!isObj(cfg.documents))
-			add('documents', 'A map of workspace-relative paths to {"theme": {...}}.')
+	if (config.palettes !== undefined) {
+		if (!isObj(config.palettes))
+			add(at('palettes'), 'A map of palette names to theme objects.')
 		else {
-			for (const [rel, entry] of Object.entries(cfg.documents)) {
-				if (!isObj(entry) || entry.theme === undefined)
-					add(`documents["${rel}"]`, 'Each entry is {"theme": {...}}.')
-				else
-					checkTheme(entry.theme, `documents["${rel}"].theme`)
-			}
-		}
-	}
-
-	if (cfg.palettes !== undefined) {
-		if (!isObj(cfg.palettes))
-			add('palettes', 'A map of palette names to theme objects.')
-		else {
-			for (const [name, theme] of Object.entries(cfg.palettes)) {
+			for (const [name, theme] of Object.entries(config.palettes)) {
 				if (themeLib.PRESET_NAMES.includes(name.toLowerCase()))
-					add(`palettes["${name}"]`, `"${name}" is a built-in preset. A palette that shadows one makes every chip in the picker ambiguous.`)
-				checkTheme(theme, `palettes["${name}"]`)
+					add(`${at('palettes')}[${JSON.stringify(name)}]`, `"${name}" is a built-in preset. A palette that shadows one makes every chip in the picker ambiguous.`)
+				checkTheme(theme, `${at('palettes')}[${JSON.stringify(name)}]`)
 			}
 		}
 	}
 
 	const result = { ok: errors.length === 0, errorCount: errors.length, errors, warnings: [] }
 	log(result.ok
-		? `✓ ${wsconfig.CONFIG_NAME} is valid`
-		: `✗ ${wsconfig.CONFIG_NAME}: ${errors.length} error(s)\n` + errors.map((e) => `  [${e.code}] ${e.path} — ${e.message}`).join('\n'))
+		? `✓ ${skillsconfig.CONFIG_NAME}: the InstantCanvas colors are valid`
+		: `✗ ${skillsconfig.CONFIG_NAME}: ${errors.length} error(s)\n` + errors.map((e) => `  [${e.code}] ${e.path} — ${e.message}`).join('\n'))
 	out(result, result.ok ? 0 : 1)
 }
 
@@ -654,17 +667,15 @@ function validateWorkspaceConfig(abs) {
 /**
  * Set a document's colors, or save a workspace palette, from the command line.
  *
- * The door an agent needs and did not have. A canvas it authored, it could always theme
- * by writing `document.theme` itself — `validate` type-checks every color and the browser
- * hot-reloads. But a native `.md` has no canvas to write into: its theme belongs in
- * `.instantcanvas.json`, and hand-writing that file was writing BLIND. Nothing validated
- * it, `wsconfig.read()` swallows a parse error, and the kernel's watcher skips dotfiles —
- * so a typo produced no error, no warning, and no visible change. An agent would set the
- * user's brand colors, see nothing happen, and have no way to find out why.
+ * The door an agent needs. A canvas it authored, it could always theme by writing
+ * `document.theme` itself. A native `.md` it could not: the markdown file has no envelope
+ * to write into. Now it does — its COMPANION canvas — and this command is how an agent
+ * creates one without having to know the shape.
  *
- * So: validated (the same `check()` the browser's Save goes through), routed by the same
- * rules (lib/themestore.js — two doors, one implementation), and it tells a live kernel to
- * repaint, which a file write alone cannot do for a dotfile.
+ * Validated (the same `check()` the browser's Save goes through), routed by the same rules
+ * (lib/themestore.js — two doors, one implementation), and it tells a live kernel to
+ * repaint. And when the write will CREATE a file in the user's repository, it says so —
+ * on stderr before the write, and in `created` on stdout after it.
  */
 async function cmdTheme(args) {
 	const root = resolveWorkspace(args)
@@ -719,8 +730,34 @@ async function cmdTheme(args) {
 	}
 
 	const file = args._[0]
+
+	// `--all` is the WORKSPACE default — the theme every document falls back to — so it
+	// names no document at all. It is the one thing a form or a confirm canvas can still
+	// wear, since a `document` object is invalid beside an interactive block, and it is
+	// what the skills-config `theme` key exists for.
+	if (args.all && !file) {
+		if (theme === undefined)
+			specError('INVALID_SPEC', 'theme --all needs the colors too: add --set \'{...}\' (or --clear to remove the workspace default).')
+		let wrote
+		try {
+			({ wrote } = themestore.applyTheme(root, '', theme, { scope: 'workspace' }))
+		} catch (err) {
+			if (err instanceof themestore.ThemeError)
+				specError(err.code, err.message, err.errors ? { errors: err.errors } : {})
+			throw err
+		}
+		await nudgeKernel(root)
+		const wroteRel = path.relative(root, wrote).split(path.sep).join('/')
+		log(`workspace default ${theme === null ? 'cleared' : (theme.preset || 'custom')} → ${wroteRel}`)
+		out({
+			status: 'themed', canvas: null, wrote: wroteRel, target: 'workspace',
+			theme: themeLib.resolve(theme), themeDeclared: theme || {}, themeSource: theme === null ? 'default' : 'workspace',
+			timestamp: now(),
+		}, 0)
+	}
+
 	if (!file)
-		specError('INVALID_SPEC', 'theme needs a canvas or markdown file — or --list, or --save <name> --set \'{...}\'.')
+		specError('INVALID_SPEC', 'theme needs a canvas or markdown file — or --list, or --all --set \'{...}\' for the workspace default, or --save <name> --set \'{...}\'.')
 	const abs = path.resolve(root, file)
 	assertReadable(abs, 'theme')
 	if (!insideRoot(root, abs))
@@ -737,9 +774,20 @@ async function cmdTheme(args) {
 		out({ status: 'theme', canvas: rel, ...state, workspace: root, timestamp: now() }, 0)
 	}
 
-	let wrote, target
+	const scope = args.all ? 'workspace' : 'document'
+
+	// Say it BEFORE doing it. Theming a bare `.md` creates a visible, tracked file in the
+	// user's repository — which is the good trade (honest, portable, reviewable in a pull
+	// request) and precisely why it must not be a surprise.
+	const plan = themestore.planTheme(root, rel, { scope })
+	if (plan.creates && theme !== null)
+		log(`this will CREATE ${plan.creates} — the companion canvas that gives ${rel} an envelope to keep a theme in`)
+	if (plan.declares && theme !== null)
+		log(`this will add a "document" object to ${rel}, which will then OPEN as paper sheets rather than a continuous page`)
+
+	let wrote, target, created
 	try {
-		({ wrote, target } = themestore.applyTheme(root, rel, theme, { scope: args.all ? 'workspace' : 'document' }))
+		({ wrote, target, created } = themestore.applyTheme(root, rel, theme, { scope }))
 	} catch (err) {
 		if (err instanceof themestore.ThemeError)
 			specError(err.code, err.message, err.errors ? { errors: err.errors } : {})
@@ -748,17 +796,29 @@ async function cmdTheme(args) {
 
 	await nudgeKernel(root, rel)
 	const wroteRel = path.relative(root, wrote).split(path.sep).join('/')
-	log(`theme ${theme === null ? 'cleared' : (theme.preset || 'custom')} → ${wroteRel}`)
+	log(`theme ${theme === null ? 'cleared' : (theme.preset || 'custom')} → ${wroteRel}${created ? ' (created)' : ''}`)
 	const state = themestore.themeFor(root, rel, declaredThemeOf(root, rel))
-	out({ status: 'themed', canvas: rel, wrote: wroteRel, target, ...state, timestamp: now() }, 0)
+	out({ status: 'themed', canvas: rel, wrote: wroteRel, target, ...(created ? { created } : {}), ...state, timestamp: now() }, 0)
 }
 
-/** What the CANVAS itself declares, if anything — the strongest voice in the precedence chain. */
+/**
+ * What the document's own envelope declares, if anything — the strongest voice in the
+ * precedence chain.
+ *
+ * For a markdown file that envelope is its COMPANION, which is why this is not simply
+ * "read the file": a `.md` has no `document` of its own, and the theme it wears may be
+ * sitting in a canvas next to it.
+ */
 function declaredThemeOf(root, rel) {
-	if (hasMarkdownExtension(rel))
-		return null
+	let target = rel
+	if (hasMarkdownExtension(rel)) {
+		const found = companionFor(root, rel)
+		if (!found)
+			return null
+		target = found.canvas
+	}
 	try {
-		const canvas = JSON.parse(fs.readFileSync(path.resolve(root, rel), 'utf8'))
+		const canvas = JSON.parse(fs.readFileSync(path.resolve(root, target), 'utf8'))
 		return canvas && canvas.document && typeof canvas.document === 'object' ? canvas.document.theme : null
 	} catch {
 		return null
@@ -766,10 +826,12 @@ function declaredThemeOf(root, rel) {
 }
 
 /**
- * Tell a running kernel to repaint. A canvas write is picked up by fs.watch — but
- * `.instantcanvas.json` is a DOTFILE, and the watcher skips those, so a theme written for
- * a native .md would sit on disk while the browser kept showing the old colors. Silent,
- * and indistinguishable from "the command did nothing".
+ * Tell a running kernel to repaint.
+ *
+ * Most theme writes now ride `fs.watch` — a companion is an ordinary `*.canvas.json`, not
+ * the dotfile the watcher used to skip. What the watcher still cannot see is
+ * `skills-config.json` when it sits ABOVE the workspace root (a project root further up,
+ * or the user-level `~/.agents/` one), so the nudge still earns its keep.
  *
  * Best effort by design: no kernel running is the normal case, not an error.
  */

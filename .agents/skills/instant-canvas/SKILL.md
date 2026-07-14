@@ -30,6 +30,36 @@ $IC print docs/report.md --out report.pdf   # and prints as paper (needs a local
 
 Two consequences worth knowing. A natively-opened markdown file is rendered as best it can be rather than validated: raw HTML is dropped (its prose kept) and a remote image becomes `*(remote image not shown)*`, because the runtime never fetches. And `validate` / `stamp` refuse a markdown file — there is no contract to check and nothing to stamp. Author a real canvas with a `markdown` block only when you need the file *beside* other blocks (charts, KPIs, a form).
 
+### To give a markdown file a cover or a theme, write a **companion canvas**
+
+A `.md` has **no envelope** — it *is* the canvas, synthesised in memory and never written — so it has nowhere to keep a cover, a theme, a running header, or page geometry. All of that lives in `document`, and a markdown file cannot hold one.
+
+So give it one. A canvas that declares **`enhances`** is the *companion* of a markdown file:
+
+```jsonc
+// README.canvas.json — save it beside README.md
+{
+  "instantcanvas": 1,
+  "createdWith": "…",              // `stamp` writes this
+  "enhances": "README.md",         // ← the key that binds them
+  "title": "README",
+  "document": {
+    "cover": {"title": "InstantCanvas", "background": {"src": "assets/hero.jpg", "scrim": {"color": "#000000", "opacity": 0.4}, "ink": "#ffffff"}},
+    "theme": {"preset": "forest"},
+    "footer": {"right": "{{pageNumber}} / {{totalPages}}"}
+  },
+  "blocks": [{"type": "markdown", "src": "README.md"}]   // it renders its own document
+}
+```
+
+It is an **ordinary canvas** — nothing new to validate, nothing new to learn, and every `document` furnishing works. One key buys the entire envelope.
+
+- **The companion is what runs, everywhere.** `open README.md` renders it, `print README.md` prints it, and the sidebar shows **one** entry. You keep pointing at the `.md`; the runtime finds the companion.
+- **`enhances` is the mechanism; the filename is only a convention.** `<base>.canvas.json` beside `<base>.md` is what the CLI writes by default. Rename it to anything and nothing changes.
+- **Carry a `markdown` block whose `src` is the same file** — a companion that does not render its own document warns, and would show its own blocks instead of the prose.
+- **One companion per document.** Two canvases enhancing one file is `DUPLICATE_ENHANCES`, naming both.
+- `$IC theme README.md --set '{…}'` **creates the companion for you** if it does not exist, and names the file before writing it. That is usually the easiest way in.
+
 **The two paths are not equally forgiving, and this is the trap.** That leniency belongs to `open <file.md>` only. The moment you point a `markdown` **block's `src`** at the same file, you become its author and the validator holds you to it: a remote image — a shields.io badge in a README is the usual way to meet this — is a hard `REMOTE_ASSET_BLOCKED` **error**, exit 1, not a silent degrade. Raw HTML and MDX `import`s warn (and `html:false` *escapes* rather than deletes, so an unremoved tag shows up as literal text). Inline a `data:` URI or a workspace-local image, or just `open` the file natively and let it degrade.
 
 **When NOT to use**: trivial yes/no questions or one-word answers (just ask in chat); headless environments — CI, SSH without a display — check before invoking. A human must be present at the browser: if `open` cannot launch one it prints the URL on stderr and keeps waiting, but nobody will answer in CI.
@@ -58,8 +88,9 @@ If `validate` or `open` reports `MISSING_CREATED_WITH`, just run `stamp` and car
 open <canvas.json | file.md> [--workspace <dir>] [--no-open] [--timeout <s>] [--result <file>]
 print <canvas.json | file.md> --out <file.pdf> [--workspace <dir>]   # → PDF (needs a local Chrome)
 stamp <canvas.json> [--workspace <dir>] [--retrofit]                 # canvases only
-validate <canvas.json | .instantcanvas.json> [--workspace <dir>]     # not markdown
-theme <canvas.json | file.md> [--set '<json>'] [--clear] [--all]     # see Colors below
+validate <canvas.json | skills-config.json> [--workspace <dir>]      # not markdown
+theme <canvas.json | file.md> [--set '<json>'] [--clear]             # see Colors below
+theme --all --set '<json>'    # the workspace default (no file)
 theme --save <name> --set '<json>'  |  theme --list
 catalog [name] [--full]   # no name → lean index (NO schemas); <name> → one schema; --full → everything
 status [--workspace <dir>]
@@ -85,6 +116,7 @@ stop [--workspace <dir>]
   "createdWith": "0.3.0",         // required; written by `stamp`, never by you
   "title": "Q3 Report",           // required
   "description": "optional",
+  "enhances": "README.md",        // optional; makes this the COMPANION of a markdown file — see above
   "document": { /* … */ },        // optional; REQUIRED to `print` a canvas — see below
   "blocks": [ /* Block[] */ ]      // XOR "pages": [{"name": "Tab", "blocks": [...]}]
 }
@@ -98,10 +130,13 @@ stop [--workspace <dir>]
 
 ```jsonc
 "document": {
-  "cover":  {"title": "Q3 Report", "subtitle": "…", "author": "…", "date": "…"},
+  "cover":  {"title": "Q3 Report", "subtitle": "…", "author": "…", "date": "…",
+             "logo": "assets/logo.svg",              // the small 48px MARK
+             "background": {"src": "assets/hero.jpg"}},  // the COVER PHOTO — see below
   "toc":    {"title": "Contents", "depth": 2},      // the TOC is auto-generated anyway; this only tunes it
   "header": {"left": "Q3 Report"},                  // left | center | right
   "footer": {"right": "{{pageNumber}} / {{totalPages}}"},
+  "backCover": {"title": "Thank you", "background": {"src": "assets/back.jpg"}},  // independent of the front's
   "theme":  {"preset": "slate", "accent": "#0054fe"},  // see Colors below — STRICT hex, "red"/"rgb(…)" is INVALID_COLOR
   "page":   {"size": "A4", "orientation": "portrait", "margin": "15mm"}
 }
@@ -113,6 +148,39 @@ stop [--workspace <dir>]
 - **`{{pageNumber}}` / `{{totalPages}}`** are the only substituted variables; any other `{{var}}` renders literally (and warns).
 - **Page numbers in a PDF must be declared.** A human reading on screen can toggle a header/footer on themselves, but that choice lives in their browser and `print` never sees it. If the PDF *you* generate must carry page numbers, put them in `"footer"` yourself.
 - **`"pages"` become chapters**, each starting on a new sheet.
+
+### Cover backgrounds — a cover is a sheet, so it can carry a photo
+
+`logo` is a **48 × 48 mark**. A photograph put through it renders as a postage stamp. For a real cover image use `background`, which fills the sheet edge to edge:
+
+```jsonc
+"cover": {
+  "title": "Q3 Report",
+  "background": {
+    "src": "assets/hero.jpg",     // workspace-local or data: — never remote
+    "size": "cover",              // "cover" | "contain" | "<len>" | "<len> <len>"  (mm, px, %)
+    "position": "center",         // "center" | "top left" | "50% 25%" | "20mm 40mm"
+    "scrim": {"color": "#000000", "opacity": 0.35},
+    "ink": "#ffffff"
+  }
+}
+```
+
+**A photo behind text needs a `scrim` or an `ink`, usually both.** A dark photo swallows the near-black title; a light one swallows a white subtitle. Neither is defaulted on — silently tinting your photograph would be presumptuous — so it is on you. And you **cannot fix it with `theme.text`**: that token paints the *whole document*, so a white cover title would come with white body text on white paper. `ink` is cover-scoped, and it drives the muted author/date line too.
+
+`size` + `position` is the CSS background model, and it covers both use cases without a second mechanism:
+
+| Intent | Value |
+|---|---|
+| Full bleed, centred — **the default** | `{"src": "hero.jpg"}` |
+| Full bleed, keeping the left of the image (a face at the edge) | `{"position": "25% 50%"}` |
+| A 120 mm image parked bottom-right | `{"size": "120mm", "position": "right bottom"}` |
+
+**Percentage `position` is a focal point, not an offset.** `"25% 50%"` aligns *the point 25% across the image* with *the point 25% across the page* — i.e. which part survives the crop.
+
+**It only moves the axis the image actually overflows**, and this catches people out: an image whose aspect is *wider than the page* — which on portrait A4 (aspect 0.71) means a square photo **and** any landscape photo — is cropped **left/right**, so the **first** number is the live one and the second does nothing. Only an image *taller* than the page is cropped top/bottom.
+
+`backCover.background` is the same shape and entirely independent. Both are inlined server-side and reach the **PDF**, not just the screen. An oversize image is a hard `ASSET_TOO_LARGE` error, never a silent truncation — a full-bleed photo is paid for twice, in the canvas and in the PDF.
 
 ## Colors: `document.theme`
 
@@ -138,45 +206,55 @@ Pick a **preset** and stop — it supplies an accent *and* a matching chart colo
 
 ### Setting colors from the CLI — `$IC theme`
 
-**Use this rather than hand-writing config.** A canvas you authored, you can theme by writing `document.theme` yourself (`validate` checks every color). But a native `.md` has no canvas to write into: its theme lives in `.instantcanvas.json`, and that file is **ignored when it fails to parse** — a typo there produces no error and no visible change, which is indistinguishable from the feature not existing. `theme` validates, writes to the right file, and tells a running browser to repaint.
+**Use this rather than hand-writing anything.** It validates first, writes to the right file, and tells a running browser to repaint.
 
 ```bash
 $IC theme report.md                      # what is it wearing, and which file decides? (writes nothing)
-$IC theme report.md --set '{"preset":"forest","accent":"#0054fe"}'
+$IC theme report.md --set '{"preset":"forest","accent":"#0054fe"}'   # creates report.canvas.json if needed
 $IC theme report.md --clear              # remove it
-$IC theme report.md --set '{...}' --all  # make it the workspace default for EVERY document
+$IC theme --all --set '{...}'            # the workspace DEFAULT, for every document (no file argument)
 $IC theme --save "Acme" --set '{...}'    # save a reusable named palette (appears in the browser's picker)
 $IC theme --list                         # every preset + every saved palette, as JSON
-$IC validate .instantcanvas.json         # if you did hand-write it, check it
 ```
 
-**Where it lands is decided for you**, by the same rule the browser uses: a canvas that declares `document` gets its own `document.theme` (spliced in as text — the rest of the file is untouched); a native `.md`, *or a canvas with no `document` object*, goes to `.instantcanvas.json`. The runtime never writes a `document` object into a canvas that lacks one, because `document` also makes the deck that canvas's default view and is refused on a form/confirm/sweep canvas — setting a color must not change what a canvas *is*.
+**Where a theme lands is decided for you, and it is always the document's own envelope:**
+
+| The document is… | Its theme goes… |
+|---|---|
+| a canvas that declares `document` | into its own `document.theme` (spliced as text — the rest of the file is untouched) |
+| a **markdown file** | into its **companion canvas**, *created if absent* — beside its cover and its header |
+| a **display** canvas with no `document` | into a `document` object created for it (it will then open as paper, not continuous) |
+| a canvas holding a **form / confirm / sweep** | **nowhere.** `THEME_NEEDS_DOCUMENT` — `document` is invalid beside an interactive block, so it wears the workspace default and nothing else |
+
+**Precedence, three levels:** the document's own `document.theme` → the workspace default (`theme` in `skills-config.json`) → the built-in default. The document always has the last word.
 
 **The brand-colors workflow** (user says *"style this in our company colors"*):
 
 1. Get the colors (from their site, their brand guide, wherever). You need an `accent` at minimum; a `palette` of 3–5 makes the charts theirs too.
 2. `$IC theme --save "Acme" --set '{"accent":"#e4002b","palette":["#e4002b","#001689","#f4a900"],"link":"#001689"}'` — saves it once, reusable, and it shows up in the user's picker.
-3. `$IC theme <their-doc> --set '{...same...}'` to apply it (add `--all` to brand every document in the workspace).
+3. `$IC theme <their-doc> --set '{...same...}'` to apply it (or `--all` to make it the workspace default).
 4. Non-hex is **refused**, not silently dropped: a color you scraped as `crimson` or `rgb(228,0,43)` comes back as `INVALID_THEME` with the offending path. Convert to hex first.
 
-### `.instantcanvas.json`
+### The workspace config — `skills-config.json`
 
-What the commands above write, and what you may write by hand (then `validate` it):
+The workspace default and the palette library live in the project's **own committed config**, keyed `owner/name`. It is not a format of ours, and the `theme` command is what writes it:
 
 ```jsonc
 {
-  "instantcanvas": 1,
-  "theme": {"preset": "slate"},                                    // default for every document
-  "documents": {"docs/report.md": {"theme": {"preset": "sepia"}}}, // per-file, wins over it
-  "palettes": {                                                    // the workspace's own palettes,
-    "Acme": {"accent": "#e4002b", "palette": ["#e4002b", "#001689", "#f4a900"]}
-  }                                                                // offered in the browser beside the presets
+  "happyskillsai/instant-canvas": {
+    "config": {
+      "theme": {"preset": "slate"},          // default for every document
+      "palettes": {                          // the workspace's own palettes, offered in the browser
+        "Acme": {"accent": "#e4002b", "palette": ["#e4002b", "#001689", "#f4a900"]}
+      }
+    }
+  }
 }
 ```
 
 `palettes` is a **library, not a set of new preset names.** Applying one copies its colors into the document's `theme`, so a canvas never carries a `"preset": "Acme"` reference it cannot resolve on its own — and never repaints itself against someone else's workspace.
 
-Precedence: `canvas document.theme` → `.instantcanvas.json documents[path].theme` → `.instantcanvas.json theme` → default. The canvas always has the last word, so the runtime never writes a `document` object into a canvas that lacks one (that would change what the canvas *is* — `document` makes the deck its default view and is refused on a form/confirm/sweep canvas). It writes to `.instantcanvas.json` instead.
+If the file is ever corrupt, **fix the syntax in place — never delete it.** It holds every skill's settings. `npx -y happyskills skills-config validate --json` reports the exact line and a fix.
 
 ## Block quick reference
 

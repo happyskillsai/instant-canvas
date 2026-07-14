@@ -538,7 +538,7 @@ async function ensurePresets() {
 
 const PAL_SOURCE_LABEL = {
 	canvas: 'from this canvas',
-	workspace: 'from .instantcanvas.json',
+	workspace: 'workspace default',
 	default: 'default',
 }
 
@@ -554,12 +554,37 @@ function paletteChips(list, activeName, { removable = false } = {}) {
 		</button>`).join('')
 }
 
+/**
+ * Deep-equal two themes REGARDLESS OF KEY ORDER.
+ *
+ * `JSON.stringify(a) === JSON.stringify(b)` is order-sensitive, and the workspace's
+ * palettes now round-trip through `happyskills skills-config set`, which stores values
+ * verbatim but **returns the keys alphabetised**:
+ *
+ *   sent: accent, link, paper, surface, text, muted, border, palette
+ *   got:  accent, border, link, muted, palette, paper, surface, text
+ *
+ * Same colors, different string. So a palette that had merely been SAVED once would stop
+ * matching its own chip — the chip would go dark while the document was still wearing
+ * exactly those colors, and nothing would say why. Arrays keep their order (a colorway is
+ * a sequence); only object keys are normalized.
+ */
+function canonical(v) {
+	if (Array.isArray(v))
+		return v.map(canonical)
+	if (v && typeof v === 'object')
+		return Object.fromEntries(Object.keys(v).sort().map((k) => [k, canonical(v[k])]))
+	return v
+}
+
+const sameTheme = (a, b) => JSON.stringify(canonical(a)) === JSON.stringify(canonical(b))
+
 /** A saved palette is matched by VALUE, not by name: applying one materializes its
- *  colors into the theme (it leaves no `preset` reference behind — see lib/wsconfig.js),
+ *  colors into the theme (it leaves no `preset` reference behind — see lib/themestore.js),
  *  so "which chip is active" can only be answered by comparing what the colors ARE. */
 function activeCustomName(declared) {
 	const custom = (state.themePresets && state.themePresets.custom) || []
-	const hit = custom.find((p) => JSON.stringify(p.theme) === JSON.stringify(declared))
+	const hit = custom.find((p) => sameTheme(p.theme, declared))
 	return hit ? hit.name : null
 }
 
@@ -715,9 +740,34 @@ function syncPalettePanel() {
 		? `Replaces the palette "${typed}" in this workspace. Documents already using its colors keep them.`
 		: 'Every change previews live. Saving keeps these colors in the workspace, ready for any document in it.'
 
-	$('palNote').textContent = state.themeSource === 'canvas'
-		? 'Saves into this canvas\'s "document.theme".'
-		: 'This document has no "document" object, so the theme is saved to .instantcanvas.json.'
+	// SAY WHAT SAVE WILL DO, BEFORE IT DOES IT.
+	//
+	// A colour click can now make a FILE APPEAR in the reader's repository — the companion
+	// canvas that gives a markdown document an envelope to keep a theme in. That is a good
+	// trade (a tracked, reviewable file beats an invisible dotfile) and precisely because
+	// it is a good trade it must not be a surprise. The plan comes from the kernel, which
+	// is the only thing that knows what is on disk.
+	const plan = state.themePlan
+	const saveBtn = $('palSave')
+	if (plan && plan.blocked) {
+		// The one case that cannot be finessed: a `document` object is invalid beside a
+		// form, a confirm or a sweep, so this canvas has nowhere to keep a theme at all.
+		// The button stays VISIBLE and goes disabled — a hidden control teaches nothing —
+		// and "All documents" beside it still works, which is the honest way out.
+		saveBtn.disabled = true
+		saveBtn.title = `This canvas holds a ${plan.blocked.join(' and a ')}, so it cannot carry a "document" — and that is where a theme lives. Use "All documents" to set the workspace default instead.`
+		$('palNote').textContent = `A ${plan.blocked.join('/')} canvas cannot hold its own theme. "All documents" sets the workspace default, which it will follow.`
+	} else {
+		saveBtn.disabled = false
+		saveBtn.title = ''
+		$('palNote').textContent = plan && plan.creates
+			? `Save will CREATE ${plan.creates} — the companion canvas that gives this document a cover, a theme, and page setup.`
+			: plan && plan.declares
+				? 'Save will add a "document" object to this canvas. It will then open as paper sheets rather than a continuous page.'
+				: plan && plan.target === 'companion'
+					? `Saves into ${plan.wrote} — this document's companion canvas.`
+					: 'Saves into this canvas\'s "document.theme".'
+	}
 
 	renderPaletteDetail()
 }
@@ -818,7 +868,7 @@ $('palCustom').addEventListener('click', (e) => {
 	const hit = (state.themePresets.custom || []).find((p) => p.name === chip.getAttribute('data-preset'))
 	// Applying a saved palette copies its COLORS in, leaving no reference behind — so
 	// the canvas stays readable on its own and cannot be repainted by someone else's
-	// workspace config. See lib/wsconfig.js.
+	// workspace config. See lib/themestore.js.
 	if (hit)
 		applyDeclared({ ...hit.theme })
 })
@@ -911,15 +961,25 @@ async function saveTheme(scope) {
 	const { status, json } = await api('/api/theme', { method: 'POST', body })
 	if (status !== 200 || !json || !json.ok) {
 		const err = json && json.error
-		toast(err ? err.message : `Could not save the theme (HTTP ${status}).`, 5000)
+		// THEME_NEEDS_DOCUMENT is not a failure to apologise for — it is the answer. The
+		// panel already disabled Save and said so; this is the belt to that braces, for a
+		// canvas that gained a form between the plan and the click.
+		toast(err ? err.message : `Could not save the theme (HTTP ${status}).`, err && err.code === 'THEME_NEEDS_DOCUMENT' ? 7000 : 5000)
 		return
 	}
 	state.canvasTheme = json.theme
 	state.themeDeclared = json.themeDeclared || {}
 	state.themeSource = json.themeSource || 'default'
 	state.themeDirty = false
+	// The plan is stale the moment a write lands: the companion that "will be created" now
+	// exists, and the note must stop promising to create it.
+	await loadThemePlan()
 	renderPalettePanel()
-	toast(`Colors saved to ${json.wrote}.`, 3000)
+	// Name the file that appeared. A companion showing up in the reader's repo is the one
+	// outcome here they did not literally ask for, so it gets said rather than implied.
+	toast(json.created
+		? `Created ${json.created} — this document's companion canvas — and saved the colors into it.`
+		: `Colors saved to ${json.wrote}.`, json.created ? 5000 : 3000)
 }
 
 $('palSave').addEventListener('click', () => saveTheme($('palWorkspace').checked ? 'workspace' : 'document'))
@@ -946,11 +1006,33 @@ $('palReset').addEventListener('click', async () => {
 	openPalette(true)
 })
 
+/**
+ * What Save would do to THIS document, asked of the kernel — the only thing that knows
+ * what is on disk. Drives the footer note (which file is about to be created) and the
+ * Save button's disabled state (a canvas that cannot hold a theme at all).
+ *
+ * Best effort: a plan we could not fetch leaves the note on its generic wording rather
+ * than blocking the panel. Nothing here is a gate — the kernel re-decides on the write.
+ */
+async function loadThemePlan() {
+	state.themePlan = null
+	if (!state.activeId)
+		return
+	try {
+		const json = await api(`/api/theme/plan?path=${encodeURIComponent(state.activeId)}`)
+		if (json && json.ok)
+			state.themePlan = json
+	} catch { /* the note keeps its generic wording */ }
+}
+
 async function openPalette(keepOpen) {
 	if (!keepOpen && !$('palettePanel').hidden)
 		return closePalette()
 	if (!await ensurePresets())
 		return toast('Could not load the color presets.', 4000)
+	// What Save is about to do, BEFORE the reader can click it: a colour click can create
+	// a companion canvas in their repository, and that has to be announced, not discovered.
+	await loadThemePlan()
 	// Always opens on the list. The editor is somewhere you go on purpose, and being
 	// dropped back into it because that is where you happened to be last is disorienting.
 	state.palView = 'pick'
@@ -1029,9 +1111,15 @@ function renderTree() {
 		// A document is a markdown file the runtime renders as itself — same click,
 		// same canvas, but it was not authored for us, so it does not wear the
 		// canvas dot.
+		//
+		// A document with a COMPANION gets ONE row, not two: the companion canvas is
+		// hidden from the tree (lib/scan.js drops it) because the reader thinks in
+		// documents, not in metadata. But it is BADGED, because an enhancement nobody can
+		// see is an enhancement that teaches nothing — the reader has to be able to tell
+		// that this README carries a cover and a theme, and where they live.
 		const items = g.canvases.map((c) => `
-			<div class="item ${c.id === state.activeId ? 'active' : ''}" data-canvas="${esc(c.id)}" title="${esc(c.id)}">
-				${c.kind === 'document' ? `<span class="doc-ico">${icon('file-text')}</span>` : '<span class="dot"></span>'}${esc(c.title)}
+			<div class="item ${c.id === state.activeId ? 'active' : ''}" data-canvas="${esc(c.id)}" title="${esc(c.id)}${c.enhanced ? ` — enhanced by ${esc(c.enhanced)} (cover, theme, page setup)` : ''}">
+				${c.kind === 'document' ? `<span class="doc-ico">${icon('file-text')}</span>` : '<span class="dot"></span>'}${esc(c.title)}${c.enhanced ? '<span class="enh-dot" aria-label="enhanced by a companion canvas"></span>' : ''}
 			</div>`).join('')
 		// Delete removes marker-verified canvases and nothing else, so a folder that
 		// holds only documents has nothing for it to remove. Offering the button
@@ -2793,8 +2881,61 @@ function addLogo(parent, logo, cls) {
 	parent.appendChild(img)
 }
 
+/**
+ * A cover is a SHEET, so it can carry a full-bleed background image.
+ *
+ * Three things make this work, and each is load-bearing:
+ *
+ * 1. THE IMAGE GOES ON THE `.sheet` BOX, not on the padded content box. A full bleed has
+ *    to reach the paper's edge, past the 15 mm margin — `background-clip: border-box` is
+ *    what lets it, while the text stays inside the padding. `size` and `position` are
+ *    handed straight to the CSS background model: it already expresses both "fill the
+ *    sheet" and "place a sized image somewhere", so there is no second mechanism.
+ *
+ * 2. IT IS SET THROUGH CSSOM (`el.style.backgroundImage = …`), like every other color
+ *    here. The CSP forbids `style=""` attributes but exempts programmatic assignment, and
+ *    `img-src 'self' data:` already permits the URI the kernel inlined.
+ *
+ * 3. THE SCRIM IS ITS OWN LAYER, under the text and over the image, because a dark photo
+ *    swallows a near-black title and CSS cannot wash a background in place. `ink` then
+ *    repaints the cover's text — and ONLY the cover's, which is the whole reason it exists
+ *    rather than `theme.text`: that token paints the entire document, so a white cover
+ *    title would come with white body text on white paper.
+ *
+ * Z-order: image → scrim → logo / title / subtitle / author / accent band.
+ */
+function applyCoverBackground(sheet, bg) {
+	if (!bg || typeof bg !== 'object' || typeof bg.src !== 'string')
+		return
+	sheet.classList.add('has-bg')
+	// CSSOM, not a style attribute — the CSP drops the latter without a word.
+	sheet.style.backgroundImage = `url("${bg.src.replace(/"/g, '\\"')}")`
+	sheet.style.backgroundSize = bg.size || 'cover'
+	sheet.style.backgroundPosition = bg.position || 'center'
+	sheet.style.backgroundRepeat = 'no-repeat'
+	sheet.style.backgroundClip = 'border-box'
+
+	const scrim = bg.scrim
+	if (scrim && typeof scrim === 'object' && typeof scrim.color === 'string') {
+		const wash = document.createElement('div')
+		wash.className = 'cover-scrim'
+		wash.style.background = scrim.color
+		wash.style.opacity = String(typeof scrim.opacity === 'number' ? scrim.opacity : 0.35)
+		sheet.appendChild(wash)
+	}
+
+	// One knob for the cover's ink: the muted line (author/date) is DERIVED from it at
+	// reduced opacity rather than left to the theme, because a white title over a grey
+	// author line is still unreadable.
+	if (typeof bg.ink === 'string') {
+		sheet.style.setProperty('--cover-ink', bg.ink)
+		sheet.classList.add('has-ink')
+	}
+}
+
 function buildCover(geo, cover) {
 	const sheet = newSheet(geo, 'sheet-cover')
+	applyCoverBackground(sheet, cover.background)
 	addLogo(sheet, cover.logo, 'cover-logo')
 	const rule = document.createElement('div')
 	rule.className = 'cover-rule'
@@ -2827,6 +2968,9 @@ function buildCover(geo, cover) {
 
 function buildBackCover(geo, back) {
 	const sheet = newSheet(geo, 'sheet-back')
+	// The back cover's background is ENTIRELY INDEPENDENT of the front's — a different
+	// image, a different crop, a different scrim. Same shape, no shared state.
+	applyCoverBackground(sheet, back.background)
 	addLogo(sheet, back.logo, 'back-logo')
 	if (back.title) {
 		const t = document.createElement('div')

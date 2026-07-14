@@ -85,6 +85,21 @@ test('the tarball ships the runtime and never the tests', { skip }, () => {
 		assert.ok(tarballFiles.includes(must), `tarball must ship ${must}`)
 	assert.ok(!tarballFiles.some((p) => p.startsWith('scripts/test')), 'scripts/test/ never ships')
 	assert.ok(!tarballFiles.some((p) => p.startsWith('docs/') || p.startsWith('demos/') || p.startsWith('.agents/')), 'workbench material never ships')
+
+	// NO CANVAS SHIPS. The `files` allowlist is only half the story: npm FORCE-INCLUDES
+	// anything named `README*`, whatever the allowlist says — and a negation cannot take it
+	// back (verified: `"!README.canvas.json"` in `files` does nothing). So the moment this
+	// repo dogfooded the companion feature by giving its own README a cover, the resulting
+	// `README.canvas.json` started shipping to every consumer of the npm package. It is
+	// workbench, it references a demo asset that does NOT ship, and nobody installing the
+	// runtime asked for it.
+	//
+	// The fix is the feature explaining itself: `enhances` is the mechanism and the filename
+	// is only a convention, so the repo's own companion is named `readme-deck.canvas.json`
+	// and binds to README.md exactly as before. This assertion is what stops the canonical
+	// name from being "tidied" back in.
+	const canvases = tarballFiles.filter((p) => p.endsWith('.canvas.json'))
+	assert.deepEqual(canvases, [], 'no canvas ships — beware README*.canvas.json, which npm force-includes past the allowlist')
 })
 
 test('the installed bin is wired to a shebanged entry', { skip }, () => {

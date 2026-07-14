@@ -254,27 +254,48 @@ test('kernel: /api/canvas hands the page a theme resolved to concrete hex', asyn
 	assert.ok(presets.json.presets.some((p) => p.name === 'forest'))
 })
 
-test('kernel: a theme for a native .md lands in .instantcanvas.json — it has no canvas to hold one', async () => {
+test('kernel: a theme for a native .md CREATES its companion — the envelope it never had', async () => {
+	// The plan says so BEFORE the write, which is what lets the palette panel announce the
+	// file it is about to create rather than let the reader discover it afterwards.
+	const plan = await httpReq({ port: K.port, path: '/api/theme/plan?path=guide.md', headers: K.auth })
+	assert.equal(plan.status, 200)
+	assert.equal(plan.json.creates, 'guide.canvas.json')
+
 	const save = await httpReq({
 		port: K.port, method: 'POST', path: '/api/theme', headers: K.auth,
 		body: { path: 'guide.md', theme: { preset: 'sepia' } },
 	})
 	assert.equal(save.status, 200)
-	assert.equal(save.json.target, 'workspace')
-	assert.equal(save.json.wrote, '.instantcanvas.json')
+	assert.equal(save.json.target, 'companion')
+	assert.equal(save.json.wrote, 'guide.canvas.json')
+	assert.equal(save.json.created, 'guide.canvas.json', 'the response names the file that appeared')
 	assert.equal(save.json.theme.paper, '#fbf7ef', 'sepia restyles the paper itself')
 
-	// The markdown file itself is never written.
+	// The markdown file itself is never written. We do not touch the user's prose.
 	assert.ok(!fs.readFileSync(path.join(K.root, 'guide.md'), 'utf8').includes('sepia'))
 
+	// THE COMPANION IS WHAT RUNS: asking for the DOCUMENT serves the companion's canvas,
+	// under the document's own path. That uniformity is the feature — `print` goes through
+	// this same function, so a cover on screen is a cover in the PDF.
 	const back = await httpReq({ port: K.port, path: '/api/canvas?path=guide.md', headers: K.auth })
-	assert.equal(back.json.themeSource, 'workspace')
+	assert.equal(back.json.themeSource, 'canvas', 'the companion IS a canvas, and canvases have the last word')
 	assert.equal(back.json.theme.accent, '#92400e')
+	assert.equal(back.json.path, 'guide.md', 'served under the DOCUMENT path, which is what the reader thinks in')
+	assert.equal(back.json.companion, 'guide.canvas.json', 'and it says which file holds the furnishings')
 
-	// And it resets cleanly.
+	// The sidebar shows ONE entry — the document, badged — never two.
+	const tree = await httpReq({ port: K.port, path: '/api/workspace', headers: K.auth })
+	const flat = tree.json.collections.flatMap((c) => c.canvases)
+	assert.ok(!flat.some((e) => e.id === 'guide.canvas.json'), 'the companion is not listed')
+	assert.equal(flat.find((e) => e.id === 'guide.md').enhanced, 'guide.canvas.json', 'the document is badged')
+
+	// A theme the companion declares is the author's contract now, exactly like any canvas:
+	// the reader is told where it lives rather than having it edited out from under them.
 	const reset = await httpReq({ port: K.port, method: 'POST', path: '/api/theme', headers: K.auth, body: { path: 'guide.md', theme: null } })
-	assert.equal(reset.status, 200)
-	assert.equal(reset.json.themeSource, 'default')
+	assert.equal(reset.status, 409)
+	assert.equal(reset.json.error.code, 'THEME_DECLARED_IN_CANVAS')
+
+	fs.rmSync(path.join(K.root, 'guide.canvas.json'))
 })
 
 test('kernel: a canvas that declares "document" is written IN PLACE, byte-for-byte outside the theme', async () => {
@@ -311,27 +332,52 @@ test('kernel: a canvas that declares "document" is written IN PLACE, byte-for-by
 	assert.equal(reset.json.error.code, 'THEME_DECLARED_IN_CANVAS')
 })
 
-test('kernel: a canvas with NO document object keeps its shape — the theme goes beside it', async () => {
-	// Writing `document` in would do far more than set a color: it makes the deck the
-	// canvas's default view, and is refused outright on a form/confirm/sweep canvas.
-	const before = fs.readFileSync(path.join(K.root, 'report.canvas.json'), 'utf8')
+test('kernel: a DISPLAY canvas with no document object gains one; an INTERACTIVE one is refused', async () => {
+	// A display canvas CAN hold a `document` — it just had not declared one. The only
+	// consequence is that it now opens as the deck rather than continuous: both views were
+	// always available to it, so this changes a default, not a capability. The plan says so.
+	const plan = await httpReq({ port: K.port, path: '/api/theme/plan?path=report.canvas.json', headers: K.auth })
+	assert.equal(plan.json.declares, true)
+	assert.equal(plan.json.blocked, null)
+
 	const save = await httpReq({
 		port: K.port, method: 'POST', path: '/api/theme', headers: K.auth,
 		body: { path: 'report.canvas.json', theme: { preset: 'plum' } },
 	})
 	assert.equal(save.status, 200)
-	assert.equal(save.json.target, 'workspace')
-	assert.equal(fs.readFileSync(path.join(K.root, 'report.canvas.json'), 'utf8'), before, 'the canvas is untouched')
-	assert.equal(JSON.parse(before).document, undefined)
+	assert.equal(save.json.target, 'canvas')
+	assert.deepEqual(JSON.parse(fs.readFileSync(path.join(K.root, 'report.canvas.json'), 'utf8')).document, { theme: { preset: 'plum' } })
 
-	await httpReq({ port: K.port, method: 'POST', path: '/api/theme', headers: K.auth, body: { path: 'report.canvas.json', theme: null } })
+	// An INTERACTIVE canvas is the case that cannot be finessed: `document` is invalid
+	// beside a form (DOCUMENT_INTERACTIVE_BLOCK — paper cannot submit), so creating one
+	// would make the agent's own canvas stop validating. A colour click must never do that.
+	const formPlan = await httpReq({ port: K.port, path: '/api/theme/plan?path=marketing/setup.canvas.json', headers: K.auth })
+	assert.deepEqual(formPlan.json.blocked, ['form'], 'the panel disables Save and names the reason')
+
+	const formBefore = fs.readFileSync(path.join(K.root, 'marketing/setup.canvas.json'), 'utf8')
+	const refused = await httpReq({
+		port: K.port, method: 'POST', path: '/api/theme', headers: K.auth,
+		body: { path: 'marketing/setup.canvas.json', theme: { preset: 'plum' } },
+	})
+	assert.equal(refused.status, 409)
+	assert.equal(refused.json.error.code, 'THEME_NEEDS_DOCUMENT')
+	assert.equal(fs.readFileSync(path.join(K.root, 'marketing/setup.canvas.json'), 'utf8'), formBefore, 'nothing was written')
+
+	// Its theme is the workspace default, and that door is still open to it.
+	const ws = await httpReq({
+		port: K.port, method: 'POST', path: '/api/theme', headers: K.auth,
+		body: { path: 'marketing/setup.canvas.json', theme: { preset: 'mono' }, scope: 'workspace' },
+	})
+	assert.equal(ws.status, 200)
+	assert.equal(ws.json.target, 'workspace')
 })
 
 test('kernel: a workspace keeps its own palettes, offered beside the built-in presets', async () => {
 	const theme = { accent: '#0054fe', palette: ['#0054fe', '#00b4d8', '#ff8800'] }
 	const save = await httpReq({ port: K.port, method: 'POST', path: '/api/theme/palette', headers: K.auth, body: { name: 'My brand', theme } })
 	assert.equal(save.status, 200)
-	assert.equal(save.json.wrote, '.instantcanvas.json')
+	// The project's OWN committed config, keyed owner/name — not a format of ours.
+	assert.equal(save.json.wrote, 'skills-config.json')
 	const mine = save.json.custom.find((p) => p.name === 'My brand')
 	assert.ok(mine)
 	assert.deepEqual(mine.palette, theme.palette, 'three colors mean three colors — no preset refill')
@@ -367,15 +413,16 @@ test('kernel: /api/theme refuses a color that is not strict hex, and writes noth
 	assert.equal(r.status, 400)
 	assert.equal(r.json.error.code, 'INVALID_THEME')
 	assert.equal(r.json.error.errors[0].path, 'theme.accent')
-	assert.ok(!fs.existsSync(path.join(K.root, '.instantcanvas.json'))
-		|| !JSON.stringify(wsRead(K.root)).includes('javascript'), 'nothing hostile reached the disk')
+	// Nothing hostile reached the disk — not the config, and not a companion conjured to
+	// hold it. A refusal writes NOTHING; it does not write a sanitized version.
+	assert.ok(!fs.existsSync(path.join(K.root, 'guide.canvas.json')), 'no companion was created for a refused theme')
+	const cfg = path.join(K.root, 'skills-config.json')
+	assert.ok(!fs.existsSync(cfg) || !fs.readFileSync(cfg, 'utf8').includes('javascript'))
 
 	// And it is refused for a file that is neither a canvas nor markdown.
 	const env = await httpReq({ port: K.port, method: 'POST', path: '/api/theme', headers: K.auth, body: { path: '.env', theme: { preset: 'mono' } } })
 	assert.equal(env.status, 404)
 })
-
-const wsRead = (root) => require('../lib/wsconfig').read(root)
 
 test('kernel: a markdown file renders as a canvas nobody wrote, degraded for a reader with no author', async () => {
 	const r = await httpReq({ port: K.port, path: '/api/canvas?path=guide.md', headers: K.auth })

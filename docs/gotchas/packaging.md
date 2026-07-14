@@ -11,11 +11,21 @@ source:
 
 ## Everything inside the skill folder ships — keep everything else out
 
-`release`/`publish` bundles the **entire** `.agents/skills/instant-canvas/` folder; whatever you drop in there reaches every consumer and competes for their agents' context. This is exactly why the runtime was migrated out (2026-07-11): the skill folder now carries only the agent-facing contract — SKILL.md, skill.json, LICENSE, ~20 KB — and 100% of the logic ships as the `instant-canvas` npm package instead, fetched lazily by `npx`. Never add scripts, design notes, specs, test tooling, or dev docs to the skill folder; if a consumer needs it, it belongs in the npm package.
+`release`/`publish` bundles the **entire** `.agents/skills/instant-canvas/` folder; whatever you drop in there reaches every consumer and competes for their agents' context. This is exactly why the runtime was migrated out (2026-07-11): the skill folder now carries only the agent-facing contract — SKILL.md, skill.json, CHANGELOG.md, LICENSE, ~52 KB — and 100% of the logic ships as the `instant-canvas` npm package instead, fetched lazily by `npx`. Never add scripts, design notes, specs, test tooling, or dev docs to the skill folder; if a consumer needs it, it belongs in the npm package.
 
 ## The npm tarball is an allowlist — verify with `npm pack --dry-run`
 
 The package publishes only what `package.json` `files` names: `scripts/` minus `scripts/test` (the `!scripts/test` negation), plus the files npm force-includes (package.json, README, LICENSE, CHANGELOG). After touching `files` or adding top-level directories, run `npm pack --dry-run` and read the list — a wrong allowlist either ships the tests or drops `scripts/web/`, leaving a kernel that serves nothing. Shape at migration time: 29 files, ~1.4 MB packed, ~4.3 MB unpacked.
+
+## npm FORCE-INCLUDES anything named `README*`, and a negation cannot take it back
+
+The `files` allowlist is only half the story. npm always ships `package.json`, `LICENSE`, `CHANGELOG` — and **`README*`, matched by prefix, whatever the extension**. So the day this repo dogfooded the companion feature by giving its own README a cover, the resulting **`README.canvas.json` started shipping inside the npm tarball**, past an allowlist that names only `scripts/`. It is workbench, it references a demo asset that does *not* ship, and nobody installing the runtime asked for it.
+
+Adding `"!README.canvas.json"` to `files` does **nothing** — verified against the real `npm pack --dry-run`; a force-include outranks a negation.
+
+The fix is the feature explaining itself: `enhances` is the mechanism and the filename is only a convention, so the repo's own companion is `readme-deck.canvas.json` and binds to `README.md` exactly as before. `e2e.test.js` now asserts **no `*.canvas.json` ships at all**, so the canonical name cannot be quietly "tidied" back in.
+
+The general rule, and it is the same one this file opens with: **the allowlist is a claim, `npm pack --dry-run` is the evidence.** Any new top-level file whose name starts with `README` is shipped whether you meant it or not.
 
 ## The size caps that blocked skill publishing are solved by relocation, not shrinking
 
@@ -59,4 +69,12 @@ The failure mode is what happens if you instead *insert* the new version below t
 
 The CLI parses `Unreleased`, cannot read it as a version, and stops. It then refuses with `MISSING_CHANGELOG_ENTRY` — *"CHANGELOG.md does not contain a ## [0.4.0] entry"* — which is false, and sends you looking for a missing entry that is sitting right there. The real tell is `next_step.context.current_top_entry: null`: it found **no** version heading at all. When a release complains about an entry you can see, check what is *above* it.
 
-This repo does keep a Keep-a-Changelog `## [Unreleased]` staging block in the skill bundle, because several agent sessions accumulate entries into it in parallel — that is worth keeping. It just has to be renamed, not out-ranked, at release time. (Restoring an empty `## [Unreleased]` above the released version afterwards is fine, and is what the repo does: the next release renames *that* heading in turn.)
+The repo keeps an empty `## [Unreleased]` heading above the released version, and the next release renames *that* heading in turn.
+
+## DO NOT hand-write the skill bundle's CHANGELOG — the publish step owns it
+
+**`.agents/skills/instant-canvas/CHANGELOG.md` is not yours to edit during a feature session.** It is produced and stamped by the HappySkills publish flow, from the release it is cutting. A working session writes the **repo's** `CHANGELOG.md` (the product changelog, at the root) and stops there.
+
+This is easy to get wrong, and it was: mid-session, a large hand-written `## [Unreleased]` block landed in the skill bundle's changelog because the entry above — which used to say that "several agent sessions accumulate entries into it in parallel" — read as an invitation. It is not. Two changelogs with two owners is a merge conflict waiting to happen, and the one the publish step generates is the one that ships.
+
+The rule, stated once: **root `CHANGELOG.md` is written by the session; the skill bundle's `CHANGELOG.md` is written by publish.** If a feature needs to be explained to *agents*, it belongs in **SKILL.md** — which is the contract they actually read — not in a changelog they never will.

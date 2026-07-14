@@ -50,6 +50,8 @@ let pdf = null
 let kernelToken = null
 let printedMd = null
 let mdPdf = null
+let printedCover = null
+let coverPdf = null
 
 test.before(async () => {
 	root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'ic-print-ws-')))
@@ -72,6 +74,32 @@ test.before(async () => {
 	printedMd = runCli(['print', path.join(root, 'handbook.md'), '--out', path.join(root, 'out', 'handbook.pdf'), '--workspace', root])
 	if (printedMd.code === 0)
 		mdPdf = fs.readFileSync(path.join(root, 'out', 'handbook.pdf'))
+
+	// A COMPANION with a full-bleed cover photo, printed by naming the MARKDOWN file.
+	// This is the whole feature in one command: `print notes.md` must find the companion,
+	// render its cover, and put the image in the PDF.
+	fs.writeFileSync(path.join(root, 'notes.md'), '# Notes\n\nProse that the companion renders.\n')
+	fs.writeFileSync(path.join(root, 'notes.canvas.json'), JSON.stringify({
+		instantcanvas: 1, createdWith: '0.0.0', enhances: 'notes.md', title: 'Notes',
+		document: {
+			cover: {
+				title: 'Notes',
+				background: {
+					src: 'assets/cover.png',
+					size: 'cover',
+					position: '25% 50%',
+					scrim: { color: '#000000', opacity: 0.45 },
+					ink: '#ffffff',
+				},
+			},
+		},
+		blocks: [{ type: 'markdown', src: 'notes.md' }],
+	}, null, 2))
+	// A real raster: a logo PNG is a genuine image XObject once Chrome embeds it.
+	fs.copyFileSync(path.join(FIXTURES, 'assets', 'logo.png'), path.join(root, 'assets', 'cover.png'))
+	printedCover = runCli(['print', path.join(root, 'notes.md'), '--out', path.join(root, 'out', 'notes.pdf'), '--workspace', root])
+	if (printedCover.code === 0)
+		coverPdf = fs.readFileSync(path.join(root, 'out', 'notes.pdf'))
 })
 
 test.after(() => {
@@ -165,6 +193,33 @@ test('print refuses a canvas outside the workspace, like open does', () => {
 	assert.equal(r.code, 1)
 	assert.equal(r.json.error.code, 'PATH_OUTSIDE_WORKSPACE')
 	assert.match(r.json.error.message, /--workspace/)
+})
+
+test('print <file.md> renders its COMPANION, and the cover image reaches the PDF', { skip, timeout: 120_000 }, () => {
+	// `print` was handed the MARKDOWN file and never told about the companion. Finding it is
+	// the kernel's job (one `loadCanvas`), which is exactly why supersede is uniform: a
+	// reader who sees a cover on screen and no cover in the PDF has been lied to.
+	assert.equal(printedCover.code, 0, JSON.stringify(printedCover.json))
+	assert.equal(printedCover.json.status, 'printed')
+	// The companion decked itself: a cover sheet, the auto-TOC its heading earns, and the
+	// prose. Pagination is pinned exactly elsewhere (/Count == sheet count); what matters
+	// here is simply that a cover sheet now exists where a bare `.md` had none.
+	assert.ok(printedCover.json.pages >= 2, `a cover sheet plus the prose (got ${printedCover.json.pages})`)
+
+	const raw = coverPdf.toString('latin1')
+
+	// THE IMAGE IS IN THE PDF, not merely on the screen. A background painted by CSS still
+	// has to be embedded by the print engine as an image XObject — `printBackground: true`
+	// is what buys that, and this is the assertion that would catch it being turned off.
+	assert.ok(/\/Subtype\s*\/Image/.test(raw), 'the cover background is embedded as an image XObject')
+
+	// And it is a real raster, not a 1-byte stub: the PDF carrying a full-bleed photo is
+	// substantially heavier than the same deck without one.
+	assert.ok(coverPdf.length > 8_000, `the PDF carries the image bytes (${coverPdf.length} B)`)
+
+	// Deliberately NOT asserted: pixel ink. The swiftshader trap next door teaches why an
+	// "is it drawn" check on rendered output lies — but an embedded XObject is structural,
+	// and structure is what this suite can honestly hold.
 })
 
 test('print refuses an invalid canvas with the full errors[] array, before any Chrome', () => {

@@ -5,8 +5,9 @@ const path = require('node:path')
 const { ENVELOPE, BLOCKS, FIELD_TYPES, CHART_KINDS, UNSUPPORTED_CHARTS, SHAPES, ENV_KEY_RE, VERSION } = require('./schema')
 const { PKG_VERSION, CREATED_WITH_RE } = require('./pkgmeta')
 const { insideRoot } = require('./paths')
-const { MARKDOWN_EXTENSIONS, IMAGE_MIME, NOT_A_FILE_RE, hasMarkdownExtension, stripFrontmatter, readMarkdownText, scanMarkdownSource } = require('./markdownsrc')
+const { MARKDOWN_EXTENSIONS, IMAGE_MIME, NOT_A_FILE_RE, MAX_COVER_IMAGE_BYTES, hasMarkdownExtension, stripFrontmatter, readMarkdownText, scanMarkdownSource } = require('./markdownsrc')
 const { TOKEN_KEYS: THEME_TOKEN_KEYS, MIN_PALETTE, MAX_PALETTE } = require('./theme')
+const { companionIndex } = require('./companion')
 
 // ---------------------------------------------------------------- helpers
 
@@ -79,6 +80,10 @@ class Ctx {
 		this.errors = []
 		this.warnings = []
 		this.root = opts.root || null
+		// The canvas's OWN workspace-relative path, when the caller knows it. Only the
+		// duplicate-`enhances` rule needs it, and only to exclude the file from its own
+		// search: without it, every companion would report itself as its own duplicate.
+		this.self = opts.self ? String(opts.self).split(path.sep).join('/') : null
 		// 'error' for the agent's loop, 'warn' for the browser. See checkCreatedWith.
 		this.provenance = opts.provenance || 'error'
 	}
@@ -281,6 +286,23 @@ function checkMarkdown(block, base, ctx) {
 		})
 	if (typeof block.src === 'string') checkMarkdownSrc(block.src, `${base}.src`, ctx)
 
+	// A COMPANION rendering ITS OWN enhanced document is the native path, not the authored
+	// one, and the difference is the whole reason this branch exists.
+	//
+	// Behind an agent's `src`, the validator is a teacher: a remote image is a hard
+	// REMOTE_ASSET_BLOCKED and raw HTML warns, because the agent WROTE that file and is the
+	// only party who can fix it. But a companion's document is the USER'S markdown — their
+	// README, with their shields.io badges — and nobody authored it for us. Holding it to
+	// the authored contract would mean that theming a README with a badge in it produced an
+	// INVALID canvas, and the document stopped rendering at all: the reader picked a colour
+	// and broke their own README. So it degrades exactly as `open README.md` degrades (HTML
+	// removed, remote image labeled — see lib/markdownsrc.js renderableMarkdown).
+	//
+	// Which is also what makes "the companion is what runs" honest: with or without a
+	// companion, the same file renders the same prose. Only the furnishings differ.
+	if (ctx.enhances && typeof block.src === 'string' && sameRel(block.src, ctx.enhances))
+		return
+
 	// Scan whatever markdown we can actually see: the inline text, or the file
 	// behind `src` when the root is known and the file passed the checks above.
 	if (typeof block.text === 'string')
@@ -292,6 +314,8 @@ function checkMarkdown(block, base, ctx) {
 			checkMarkdownContent(stripFrontmatter(text), `${base}.src`, ctx)
 	}
 }
+
+const sameRel = (a, b) => String(a).split(path.sep).join('/') === String(b).split(path.sep).join('/')
 
 const SRC_EXAMPLE = { type: 'markdown', src: 'notes/summary.md' }
 
@@ -650,21 +674,138 @@ function checkDocument(canvas, ctx) {
 
 	for (const key of ['cover', 'backCover']) {
 		const section = doc[key]
-		if (typeOf(section) === 'object' && typeof section.logo === 'string')
+		if (typeOf(section) !== 'object')
+			continue
+		if (typeof section.logo === 'string')
 			checkDocumentLogo(section.logo, `document.${key}.logo`, ctx)
+		if (typeOf(section.background) === 'object')
+			checkCoverBackground(section.background, `document.${key}.background`, ctx)
 	}
+}
+
+// ---------------------------------------------------------------- cover background
+
+// The CSS background model, narrowed to what a sheet can honestly express. Lengths are
+// mm, px or %: millimetres because the page geometry already is ("15mm") and paper is
+// measured in them, px because people think in it.
+const LENGTH_RE = /^-?\d+(\.\d+)?(mm|px|%)$/
+const POSITION_KEYWORDS = ['center', 'left', 'right', 'top', 'bottom']
+const SIZE_KEYWORDS = ['cover', 'contain']
+
+const isLength = (v) => LENGTH_RE.test(v)
+
+/** "cover" | "contain" | "<len>" | "<len> <len>" */
+function isValidSize(v) {
+	const parts = String(v).trim().split(/\s+/)
+	if (parts.length === 1)
+		return SIZE_KEYWORDS.includes(parts[0]) || isLength(parts[0])
+	return parts.length === 2 && parts.every(isLength)
+}
+
+/** A keyword pair ("center", "top left") or two lengths ("50% 25%", "20mm 40mm"). */
+function isValidPosition(v) {
+	const parts = String(v).trim().split(/\s+/)
+	if (!parts.length || parts.length > 2)
+		return false
+	return parts.every((p) => POSITION_KEYWORDS.includes(p) || isLength(p))
+}
+
+const BACKGROUND_EXAMPLE = {
+	cover: {
+		title: 'Q3 Report',
+		background: { src: 'assets/hero.jpg', position: '50% 25%', scrim: { color: '#000000', opacity: 0.35 }, ink: '#ffffff' },
+	},
+}
+
+/**
+ * A cover is a sheet, so it can carry a background image — and a background image
+ * behind text is a legibility problem that DOES NOT SOLVE ITSELF.
+ *
+ * The asset ladder is the logo's, with one deliberate difference: the byte cap is far
+ * larger (a photograph is not a mark) and blowing it is an ERROR rather than the logo's
+ * silent drop. A full-bleed image lands in the canvas payload AND in the PDF, and nobody
+ * should ship a 40 MB PDF by accident — least of all without being told.
+ */
+function checkCoverBackground(bg, base, ctx) {
+	if (typeof bg.src === 'string')
+		checkDocumentLogo(bg.src, `${base}.src`, ctx, {
+			kindLabel: 'cover background',
+			example: BACKGROUND_EXAMPLE,
+			maxBytes: MAX_COVER_IMAGE_BYTES,
+		})
+
+	if (typeof bg.size === 'string' && !isValidSize(bg.size))
+		ctx.error('INVALID_SPEC', `${base}.size`, `${JSON.stringify(bg.size)} is not a background size.`, {
+			got: bg.size,
+			expected: '"cover" | "contain" | "<len>" | "<len> <len>" — lengths in mm, px or %',
+			hint: 'Use "cover" to fill the sheet (the default), "contain" to fit the whole image, or a length like "120mm" to place a sized image.',
+			example: BACKGROUND_EXAMPLE,
+		})
+
+	if (typeof bg.position === 'string' && !isValidPosition(bg.position))
+		ctx.error('INVALID_SPEC', `${base}.position`, `${JSON.stringify(bg.position)} is not a background position.`, {
+			got: bg.position,
+			expected: `a keyword pair (${POSITION_KEYWORDS.join(', ')}) or two lengths ("50% 25%", "20mm 40mm")`,
+			hint: 'Percentages are a FOCAL POINT, not an offset: "50% 25%" aligns the point 25% down the image with the point 25% down the page — i.e. which part survives the crop.',
+			example: BACKGROUND_EXAMPLE,
+		})
+
+	const scrim = bg.scrim
+	if (typeOf(scrim) === 'object') {
+		if (typeof scrim.color === 'string' && !HEX_COLOR_RE.test(scrim.color))
+			ctx.error('INVALID_COLOR', `${base}.scrim.color`, `${JSON.stringify(scrim.color)} is not a hex color.`, {
+				got: scrim.color,
+				expected: '#rgb or #rrggbb',
+				hint: 'The scrim is {color, opacity} rather than an 8-digit hex precisely so the strict-hex rule every other color obeys still holds here.',
+				example: BACKGROUND_EXAMPLE,
+			})
+		if (typeof scrim.opacity === 'number' && (scrim.opacity < 0 || scrim.opacity > 1))
+			ctx.error('INVALID_SPEC', `${base}.scrim.opacity`, `Scrim opacity is 0 to 1, got ${scrim.opacity}.`, {
+				got: scrim.opacity,
+				expected: '0–1',
+				example: BACKGROUND_EXAMPLE,
+			})
+	}
+
+	if (typeof bg.ink === 'string' && !HEX_COLOR_RE.test(bg.ink))
+		ctx.error('INVALID_COLOR', `${base}.ink`, `${JSON.stringify(bg.ink)} is not a hex color.`, {
+			got: bg.ink,
+			expected: '#rgb or #rrggbb',
+			hint: '"ink" is the cover\'s own text color and reaches live CSS through CSSOM, so only strict hex passes.',
+			example: BACKGROUND_EXAMPLE,
+		})
+
+	// The warning that earns its keep: a photo behind a near-black title is unreadable,
+	// and nothing downstream will notice. We do not default a scrim on — silently tinting
+	// somebody's photograph would be rude — so we say so instead.
+	if (typeof bg.src === 'string' && scrim === undefined && bg.ink === undefined)
+		ctx.warn('COVER_TEXT_MAY_BE_ILLEGIBLE', base, 'This cover puts text over an image with neither a "scrim" nor an "ink" — a dark photo swallows the near-black title, and a light one swallows a white subtitle.', {
+			hint: 'Add a "scrim" ({color, opacity}) to wash the image behind the text, an "ink" to repaint the cover\'s own text (theme.text would repaint the WHOLE document), or usually both.',
+			example: BACKGROUND_EXAMPLE,
+		})
 }
 
 const LOGO_EXAMPLE = { cover: { title: 'Q3 Report', logo: 'assets/logo.png' } }
 
-/** Same ladder as checkMarkdownSrc: one defect, one error — scheme, then extension, then confinement, then existence. */
-function checkDocumentLogo(src, p, ctx) {
+const mb = (n) => `${Math.round((n / (1024 * 1024)) * 10) / 10} MB`
+
+/**
+ * Same ladder as checkMarkdownSrc: one defect, one error — scheme, then extension,
+ * then confinement, then existence, then size.
+ *
+ * Shared by `logo` and by a cover `background`, which differ only in their cap: a mark
+ * is small, a photograph is not. `maxBytes` is checked ONLY when the caller names one,
+ * because a logo that is too big is dropped at render time (no logo beats a broken
+ * image) while an oversize cover is a hard error — the reader would otherwise get a
+ * silently coverless document, and the PDF would carry the weight either way.
+ */
+function checkDocumentLogo(src, p, ctx, { kindLabel = 'logo', example = LOGO_EXAMPLE, maxBytes = null } = {}) {
 	if (/^data:/i.test(src)) {
 		if (!/^data:image\//i.test(src))
-			ctx.error('INVALID_SPEC', p, 'A data: logo must be a data:image/ URI.', {
+			ctx.error('INVALID_SPEC', p, `A data: ${kindLabel} must be a data:image/ URI.`, {
 				got: src.slice(0, 40),
 				expected: 'data:image/<type>;base64,…',
-				example: LOGO_EXAMPLE,
+				example,
 			})
 		return
 	}
@@ -672,18 +813,18 @@ function checkDocumentLogo(src, p, ctx) {
 		return ctx.error('REMOTE_ASSET_BLOCKED', p, `Remote asset ${JSON.stringify(src)} is not fetched — the canvas forbids off-origin requests by design.`, {
 			got: src,
 			hint: 'Download the asset yourself, then either inline it as a `data:` URI (disposable canvas) or save it beside the canvas and reference the local path (durable report). A path outside the workspace cannot be referenced.',
-			example: LOGO_EXAMPLE,
+			example,
 		})
 	if (!IMAGE_MIME[path.extname(src).toLowerCase()])
-		return ctx.error('INVALID_SPEC', p, `"${src}" is not an image file — a logo must end in ${Object.keys(IMAGE_MIME).join(', ')}.`, {
+		return ctx.error('INVALID_SPEC', p, `"${src}" is not an image file — a ${kindLabel} must end in ${Object.keys(IMAGE_MIME).join(', ')}.`, {
 			got: src,
 			expected: Object.keys(IMAGE_MIME),
-			example: LOGO_EXAMPLE,
+			example,
 		})
 	if (!ctx.root)
 		return
 	if (!insideRoot(ctx.root, src))
-		return ctx.error('PATH_OUTSIDE_WORKSPACE', p, `"${src}" resolves outside the workspace root — logos must live inside it.`, {
+		return ctx.error('PATH_OUTSIDE_WORKSPACE', p, `"${src}" resolves outside the workspace root — a ${kindLabel} must live inside it.`, {
 			got: src,
 		})
 	let stat = null
@@ -691,10 +832,98 @@ function checkDocumentLogo(src, p, ctx) {
 		stat = fs.statSync(path.resolve(ctx.root, src))
 	} catch { /* missing or unreadable — reported below */ }
 	if (!stat || !stat.isFile())
-		ctx.error('MISSING_SOURCE', p, `"${src}" does not exist or is not a readable file.`, {
+		return ctx.error('MISSING_SOURCE', p, `"${src}" does not exist or is not a readable file.`, {
 			got: src,
-			hint: 'Write the file before opening the canvas, or inline the logo as a data:image/ URI.',
-			example: LOGO_EXAMPLE,
+			hint: `Write the file before opening the canvas, or inline the ${kindLabel} as a data:image/ URI.`,
+			example,
+		})
+	if (maxBytes && stat.size > maxBytes)
+		ctx.error('ASSET_TOO_LARGE', p, `"${src}" is ${mb(stat.size)}; a ${kindLabel} is capped at ${mb(maxBytes)}.`, {
+			got: stat.size,
+			expected: `<= ${maxBytes} bytes`,
+			hint: 'A full-bleed image is embedded in the canvas payload AND in the PDF, so its weight is paid twice. Resize or re-compress it — a cover reproduces perfectly well at print resolution.',
+			example,
+		})
+}
+
+// ---------------------------------------------------------------- enhances
+
+const ENHANCES_EXAMPLE = {
+	instantcanvas: 1,
+	enhances: 'README.md',
+	title: 'README',
+	document: { cover: { title: 'README' }, theme: { preset: 'forest' } },
+	blocks: [{ type: 'markdown', src: 'README.md' }],
+}
+
+/**
+ * The companion contract (lib/companion.js).
+ *
+ * Four rules, and the split between error and warning is the point of each one:
+ *
+ *   1. `enhances` must name a markdown file that EXISTS, inside the workspace. A
+ *      companion pointing at nothing is a companion to nothing.
+ *   2. It SHOULD carry a markdown block rendering that same file — a warning, because
+ *      it is legal and occasionally deliberate, but a companion that does not render
+ *      its own document is almost certainly a mistake.
+ *   3. Two canvases may not enhance one file. An ERROR naming both, because first-wins
+ *      is a coin toss the reader cannot see.
+ *   4. `enhances` with no `document` object is legal and pointless — a warning, since
+ *      the companion then adds nothing a bare `.md` did not already have.
+ */
+function checkEnhances(canvas, ctx) {
+	const src = canvas.enhances
+
+	if (!hasMarkdownExtension(src))
+		ctx.error('INVALID_SPEC', 'enhances', `"${src}" is not a markdown file — "enhances" names the .md this canvas is the companion of.`, {
+			got: src,
+			expected: MARKDOWN_EXTENSIONS,
+			hint: 'A companion enhances a markdown document. To wrap other content, drop "enhances" and make this an ordinary canvas.',
+			example: ENHANCES_EXAMPLE,
+		})
+	else if (ctx.root && !insideRoot(ctx.root, src))
+		ctx.error('PATH_OUTSIDE_WORKSPACE', 'enhances', `"${src}" resolves outside the workspace root — a companion's document must live inside it.`, {
+			got: src,
+		})
+	else if (ctx.root) {
+		let stat = null
+		try {
+			stat = fs.statSync(path.resolve(ctx.root, src))
+		} catch { /* missing or unreadable — reported below */ }
+		if (!stat || !stat.isFile())
+			ctx.error('MISSING_SOURCE', 'enhances', `"${src}" does not exist or is not a readable file — this canvas enhances a document that is not there.`, {
+				got: src,
+				hint: 'Write the markdown file first, or point "enhances" at the document you meant.',
+				example: ENHANCES_EXAMPLE,
+			})
+	}
+
+	// Rule 2 — a companion that does not render its own document.
+	const rendersIt = collectBlocks(canvas).some(({ block }) =>
+		typeOf(block) === 'object' && block.type === 'markdown'
+		&& typeof block.src === 'string' && sameRel(block.src, src))
+	if (!rendersIt)
+		ctx.warn('COMPANION_DOES_NOT_RENDER', 'blocks', `This canvas enhances "${src}" but never renders it — opening the document will show whatever these blocks say instead of the markdown itself.`, {
+			hint: `Add {"type": "markdown", "src": ${JSON.stringify(String(src))}} to "blocks". A companion supersedes its document everywhere, so what it renders IS the document.`,
+			example: ENHANCES_EXAMPLE,
+		})
+
+	// Rule 4 — legal, and pointless.
+	if (canvas.document === undefined)
+		ctx.warn('COMPANION_WITHOUT_DOCUMENT', 'enhances', `This canvas enhances "${src}" but declares no "document" — it adds nothing a bare markdown file did not already have.`, {
+			hint: 'A companion exists so a .md can carry what it has nowhere to keep: a cover, a theme, a running header, page geometry. Add "document", or delete the companion and open the .md directly.',
+			example: ENHANCES_EXAMPLE,
+		})
+
+	// Rule 3 — the ambiguity. Needs the canvas's own path to exclude it from its own
+	// search, so it runs only when the caller knew what file it was validating.
+	if (!ctx.root || !ctx.self)
+		return
+	const rivals = companionIndex(ctx.root).duplicates.get(String(src).split(path.sep).join('/'))
+	if (rivals && rivals.includes(ctx.self))
+		ctx.error('DUPLICATE_ENHANCES', 'enhances', `${rivals.length} canvases enhance "${src}": ${rivals.join(', ')}. Only one may.`, {
+			got: rivals,
+			hint: 'A document has at most one companion — which one runs cannot be decided by a coin toss the reader never sees. Delete or re-point all but one.',
 		})
 }
 
@@ -807,6 +1036,12 @@ function validate(source, opts = {}) {
 
 	checkCreatedWith(canvas, ctx)
 
+	// Set BEFORE the block walk: a companion's markdown block pointing at its own enhanced
+	// document renders natively (degraded), not as an authored `src`, and checkMarkdown
+	// needs to know that while it is walking.
+	if (typeof canvas.enhances === 'string')
+		ctx.enhances = canvas.enhances.trim()
+
 	checkObject(canvas, ENVELOPE.properties, '', ctx, { skip: ['blocks', 'pages', 'createdWith'] })
 
 	const hasBlocks = canvas.blocks !== undefined, hasPages = canvas.pages !== undefined
@@ -824,6 +1059,9 @@ function validate(source, opts = {}) {
 			ctx.error('MULTIPLE_INTERACTIVE_BLOCKS', p, `Only ONE interactive block (form or confirm) is allowed per canvas; the first is at ${interactive[0].path}.`, {})
 		})
 	}
+
+	if (typeof canvas.enhances === 'string')
+		checkEnhances(canvas, ctx)
 
 	if (typeOf(canvas.document) === 'object')
 		checkDocument(canvas, ctx)

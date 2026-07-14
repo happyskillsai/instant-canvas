@@ -130,14 +130,32 @@ const SHAPES = {
 	},
 
 	// --- document mode (envelope-level) --------------------------------------
+	documentCoverBackground: {
+		description: 'A full-bleed image behind the cover. The cover IS a sheet, so the image reaches the paper\'s edge, past the margin — this is the cover photo, not the small "logo" mark, which still sits on top of it. "size" and "position" are the CSS background model: they express both "fill the sheet" (the default) and "place a sized image somewhere" without a second mechanism. A photo behind text NEEDS a "scrim" or an "ink", usually both — a dark photo swallows a near-black title, and neither is defaulted on because silently tinting your photograph would be rude.',
+		properties: {
+			src: { type: 'string', required: true, description: 'Workspace-local image path (inlined server-side) or a data:image/ URI. Remote URLs are refused. A full-bleed photo lands in the canvas payload AND the PDF, so it is capped larger than a logo but still capped — an oversize image is an error, never a silent truncation.', example: 'assets/cover.jpg' },
+			size: { type: 'string', default: 'cover', description: '"cover" (fill the sheet, cropping the overflow — the default), "contain" (fit whole, letterboxed), or a length ("120mm") / two lengths ("80mm 40mm") to place a sized image. Lengths accept mm, px and %.', example: 'cover' },
+			position: { type: 'string', default: 'center', description: 'Where the image sits: a keyword pair ("center", "top left", "right bottom") or two lengths ("25% 50%", "20mm 40mm"). PERCENTAGES ARE A FOCAL POINT, not an offset: "25% 50%" aligns the point 25% ACROSS the image with the point 25% across the page — i.e. which part survives the crop. IT ONLY MOVES THE AXIS THE IMAGE ACTUALLY OVERFLOWS. An image whose aspect ratio is WIDER than the page (a square or a landscape photo on portrait A4) overflows sideways and is cropped left/right, so the FIRST number is the one that does anything; a TALLER-than-the-page image is cropped top/bottom, so the second one is. On portrait A4 (aspect 0.71) almost every photograph overflows sideways.', example: 'center' },
+			scrim: { type: 'object', itemShape: 'documentScrim', description: 'A flat wash between the image and the text, so the title stays legible over a busy photo. Not on by default.' },
+			ink: { type: 'string', description: 'The cover\'s own text color, overriding the theme ON THE COVER AND NOWHERE ELSE. It also drives the muted line (author/date) at reduced opacity — one knob, because a white title over a grey author line is still unreadable. Use this rather than theme.text, which would paint the whole document (white body text on white paper).', example: '#ffffff' },
+		},
+	},
+	documentScrim: {
+		description: 'A flat color wash between a cover image and its text. Expressed as {color, opacity} rather than an 8-digit hex so the "colors are strict hex" rule every other token obeys still holds.',
+		properties: {
+			color: { type: 'string', required: true, description: 'Wash color, strict hex.', example: '#000000' },
+			opacity: { type: 'number', required: true, description: 'How much of it, 0 to 1. Around 0.35 is usually enough to carry white text over a photograph.', example: 0.35 },
+		},
+	},
 	documentCover: {
-		description: 'Front cover, rendered as its own sheet. Only "title" is required.',
+		description: 'Front cover, rendered as its own sheet. Only "title" is required. Add "background" for a real cover photo — full bleed, edge to edge.',
 		properties: {
 			title: { type: 'string', required: true, description: 'Cover title.', example: 'Q3 Report' },
 			subtitle: { type: 'string', description: 'Line under the title.', example: 'Revenue and growth' },
 			author: { type: 'string', description: 'Author line.', example: 'Finance team' },
 			date: { type: 'string', description: 'Freeform date line, written by the agent.', example: 'July 2026' },
-			logo: { type: 'string', description: 'Workspace-local image path (inlined server-side) or a data:image/ URI. Remote URLs are refused.', example: 'assets/logo.png' },
+			logo: { type: 'string', description: 'The small MARK (48px), not a cover photo — it sits ON the background image when there is one. Workspace-local image path (inlined server-side) or a data:image/ URI. Remote URLs are refused. For a photographic cover use "background".', example: 'assets/logo.png' },
+			background: { type: 'object', itemShape: 'documentCoverBackground', description: 'A full-bleed image behind the whole cover sheet.' },
 		},
 	},
 	documentToc: {
@@ -156,11 +174,12 @@ const SHAPES = {
 		},
 	},
 	documentBackCover: {
-		description: 'Closing sheet, mirroring the front cover.',
+		description: 'Closing sheet, mirroring the front cover — including its "background", which is entirely independent of the front\'s: a different image, a different crop, a different scrim.',
 		properties: {
 			title: { type: 'string', description: 'Closing headline.', example: 'Thank you' },
 			text: { type: 'string', description: 'Closing message.', example: 'Prepared by the finance team.' },
-			logo: { type: 'string', description: 'Workspace-local image path (inlined server-side) or a data:image/ URI. Remote URLs are refused.', example: 'assets/logo.png' },
+			logo: { type: 'string', description: 'The small mark. Workspace-local image path (inlined server-side) or a data:image/ URI. Remote URLs are refused.', example: 'assets/logo.png' },
+			background: { type: 'object', itemShape: 'documentCoverBackground', description: 'A full-bleed image behind the whole back-cover sheet. Independent of the front cover\'s.' },
 		},
 	},
 	documentTheme: {
@@ -670,7 +689,7 @@ const BLOCKS = {
 BLOCKS.chart.properties.kind.enum = Object.keys(CHART_KINDS)
 
 const ENVELOPE = {
-	description: 'A canvas file: one renderable document. Top level must carry "instantcanvas": 1 (the marker doubles as the discriminator during workspace scans) and "createdWith" (written by `stamp`, never by hand). EXACTLY ONE of "blocks" or "pages".',
+	description: 'A canvas file: one renderable document. Top level must carry "instantcanvas": 1 (the marker doubles as the discriminator during workspace scans) and "createdWith" (written by `stamp`, never by hand). EXACTLY ONE of "blocks" or "pages". A canvas that declares "enhances" is the COMPANION of a markdown file — the way a .md gets a cover, a theme, or anything else a "document" carries.',
 	properties: {
 		instantcanvas: { type: 'number', required: true, enum: [VERSION], description: 'Contract version marker. Must be 1.', example: 1 },
 		createdWith: {
@@ -681,6 +700,11 @@ const ENVELOPE = {
 		},
 		title: { type: 'string', required: true, description: 'Canvas title (shown as the page heading and in the sidebar).', example: 'Q3 Campaign Analysis' },
 		description: { type: 'string', description: 'Optional subtitle.' },
+		enhances: {
+			type: 'string',
+			description: 'Workspace-relative path to a markdown file this canvas is the COMPANION of. A plain .md has no envelope — it IS the canvas, synthesised in memory — so it has nowhere to keep a cover, a theme, a running header, or page geometry. Declaring "enhances" gives it one: WHEN A MARKDOWN FILE HAS A COMPANION, THE COMPANION IS WHAT RUNS, everywhere and uniformly — `open <file.md>` renders it, `print <file.md>` prints it, and the sidebar shows ONE entry (the document, badged), never two. The convention is to name the file <base>.canvas.json beside <base>.md, but that is only what we write by default: the DECLARATION is the mechanism, so renaming the companion changes nothing. Carry a markdown block whose "src" is this same path — a companion that does not render its own document is almost certainly a mistake.',
+			example: 'README.md',
+		},
 		document: { type: 'object', itemShape: 'document', description: 'Document furnishings + default view: opens the canvas as paper sheets (cover, contents, running header/footer, back cover, brand theme) that print 1:1. Any display canvas can also be toggled into document view in the browser. Display blocks only. See `catalog document`.' },
 		blocks: { type: 'array', itemShape: 'block', description: 'Ordered blocks (single-page canvas). XOR with "pages".' },
 		pages: { type: 'array', itemShape: 'page', description: 'Named tabs, each with its own blocks. XOR with "blocks". In document mode each page becomes a chapter.' },

@@ -157,6 +157,13 @@ button{font:inherit;cursor:pointer}
 .item .doc-ico{opacity:.6}
 .item .doc-ico .lucide{width:13px;height:13px}
 .item:hover .doc-ico,.item.active .doc-ico{opacity:1}
+/* A document with a COMPANION wears an accent dot. The companion itself is not in the
+   tree — one thing, one row — so this is the only thing telling the reader that this
+   markdown file carries a cover and a theme. A control (or a state) the reader cannot
+   see is one that teaches nothing. `margin-left:auto` parks it on the trailing edge,
+   clear of the title, which may be long enough to ellipsize. */
+.item .enh-dot{flex:0 0 6px;width:6px;height:6px;border-radius:50%;margin-left:auto;
+	background:var(--accent);opacity:.85}
 .side-foot{padding:10px 16px;border-top:1px solid var(--border);color:var(--muted);font-size:11.5px}
 .side-foot .watch{display:flex;align-items:center;gap:6px;margin-top:4px;min-width:0}
 .side-foot .watch #watchState{flex:0 0 auto}
@@ -795,6 +802,23 @@ body.modal-open .main{overflow:hidden}
 .cover-sub{font-size:18px;color:var(--muted);margin-bottom:34px}
 .cover-meta{display:flex;gap:22px;font-size:13px;color:var(--muted);margin-bottom:16mm}
 .cover-band{position:absolute;left:0;right:0;bottom:0;height:9mm;background:var(--doc-accent)}
+
+/* A COVER IS A SHEET, SO IT CAN CARRY A BACKGROUND IMAGE.
+   The image itself is set through CSSOM (background-image/size/position on the .sheet
+   box, which is border-box — so a full bleed reaches the paper's edge, PAST the 15mm
+   padding the text lives in). What is declarative is only the stacking:
+     image (the .sheet's own background)  →  scrim  →  logo/title/subtitle/meta/band.
+   The cover's children sit above the scrim because they are positioned; the scrim is a
+   plain absolutely-positioned wash with no z-index games needed beyond this one. */
+.cover-scrim{position:absolute;inset:0;pointer-events:none}
+.sheet.has-bg>*:not(.cover-scrim){position:relative;z-index:1}
+/* `ink` repaints the cover's text and NOTHING ELSE — theme.text would paint the whole
+   document, which is why a cover-scoped token exists at all. The muted line (author,
+   date) is derived from the same value at reduced opacity: one knob, because a white
+   title above a grey author line is still unreadable. */
+.sheet.has-ink .cover-title,.sheet.has-ink .back-title{color:var(--cover-ink)}
+.sheet.has-ink .cover-sub,.sheet.has-ink .cover-meta,.sheet.has-ink .back-text{color:var(--cover-ink);opacity:.78}
+
 .sheet-back{align-items:center;justify-content:center;text-align:center}
 .back-logo{width:42px;height:42px;object-fit:contain;margin-bottom:20px}
 .back-title{font-size:30px;font-weight:750;margin-bottom:10px}

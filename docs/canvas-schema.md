@@ -7,7 +7,8 @@ source:
   - scripts/lib/catalog.js
   - scripts/lib/theme.js
   - scripts/lib/themestore.js
-  - scripts/lib/wsconfig.js
+  - scripts/lib/skillsconfig.js
+  - scripts/lib/companion.js
   - scripts/lib/markdownsrc.js
   - scripts/lib/mdcanvas.js
   - scripts/lib/pkgmeta.js
@@ -25,6 +26,7 @@ source:
   "createdWith": "0.3.0",      // required provenance stamp; written by `stamp`, never by the agent
   "title": "Q3 Report",        // required
   "description": "optional",
+  "enhances": "README.md",     // optional — makes this the COMPANION of a markdown file (below)
   "blocks": [ /* Block[] */ ]   // XOR "pages": [{"name": "Tab", "blocks": [...]}]
 }
 ```
@@ -138,11 +140,11 @@ Validation: `data` becomes optional (and is warned about if sent anyway); `frame
 
 ```jsonc
 "document": {
-  "cover":     { "title", "subtitle"?, "author"?, "date"?, "logo"? },
+  "cover":     { "title", "subtitle"?, "author"?, "date"?, "logo"?, "background"? },
   "toc":       { "title"?: "Contents", "depth"?: 2 },            // depth 1–3
   "header":    { "left"?, "center"?, "right"? },                 // every content sheet
   "footer":    { "left"?, "center"?, "right"? },                 // {{pageNumber}}/{{totalPages}} substituted
-  "backCover": { "title"?, "text"?, "logo"? },
+  "backCover": { "title"?, "text"?, "logo"?, "background"? },    // background independent of the cover's
   "theme":     { "preset"?, "accent"?, "palette"?, "paper"?, "surface"?,
                  "text"?, "muted"?, "border"?, "link"? },        // strict hex only
   "page":      { "size"?: "A4"|"letter", "orientation"?, "margin"?: "15mm" }
@@ -156,6 +158,39 @@ Shapes are registry-driven (`SHAPES.document*` in `schema.js`); `checkDocument` 
 - **`UNKNOWN_TEMPLATE_VAR`** (warning) — an unknown `{{var}}` in a header/footer string renders literally; only `{{pageNumber}}` and `{{totalPages}}` are substituted.
 - `page.margin` must be a millimeter length (`^\d+(\.\d+)?mm$`) — sheet geometry is computed in millimeters.
 - `cover.logo`/`backCover.logo` follow the markdown asset ladder: remote URLs are `REMOTE_ASSET_BLOCKED` (same message, same hint), the extension must be in `IMAGE_MIME`, `insideRoot` confines the path, existence is checked when the root is known; a `data:image/` URI passes through as-is. The kernel inlines logo files as `data:` URIs (`resolveDocumentAssets`, sharing `inlineImageFile` with markdown image inlining) and drops a logo it cannot inline rather than serving a broken image.
+
+### A cover is a sheet, so it can carry a background image
+
+`logo` is a **48 × 48 mark**; a photograph put through it renders as a postage stamp. `cover.background` is the real cover image — full bleed, edge to edge. `backCover.background` is the same shape and **entirely independent**: a different image, a different crop, a different scrim.
+
+```jsonc
+"cover": {
+  "title": "Q3 Report",
+  "logo": "assets/logo.svg",          // unchanged — the small mark; now sits ON the image
+  "background": {
+    "src":      "assets/hero.jpg",    // workspace-local or data: — never remote
+    "size":     "cover",              // "cover" | "contain" | "<len>" | "<len> <len>"
+    "position": "center",             // "center" | "top left" | "25% 50%" | "20mm 40mm"
+    "scrim":    { "color": "#000000", "opacity": 0.35 },
+    "ink":      "#ffffff"
+  }
+}
+```
+
+**One concept, both use cases.** `size` + `position` is the CSS background model, which already expresses "fill the sheet" *and* "place a sized image somewhere" — so there is no second mechanism. Lengths accept `mm`, `px` and `%`; millimetres are the honest unit on paper (the page geometry already is), and px is allowed because people think in it.
+
+**Percentage `position` is a focal point, not an offset** — `"25% 50%"` aligns *the point 25% across the image* with *the point 25% across the page*, which is exactly "which part survives the crop". The subtlety worth stating out loud, because it catches people: **it only moves the axis the image actually overflows.** An image whose aspect is *wider than the page* is cropped left/right, so the first number is the live one; only a *taller* image is cropped top/bottom. On portrait A4 (aspect 0.71) a square photo **and** a landscape photo both overflow sideways — so the horizontal number is almost always the one that does anything.
+
+**Legibility is not optional, and it does not solve itself.** A dark photo swallows the near-black cover title. It cannot be fixed with `theme.text`: that token paints the *whole document*, so a white cover title would come with white body text on white paper. Hence two cover-scoped knobs:
+
+- **`scrim`** — a flat wash between image and text, `{color, opacity}` rather than an 8-digit hex, so the "colors are strict hex" rule everything else obeys still holds.
+- **`ink`** — the cover's own text colour, overriding the theme **on the cover and nowhere else**. It also drives the muted line (author/date), derived as the same colour at reduced opacity — one knob, because a white `ink` above a grey author line is still unreadable.
+
+Neither is defaulted on: silently tinting somebody's photograph would be presumptuous. So the validator **warns** instead (`COVER_TEXT_MAY_BE_ILLEGIBLE`) when a background carries neither, and the catalog says plainly that *a photo behind text needs a scrim or an ink, usually both*.
+
+**Mechanics.** The image belongs on the `.sheet` box (`background-clip: border-box`), **not** the padded content box — a full bleed must reach the paper's edge, past the 15 mm margin, while the text stays in the padding. It is set through **CSSOM** (`el.style.backgroundImage = …`), like every other colour: the CSP forbids `style=""` but exempts programmatic assignment, and `img-src 'self' data:` already permits the URI. Z-order: image → scrim → `logo` / title / subtitle / author / accent band. The kernel inlines it in the same pass that inlines `cover.logo`, with the same remote-asset refusal but a **larger byte cap** (`MAX_COVER_IMAGE_BYTES`) and an **error rather than a silent drop** (`ASSET_TOO_LARGE`) — a full-bleed photo lands in the canvas payload *and* the PDF, and nobody should ship a 40 MB PDF by accident.
+
+**Scoped out, deliberately:** background images on **content sheets**. A photo behind body text is unreadable, and a watermark is a different feature with different rules (tiling, opacity, "every page but the first"). Cover and back cover only.
 
 **TOC page numbers come from the deck's own pagination.** Because sheets are literal page boxes, the packer knows exactly which sheet every heading and block title landed on, and the TOC prints those numbers with dotted leaders. They are exact on screen, for `instantcanvas print`, and for Cmd+P at default settings. The honest caveat (which originally kept numbers out entirely — revisited at the user's request): a human who manually overrides paper size or scale *in the print dialog* can make Chrome repaginate, and printed numbers cannot follow. The `notes` in `catalog document` carry this caveat for agents.
 
@@ -183,26 +218,52 @@ Two composition rules are subtle enough that the catalog states them out loud:
 
 `resolve()` is deliberately **forgiving** — anything that is not strict hex is dropped rather than passed through, because it also runs on a hand-edited config the validator never sees, and a bad color must not reach `setProperty` just because it arrived by the unvalidated door. Its strict counterpart `check()` guards the `POST /api/theme` write boundary and **refuses rather than sanitizes**: that boundary persists into a file the agent later reads back as truth. Anything `check()` accepts must survive `validate` afterwards, and a test asserts exactly that.
 
-### `.instantcanvas.json`: where a document with no envelope keeps its theme
+### The companion canvas: the envelope a markdown file never had
 
-A native `.md` has nowhere to put a `document.theme` — the `.md` *is* the canvas, its envelope is synthesised in memory and never written, and we do not write to the user's prose. So the theme goes beside the workspace instead of inside the file (`lib/wsconfig.js`):
+**The thing a `.md` is missing is a canvas. So it is given one.**
+
+A markdown file has no envelope — it *is* the canvas, synthesised in memory and never written — so it has nowhere to keep a theme. Nor a cover, a back cover, a running header, or page geometry. All of those live in `document`, and a `.md` cannot hold one.
+
+The first answer to that was a bespoke dotfile (`.instantcanvas.json`) holding a per-path theme map. It worked, and it was wrong: **it only ever solved colour.** A cover could not go in it. Each new furnishing would have needed a new bespoke key — reinventing, badly, the canvas envelope that already existed. So the dotfile is gone, and a markdown file gets an actual canvas instead (`lib/companion.js`):
 
 ```jsonc
-{"instantcanvas": 1,
- "theme": {"preset": "forest"},                              // default for every document
- "documents": {"docs/report.md": {"theme": {"preset": "sepia"}}},  // per-file, wins over it
- "palettes": {"My brand": {"accent": "#0054fe", "palette": ["#0054fe", "#00c2a8"]}}}  // a library
+// README.canvas.json — sits beside README.md
+{
+  "instantcanvas": 1,
+  "createdWith": "0.5.0",
+  "enhances": "README.md",              // ← the envelope key that binds them
+  "title": "InstantCanvas — README",
+  "document": {
+    "cover":  {"title": "…", "background": {"src": "assets/hero.jpg", "scrim": {"color": "#000000", "opacity": 0.4}, "ink": "#ffffff"}},
+    "theme":  {"accent": "#eb4a26", "palette": ["#eb4a26", "#47b5c2"]},
+    "footer": {"right": "{{pageNumber}} / {{totalPages}}"}
+  },
+  "blocks": [{"type": "markdown", "src": "README.md"}]
+}
 ```
 
-It carries the marker but is **not a canvas**: `scan.js` skips dotfiles, so it never appears in the sidebar, and a malformed config is ignored rather than fatal. Precedence, weakest to strongest: built-in default < `theme` < `documents[rel].theme` < the canvas's `document.theme`. **The canvas always has the last word** — an agent's declared theme is part of its contract, and a workspace default must not silently repaint it.
+It is **an ordinary canvas**. Nothing new to validate, nothing new to learn, and every `document` furnishing works the day it ships — because it already does. That is the whole point: one key buys the entire envelope.
 
-**An agent brands a markdown file with `instantcanvas theme`, and should not hand-write this file at all** (see [cli.md](cli.md)). Everything that makes the config forgiving makes hand-writing it *blind*: nothing validated it, `wsconfig.read()` swallows a parse error on purpose, and the watcher skips dotfiles — so a typo produced no error, no warning, and no repaint, which is what "the feature does not exist" looks like from the outside. `theme report.md --set '{…}'` writes the same file through the strict `check()` boundary the browser's Save uses, routes it by what the document *is* rather than where the agent happened to be pointing, and nudges a live kernel to repaint. And the file is now a checkable contract in its own right: **`validate .instantcanvas.json`** type-checks `theme`, every `documents["path"].theme` and every `palettes["name"]`, and refuses a palette name that shadows a built-in preset.
+**`enhances` is declared, never sniffed.** The companion is found by reading the key, not by scanning blocks for a markdown `src` that happens to match. Sniffing is ambiguous and it would bite: a genuine report that quotes the README among its other content would hijack the README's entry, and nothing could tell *"this is README's metadata"* from *"this is a document that happens to include README"*. A declared key cannot be ambiguous, survives any rename, and is trivially validated. The filename convention (`<base>.canvas.json`) is only what the runtime *writes* by default, for humans — rename it to `anything.json` and nothing changes.
+
+Four validation rules (`checkEnhances` in `validate.js`), and the error/warning split is the point of each:
+
+| Rule | Code |
+|---|---|
+| `enhances` must name an existing markdown file inside the workspace | `MISSING_SOURCE` / `PATH_OUTSIDE_WORKSPACE` / `INVALID_SPEC` |
+| The canvas SHOULD carry a `markdown` block whose `src` is that same file | `COMPANION_DOES_NOT_RENDER` (warn) — legal, but it would show its own blocks instead of the prose |
+| Two canvases may not enhance the same file | `DUPLICATE_ENHANCES` — an **error** naming both, because first-wins is a coin toss the reader cannot see |
+| `enhances` with no `document` object | `COMPANION_WITHOUT_DOCUMENT` (warn) — legal, and pointless: it adds nothing a bare `.md` did not have |
+
+**Supersede is uniform, or it is a lie.** When a markdown file has a companion, *the companion is what runs*: `open README.md` renders it, `print README.md` prints it, and the sidebar shows **one** entry — the document, badged (see [frontend.md](frontend.md)). All three go through the same `loadCanvas`, which is what makes it free. A reader who saw a cover on screen and no cover in the PDF would have been lied to.
+
+**But a companion does not make you the author of the user's prose.** A companion's `markdown` block points at its own enhanced document, which is the *authored* `src` path — and behind that path a remote image is a hard `REMOTE_ASSET_BLOCKED`. So branding a README with a shields.io badge in it would have produced an invalid canvas and stopped the document rendering entirely. A companion rendering **its own document** therefore degrades exactly as `open README.md` degrades (see [gotchas/runtime.md](gotchas/runtime.md)). With or without a companion, the same file renders the same prose; only the furnishings differ.
 
 ### Custom palettes: a library, not a preset name
 
-`palettes` maps a name to a theme object — any of the seven tokens, plus a `palette` — and the browser offers them as chips beside the built-in presets. `lib/wsconfig.js` reads and writes them (`readPalettes()` / `setPalette()`), and `lib/themestore.js` is the write boundary both doors go through — the kernel's `POST /api/theme/palette` (`{name, theme}`, with `theme: null` deleting one) and the CLI's `theme --save <name> --set '{…}'` — guarded by the same strict-hex `theme.check()` as a document's theme (`INVALID_THEME`) for the same reason: this is a file the agent later reads back as truth. A name is 1–40 characters and a workspace holds at most 24 of them. Saving one from the CLI is how a brand an agent reverse-engineered once becomes a name every other document in the workspace can wear, and it shows up in the reader's picker the moment it lands. A name that collides with a built-in preset is a **409 `PALETTE_NAME_TAKEN`** — a custom `forest` shadowing the real one would make every chip in the picker ambiguous, and `catalog theme` ambiguous with it: the same name would mean two different sets of colors depending on whose workspace you opened it in.
+`palettes` maps a name to a theme object — any of the seven tokens, plus a `palette` — and the browser offers them as chips beside the built-in presets. They live in **`skills-config.json`**, the project's own committed config, under our `happyskillsai/instant-canvas` key (`lib/skillsconfig.js` reads and writes them). `lib/themestore.js` is the write boundary both doors go through — the kernel's `POST /api/theme/palette` (`{name, theme}`, with `theme: null` deleting one) and the CLI's `theme --save <name> --set '{…}'` — guarded by the same strict-hex `theme.check()` as a document's theme (`INVALID_THEME`) for the same reason: this is a file the agent later reads back as truth. A name is 1–40 characters and a workspace holds at most 24 of them. Saving one from the CLI is how a brand an agent reverse-engineered once becomes a name every other document in the workspace can wear, and it shows up in the reader's picker the moment it lands. A name that collides with a built-in preset is a **409 `PALETTE_NAME_TAKEN`** — a custom `forest` shadowing the real one would make every chip in the picker ambiguous, and `catalog theme` ambiguous with it: the same name would mean two different sets of colors depending on whose workspace you opened it in.
 
-The load-bearing decision is what *applying* one does. **A custom palette is a library entry, not a new preset name: applying it MATERIALIZES its colors into `document.theme` rather than leaving a `"preset": "My brand"` reference behind.** A canvas is a self-contained contract, and three things depend on that. An agent reading the file must see the actual colors, not a name it cannot resolve. `validate` must stay a pure function of the file — a preset name that only exists in someone's workspace config makes validity depend on the machine you run it on. And a canvas mailed to someone else must not silently repaint itself against *their* `.instantcanvas.json`, or come up unstyled because their workspace never heard of "My brand". The library is for reuse while you author; the canvas keeps the answer.
+The load-bearing decision is what *applying* one does. **A custom palette is a library entry, not a new preset name: applying it MATERIALIZES its colors into `document.theme` rather than leaving a `"preset": "My brand"` reference behind.** A canvas is a self-contained contract, and three things depend on that. An agent reading the file must see the actual colors, not a name it cannot resolve. `validate` must stay a pure function of the file — a preset name that only exists in someone's workspace config makes validity depend on the machine you run it on. And a canvas mailed to someone else must not silently repaint itself against *their* `skills-config.json`, or come up unstyled because their workspace never heard of "My brand". The library is for reuse while you author; the canvas keeps the answer.
 
 Two consequences follow directly, and both are the feature rather than a cost. The picker matches the active custom chip **by value** — a deep compare of the declared theme against each library entry — because there is no name left in the document to match on. And **deleting a library entry does not repaint the documents that used it**: their colors were copied in, and they are still what those documents say. There is nothing to undo and nothing to cascade.
 
@@ -221,13 +282,15 @@ Common shape: `{name, label, type, required?, placeholder?, help?, default?, opt
 
 `validate(source, {root})` collects **all** errors in one pass — never fail-fast, never throws for spec problems. Every error carries `code`, `path` (e.g. `pages[1].blocks[0].encoding.y[1]`), `message`, and usually `got`, `expected`, a Levenshtein/alias-driven `hint` ("Did you mean \"range\"?"), and a correct `example`. Unknown properties are **warnings**, not errors. `INVALID_JSON` includes line/column. This is the deterministic half of the agentic loop: the agent writes, the validator names the exact defect and its fix, the agent retries until `{"ok": true}`.
 
-Error codes: `INVALID_JSON, INVALID_SPEC, UNSUPPORTED_VERSION, MISSING_CREATED_WITH(warn in the kernel), INVALID_CREATED_WITH(warn in the kernel), UNKNOWN_BLOCK_TYPE, UNKNOWN_FIELD_TYPE, UNKNOWN_PROPERTY(warn), MISSING_REQUIRED_PROPERTY, INVALID_PROPERTY_TYPE, INVALID_ENUM_VALUE, DUPLICATE_FIELD_NAME, MULTIPLE_INTERACTIVE_BLOCKS, DOCUMENT_INTERACTIVE_BLOCK, INVALID_COLOR, UNKNOWN_TEMPLATE_VAR(warn), ENCODING_KEY_NOT_IN_DATA, INVALID_ENV_KEY, PATH_OUTSIDE_WORKSPACE, MISSING_SOURCE, REMOTE_ASSET_BLOCKED, MDX_NOT_RENDERED(warn), RAW_HTML_NOT_RENDERED(warn)` — plus runtime codes surfaced by the CLI/kernel: `SECRET_RETURN_BLOCKED, WRITE_FAILED, SESSION_TIMEOUT, KERNEL_UNREACHABLE, CHROME_REQUIRED, BROWSER_OPEN_FAILED(warn), INVALID_THEME, THEME_DECLARED_IN_CANVAS, INVALID_PALETTE_NAME, PALETTE_NAME_TAKEN, TOO_MANY_PALETTES, INTERNAL_ERROR`. The five theme codes are **write boundaries, never a canvas's shape** — they are raised by `lib/themestore.js`, which is to say by both doors into it: the browser's `POST /api/theme` / `POST /api/theme/palette` and the CLI's `theme` command, reported as an HTTP status on one and an exit-1 error object on the other. `INVALID_THEME` means a theme was refused rather than sanitized (and it is also what `validate .instantcanvas.json` reports for a bad color in the config); `THEME_DECLARED_IN_CANVAS` means a reset was refused because the canvas — not the config — is what declares the theme (see [architecture.md](architecture.md)). The three palette codes concern the workspace's own library, never a document.
+Error codes: `INVALID_JSON, INVALID_SPEC, UNSUPPORTED_VERSION, MISSING_CREATED_WITH(warn in the kernel), INVALID_CREATED_WITH(warn in the kernel), UNKNOWN_BLOCK_TYPE, UNKNOWN_FIELD_TYPE, UNKNOWN_PROPERTY(warn), MISSING_REQUIRED_PROPERTY, INVALID_PROPERTY_TYPE, INVALID_ENUM_VALUE, DUPLICATE_FIELD_NAME, MULTIPLE_INTERACTIVE_BLOCKS, DOCUMENT_INTERACTIVE_BLOCK, INVALID_COLOR, UNKNOWN_TEMPLATE_VAR(warn), ENCODING_KEY_NOT_IN_DATA, INVALID_ENV_KEY, PATH_OUTSIDE_WORKSPACE, MISSING_SOURCE, REMOTE_ASSET_BLOCKED, ASSET_TOO_LARGE, MDX_NOT_RENDERED(warn), RAW_HTML_NOT_RENDERED(warn), COVER_TEXT_MAY_BE_ILLEGIBLE(warn)` — plus the three companion codes: `DUPLICATE_ENHANCES, COMPANION_DOES_NOT_RENDER(warn), COMPANION_WITHOUT_DOCUMENT(warn)` — plus runtime codes surfaced by the CLI/kernel: `SECRET_RETURN_BLOCKED, WRITE_FAILED, SESSION_TIMEOUT, KERNEL_UNREACHABLE, CHROME_REQUIRED, BROWSER_OPEN_FAILED(warn), INVALID_THEME, THEME_DECLARED_IN_CANVAS, THEME_NEEDS_DOCUMENT, INVALID_PALETTE_NAME, PALETTE_NAME_TAKEN, TOO_MANY_PALETTES, CONFIG_UNREADABLE, INTERNAL_ERROR`.
+
+The six theme codes are **write boundaries, never a canvas's shape** — they are raised by `lib/themestore.js`, which is to say by both doors into it: the browser's `POST /api/theme` / `POST /api/theme/palette` and the CLI's `theme` command, reported as an HTTP status on one and an exit-1 error object on the other. `INVALID_THEME` means a theme was refused rather than sanitized; `THEME_DECLARED_IN_CANVAS` means a reset was refused because the canvas is what declares the theme; **`THEME_NEEDS_DOCUMENT`** means the canvas holds a form, a confirm or a sweep, so it cannot carry a `document` at all and therefore has nowhere to keep a theme (see [architecture.md](architecture.md)). The three palette codes concern the workspace's own library, never a document. `CONFIG_UNREADABLE` is `skills-config.json` existing but not parsing — deliberately loud, because *absent is not corrupt*.
 
 ## Catalog: progressive disclosure
 
 The catalog is designed so an agent pulls **only the information it needs, when it needs it**:
 
-1. `catalog` (bare) — a **~7 KB lean index**: one-liners for every block, every chart kind (with when-to-use), every field type, plus layout/validation pointers. No schemas — a test asserts no `"properties"` key appears and caps the payload at 7.5 KB. It opens with `markdownFiles`, because the cheapest canvas is the one an agent never writes: a `.md` that already exists is opened, not wrapped.
+1. `catalog` (bare) — a **~8 KB lean index**: one-liners for every block, every chart kind (with when-to-use), every field type, plus layout/validation pointers. No schemas — a test asserts no `"properties"` key appears and caps the payload at 8.4 KB. It opens with `markdownFiles`, because the cheapest canvas is the one an agent never writes: a `.md` that already exists is opened, not wrapped.
 2. `catalog <name>` — ONE full contract: a block, a chart kind, a field type, `fieldset`, `sweep`, `document`, `theme`, or `envelope`. Chart kinds return summary, when-to-use, data shape, typed encoding, and a working example. `catalog theme` returns the token shape *plus* every preset with its swatches, so an agent can pick one without a second call.
 3. `catalog --full` — the everything dump, for the rare case it is genuinely needed. It means *everything*: `document` and `sweep` were once reachable only by name, so an agent that pulled the whole contract to learn what existed concluded they did not. `theme` was added to the dump for the same reason, the day it existed.
 

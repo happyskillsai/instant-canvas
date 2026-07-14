@@ -10,6 +10,16 @@ const MARKDOWN_EXTENSIONS = ['.md', '.mdx', '.markdown']
 const MAX_MARKDOWN_BYTES = 2 * 1024 * 1024
 const UNAVAILABLE = '*(markdown source unavailable)*'
 
+/**
+ * The cap on a cover's background image — far larger than a logo's, because a
+ * photograph is not a mark, and still a cap, because a full-bleed image lands in the
+ * canvas payload AND in the PDF. Nobody should ship a 40 MB PDF by accident, so going
+ * over is an ERROR at validate time (see checkCoverBackground) rather than the silent
+ * drop a logo gets: a missing 48px mark is a blemish, a missing cover is a different
+ * document.
+ */
+const MAX_COVER_IMAGE_BYTES = 8 * 1024 * 1024
+
 function hasMarkdownExtension(src) {
 	return MARKDOWN_EXTENSIONS.includes(path.extname(String(src)).toLowerCase())
 }
@@ -294,6 +304,7 @@ function inlineImageFile(root, target, baseDir = root, maxBytes = MAX_MARKDOWN_B
 module.exports = {
 	MARKDOWN_EXTENSIONS,
 	MAX_MARKDOWN_BYTES,
+	MAX_COVER_IMAGE_BYTES,
 	IMAGE_MIME,
 	NOT_A_FILE_RE,
 	hasMarkdownExtension,

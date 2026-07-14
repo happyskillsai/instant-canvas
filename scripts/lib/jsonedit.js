@@ -194,4 +194,63 @@ function setDocumentTheme(raw, canvas, theme) {
 	return candidate
 }
 
-module.exports = { setDocumentTheme, detectIndent }
+/**
+ * Create the whole `document` member on a canvas that has none, as TEXT.
+ *
+ * The sibling of `setDocumentTheme`, for the case it deliberately refuses: a DISPLAY
+ * canvas with no `document` object at all. Such a canvas can hold a theme — it just has
+ * no envelope slot for one yet — so the slot is created. (An INTERACTIVE canvas is
+ * refused upstream in lib/themestore.js: `document` is invalid beside a form, a confirm
+ * or a sweep, and a colour click must never make the agent's canvas stop validating.)
+ *
+ * It splices for the same reason everything else here does: re-serializing would reformat
+ * a file the user owns, turning "I picked an accent" into a whole-file diff — and it would
+ * flatten a deliberately minified canvas beyond recognition.
+ *
+ * The member lands just before `blocks`/`pages`, which is where the schema reads it and
+ * where a human would have typed it. Returns null when the splice cannot be PROVEN to have
+ * added exactly `document` and nothing else.
+ */
+function createDocument(raw, canvas, document) {
+	let candidate
+	try {
+		const objStart = skipWs(raw, 0)
+		if (raw[objStart] !== '{')
+			return null
+		if (findMember(raw, objStart, 'document').found)
+			return null // not ours to create — setDocumentTheme owns an existing one
+
+		const indentUnit = detectIndent(raw)
+		const multiline = raw.includes('\n')
+
+		// Sit above the content, like the schema and like a human would write it.
+		const anchor = ['blocks', 'pages'].map((k) => findMember(raw, objStart, k)).find((m) => m.found)
+		const at = anchor ? anchor.keyStart : findMember(raw, objStart, 'document').firstMemberAt
+		const base = multiline ? indentOf(raw, at) : ''
+		const colon = multiline ? '": ' : '":'
+		const text = serializeAt(document, indentUnit, base, multiline)
+		const sep = multiline ? `\n${base}` : ''
+		candidate = raw.slice(0, at) + `"document${colon}${text},${sep}` + raw.slice(at)
+	} catch {
+		return null
+	}
+
+	// Trust nothing: prove we added `document` and moved nothing else.
+	let after
+	try {
+		after = JSON.parse(candidate)
+	} catch {
+		return null
+	}
+	if (JSON.stringify(after.document) !== JSON.stringify(document))
+		return null
+	const before = JSON.parse(JSON.stringify(canvas))
+	delete after.document
+	delete before.document
+	if (JSON.stringify(after) !== JSON.stringify(before))
+		return null
+
+	return candidate
+}
+
+module.exports = { setDocumentTheme, createDocument, detectIndent }

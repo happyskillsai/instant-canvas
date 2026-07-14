@@ -233,7 +233,12 @@ test('catalog theme: the presets are IN the contract, and the lean index says th
 
 	// The two rules an agent would otherwise have to discover by being surprised.
 	assert.ok(t.notes.some((n) => /LEADS the colorway/.test(n)), 'a lone accent leads the colorway')
-	assert.ok(t.notes.some((n) => /\.instantcanvas\.json/.test(n)), 'a native .md keeps its theme elsewhere')
+	// Where a theme LIVES, which is the thing an agent cannot guess: a markdown file has no
+	// envelope, so its theme goes in its COMPANION canvas. (This used to name
+	// `.instantcanvas.json`, which no longer exists — the companion replaced it, and the
+	// catalog is the surface an agent actually reads, so it is where that must be true.)
+	assert.ok(t.notes.some((n) => /COMPANION canvas/.test(n)), 'a markdown file keeps its theme in its companion')
+	assert.ok(!t.notes.some((n) => /instantcanvas\.json/.test(n)), 'and the dead config is not still being taught')
 
 	const r = validate(JSON.stringify({
 		instantcanvas: 1, createdWith: '0.0.0', title: 'T',

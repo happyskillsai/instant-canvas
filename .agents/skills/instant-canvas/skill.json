@@ -22,6 +22,184 @@
 		"documents"
 	],
 	"dependencies": {},
+	"config": {
+		"theme": {
+			"type": "object",
+			"default": {},
+			"prompt": false,
+			"description": "Workspace default theme — the colors every document falls back to when it declares none of its own. A canvas (or a markdown file's companion canvas) always outranks it.",
+			"schema": {
+				"type": "object",
+				"description": "A theme: a named preset, plus any color token override.",
+				"properties": {
+					"preset": {
+						"type": "string",
+						"enum": [
+							"default",
+							"slate",
+							"ocean",
+							"forest",
+							"plum",
+							"ember",
+							"mono",
+							"sepia",
+							"tableau",
+							"okabe",
+							"carbon",
+							"nord",
+							"solarized",
+							"material",
+							"midnight",
+							"graphite",
+							"abyss",
+							"moss",
+							"dracula",
+							"tokyo",
+							"solarized-dark",
+							"okabe-dark"
+						],
+						"description": "Named starting point — supplies an accent, a chart colorway, and (for the dark presets and a few light ones) the paper itself."
+					},
+					"palette": {
+						"type": "array",
+						"minItems": 1,
+						"maxItems": 8,
+						"items": {
+							"type": "string",
+							"pattern": "^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$"
+						},
+						"description": "The chart colorway, 1–8 hex colors. ONE color is a lead the preset fills out; TWO or more ARE the colorway, exactly as given."
+					},
+					"accent": {
+						"type": "string",
+						"pattern": "^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$",
+						"description": "The \"accent\" color token. Strict hex (#rgb or #rrggbb) — these values are assigned into live CSS, which would happily accept anything."
+					},
+					"paper": {
+						"type": "string",
+						"pattern": "^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$",
+						"description": "The \"paper\" color token. Strict hex (#rgb or #rrggbb) — these values are assigned into live CSS, which would happily accept anything."
+					},
+					"surface": {
+						"type": "string",
+						"pattern": "^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$",
+						"description": "The \"surface\" color token. Strict hex (#rgb or #rrggbb) — these values are assigned into live CSS, which would happily accept anything."
+					},
+					"text": {
+						"type": "string",
+						"pattern": "^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$",
+						"description": "The \"text\" color token. Strict hex (#rgb or #rrggbb) — these values are assigned into live CSS, which would happily accept anything."
+					},
+					"muted": {
+						"type": "string",
+						"pattern": "^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$",
+						"description": "The \"muted\" color token. Strict hex (#rgb or #rrggbb) — these values are assigned into live CSS, which would happily accept anything."
+					},
+					"border": {
+						"type": "string",
+						"pattern": "^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$",
+						"description": "The \"border\" color token. Strict hex (#rgb or #rrggbb) — these values are assigned into live CSS, which would happily accept anything."
+					},
+					"link": {
+						"type": "string",
+						"pattern": "^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$",
+						"description": "The \"link\" color token. Strict hex (#rgb or #rrggbb) — these values are assigned into live CSS, which would happily accept anything."
+					}
+				},
+				"additionalProperties": false
+			}
+		},
+		"palettes": {
+			"type": "object",
+			"default": {},
+			"prompt": false,
+			"description": "Named palette library, authored by the app's palette editor. Each entry is a theme object, offered in the browser beside the built-in presets. A LIBRARY, not new preset names: applying one copies its colors into the document.",
+			"schema": {
+				"type": "object",
+				"description": "A map of palette name → theme object.",
+				"additionalProperties": {
+					"type": "object",
+					"description": "One saved palette: a theme object.",
+					"properties": {
+						"preset": {
+							"type": "string",
+							"enum": [
+								"default",
+								"slate",
+								"ocean",
+								"forest",
+								"plum",
+								"ember",
+								"mono",
+								"sepia",
+								"tableau",
+								"okabe",
+								"carbon",
+								"nord",
+								"solarized",
+								"material",
+								"midnight",
+								"graphite",
+								"abyss",
+								"moss",
+								"dracula",
+								"tokyo",
+								"solarized-dark",
+								"okabe-dark"
+							],
+							"description": "Named starting point — supplies an accent, a chart colorway, and (for the dark presets and a few light ones) the paper itself."
+						},
+						"palette": {
+							"type": "array",
+							"minItems": 1,
+							"maxItems": 8,
+							"items": {
+								"type": "string",
+								"pattern": "^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$"
+							},
+							"description": "The chart colorway, 1–8 hex colors. ONE color is a lead the preset fills out; TWO or more ARE the colorway, exactly as given."
+						},
+						"accent": {
+							"type": "string",
+							"pattern": "^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$",
+							"description": "The \"accent\" color token. Strict hex (#rgb or #rrggbb) — these values are assigned into live CSS, which would happily accept anything."
+						},
+						"paper": {
+							"type": "string",
+							"pattern": "^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$",
+							"description": "The \"paper\" color token. Strict hex (#rgb or #rrggbb) — these values are assigned into live CSS, which would happily accept anything."
+						},
+						"surface": {
+							"type": "string",
+							"pattern": "^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$",
+							"description": "The \"surface\" color token. Strict hex (#rgb or #rrggbb) — these values are assigned into live CSS, which would happily accept anything."
+						},
+						"text": {
+							"type": "string",
+							"pattern": "^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$",
+							"description": "The \"text\" color token. Strict hex (#rgb or #rrggbb) — these values are assigned into live CSS, which would happily accept anything."
+						},
+						"muted": {
+							"type": "string",
+							"pattern": "^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$",
+							"description": "The \"muted\" color token. Strict hex (#rgb or #rrggbb) — these values are assigned into live CSS, which would happily accept anything."
+						},
+						"border": {
+							"type": "string",
+							"pattern": "^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$",
+							"description": "The \"border\" color token. Strict hex (#rgb or #rrggbb) — these values are assigned into live CSS, which would happily accept anything."
+						},
+						"link": {
+							"type": "string",
+							"pattern": "^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$",
+							"description": "The \"link\" color token. Strict hex (#rgb or #rrggbb) — these values are assigned into live CSS, which would happily accept anything."
+						}
+					},
+					"additionalProperties": false
+				}
+			}
+		}
+	},
 	"systemDependencies": {
 		"node": {
 			"description": "Node.js >= 20 with npx — fetches and runs the instant-canvas CLI and its per-workspace kernel (the CLI itself has zero npm dependencies).",

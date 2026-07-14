@@ -1,0 +1,66 @@
+{
+	"instantcanvas": 1,
+	"createdWith": "0.4.0",
+	"enhances": "README.md",
+	"title": "InstantCanvas — README",
+	"document": {
+		"cover": {
+			"title": "InstantCanvas",
+			"subtitle": "Death to the admin panel — a local, schema-driven canvas runtime for coding agents",
+			"author": "HappySkills",
+			"date": "v0.4.0",
+			"logo": "assets/logo.png",
+			"background": {
+				"src": "demos/assets/cover-square.png",
+				"size": "cover",
+				"position": "25% 50%",
+				"scrim": {
+					"color": "#0b0e14",
+					"opacity": 0.55
+				},
+				"ink": "#ffffff"
+			}
+		},
+		"theme": {
+			"accent": "#eb4a26",
+			"palette": [
+				"#eb4a26",
+				"#47b5c2",
+				"#2e767e",
+				"#f28972",
+				"#17181a"
+			]
+		},
+		"header": {
+			"left": "InstantCanvas"
+		},
+		"footer": {
+			"right": "{{pageNumber}} / {{totalPages}}"
+		},
+		"backCover": {
+			"title": "Answers, not dashboards.",
+			"text": "The agent gathers the data, reasons about it, and delivers the answer on the fly — rendered visually, on demand.",
+			"logo": "assets/logo.png",
+			"background": {
+				"src": "demos/assets/cover-square.png",
+				"size": "cover",
+				"position": "right bottom",
+				"scrim": {
+					"color": "#0b0e14",
+					"opacity": 0.72
+				},
+				"ink": "#ffffff"
+			}
+		},
+		"page": {
+			"size": "A4",
+			"margin": "15mm"
+		}
+	},
+	"blocks": [
+		{
+			"type": "markdown",
+			"src": "README.md"
+		}
+	]
+}

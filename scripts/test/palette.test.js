@@ -226,7 +226,11 @@ test.before(async () => {
 			saveLabel: document.getElementById('palSaveAs').textContent.trim(),
 		})`)
 		await evaluate(`document.getElementById('palSaveAs').click()`)
-		await sleep(900)
+		// Saving a palette now writes `skills-config.json` through `npx happyskills
+		// skills-config set`, which is a subprocess: budget for it. (A Save is rare and
+		// human-initiated, so one subprocess is affordable — but it is not instant, and a
+		// 900 ms wait here silently asserted an empty chip list.)
+		await sleep(6000)
 		const saved = await evaluate(`({
 			chips: document.querySelectorAll('#palCustom .pal-chip').length,
 			activeByValue: !!document.querySelector('#palCustom .pal-chip.active'),
@@ -425,8 +429,11 @@ test('palette: a workspace palette is saved, and its chip matches BY VALUE', { s
 	// "which chip is active" can only be answered by comparing the colors themselves.
 	assert.equal(snap.saved.activeByValue, true)
 
-	const cfg = JSON.parse(fs.readFileSync(path.join(root, '.instantcanvas.json'), 'utf8'))
-	const mine = cfg.palettes['My brand']
+	// It reached the project's OWN committed config, under our owner/name key — not a
+	// format of ours, and not a dotfile the watcher would have skipped.
+	const { SKILL_KEY, CONFIG_NAME } = require('../lib/skillsconfig')
+	const cfg = JSON.parse(fs.readFileSync(path.join(root, CONFIG_NAME), 'utf8'))
+	const mine = cfg[SKILL_KEY].config.palettes['My brand']
 	assert.ok(mine, 'it reached the workspace config')
 	assert.equal(mine.paper, '#fdf6e3', 'with every token, not just the two a chip renders')
 	assert.equal(mine.text, '#073642')

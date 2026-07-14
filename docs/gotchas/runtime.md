@@ -6,8 +6,9 @@ source:
   - scripts/instantcanvas.js
   - scripts/lib/registry.js
   - scripts/lib/jsonedit.js
-  - scripts/lib/wsconfig.js
+  - scripts/lib/skillsconfig.js
   - scripts/lib/themestore.js
+  - scripts/lib/companion.js
 ---
 
 # Gotchas — Runtime (kernel & CLI)
@@ -44,32 +45,68 @@ An interactive `open` backgrounded with `&` dies when its shell is cleaned up, b
 
 The rule above ("never re-serialize to add one field") held when the browser's palette control needed to write `document.theme` back into a canvas — but the technique did not. `spliceStamp` finds its insertion point with a regex because `"instantcanvas": 1` is a **known literal at a known place**: the first member of the top-level object. `"theme"` is neither. It can appear inside a string, inside a chart block's `data`, inside a *different* object, or inside a `document` that is itself minified on one line — and a regex has no idea which match it just found.
 
-`lib/jsonedit.js` therefore walks the JSON grammar (strings, with escapes; balanced braces and brackets; bare literals) to locate the exact span of `document`'s value, and then of `theme`'s inside it. It adopts the file's own indent unit and colon spacing, and a minified `document` object gets a minified theme — matching the neighbourhood is the entire point of splicing rather than re-serializing. The verification is the same and non-negotiable: **re-parse the candidate, diff it against the original, and discard a splice that changed anything but `document.theme`** — it returns `null`, and the caller writes the theme to `.instantcanvas.json` instead. A splice that cannot be *proven* correct is never trusted, because the file it would corrupt is the user's.
+`lib/jsonedit.js` therefore walks the JSON grammar (strings, with escapes; balanced braces and brackets; bare literals) to locate the exact span of `document`'s value, and then of `theme`'s inside it. It adopts the file's own indent unit and colon spacing, and a minified `document` object gets a minified theme — matching the neighbourhood is the entire point of splicing rather than re-serializing. The verification is the same and non-negotiable: **re-parse the candidate, diff it against the original, and discard a splice that changed anything but `document.theme`** — it returns `null`, and the caller falls back to a full re-serialize rather than writing something it cannot prove. A splice that cannot be *proven* correct is never trusted, because the file it would corrupt is the user's.
+
+`createDocument()` is its sibling, for the canvas that has no `document` object at all: it splices the whole member in as text, above `blocks`, where the schema reads it and a human would have typed it. Same proof obligation — re-parse, diff, and confirm that `document` is the *only* thing that appeared.
+
+## A companion turns the forgiving markdown path into the strict one, and that would break every README
+
+The two markdown paths are deliberately not equally forgiving. `open README.md` **degrades** (raw HTML removed, a remote image labeled `*(remote image not shown)*`), because nobody authored that file for us. A `markdown` block's `src`, on the other hand, **teaches**: a remote image is a hard `REMOTE_ASSET_BLOCKED`, because an agent wrote that canvas and is the only party who can fix it.
+
+A companion sits exactly on that seam, and the obvious implementation gets it backwards. A companion carries `{"type": "markdown", "src": "README.md"}` — which is the *authored* path. So the moment a reader gave their README a cover, the shields.io badge in it became a validation **error**, the companion became invalid, and **the document stopped rendering at all**. The reader picked a colour and broke their own README.
+
+The fix is to ask *who wrote the file*, not *how it is referenced*: a companion rendering **its own enhanced document** is the native path, and degrades exactly as `open README.md` does (`checkMarkdown()` in `validate.js` returns early; `resolveMarkdownSrc()` in `kernel.js` passes it through `renderableMarkdown()`). A canvas that merely *quotes* the same README is still held to the authored contract, because it is not that README's companion — it is a document that happens to include it.
+
+This is also what makes *"the companion is what runs"* honest: **with or without a companion, the same file renders the same prose.** Only the furnishings differ. Any future feature that reads a companion's blocks must preserve that, or it reintroduces the same class of bug — a document that renders until you brand it.
 
 ## Setting a color must not change what a canvas IS
 
-`POST /api/theme` cannot simply write `document.theme` wherever the reader happened to be. On a canvas with **no `document` object**, creating one would do far more than set a color: the presence of `document` is what makes the deck a canvas's **default view**, and it is refused outright (`DOCUMENT_INTERACTIVE_BLOCK`) on a canvas holding a `form`, a `confirm` or a sweep. So a reader picking an accent on a dashboard would have silently converted it into a document — or turned a perfectly valid form canvas into one the validator now rejects. The theme therefore goes *beside* the canvas, in `.instantcanvas.json`, and only a canvas that **already** declares `document` is written into.
+`POST /api/theme` cannot simply write `document.theme` wherever the reader happened to be, and the shape of the exception is the whole lesson.
 
-The mirror case is the reset. A theme the canvas itself declares is the author's contract, so removing it from the browser is refused with a 409 (`THEME_DECLARED_IN_CANVAS`) rather than quietly editing the agent's file out from under it. **The general rule: a reader-facing write may change what a file *says*, never what it *is*.**
+The presence of `document` is what makes the deck a canvas's **default view**, and it is refused outright (`DOCUMENT_INTERACTIVE_BLOCK`) on a canvas holding a `form`, a `confirm` or a sweep. So creating one has two very different costs depending on what the canvas is:
 
-## Three forgiving layers compose into a feature that does not exist
+- On a **display** canvas it changes a *default*, not a capability — both views were always available to it (the deck⇄continuous toggle is on every canvas), so the canvas simply now opens as paper. That is an acceptable, reversible surprise, and `themestore` does it, splicing the member in as text so the file is not reformatted.
+- On an **interactive** canvas it would make the file **stop validating**. A reader picking an accent on a credentials form would have broken the agent's own canvas. That one is refused: `THEME_NEEDS_DOCUMENT` (409), the Save button is disabled with the reason attached, and "All documents" — the workspace default in `skills-config.json` — is the honest way out. **The form is the form.**
 
-`.instantcanvas.json` is where a native `.md` keeps its theme, and hand-writing it was **writing blind**. Not because anything was broken — because three separately correct decisions stacked:
+The mirror case is the reset. A theme the canvas itself declares is the author's contract, so removing it from the browser is refused with a 409 (`THEME_DECLARED_IN_CANVAS`) rather than quietly editing the agent's file out from under it.
 
-1. **`wsconfig.read()` swallows a parse error on purpose.** A malformed config must not take a workspace down; the reader still wants to read their documents.
+**The general rule survives, sharpened: a reader-facing write may change what a file *says*, never what it *is*.** Adding `document` to a dashboard changes what it says. Adding it to a form would change what it *is* — from valid to invalid — and that is where the line falls.
+
+## Three forgiving layers composed into a feature that did not exist — and the fix was to delete the file
+
+`.instantcanvas.json` was where a native `.md` kept its theme, and hand-writing it was **writing blind**. Not because anything was broken — because three separately correct decisions stacked:
+
+1. **`wsconfig.read()` swallowed a parse error on purpose.** A malformed config must not take a workspace down; the reader still wants to read their documents.
 2. **`theme.resolve()` drops anything that is not strict hex.** It runs on hand-edited files the validator never saw, and a bad color must not reach `setProperty` just because it arrived by the unvalidated door.
 3. **`fs.watch` handling skips dotfiles.** `onFsEvent` filters them, as it must — nobody wants a hot reload per `.git` write.
 
-Each is defensible alone. Together, an agent that wrote the user's brand colors into that file with one typo got **no error, no warning, and no repaint** — which from the outside is indistinguishable from the feature not existing. `crimson` instead of `#dc143c` was dropped in silence; a trailing comma made the whole file vanish in silence; a perfectly *correct* write did nothing visible in an open browser because a dotfile changing is not an event.
+Each is defensible alone. Together, an agent that wrote the user's brand colors into that file with one typo got **no error, no warning, and no repaint** — indistinguishable from the feature not existing.
 
-Four things had to land together, and none of them makes any of the three layers stricter:
+The first fix was to add strict doors (a `theme` command, a `validate` for the config, a refresh route). It worked. **The real fix was to notice the file should not have existed.** It only ever solved *colour*: a cover could not go in it, nor a back cover, nor a running header, nor page geometry. Every new furnishing would have needed a new bespoke key — reinventing, badly, the canvas envelope that already existed. So a markdown file now keeps all of it in a **companion canvas** (`lib/companion.js`), which is an *ordinary canvas*, validated by the ordinary validator, watched by the ordinary watcher; and the workspace default moved into `skills-config.json`, the project's own committed config. All three forgiving layers stopped mattering, because the thing they were forgiving is gone.
 
-- **`instantcanvas theme` writes the file, so nobody has to hand-write it** (see [cli.md](../cli.md)) — and it writes through `theme.check()`, which **refuses** exactly what `resolve()` would have quietly dropped.
-- **`validate .instantcanvas.json`** makes the config a checkable contract, so a file that *was* hand-written can be interrogated.
-- **`POST /api/refresh`** lets a writer that is not the kernel tell a live kernel to repaint, which is the only way a dotfile write reaches an open browser.
-- The browser **drops its cached preset list** on the resulting `workspace` broadcast, or an agent's freshly saved palette would be missing from the reader's own picker.
+Two rules are worth carrying forward:
 
-**The rule worth keeping: a layer that is forgiving because it must be needs a strict door somewhere else.** Every "we tolerate junk here" is a promise that some other surface will name the junk out loud — otherwise tolerance is just silence, and silence is the one failure mode an agent cannot debug.
+- **A layer that is forgiving because it must be needs a strict door somewhere else.** Every "we tolerate junk here" is a promise that some other surface names the junk out loud — otherwise tolerance is just silence, and silence is the one failure mode an agent cannot debug. `skillsconfig.read()` now honours this directly: **ABSENT ≠ CORRUPT.** A missing config means "nothing configured" → defaults. A config that *exists but does not parse* means the user's settings are unreadable, and it **throws**, naming the file and pointing at `npx -y happyskills skills-config validate --json`. Never repair it by deleting: it holds *every* skill's settings.
+- **When a bespoke sidecar needs a third strict door, ask whether it should exist.** The sidecar was the bug. The envelope already existed.
+
+## ⚠️ `skills-config set` REORDERS KEYS
+
+Values round-trip exactly; **key order does not** — it comes back alphabetised.
+
+```
+sent: accent, link, paper, surface, text, muted, border, palette
+got:  accent, border, link, muted, palette, paper, surface, text
+```
+
+This is a bug that had not happened yet when it was written down, and it would have been invisible. `app.js` matched the active custom-palette chip with `JSON.stringify(a) === JSON.stringify(b)`, which **is** order-sensitive — so a palette would have stopped matching its own chip the first time it round-tripped through the CLI. The chip goes dark while the document is still wearing exactly those colors, and nothing says why.
+
+**Compare canonically** (`canonical()` in `app.js` sorts keys before stringifying; arrays keep their order, because a colorway is a sequence). `skillsconfig.test.js` pins it by round-tripping a deliberately non-alphabetical palette through the real CLI.
+
+The general shape: **any value that survives a round trip through someone else's serializer may come back re-ordered.** If you compare it by string, you have a latent bug whose trigger is "somebody saved it once".
+
+## A palette Save spawns a subprocess, and it is not instant
+
+Writing `skills-config.json` goes through `npx -y happyskills skills-config set` (with an atomic direct-write fallback when the CLI is unreachable — a local-first tool must not fail to save a colour because the user is on a plane). That subprocess costs **~2 seconds**. A Save is rare and human-initiated, so it is affordable — but it is not free, and a browser test that waited 900 ms for it silently asserted an empty chip list and passed for the wrong reason. Budget for it in any test that drives a Save.
 
 ## A validator error is a wall of red in someone's browser
 

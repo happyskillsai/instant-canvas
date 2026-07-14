@@ -1,8 +1,11 @@
 'use strict'
 
-// The document color system: resolution (lib/theme.js), the workspace config that
-// gives a native .md somewhere to keep a theme (lib/wsconfig.js), and the splice
-// that writes one back into a canvas without reformatting it (lib/jsonedit.js).
+// The document color system: resolution (lib/theme.js) and the splice that writes a
+// theme back into a canvas without reformatting it (lib/jsonedit.js).
+//
+// Where a theme LANDS is no longer here. It moved out with `.instantcanvas.json`: a
+// markdown file now keeps its theme in its companion canvas (companion.test.js) and the
+// workspace default lives in skills-config.json (skillsconfig.test.js).
 
 const test = require('node:test')
 const assert = require('node:assert/strict')
@@ -11,7 +14,6 @@ const os = require('node:os')
 const path = require('node:path')
 
 const theme = require('../lib/theme')
-const wsconfig = require('../lib/wsconfig')
 const { setDocumentTheme } = require('../lib/jsonedit')
 
 const tmpRoot = () => fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'ic-theme-')))
@@ -123,20 +125,6 @@ test('theme: anything check() accepts also survives the canvas validator', () =>
 	assert.equal(res.ok, true, JSON.stringify(res.errors))
 })
 
-// ------------------------------------------------------------- workspace config
-
-test('wsconfig: precedence — per-document beats the workspace default beats nothing', () => {
-	const root = tmpRoot()
-	assert.equal(wsconfig.themeFor(root, 'a.md'), null, 'no config → the caller falls back')
-
-	wsconfig.setWorkspaceTheme(root, { preset: 'slate' })
-	assert.deepEqual(wsconfig.themeFor(root, 'a.md'), { preset: 'slate' })
-
-	wsconfig.setDocumentTheme(root, 'a.md', { preset: 'ember' })
-	assert.deepEqual(wsconfig.themeFor(root, 'a.md'), { preset: 'ember' }, 'the file wins')
-	assert.deepEqual(wsconfig.themeFor(root, 'b.md'), { preset: 'slate' }, 'others keep the default')
-})
-
 test('theme: presetList() ships EVERY token, not just the two a chip renders', () => {
 	// The browser resolves its live preview against this list. A preset arriving with
 	// only `accent` and `paper` resolved text/muted/border/surface to undefined — which
@@ -165,43 +153,6 @@ test('theme: the well-known palettes are carried faithfully, and two restyle the
 	// grounds other than taste — they must exist and say so.
 	for (const name of ['okabe', 'carbon'])
 		assert.match(theme.PRESETS[name].description, /colorblind-safe/i)
-})
-
-test('wsconfig: a workspace can hold its own palettes, saved and deleted by name', () => {
-	const root = tmpRoot()
-	assert.deepEqual(wsconfig.readPalettes(root), {})
-
-	const brand = { accent: '#0054fe', palette: ['#0054fe', '#00b4d8'] }
-	wsconfig.setPalette(root, 'My brand', brand)
-	assert.deepEqual(wsconfig.readPalettes(root)['My brand'], brand)
-	// It lives beside the theme keys without disturbing them.
-	wsconfig.setWorkspaceTheme(root, { preset: 'slate' })
-	assert.deepEqual(wsconfig.readPalettes(root)['My brand'], brand)
-	assert.deepEqual(wsconfig.themeFor(root, 'a.md'), { preset: 'slate' })
-
-	wsconfig.setPalette(root, 'My brand', null)
-	assert.deepEqual(wsconfig.readPalettes(root), {})
-	assert.equal(wsconfig.read(root).palettes, undefined, 'the empty map goes too')
-})
-
-test('wsconfig: a reset removes the entry rather than leaving {} litter', () => {
-	const root = tmpRoot()
-	wsconfig.setDocumentTheme(root, 'a.md', { preset: 'ember' })
-	wsconfig.setDocumentTheme(root, 'a.md', null)
-	const cfg = wsconfig.read(root)
-	assert.equal(cfg.documents, undefined, 'the empty map goes too')
-	assert.equal(wsconfig.themeFor(root, 'a.md'), null)
-})
-
-test('wsconfig: unknown keys survive a write, and a malformed config is ignored, not fatal', () => {
-	const root = tmpRoot()
-	fs.writeFileSync(path.join(root, '.instantcanvas.json'), JSON.stringify({ instantcanvas: 1, mine: { keep: true } }))
-	wsconfig.setWorkspaceTheme(root, { preset: 'mono' })
-	assert.deepEqual(wsconfig.read(root).mine, { keep: true }, 'we do not own that key')
-
-	fs.writeFileSync(path.join(root, '.instantcanvas.json'), '{ not json')
-	assert.deepEqual(wsconfig.read(root), {})
-	assert.equal(wsconfig.themeFor(root, 'a.md'), null, 'a broken config must not take the workspace down')
 })
 
 // --------------------------------------------------------------- the canvas splice

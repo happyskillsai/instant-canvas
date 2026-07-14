@@ -22,7 +22,7 @@
         "Project Structure",
         "Documentation"
       ],
-      "line_count": 109,
+      "line_count": 116,
       "links_to": [
         "docs/architecture.md",
         "docs/canvas-schema.md",
@@ -49,7 +49,7 @@
     },
     {
       "dangling": false,
-      "description": "How the CLI, per-workspace kernel, and browser fit together — process model, registry, sessions, hot reload, and the security perimeter.",
+      "description": "How the CLI, per-workspace kernel, and browser fit together — process model, registry, sessions, hot reload, theme resolution, and the security perimeter.",
       "has_frontmatter": true,
       "headings": [
         "Architecture",
@@ -58,13 +58,19 @@
         "Request perimeter",
         "Routes",
         "Workspace scan",
+        "Document theme: resolved server-side, once",
+        "Companion resolution — `lib/companion.js`",
+        "The workspace config — `skills-config.json`",
+        "Where a saved theme lands — `lib/themestore.js`, the one write path",
+        "The workspace's own palettes",
         "Sessions",
         "Hot reload",
         "Version handshake"
       ],
-      "line_count": 99,
+      "line_count": 175,
       "links_to": [
         "docs/canvas-schema.md",
+        "docs/cli.md",
         "docs/gotchas/frontend.md",
         "docs/gotchas/runtime.md",
         "docs/security.md"
@@ -79,6 +85,13 @@
         "scripts/lib/session.js",
         "scripts/lib/scan.js",
         "scripts/lib/mdcanvas.js",
+        "scripts/lib/theme.js",
+        "scripts/lib/themestore.js",
+        "scripts/lib/skillsconfig.js",
+        "scripts/lib/configschema.js",
+        "scripts/lib/companion.js",
+        "scripts/lib/canvasfile.js",
+        "scripts/lib/jsonedit.js",
         "scripts/lib/fsatomic.js",
         "scripts/lib/browser.js"
       ],
@@ -88,6 +101,7 @@
         "kernel",
         "sessions",
         "websocket",
+        "theme",
         "security"
       ],
       "toc": {
@@ -98,7 +112,7 @@
     },
     {
       "dangling": false,
-      "description": "The canvas JSON contract — envelope, six block types, 26 chart kinds, 16 field types, fieldset layout, validation rules, and the progressive-disclosure catalog.",
+      "description": "The canvas JSON contract — envelope, six block types, 26 chart kinds, 16 field types, fieldset layout, the document theme, validation rules, and the progressive-disclosure catalog.",
       "has_frontmatter": true,
       "headings": [
         "Canvas Schema, Validator, and Catalog",
@@ -110,15 +124,21 @@
         "Chart kinds (26)",
         "Sweeps: a slider over precomputed frames",
         "Document mode",
+        "A cover is a sheet, so it can carry a background image",
+        "The theme: one color system, two sinks",
+        "The companion canvas: the envelope a markdown file never had",
+        "Custom palettes: a library, not a preset name",
+        "Field types (16)",
         "Validator behavior",
         "Catalog: progressive disclosure"
       ],
-      "line_count": 185,
+      "line_count": 301,
       "links_to": [
         "docs/architecture.md",
         "docs/cli.md",
         "docs/frontend.md",
         "docs/gotchas/frontend.md",
+        "docs/gotchas/runtime.md",
         "docs/security.md"
       ],
       "over_size": false,
@@ -128,6 +148,10 @@
         "scripts/lib/schema.js",
         "scripts/lib/validate.js",
         "scripts/lib/catalog.js",
+        "scripts/lib/theme.js",
+        "scripts/lib/themestore.js",
+        "scripts/lib/skillsconfig.js",
+        "scripts/lib/companion.js",
         "scripts/lib/markdownsrc.js",
         "scripts/lib/mdcanvas.js",
         "scripts/lib/pkgmeta.js"
@@ -138,7 +162,8 @@
         "validation",
         "catalog",
         "charts",
-        "forms"
+        "forms",
+        "theme"
       ],
       "toc": {
         "linked": false,
@@ -157,12 +182,14 @@
         "open",
         "print",
         "stamp",
+        "theme",
         "validate / catalog / status / stop",
         "Result contract (stdout of `open`)",
         "The agent workflow"
       ],
-      "line_count": 90,
+      "line_count": 126,
       "links_to": [
+        "docs/architecture.md",
         "docs/canvas-schema.md",
         "docs/gotchas/runtime.md",
         "docs/security.md"
@@ -172,7 +199,8 @@
       "path": "docs/cli.md",
       "source": [
         "scripts/instantcanvas.js",
-        "scripts/lib/cdp.js"
+        "scripts/lib/cdp.js",
+        "scripts/lib/themestore.js"
       ],
       "source_unresolved": [],
       "tags": [
@@ -203,8 +231,10 @@
         "CSP shim",
         "Icons and vendored assets"
       ],
-      "line_count": 89,
+      "line_count": 106,
       "links_to": [
+        "docs/architecture.md",
+        "docs/canvas-schema.md",
         "docs/gotchas/frontend.md"
       ],
       "over_size": false,
@@ -266,6 +296,8 @@
       "headings": [
         "Gotchas — Frontend",
         "CSP silently drops `style=\"\"` attributes",
+        "CSSOM is exempt from the CSP — including from its *protection*",
+        "A partial preset lies quietly",
         "markdown-it silently refuses most `data:` image URIs",
         "`html: false` escapes raw HTML, so \"not rendering\" it means showing it",
         "Shiki cannot be used for syntax highlighting, and it is not about size",
@@ -294,7 +326,7 @@
         "A sheet 3 px too tall prints a silent sliver page",
         "Constraint API quirks around custom widgets"
       ],
-      "line_count": 149,
+      "line_count": 169,
       "links_to": [],
       "over_size": false,
       "parse_error": null,
@@ -327,6 +359,7 @@
         "Gotchas — Packaging (npm CLI & HappySkills skill)",
         "Everything inside the skill folder ships — keep everything else out",
         "The npm tarball is an allowlist — verify with `npm pack --dry-run`",
+        "npm FORCE-INCLUDES anything named `README*`, and a negation cannot take it back",
         "The size caps that blocked skill publishing are solved by relocation, not shrinking",
         "Testing a packed tarball with npx needs `-p`, or npx executes the file",
         "A 404 on `npm view` does not mean the name is publishable",
@@ -334,9 +367,10 @@
         "Description validators are strict and double-layered",
         "Never scaffold a skill by hand",
         "The skill loads from a mirror path",
-        "Stamping the skill CHANGELOG means RENAMING `## [Unreleased]`, not adding a section under it"
+        "Stamping the skill CHANGELOG means RENAMING `## [Unreleased]`, not adding a section under it",
+        "DO NOT hand-write the skill bundle's CHANGELOG — the publish step owns it"
       ],
-      "line_count": 62,
+      "line_count": 80,
       "links_to": [],
       "over_size": false,
       "parse_error": null,
@@ -372,11 +406,17 @@
         "macOS `/tmp` is a symlink",
         "Background `open` outliving its shell",
         "Adding one field by re-serializing rewrites the whole file",
+        "A NESTED property cannot be spliced with a regex",
+        "A companion turns the forgiving markdown path into the strict one, and that would break every README",
+        "Setting a color must not change what a canvas IS",
+        "Three forgiving layers composed into a feature that did not exist — and the fix was to delete the file",
+        "⚠️ `skills-config set` REORDERS KEYS",
+        "A palette Save spawns a subprocess, and it is not instant",
         "A validator error is a wall of red in someone's browser",
         "A rejected file leaks its own first bytes through `JSON.parse`",
         "Deleting collections is not `rm -rf`"
       ],
-      "line_count": 54,
+      "line_count": 125,
       "links_to": [],
       "over_size": false,
       "parse_error": null,
@@ -384,7 +424,11 @@
       "source": [
         "scripts/kernel.js",
         "scripts/instantcanvas.js",
-        "scripts/lib/registry.js"
+        "scripts/lib/registry.js",
+        "scripts/lib/jsonedit.js",
+        "scripts/lib/skillsconfig.js",
+        "scripts/lib/themestore.js",
+        "scripts/lib/companion.js"
       ],
       "source_unresolved": [],
       "tags": [
@@ -523,8 +567,10 @@
         "Network perimeter",
         "What this does NOT protect against"
       ],
-      "line_count": 51,
-      "links_to": [],
+      "line_count": 61,
+      "links_to": [
+        "docs/architecture.md"
+      ],
       "over_size": false,
       "parse_error": null,
       "path": "docs/security.md",
@@ -532,6 +578,11 @@
         "scripts/lib/redact.js",
         "scripts/lib/envfile.js",
         "scripts/lib/jsonfile.js",
+        "scripts/lib/jsonedit.js",
+        "scripts/lib/theme.js",
+        "scripts/lib/skillsconfig.js",
+        "scripts/lib/companion.js",
+        "scripts/lib/themestore.js",
         "scripts/lib/markdownsrc.js",
         "scripts/lib/mdcanvas.js",
         "scripts/lib/fsatomic.js",
@@ -563,7 +614,7 @@
         "Security regressions",
         "Browser verification"
       ],
-      "line_count": 90,
+      "line_count": 96,
       "links_to": [
         "docs/gotchas/testing.md",
         "docs/releasing.md"

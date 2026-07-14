@@ -16,8 +16,9 @@ const registry = require('./lib/registry')
 const { registerSecret, redact, errorOut } = require('./lib/redact')
 const { scan, counts, readCanvasFile, MAX_CANVAS_BYTES } = require('./lib/scan')
 const { validate, collectBlocks, isInteractiveBlock, flattenFields } = require('./lib/validate')
-const { readMarkdownSrc, inlineLocalImages, inlineImageFile, hasMarkdownExtension, renderableMarkdown } = require('./lib/markdownsrc')
+const { readMarkdownSrc, inlineLocalImages, inlineImageFile, hasMarkdownExtension, renderableMarkdown, MAX_COVER_IMAGE_BYTES } = require('./lib/markdownsrc')
 const { virtualCanvasFor } = require('./lib/mdcanvas')
+const { companionFor, enhancesOf } = require('./lib/companion')
 const { Sessions } = require('./lib/session')
 const envfile = require('./lib/envfile')
 const jsonfile = require('./lib/jsonfile')
@@ -140,12 +141,42 @@ function loadCanvas(rel) {
 	// branch is keyed on the extension allowlist, which is also what keeps this
 	// route from becoming a second way to render `.env`.
 	if (hasMarkdownExtension(rel)) {
+		// UNLESS IT HAS A COMPANION, in which case THE COMPANION IS WHAT RUNS — here, and
+		// therefore everywhere: `open`, `print` and the browser all arrive through this one
+		// function. That uniformity is the whole feature. Anything else is a trap: a reader
+		// who sees a cover on screen and no cover in the PDF has been lied to.
+		const found = companionFor(ROOT, rel)
+		if (found) {
+			if (found.duplicates)
+				// First-wins would be a coin toss the reader cannot see, so we refuse and name
+				// both files rather than silently rendering one of them.
+				return { status: 422, body: { ok: false, errors: [{
+					code: 'DUPLICATE_ENHANCES',
+					path: 'enhances',
+					message: `${found.duplicates.length} canvases enhance "${rel}": ${found.duplicates.join(', ')}. Only one may — delete or re-point all but one.`,
+				}] } }
+			return loadCanvasFile(found.canvas, { as: rel })
+		}
 		const canvas = virtualCanvasFor(ROOT, rel, MAX_CANVAS_BYTES)
 		if (!canvas)
 			return { status: 404, body: { ok: false, message: `Document not found: ${rel}` } }
 		resolveMarkdownSrc(canvas, { native: true })
 		return { status: 200, body: { ok: true, path: rel, canvas, warnings: [], ...themeFor(rel, null) }, canvas }
 	}
+
+	return loadCanvasFile(rel)
+}
+
+/**
+ * Load a canvas FILE.
+ *
+ * `as` is the path the reader asked for, which for a companion is the markdown document
+ * rather than the canvas itself. The browser routes on it, the palette control saves
+ * against it, and the sidebar highlights it — all of which must name the document, because
+ * the document is what the user thinks in. The companion is metadata.
+ */
+function loadCanvasFile(rel, { as = null } = {}) {
+	const abs = path.resolve(ROOT, rel)
 
 	// A canvas is a *.json (lib/scan.js says so), and this route must read nothing
 	// else. Without the gate it happily opened any file in the workspace and, when
@@ -165,21 +196,35 @@ function loadCanvas(rel) {
 	// An absent provenance stamp is the agent's problem, never the reader's: it
 	// downgrades to a warning here so a human clicking an unstamped canvas still
 	// sees their data instead of a validation error page.
-	const result = validate(raw, { root: ROOT, provenance: 'warn' })
+	const result = validate(raw, { root: ROOT, provenance: 'warn', self: rel })
 	if (!result.ok)
 		return { status: 422, body: { ok: false, errors: result.errors, warnings: result.warnings } }
 	const canvas = JSON.parse(raw)
 	resolveMarkdownSrc(canvas)
 	resolveDocumentAssets(canvas)
 	const declared = canvas.document && typeof canvas.document === 'object' ? canvas.document.theme : undefined
-	return { status: 200, body: { ok: true, path: rel, canvas, warnings: result.warnings, ...themeFor(rel, declared) }, canvas }
+	// A companion answers under its DOCUMENT's path, and says which file actually holds
+	// the furnishings — the palette control needs to name it, and the sidebar badges by it.
+	const asPath = as || rel
+	return {
+		status: 200,
+		body: {
+			ok: true, path: asPath, canvas, warnings: result.warnings,
+			...(as ? { companion: rel } : {}),
+			...themeFor(asPath, declared),
+		},
+		canvas,
+	}
 }
 
 /**
  * The theme the browser should paint this document with, resolved to concrete hex.
  *
  * Precedence, weakest to strongest:
- *   built-in default  <  config.theme  <  config.documents[rel].theme  <  canvas.document.theme
+ *   built-in default  <  skills-config `theme`  <  the canvas's own document.theme
+ *
+ * Three levels, not four: a per-document theme now lives in the document's own envelope —
+ * its COMPANION, when the document is markdown — rather than in a side table keyed by path.
  *
  * Resolving here rather than in the page means the browser never learns what a
  * preset is, and `print` — the same page in a headless Chrome — inherits the
@@ -202,12 +247,14 @@ function saveTheme(res, rel, body) {
 		return sendJson(res, load.status, load.body)
 
 	const scope = body.scope === 'workspace' ? 'workspace' : 'document'
-	let wrote, target
+	let wrote, target, created
 	try {
-		({ wrote, target } = themestore.applyTheme(ROOT, rel, body.theme === null ? null : body.theme, { scope }))
+		({ wrote, target, created } = themestore.applyTheme(ROOT, rel, body.theme === null ? null : body.theme, { scope }))
 	} catch (err) {
 		if (err instanceof themestore.ThemeError) {
-			const status = err.code === 'THEME_DECLARED_IN_CANVAS' ? 409 : 400
+			// THEME_NEEDS_DOCUMENT is a 409 for the same reason THEME_DECLARED_IN_CANVAS is:
+			// nothing is wrong with the request — the file simply cannot hold the answer.
+			const status = err.code === 'THEME_DECLARED_IN_CANVAS' || err.code === 'THEME_NEEDS_DOCUMENT' ? 409 : 400
 			return sendJson(res, status, { ok: false, error: { code: err.code, message: err.message, ...(err.errors ? { errors: err.errors } : {}) } })
 		}
 		return sendJson(res, 500, { ok: false, error: { code: 'WRITE_FAILED', message: err.message } })
@@ -215,16 +262,46 @@ function saveTheme(res, rel, body) {
 
 	const wroteRel = path.relative(ROOT, wrote).split(path.sep).join('/')
 	klog('theme', body.theme === null ? 'reset' : (body.theme.preset || 'custom'), '\u2192', wroteRel, `(${rel})`)
-	// The canvas write is picked up by fs.watch, but `.instantcanvas.json` is a
-	// dotfile the watcher skips — broadcast either way so the deck repaints at once.
+	// A canvas write rides fs.watch — but a NEW companion also changes the TREE (the
+	// document's row gains its badge), and skills-config.json may sit above the workspace
+	// root, where the watcher cannot see it at all. Broadcast both by hand.
 	broadcast({ type: 'canvas', path: rel })
+	broadcast({ type: 'workspace' })
 
-	// Report what is now ON DISK, not what we meant to put there: the splice can
-	// fall back to the config, and a workspace default can be shadowed. Re-reading
-	// is the only answer that cannot lie to the palette control about its state.
+	// Report what is now ON DISK, not what we meant to put there: a splice can fall back
+	// to a re-serialize, and a workspace default can be shadowed. Re-reading is the only
+	// answer that cannot lie to the palette control about its own state.
 	const after = loadCanvas(rel)
 	const state = after.status === 200 ? after.body : {}
-	return sendJson(res, 200, { ok: true, wrote: wroteRel, target, theme: state.theme, themeDeclared: state.themeDeclared, themeSource: state.themeSource })
+	return sendJson(res, 200, {
+		ok: true, wrote: wroteRel, target,
+		...(created ? { created } : {}),
+		theme: state.theme, themeDeclared: state.themeDeclared, themeSource: state.themeSource,
+	})
+}
+
+/**
+ * What a Save would do, WITHOUT doing it.
+ *
+ * The palette panel calls this so its footer can say *"Save will create
+ * README.canvas.json"* before the reader clicks — because that click makes a file appear
+ * in their repository, and a file appearing from a colour click is only a good trade if
+ * nobody has to discover it afterwards. It is also what disables Save on a canvas that
+ * cannot hold a theme at all (a form, a confirm, a sweep), with the reason attached.
+ */
+function themePlan(res, rel, scope) {
+	const load = loadCanvas(rel)
+	if (load.status !== 200)
+		return sendJson(res, load.status, load.body)
+	const plan = themestore.planTheme(ROOT, rel, { scope: scope === 'workspace' ? 'workspace' : 'document' })
+	return sendJson(res, 200, {
+		ok: true,
+		target: plan.target,
+		wrote: plan.wrote ? path.relative(ROOT, plan.wrote).split(path.sep).join('/') : null,
+		creates: plan.creates,
+		declares: plan.declares,
+		blocked: plan.blocked,
+	})
 }
 
 /** The workspace's saved palettes, resolved for the picker exactly like a preset. */
@@ -264,11 +341,22 @@ function savePalette(res, body) {
  * not rewrite the user's markdown; we render less of it.
  */
 function resolveMarkdownSrc(canvas, { native = false } = {}) {
+	// A COMPANION's own document degrades exactly as `open README.md` degrades. The
+	// companion supplies an envelope, not an author: the markdown behind it is still the
+	// user's README, badges and all, and nobody wrote it for us. Rendering it as an
+	// AUTHORED `src` instead would mean a README with a shields.io badge could not carry a
+	// cover at all — its companion would fail validation and the document would stop
+	// rendering. See checkMarkdown() in lib/validate.js, which declines to teach the same
+	// file for the same reason.
+	const enhanced = enhancesOf(canvas)
+
 	for (const { block } of collectBlocks(canvas)) {
 		if (!block || block.type !== 'markdown')
 			continue
 		// An image path inside a src file is relative to that file, not to the root.
 		let baseDir = ROOT
+		const isOwnDocument = enhanced && typeof block.src === 'string'
+			&& block.src.split(path.sep).join('/') === enhanced
 		if (typeof block.src === 'string' && block.text === undefined) {
 			block.text = readMarkdownSrc(ROOT, block.src, MAX_CANVAS_BYTES)
 			const abs = path.resolve(ROOT, block.src)
@@ -277,17 +365,23 @@ function resolveMarkdownSrc(canvas, { native = false } = {}) {
 		}
 		if (typeof block.text !== 'string')
 			continue
-		if (native)
+		if (native || isOwnDocument)
 			block.text = renderableMarkdown(block.text)
 		block.text = inlineLocalImages(block.text, ROOT, baseDir, MAX_CANVAS_BYTES)
 	}
 }
 
 /**
- * Inline document cover/backCover logos as `data:` URIs, same policy as
- * markdown images: the browser never issues a request for them. A logo that
- * cannot be inlined (deleted since validation, unreadable) is dropped —
- * no logo beats a broken image.
+ * Inline document cover/backCover logos AND cover background images as `data:` URIs,
+ * same policy as markdown images: the browser never issues a request for them.
+ *
+ * The two differ in what a failure means, and the difference is deliberate. A LOGO that
+ * cannot be inlined is dropped — no logo beats a broken image, and a missing 48px mark is
+ * a blemish. A BACKGROUND that cannot be inlined leaves the cover without its defining
+ * element, so the whole `background` object goes rather than leaving a scrim washing over
+ * nothing. Either way the validator has already refused an oversize or absent file with an
+ * error (ASSET_TOO_LARGE / MISSING_SOURCE), so reaching these branches means the file
+ * changed under us since.
  */
 function resolveDocumentAssets(canvas) {
 	const doc = canvas && canvas.document
@@ -295,13 +389,25 @@ function resolveDocumentAssets(canvas) {
 		return
 	for (const key of ['cover', 'backCover']) {
 		const section = doc[key]
-		if (!section || typeof section !== 'object' || typeof section.logo !== 'string' || /^data:/i.test(section.logo))
+		if (!section || typeof section !== 'object')
 			continue
-		const uri = inlineImageFile(ROOT, section.logo, ROOT, MAX_CANVAS_BYTES)
+
+		if (typeof section.logo === 'string' && !/^data:/i.test(section.logo)) {
+			const uri = inlineImageFile(ROOT, section.logo, ROOT, MAX_CANVAS_BYTES)
+			if (uri)
+				section.logo = uri
+			else
+				delete section.logo
+		}
+
+		const bg = section.background
+		if (!bg || typeof bg !== 'object' || typeof bg.src !== 'string' || /^data:/i.test(bg.src))
+			continue
+		const uri = inlineImageFile(ROOT, bg.src, ROOT, MAX_COVER_IMAGE_BYTES)
 		if (uri)
-			section.logo = uri
+			bg.src = uri
 		else
-			delete section.logo
+			delete section.background
 	}
 }
 
@@ -566,15 +672,21 @@ async function route(req, res, url) {
 		return saveTheme(res, relCanvasPath(String(body.path || '')), body)
 	}
 
+	// What Save WOULD do — so the panel can announce the file it is about to create, and
+	// disable itself on a canvas that cannot hold a theme, BEFORE the reader clicks.
+	if (method === 'GET' && p === '/api/theme/plan')
+		return themePlan(res, relCanvasPath(url.searchParams.get('path') || ''), url.searchParams.get('scope'))
+
 	if (method === 'POST' && p === '/api/theme/palette') {
 		const body = await readBody(req)
 		return savePalette(res, body)
 	}
 
-	// Repaint. The CLI writes theme files directly (no kernel required), but a write to
-	// `.instantcanvas.json` is invisible to fs.watch — the watcher skips dotfiles — so an
-	// agent theming a native .md would leave the open browser showing the old colors, with
-	// nothing to say the command had worked.
+	// Repaint. The CLI writes theme files directly (no kernel required), and most of what
+	// it writes now rides fs.watch — a companion is an ordinary `*.canvas.json`, not the
+	// dotfile the watcher used to skip. What the watcher still cannot see is
+	// `skills-config.json` when it sits ABOVE the workspace root (a project root further
+	// up, or the user-level `~/.agents/` one), so the nudge still earns its keep.
 	if (method === 'POST' && p === '/api/refresh') {
 		const body = await readBody(req)
 		const rel = relCanvasPath(String(body.path || ''))
@@ -909,8 +1021,24 @@ function onFsEvent(eventType, filename) {
 		for (const f of files) {
 			// A markdown file is a canvas here, so editing one must re-render the
 			// open document exactly as editing a *.canvas.json does.
-			if (hasMarkdownExtension(f) || (f.endsWith('.json') && readCanvasFile(path.join(ROOT, f))))
+			if (hasMarkdownExtension(f)) {
 				broadcast({ type: 'canvas', path: f })
+				continue
+			}
+			if (!f.endsWith('.json'))
+				continue
+			const parsed = readCanvasFile(path.join(ROOT, f))
+			if (!parsed)
+				continue
+			// A COMPANION is open under its DOCUMENT's path, never its own — so editing
+			// `README.canvas.json` has to repaint `README.md`. Broadcasting the canvas's own
+			// path would reach nobody: no browser is on it, because the sidebar never
+			// offered it. (The companion path goes out too — harmless, and it is what a
+			// reader who deep-linked the file would be on.)
+			const doc = enhancesOf(parsed)
+			broadcast({ type: 'canvas', path: f })
+			if (doc)
+				broadcast({ type: 'canvas', path: doc })
 		}
 	}, 150)
 }
