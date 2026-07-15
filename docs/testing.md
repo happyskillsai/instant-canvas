@@ -14,7 +14,7 @@ Everything runs on `node:test` with zero dependencies:
 node --test scripts/test/   # from the repo root — `npm test` is the same thing
 ```
 
-336 tests at last count: eighty-seven drive a real browser (or headless printing) and skip when Chrome is absent, and three exercise the packed npm artifact end to end and skip without npm. `scripts/test/index.js` exists because `node --test <dir>` does not expand a directory on the pinned Node version — the directory resolves to `index.js`, which requires every `*.test.js` (see [gotchas/testing.md](gotchas/testing.md)).
+338 tests at last count: eighty-eight drive a real browser (or headless printing) and skip when Chrome is absent, and three exercise the packed npm artifact end to end and skip without npm. `scripts/test/index.js` exists because `node --test <dir>` does not expand a directory on the pinned Node version — the directory resolves to `index.js`, which requires every `*.test.js` (see [gotchas/testing.md](gotchas/testing.md)).
 
 ## Suite layout
 

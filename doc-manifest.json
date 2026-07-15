@@ -236,7 +236,8 @@
       "links_to": [
         "docs/architecture.md",
         "docs/canvas-schema.md",
-        "docs/gotchas/frontend.md"
+        "docs/gotchas/frontend.md",
+        "docs/security.md"
       ],
       "over_size": false,
       "parse_error": null,
@@ -329,10 +330,15 @@
         "Rounded table corners need `border-collapse: separate`, and the paper override must stay `overflow: visible`",
         "`overflow:auto` is a scrollbar on screen and a guillotine in print",
         "A sheet 3 px too tall prints a silent sliver page",
-        "Constraint API quirks around custom widgets"
+        "Constraint API quirks around custom widgets",
+        "A CSS `url()` cannot carry the per-request token, so a tokened asset gate 403s `@font-face` SILENTLY",
+        "A responsive `@media` block must sit LAST, or a same-specificity base rule beats it"
       ],
-      "line_count": 234,
-      "links_to": [],
+      "line_count": 246,
+      "links_to": [
+        "docs/architecture.md",
+        "docs/security.md"
+      ],
       "over_size": false,
       "parse_error": null,
       "path": "docs/gotchas/frontend.md",

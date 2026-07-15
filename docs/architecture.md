@@ -54,18 +54,18 @@ Every request passes the same gate in `kernel.js`:
 
 1. **Bind**: the server listens on the literal `127.0.0.1`, never `0.0.0.0` (a source-scan test enforces this).
 2. **Host header** must be `127.0.0.1:<port>` or `localhost:<port>` — DNS-rebinding defense.
-3. **Token**: every route except `GET /healthz` requires the per-kernel 32-byte token (query `?token=` or `X-IC-Token` header), compared via SHA-256 digests and `crypto.timingSafeEqual`.
+3. **Token**: every route except two requires the per-kernel 32-byte token (query `?token=` or `X-IC-Token` header), compared via SHA-256 digests and `crypto.timingSafeEqual`. The exceptions are `GET /healthz` and the static fonts `GET /assets/vendor/*.woff2` — the latter because `styles.css` references them through a CSS `url()` that cannot carry the token, and a tokened gate would 403 `@font-face` silently (see [security.md](security.md)).
 4. POST bodies must be `application/json`, ≤ 10 MB.
 5. Responses carry `X-Content-Type-Options: nosniff`; HTML gets a strict CSP (`default-src 'none'`, `script-src 'self'`, `connect-src 'self' ws://127.0.0.1:<port>`). **No CORS headers, ever.** The CSP also blocks inline `style=""` attributes — a constraint the frontend is built around (see [gotchas/frontend.md](gotchas/frontend.md)).
 
-The token reaches the browser via `__IC_TOKEN__` placeholder substitution when the shell is served (CSP forbids inline scripts, so it cannot be injected as a `<script>` variable). Asset URLs carry it as a query parameter.
+The token reaches the browser via `__IC_TOKEN__` placeholder substitution when the shell is served (CSP forbids inline scripts, so it cannot be injected as a `<script>` variable). Asset URLs carry it as a query parameter — except the vendored fonts, which are served tokenless (a CSS `url()` cannot append the token) and are exempt at the gate.
 
 ## Routes
 
 | Route | Purpose |
 |---|---|
 | `GET /healthz` | Liveness + identity: `{ok, name, version, workspace, pid, pendingSessions}`. Tokenless. |
-| `GET /`, `GET /assets/*` | App shell and static files (path-normalized; traversal blocked). |
+| `GET /`, `GET /assets/*` | App shell and static files (path-normalized; traversal blocked). `*.woff2` fonts serve tokenless with a `font/woff2` MIME; every other asset needs the token. |
 | `GET /api/workspace` | Scanned tree of canvases **and markdown documents** (see below), with `count` and `docCount` reported apart. |
 | `GET /api/canvas?path=` | Parse + validate one canvas, **or** synthesise one for a markdown file (`lib/mdcanvas.js`). Markdown `src` files **and their workspace-local images** are inlined server-side (images as `data:` URIs — the browser never fetches); includes the active session if any, and the **resolved theme** (below). Reads `*.json` and markdown only — anything else is a 404 before it is opened, because a rejected file leaks its own first bytes through `JSON.parse` (see [gotchas/runtime.md](gotchas/runtime.md)). |
 | `POST /api/open` | CLI entry: display → broadcast `navigate`; interactive → create a session. |

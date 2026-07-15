@@ -31,7 +31,7 @@ Instead of maintaining an answers *warehouse* (pre-built admin panels), agents d
 Two design commitments run through everything:
 
 - **Progressive disclosure.** The contract is large (26 chart kinds, 16 field types, a full form-layout system), but agents never load it wholesale: `catalog` returns a ~8 KB lean index; `catalog <name>` returns exactly one schema; the deterministic validator turns mistakes into self-explanatory fixes.
-- **Zero dependencies.** The published package declares no npm dependencies — npx installs `instant-canvas` itself and nothing else. Plain Node ≥ 20, built-in `http`, a hand-rolled WebSocket server, four vendored browser files (a custom strict Plotly.js build, its stylesheet, markdown-it, and a full highlight.js). No build step — rebuilding the Plotly and highlight.js bundles is a maintainer-only task, documented in `scripts/web/vendor/VENDORED.md`.
+- **Zero dependencies.** The published package declares no npm dependencies — npx installs `instant-canvas` itself and nothing else. Plain Node ≥ 20, built-in `http`, a hand-rolled WebSocket server, a handful of vendored browser files (a custom strict Plotly.js build, its stylesheet, markdown-it, a full highlight.js, and the self-hosted Inter webfont for the app chrome). No build step — rebuilding the Plotly and highlight.js bundles is a maintainer-only task, documented in `scripts/web/vendor/VENDORED.md`.
 
 ## Getting Started
 
