@@ -22,6 +22,17 @@
   heatmap ramp follow the new primary. The change is only to the *default*: every other
   preset (Ocean, Forest, Ember, Okabe-Ito, …) and every custom palette is untouched, and
   a document that declares its own theme is unaffected. Semantic KPI/syntax colors stay put.
+- **The topbar is now responsive.** Below 900px the sidebar collapses into an off-canvas
+  drawer opened by a hamburger button (closes on scrim tap, navigation, or Escape) and the
+  main pane goes full width; below 600px the island drops its product label and workspace
+  path and multi-column form fieldsets stack to one column. Document content was already
+  fluid (charts resize, KPIs auto-fit, wide tables scroll), so the reflow is in the chrome.
+- **The HappySkills wordmark links to happyskills.ai**, opening in a new tab
+  (`rel="noopener noreferrer"` — required, since the page URL carries the kernel token and a
+  referrer would leak it).
+- **The topbar workspace path reads as a copyable label, not a search field.** It dropped
+  the white filled-pill styling (which looked like an editable input on the black island)
+  for a light monospace label with a quiet ghost copy button and a hover wash.
 
 ### Fixed
 - **Vendored web fonts are served without the per-kernel token.** A CSS `url()` cannot

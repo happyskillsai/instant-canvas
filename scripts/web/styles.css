@@ -125,6 +125,20 @@ button{font:inherit;cursor:pointer}
 /* The product name rides beside the parent wordmark, dimmed, behind a hairline divider. */
 .brand .product{font-size:12.5px;font-weight:500;letter-spacing:.01em;color:var(--island-fg-dim);
 	padding-left:10px;border-left:1px solid rgba(255,255,255,.18);white-space:nowrap}
+/* The wordmark links to happyskills.ai in a new tab. rel="noreferrer" is REQUIRED, not
+   cosmetic: the page URL carries the kernel token in its query string, and a referrer
+   would leak it to the external site. */
+.brand-link{display:inline-flex;align-items:center;color:var(--island-fg);text-decoration:none;border-radius:6px}
+.brand-link:hover{opacity:.82}
+.brand-link:focus-visible{outline:none;box-shadow:0 0 0 2px var(--island),0 0 0 4px rgba(255,255,255,.5)}
+/* The hamburger toggles the sidebar drawer; it exists only in the responsive layouts.
+   `.topbar .menu-btn` outranks `.tbtn{display:inline-flex}`, which is defined later. */
+.topbar .menu-btn{display:none}
+/* All right-side island controls in one group, so they stay right-aligned even when the
+   workspace path is hidden on a narrow screen. */
+.topbar-actions{display:flex;align-items:center;gap:6px;flex:0 0 auto;margin-left:auto}
+/* Drawer scrim — only rendered in the responsive layouts below. */
+.nav-scrim{display:none}
 /* Path + copy button, joined into one control: the border and radius that used to sit
    on the path itself move to the group, so the two read as a single object rather than
    a label with a button parked next to it. The path keeps `flex:1` INSIDE the group —
@@ -1093,4 +1107,37 @@ body.modal-open .main{overflow:hidden}
 	.deck-scale{transform:none !important;display:block}
 	.sheet{box-shadow:none;margin:0}
 	.sheet:not(:last-child){break-after:page;page-break-after:always}
+}
+
+/* ------------------------------------------------------------------- responsive
+   Placed at the END so these rules win over the base chrome rules they override
+   (same specificity → later source wins). The chrome is a floating island + a fixed
+   sidebar card, which is a desktop shape. Below 900px the sidebar becomes an
+   off-canvas DRAWER toggled by the hamburger and the main pane goes full width;
+   below 600px the island sheds its non-essential bits (product label, workspace
+   path) and multi-column form grids stack. The document content is already fluid:
+   charts resize (ResizeObserver), KPIs auto-fit, and wide tables scroll inside their
+   own box — so the reflow lives in the chrome, not there. */
+@media (max-width:900px){
+	.topbar .menu-btn{display:inline-flex}
+	.body{position:relative}
+	/* The sidebar leaves the flex flow (main fills the row) and slides in over the content. */
+	.sidebar{position:absolute;z-index:40;top:12px;left:12px;bottom:12px;width:min(78vw,300px);
+		transform:translateX(calc(-100% - 24px));transition:transform .22s ease;box-shadow:var(--shadow)}
+	body.nav-open .sidebar{transform:translateX(0)}
+	.nav-scrim{display:block;position:absolute;inset:0;z-index:35;background:var(--scrim);
+		opacity:0;pointer-events:none;transition:opacity .2s}
+	body.nav-open .nav-scrim{opacity:1;pointer-events:auto}
+}
+@media (max-width:600px){
+	.topbar{margin:8px 8px 0;padding:6px 6px 6px 10px;gap:6px}
+	.brand .product{display:none}
+	.rootpath-group{display:none}
+	.tbtn.icon{padding:7px}
+	.topbar-actions{gap:2px}
+	.body{padding:8px;gap:8px}
+	.sidebar{top:8px;left:8px;bottom:8px}
+	/* Multi-column fieldsets stack — three inputs across is unreadable on a phone. */
+	.fset-grid.cols-2,.fset-grid.cols-3{grid-template-columns:minmax(0,1fr)}
+	.fset-grid .field.span-2,.fset-grid .field.span-3{grid-column:auto}
 }

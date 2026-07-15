@@ -389,6 +389,18 @@ $('themeBtn').addEventListener('click', () => {
 	rethemeCharts()
 })
 
+// Responsive sidebar drawer. Below the CSS breakpoint the sidebar is off-canvas; the
+// hamburger toggles it, and it closes on scrim tap, on navigation (hashchange), and on
+// Escape. Above the breakpoint the sidebar is static, so `nav-open` is simply inert.
+function setNav(open) {
+	document.body.classList.toggle('nav-open', open)
+	$('menuBtn').setAttribute('aria-expanded', open ? 'true' : 'false')
+}
+$('menuBtn').addEventListener('click', () => setNav(!document.body.classList.contains('nav-open')))
+$('navScrim').addEventListener('click', () => setNav(false))
+window.addEventListener('hashchange', () => setNav(false))
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') setNav(false) })
+
 // Document deck ⇄ continuous view. Both live in the DOM (one hidden by the
 // view class); the toggle is a class flip plus a chart relocation.
 $('viewDeck').addEventListener('click', () => switchDocView('deck'))
