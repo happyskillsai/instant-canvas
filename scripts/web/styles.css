@@ -23,7 +23,7 @@
 	--inp-bg:#ffffff; --inp-border:#d3d8e0; --inp-border-hover:#b9c0cc;
 	--inp-shadow:0 1px 2px rgba(16,20,30,.05);
 	--fset-border:#c3cad5;
-	--logo-base:#00184d; --logo-accent:#0054fe;
+	--logo-base:#00184d; --logo-accent:#eb4a26;
 	--gutter:40px;
 	/* HappySkills chrome tokens. The island is black in BOTH themes. --tint is the
 	   neutral hover/active wash for sidebar rows (accent is used sparingly, never as a
@@ -44,7 +44,7 @@
 	--inp-bg:#1b1f29; --inp-border:#2d3442; --inp-border-hover:#3c4556;
 	--inp-shadow:none;
 	--fset-border:#2d3442;
-	--logo-base:#2a3a6b; --logo-accent:#2f6bff;
+	--logo-base:#2a3a6b; --logo-accent:#eb4a26;
 	--tint:rgba(255,255,255,.06); --tint-strong:rgba(255,255,255,.1);
 	--island:#000000; --island-fg:#ffffff; --island-fg-dim:rgba(255,255,255,.6);
 	--island-hover:rgba(255,255,255,.1); --island-pill:#26262e; --island-pill-fg:#e7e9ee;
@@ -62,7 +62,7 @@
 		--inp-bg:#1b1f29; --inp-border:#2d3442; --inp-border-hover:#3c4556;
 		--inp-shadow:none;
 		--fset-border:#2d3442;
-		--logo-base:#2a3a6b; --logo-accent:#2f6bff;
+		--logo-base:#2a3a6b; --logo-accent:#eb4a26;
 		--tint:rgba(255,255,255,.06); --tint-strong:rgba(255,255,255,.1);
 		--island:#000000; --island-fg:#ffffff; --island-fg-dim:rgba(255,255,255,.6);
 		--island-hover:rgba(255,255,255,.1); --island-pill:#26262e; --island-pill-fg:#e7e9ee;

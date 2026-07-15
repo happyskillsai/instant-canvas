@@ -1,3 +1,5 @@
+<img src="assets/logo.svg" alt="The InstantCanvas mark — a navy square with a vermilion folded corner" width="96" align="right" />
+
 # InstantCanvas
 
 > **InstantCanvas is a [HappySkills](https://happyskills.ai) project.** HappySkills is its parent and steward — the project is built, maintained, and shepherded under the HappySkills umbrella.

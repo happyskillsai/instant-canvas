@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Changed
+- **The InstantCanvas mark now folds in HappySkills vermilion.** The logo's folded
+  corner moved from the legacy blue (`#0054fe`) to the brand accent (`#eb4a26`) in the
+  canonical `assets/logo.svg`, the browser-tab favicon (`scripts/web/favicon.svg`), and
+  the `--logo-accent` theme tokens. The README now opens with the mark, and its
+  companion deck's cover and back cover point at the recolored SVG instead of the old
+  blue raster (`assets/logo.png`).
+
 ## [0.8.0] - 2026-07-15
 
 ### Changed

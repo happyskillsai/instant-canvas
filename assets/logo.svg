@@ -4,14 +4,14 @@
 	     folded corner running from the midpoint of the top edge to the midpoint of the
 	     right edge, joined to the 45° diagonal by two symmetric r = 17.5 fillets. -->
 	<style>
-		.ic-logo-accent { fill: var(--logo-accent, #0054fe); }
+		.ic-logo-accent { fill: var(--logo-accent, #eb4a26); }
 		.ic-logo-base   { fill: var(--logo-base,   #00184d); }
 	</style>
 	<defs>
 		<clipPath id="ic-logo-clip"><rect width="100" height="100" rx="12"/></clipPath>
 	</defs>
 	<g clip-path="url(#ic-logo-clip)">
-		<rect class="ic-logo-accent" width="100" height="100" fill="#0054fe"/>
+		<rect class="ic-logo-accent" width="100" height="100" fill="#eb4a26"/>
 		<path class="ic-logo-base" fill="#00184d" d="M50 0
 			A17.5 17.5 0 0 1 56.006 3.926
 			L96.074 43.994

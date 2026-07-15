@@ -9,7 +9,7 @@
 			"subtitle": "Death to the admin panel \u2014 a local, schema-driven canvas runtime for coding agents",
 			"author": "HappySkills",
 			"date": "v0.5.2",
-			"logo": "assets/logo.png",
+			"logo": "assets/logo.svg",
 			"background": {
 				"src": "assets/readme-cover.png",
 				"size": "cover",
@@ -40,7 +40,7 @@
 		"backCover": {
 			"title": "Answers, not dashboards.",
 			"text": "The agent gathers the data, reasons about it, and delivers the answer on the fly \u2014 rendered visually, on demand.",
-			"logo": "assets/logo.png",
+			"logo": "assets/logo.svg",
 			"background": {
 				"src": "assets/readme-cover.png",
 				"size": "cover",

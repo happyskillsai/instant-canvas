@@ -4,7 +4,7 @@
 	     is fetched as an isolated document and cannot read the page's custom properties. -->
 	<defs><clipPath id="ic-fav-clip"><rect width="100" height="100" rx="12"/></clipPath></defs>
 	<g clip-path="url(#ic-fav-clip)">
-		<rect width="100" height="100" fill="#0054fe"/>
+		<rect width="100" height="100" fill="#eb4a26"/>
 		<path fill="#00184d" d="M50 0A17.5 17.5 0 0 1 56.006 3.926L96.074 43.994A17.5 17.5 0 0 1 100 50L100 100L0 100L0 0Z"/>
 	</g>
 </svg>
