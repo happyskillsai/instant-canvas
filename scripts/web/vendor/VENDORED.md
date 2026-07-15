@@ -9,8 +9,24 @@ They are **never** `require()`d by Node. Do not edit them.
 | `plotly.css` | Plotly.js `build/plotcss.js`, expanded to a real stylesheet | 3.7.0 | same tag, see recipe | `429a3d6830103153ba1663049d695c7825842740930d55ebfbd98944343e51df` | 2026-07-09 |
 | `markdown-it.min.js` | markdown-it (UMD, minified) | 14.3.0 | https://cdn.jsdelivr.net/npm/markdown-it@14.3.0/dist/markdown-it.min.js | `70fe17bd06c7fa819f03a1ed10957904318103624198845dc893b309bf495e28` | 2026-07-08 |
 | `highlight.min.js` | highlight.js — **full build, assembled** (see recipe) | 11.11.1 | https://registry.npmjs.org/@highlightjs/cdn-assets/-/cdn-assets-11.11.1.tgz | `a2efeb71d4c44ada979696f851491589cc9a37bb8d12df93484003df667ea360` | 2026-07-10 |
+| `inter-latin-400-normal.woff2` | Inter (latin subset) via `@fontsource/inter` | 5.1.0 | https://cdn.jsdelivr.net/npm/@fontsource/inter@5.1.0/files/inter-latin-400-normal.woff2 | `dd05e326cf8eac3b55acecf29c842ed73e6e6dd06491cf47f7e8800680ab3e33` | 2026-07-15 |
+| `inter-latin-500-normal.woff2` | Inter (latin subset) via `@fontsource/inter` | 5.1.0 | https://cdn.jsdelivr.net/npm/@fontsource/inter@5.1.0/files/inter-latin-500-normal.woff2 | `b0e7558f4710a1e255b93e3deefe3aebb19f3bb41c150f685a74d3b1a1c79e87` | 2026-07-15 |
+| `inter-latin-600-normal.woff2` | Inter (latin subset) via `@fontsource/inter` | 5.1.0 | https://cdn.jsdelivr.net/npm/@fontsource/inter@5.1.0/files/inter-latin-600-normal.woff2 | `62553d159189834af73c9a6264704be5b2bee9a08da66a14768d8e5c6ffd2cdb` | 2026-07-15 |
+| `inter-latin-700-normal.woff2` | Inter (latin subset) via `@fontsource/inter` | 5.1.0 | https://cdn.jsdelivr.net/npm/@fontsource/inter@5.1.0/files/inter-latin-700-normal.woff2 | `aac638f7503cebb084ec494cf00f75f7d8260d50c2f4e7820bccabba09626a3a` | 2026-07-15 |
 
-Licenses: Plotly.js — MIT; markdown-it — MIT; highlight.js — BSD-3-Clause.
+Licenses: Plotly.js — MIT; markdown-it — MIT; highlight.js — BSD-3-Clause; **Inter — SIL Open Font License 1.1**.
+
+## Why Inter is bundled (and Satoshi is not)
+
+The app chrome (topbar island, sidebar) uses **Inter** as its UI face, matching the
+HappySkills brand. Inter is chosen over HappySkills' display face **Satoshi** for one
+reason: license. Satoshi ships under the ITF Free Font License, which permits `@font-face`
+use in your own hosted work but **restricts redistributing the font files** — and this npm
+tarball redistributes whatever sits in `scripts/`. Inter is **SIL OFL 1.1**, which
+explicitly permits bundling and redistribution (it may not be sold on its own). Only the
+**latin** subset is vendored (English UI), four weights (400/500/600/700), ~24 KB each.
+The fonts are served by `serveAsset()` at `/assets/vendor/*.woff2` (MIME `font/woff2`, and
+the CSP already allows `font-src 'self'`); `@font-face` lives in `../styles.css`.
 
 ## Why highlight.js, and why a full build
 

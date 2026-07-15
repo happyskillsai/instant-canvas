@@ -41,6 +41,7 @@ const MIME = {
 	'.svg': 'image/svg+xml',
 	'.png': 'image/png',
 	'.md': 'text/plain; charset=utf-8',
+	'.woff2': 'font/woff2',
 }
 
 // ---------------------------------------------------------------- state
@@ -1097,7 +1098,15 @@ function boot() {
 			if (!hostOk(req))
 				return forbidden(res, 'Bad Host header.')
 			const url = new URL(req.url, `http://127.0.0.1:${PORT}`)
-			if (!(req.method === 'GET' && url.pathname === '/healthz')) {
+			// The token gates every route except two. `/healthz` is the liveness probe.
+			// Static font files are the other: they are referenced from styles.css via a
+			// CSS `url()`, which cannot carry the per-request token (the stylesheet is
+			// static, not templated) — so a tokened gate makes @font-face 403 SILENTLY and
+			// the chrome falls back to a system font with nothing in the console. They are
+			// non-secret, identical for every install, and expose neither workspace data
+			// nor the token; the Host allowlist above still applies. Nothing else is exempt.
+			const isPublicFont = req.method === 'GET' && /^\/assets\/vendor\/[A-Za-z0-9._-]+\.woff2$/.test(url.pathname)
+			if (!(req.method === 'GET' && url.pathname === '/healthz') && !isPublicFont) {
 				const provided = url.searchParams.get('token') || req.headers['x-ic-token']
 				if (!tokenOk(provided))
 					return forbidden(res, 'Missing or invalid token.')
