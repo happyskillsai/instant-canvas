@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-07-15
+
+### Added
+- **A browser favicon.** The original InstantCanvas mark — the blue folded-corner square,
+  retired from the topbar in the rebrand — now serves as the browser-tab favicon. The
+  canonical `assets/logo.svg` is not shipped (the npm allowlist is `scripts/` only), so a
+  fixed-fill copy lives at `scripts/web/favicon.svg` and is linked from the shell `<head>`.
+- **The README names HappySkills as the project's parent and steward**, with a link to
+  happyskills.ai.
+
 ### Changed
 - **The app chrome now wears the HappySkills brand.** The top bar became a black,
   fully-rounded "island" floating on a lavender-grey shell; the sidebar became a white
