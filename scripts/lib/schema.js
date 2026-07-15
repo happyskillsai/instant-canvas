@@ -23,8 +23,8 @@ const SHAPES = {
 		description: 'One KPI card.',
 		properties: {
 			label: { type: 'string', required: true, description: 'Card caption.', example: 'Revenue' },
-			value: { type: ['number', 'string'], required: true, description: 'The headline value.', example: 128000 },
-			format: { type: 'string', enum: ['number', 'currency', 'percent', 'none'], default: 'number', description: 'How the value is formatted.' },
+			value: { type: ['number', 'string'], required: true, description: 'The headline value. With format "percent" it is a FRACTION — 0.41 renders as "41%", 1.18 as "118%". With "currency"/"number" it is the plain amount (128000 → "$128,000").', example: 128000 },
+			format: { type: 'string', enum: ['number', 'currency', 'percent', 'none'], default: 'number', description: 'How the value is formatted. "percent" multiplies by 100, so pass a FRACTION (0.41 → "41%"); "currency" and "number" take the plain amount.' },
 			currency: { type: 'string', default: 'USD', description: 'ISO currency code used when format is "currency".', example: 'USD' },
 			delta: { type: 'object', itemShape: 'kpiDelta', description: 'Optional change indicator.' },
 		},
@@ -42,7 +42,7 @@ const SHAPES = {
 		properties: {
 			key: { type: 'string', required: true, description: 'Property name looked up in each row object.', example: 'customer' },
 			label: { type: 'string', required: true, description: 'Column header.', example: 'Customer' },
-			format: { type: 'string', enum: ['text', 'number', 'currency', 'percent'], default: 'text', description: 'Cell formatting.' },
+			format: { type: 'string', enum: ['text', 'number', 'currency', 'percent'], default: 'text', description: 'Cell formatting. A "percent" cell is a FRACTION (0.41 → "41%"); "currency"/"number" take the plain amount. Numeric formats right-align.' },
 			currency: { type: 'string', default: 'USD', description: 'ISO currency code used when format is "currency".', example: 'USD' },
 			align: { type: 'string', enum: ['left', 'right'], description: 'Cell alignment. Defaults to right for numeric formats, left for text.' },
 		},
@@ -50,7 +50,7 @@ const SHAPES = {
 	chartFormat: {
 		description: 'Axis/tooltip value formatting.',
 		properties: {
-			y: { type: 'string', enum: ['number', 'currency', 'percent'], default: 'number', description: 'Format applied to y values (or pie values).' },
+			y: { type: 'string', enum: ['number', 'currency', 'percent'], default: 'number', description: 'Format applied to y/pie values. "percent" multiplies by 100, so pass a FRACTION (0.41 → "41%"); "currency"/"number" take the plain amount.' },
 			currency: { type: 'string', default: 'USD', description: 'ISO currency code used when y is "currency".', example: 'USD' },
 		},
 	},
