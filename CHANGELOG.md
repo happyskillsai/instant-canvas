@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-07-16
+
 ### Added
 - **Presentation mode: a canvas can be a slide deck.** A canvas whose envelope carries
   `slides` (a third XOR member beside `blocks`/`pages`) renders as a deck. Each slide names
@@ -22,7 +24,24 @@
   zero new block types, zero agent-authored CSS — the theme system, cover backgrounds, the
   print pipeline and the one theme write path are reused whole.
 
+### Changed
+- **The `catalog` now spells out that a `"percent"` value is a fraction.** A
+  `kpiCard.value`/`kpiCard.format`, `tableColumn.format`, or `chartFormat.y` set to
+  `"percent"` treats the number as a fraction — `0.41` renders as `"41%"`, `1.18` as
+  `"118%"` — so an agent stops multiplying by 100 by hand. This documents the deterministic
+  surface (`catalog`); no behavior changed.
+- **`catalog theme` now names `presentation.theme`.** The theme notes explain that a
+  deck's theme lives at `presentation.theme` (created above `slides` when absent), never
+  `document.theme`, so an agent recoloring a presentation writes to the one place the
+  runtime reads.
+
 ### Fixed
+- **KPI values shrink to fit their cards, and `table` blocks get the theme zebra.** A long
+  KPI value (a wide currency figure, a big count) used to overflow its card and collide
+  with its neighbours. The KPI row now measures itself and shrinks every value by one
+  shared ratio, so the numbers fit without breaking the grid — cards stay uniformly sized.
+  Separately, `table` display blocks now carry the same theme-aware zebra striping and
+  header tint that markdown tables already had, for a consistent look across the app.
 - **The README logo no longer collides with the title's underline on GitHub.** The
   right-aligned mark sat beside the h1, whose full-width bottom border drew straight
   through it. The mark now sits centered above the title (`<p align="center">`), where
