@@ -201,7 +201,15 @@ function loadCanvasFile(rel, { as = null } = {}) {
 	const canvas = JSON.parse(raw)
 	resolveMarkdownSrc(canvas)
 	resolveDocumentAssets(canvas)
-	const declared = canvas.document && typeof canvas.document === 'object' ? canvas.document.theme : undefined
+	// A document keeps its theme in `document.theme`; a presentation keeps it in
+	// `presentation.theme`. Both resolve through the same `themeFor` pipeline to concrete
+	// hex, so the browser and `print` inherit the answer identically (a deck never carries
+	// both — DOCUMENT_ON_PRESENTATION).
+	const declared = canvas.document && typeof canvas.document === 'object'
+		? canvas.document.theme
+		: canvas.presentation && typeof canvas.presentation === 'object'
+			? canvas.presentation.theme
+			: undefined
 	// A companion answers under its DOCUMENT's path, and says which file actually holds
 	// the furnishings — the palette control needs to name it, and the sidebar badges by it.
 	const asPath = as || rel
@@ -220,7 +228,8 @@ function loadCanvasFile(rel, { as = null } = {}) {
  * The theme the browser should paint this document with, resolved to concrete hex.
  *
  * Precedence, weakest to strongest:
- *   built-in default  <  skills-config `theme`  <  the canvas's own document.theme
+ *   built-in default  <  skills-config `theme`  <  the canvas's own document.theme /
+ *                                                   presentation.theme
  *
  * Three levels, not four: a per-document theme now lives in the document's own envelope —
  * its COMPANION, when the document is markdown — rather than in a side table keyed by path.

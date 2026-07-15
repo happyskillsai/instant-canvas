@@ -4,7 +4,7 @@ const fs = require('node:fs')
 const path = require('node:path')
 const themeLib = require('./theme')
 const skillsconfig = require('./skillsconfig')
-const { setDocumentTheme, createDocument } = require('./jsonedit')
+const { setDocumentTheme, setPresentationTheme, createDocument, createPresentation } = require('./jsonedit')
 const { writeAtomic } = require('./fsatomic')
 const { PKG_VERSION } = require('./pkgmeta')
 const { VERSION: SCHEMA_VERSION } = require('./schema')
@@ -42,6 +42,12 @@ const { hasMarkdownExtension } = require('./markdownsrc')
  *      The form is the form. Its only theme is the workspace default, which the reader
  *      sets with "All documents" (scope: "workspace") — and that is what the
  *      skills-config `theme` key is for.
+ *
+ *   5. A PRESENTATION (a canvas with `slides`)  → its own `presentation.theme`, spliced in
+ *      the same way case 1 splices `document.theme` (`presentation` created above `slides`
+ *      when absent). It must NEVER gain a `document`: `document` beside `slides` is invalid
+ *      (DOCUMENT_ON_PRESENTATION), which is the same "a write may change what a file SAYS,
+ *      never what it IS" rule as case 4, from the other direction.
  *
  * The rule underneath all four: A READER-FACING WRITE MAY CHANGE WHAT A FILE SAYS, NEVER
  * WHAT IT IS. Case 3 is the edge of that rule, not a breach of it — a display canvas that
@@ -127,6 +133,12 @@ function planTheme(root, rel, { scope = 'document' } = {}) {
 		return { ...plan, wrote: abs }
 	}
 
+	// A presentation keeps its theme in `presentation.theme`, in its own file — no new file
+	// to announce, no `document` to declare, and never blocked (a valid deck has no
+	// interactive block to block on).
+	if (Array.isArray(canvas.slides))
+		return { ...plan, wrote: abs }
+
 	if (isObj(canvas.document))
 		return { ...plan, wrote: abs }
 
@@ -185,6 +197,11 @@ function writeCanvasTheme(root, rel, theme, reset) {
 	const abs = path.resolve(root, rel)
 	const raw = fs.readFileSync(abs, 'utf8')
 	const canvas = JSON.parse(raw)
+
+	// A presentation keeps its theme in `presentation.theme`, never a `document`.
+	if (Array.isArray(canvas.slides))
+		return writePresentationTheme(root, rel, raw, canvas, theme, reset)
+
 	const hasDocument = isObj(canvas.document)
 
 	if (hasDocument && reset)
@@ -226,6 +243,40 @@ function writeCanvasTheme(root, rel, theme, reset) {
 		delete next.document.theme
 	writeAtomic(abs, JSON.stringify(next, null, 2) + '\n')
 	return { wrote: abs, target: 'canvas', ...(hasDocument ? {} : { declaredDocument: true }) }
+}
+
+/**
+ * Put a theme inside a PRESENTATION — splicing into an existing `presentation` object, or
+ * creating one above `slides`. The mirror of writeCanvasTheme's document path, with the one
+ * inviolable difference: a deck must NEVER gain a `document` (case 5), because `document`
+ * beside `slides` is invalid (DOCUMENT_ON_PRESENTATION) and a colour click must not make the
+ * agent's deck stop validating.
+ */
+function writePresentationTheme(root, rel, raw, canvas, theme, reset) {
+	const abs = path.resolve(root, rel)
+	const hasPresentation = isObj(canvas.presentation)
+	const declaresTheme = hasPresentation && isObj(canvas.presentation.theme)
+
+	if (declaresTheme && reset)
+		// Same as case 1's reset: a theme the CANVAS declares is the author's contract, not
+		// ours to edit out. Point at the file instead.
+		throw new ThemeError('THEME_DECLARED_IN_CANVAS',
+			`${rel} declares "presentation.theme" itself. Remove it from the canvas to fall back to the workspace default.`)
+	if (reset)
+		return { wrote: abs, target: 'canvas' } // nothing declared, nothing to remove
+
+	const spliced = hasPresentation
+		? setPresentationTheme(raw, canvas, theme)
+		: createPresentation(raw, canvas, { theme })
+	if (spliced !== null) {
+		writeAtomic(abs, spliced)
+		return { wrote: abs, target: 'canvas' }
+	}
+
+	// The splice could not be PROVEN correct. Re-serialize — but NEVER add a `document`.
+	const next = { ...canvas, presentation: { ...(hasPresentation ? canvas.presentation : {}), theme } }
+	writeAtomic(abs, JSON.stringify(next, null, 2) + '\n')
+	return { wrote: abs, target: 'canvas' }
 }
 
 const MAX_PALETTES = 24

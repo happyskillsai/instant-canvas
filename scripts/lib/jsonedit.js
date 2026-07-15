@@ -129,25 +129,30 @@ function serializeAt(value, indentUnit, base, multiline) {
 	return JSON.stringify(value, null, indentUnit).split('\n').join('\n' + base)
 }
 
-function setDocumentTheme(raw, canvas, theme) {
+/**
+ * Splice `<member>.theme` into an existing outer object (`document` or `presentation`) as
+ * TEXT. `document.theme` and `presentation.theme` carry the identical contract — one color
+ * system, two sinks — so they share one implementation parameterised by the member name.
+ */
+function setMemberTheme(raw, canvas, member, theme) {
 	let candidate
 	try {
 		const objStart = skipWs(raw, 0)
 		if (raw[objStart] !== '{')
 			return null
 
-		const doc = findMember(raw, objStart, 'document')
-		if (!doc.found || raw[doc.valueStart] !== '{')
+		const outer = findMember(raw, objStart, member)
+		if (!outer.found || raw[outer.valueStart] !== '{')
 			return null
 
 		const indentUnit = detectIndent(raw)
-		const docText = raw.slice(doc.valueStart, doc.valueEnd)
-		const themeMember = findMember(raw, doc.valueStart, 'theme')
-		// A minified document object gets a minified theme; a pretty-printed one gets
-		// the file's own indentation. Matching the neighbourhood is the whole point of
-		// splicing rather than re-serializing. An EMPTY `{}` has no neighbourhood to
-		// match, so it follows the file instead.
-		const multiline = docText.includes('\n') || (themeMember.empty && raw.includes('\n'))
+		const outerText = raw.slice(outer.valueStart, outer.valueEnd)
+		const themeMember = findMember(raw, outer.valueStart, 'theme')
+		// A minified outer object gets a minified theme; a pretty-printed one gets the
+		// file's own indentation. Matching the neighbourhood is the whole point of splicing
+		// rather than re-serializing. An EMPTY `{}` has no neighbourhood to match, so it
+		// follows the file instead.
+		const multiline = outerText.includes('\n') || (themeMember.empty && raw.includes('\n'))
 		const colon = multiline ? '": ' : '":'
 
 		if (themeMember.found) {
@@ -155,15 +160,15 @@ function setDocumentTheme(raw, canvas, theme) {
 			const text = serializeAt(theme, indentUnit, base, multiline)
 			candidate = raw.slice(0, themeMember.valueStart) + text + raw.slice(themeMember.valueEnd)
 		} else if (themeMember.empty) {
-			// `"document": {}` — the canvas is printable but unfurnished.
-			const outer = indentOf(raw, doc.valueStart)
-			const base = multiline ? outer + indentUnit : ''
+			// e.g. `"presentation": {}` — the canvas is printable but unfurnished.
+			const outerIndent = indentOf(raw, outer.valueStart)
+			const base = multiline ? outerIndent + indentUnit : ''
 			const text = serializeAt(theme, indentUnit, base, multiline)
-			const body = multiline ? `\n${base}"theme${colon}${text}\n${outer}` : `"theme${colon}${text}`
-			candidate = raw.slice(0, doc.valueStart + 1) + body + raw.slice(doc.valueEnd - 1)
+			const body = multiline ? `\n${base}"theme${colon}${text}\n${outerIndent}` : `"theme${colon}${text}`
+			candidate = raw.slice(0, outer.valueStart + 1) + body + raw.slice(outer.valueEnd - 1)
 		} else {
-			// Insert as the FIRST member of `document`, mirroring the indentation of
-			// the member that is currently first.
+			// Insert as the FIRST member, mirroring the indentation of the member that is
+			// currently first.
 			const at = themeMember.firstMemberAt
 			const base = multiline ? indentOf(raw, at) : ''
 			const text = serializeAt(theme, indentUnit, base, multiline)
@@ -181,76 +186,79 @@ function setDocumentTheme(raw, canvas, theme) {
 	} catch {
 		return null
 	}
-	if (!after.document || JSON.stringify(after.document.theme) !== JSON.stringify(theme))
+	if (!after[member] || JSON.stringify(after[member].theme) !== JSON.stringify(theme))
 		return null
 
 	const before = JSON.parse(JSON.stringify(canvas))
-	delete after.document.theme
-	if (before.document)
-		delete before.document.theme
+	delete after[member].theme
+	if (before[member])
+		delete before[member].theme
 	if (JSON.stringify(after) !== JSON.stringify(before))
 		return null
 
 	return candidate
 }
 
+const setDocumentTheme = (raw, canvas, theme) => setMemberTheme(raw, canvas, 'document', theme)
+const setPresentationTheme = (raw, canvas, theme) => setMemberTheme(raw, canvas, 'presentation', theme)
+
 /**
- * Create the whole `document` member on a canvas that has none, as TEXT.
+ * Create a whole outer member (`document` above blocks/pages, or `presentation` above
+ * slides) on a canvas that has none, as TEXT, landing just before its anchor — where the
+ * schema reads it and where a human would have typed it.
  *
- * The sibling of `setDocumentTheme`, for the case it deliberately refuses: a DISPLAY
- * canvas with no `document` object at all. Such a canvas can hold a theme — it just has
- * no envelope slot for one yet — so the slot is created. (An INTERACTIVE canvas is
- * refused upstream in lib/themestore.js: `document` is invalid beside a form, a confirm
- * or a sweep, and a colour click must never make the agent's canvas stop validating.)
- *
- * It splices for the same reason everything else here does: re-serializing would reformat
- * a file the user owns, turning "I picked an accent" into a whole-file diff — and it would
- * flatten a deliberately minified canvas beyond recognition.
- *
- * The member lands just before `blocks`/`pages`, which is where the schema reads it and
- * where a human would have typed it. Returns null when the splice cannot be PROVEN to have
- * added exactly `document` and nothing else.
+ * The sibling of `setMemberTheme`, for the case it refuses: a canvas with no such member
+ * yet. It splices for the same reason everything else here does — re-serializing would
+ * reformat a file the user owns, turning "I picked an accent" into a whole-file diff, and
+ * flatten a deliberately minified canvas. Returns null when the splice cannot be PROVEN to
+ * have added exactly `member` and nothing else.
  */
-function createDocument(raw, canvas, document) {
+function createMember(raw, canvas, member, value, anchors) {
 	let candidate
 	try {
 		const objStart = skipWs(raw, 0)
 		if (raw[objStart] !== '{')
 			return null
-		if (findMember(raw, objStart, 'document').found)
-			return null // not ours to create — setDocumentTheme owns an existing one
+		if (findMember(raw, objStart, member).found)
+			return null // not ours to create — setMemberTheme owns an existing one
 
 		const indentUnit = detectIndent(raw)
 		const multiline = raw.includes('\n')
 
 		// Sit above the content, like the schema and like a human would write it.
-		const anchor = ['blocks', 'pages'].map((k) => findMember(raw, objStart, k)).find((m) => m.found)
-		const at = anchor ? anchor.keyStart : findMember(raw, objStart, 'document').firstMemberAt
+		const anchor = anchors.map((k) => findMember(raw, objStart, k)).find((m) => m.found)
+		const at = anchor ? anchor.keyStart : findMember(raw, objStart, member).firstMemberAt
 		const base = multiline ? indentOf(raw, at) : ''
 		const colon = multiline ? '": ' : '":'
-		const text = serializeAt(document, indentUnit, base, multiline)
+		const text = serializeAt(value, indentUnit, base, multiline)
 		const sep = multiline ? `\n${base}` : ''
-		candidate = raw.slice(0, at) + `"document${colon}${text},${sep}` + raw.slice(at)
+		candidate = raw.slice(0, at) + `"${member}${colon}${text},${sep}` + raw.slice(at)
 	} catch {
 		return null
 	}
 
-	// Trust nothing: prove we added `document` and moved nothing else.
+	// Trust nothing: prove we added `member` and moved nothing else.
 	let after
 	try {
 		after = JSON.parse(candidate)
 	} catch {
 		return null
 	}
-	if (JSON.stringify(after.document) !== JSON.stringify(document))
+	if (JSON.stringify(after[member]) !== JSON.stringify(value))
 		return null
 	const before = JSON.parse(JSON.stringify(canvas))
-	delete after.document
-	delete before.document
+	delete after[member]
+	delete before[member]
 	if (JSON.stringify(after) !== JSON.stringify(before))
 		return null
 
 	return candidate
 }
 
-module.exports = { setDocumentTheme, createDocument, detectIndent }
+// `document` sits above the content (blocks/pages); a presentation's own `presentation`
+// object sits above `slides`. A display canvas gaining `document` is only refused UPSTREAM
+// (themestore) for interactive canvases; a slides canvas never gains `document` at all.
+const createDocument = (raw, canvas, document) => createMember(raw, canvas, 'document', document, ['blocks', 'pages'])
+const createPresentation = (raw, canvas, presentation) => createMember(raw, canvas, 'presentation', presentation, ['slides'])
+
+module.exports = { setDocumentTheme, setPresentationTheme, createDocument, createPresentation, detectIndent }

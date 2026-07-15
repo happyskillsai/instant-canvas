@@ -822,7 +822,14 @@ function declaredThemeOf(root, rel) {
 	}
 	try {
 		const canvas = JSON.parse(fs.readFileSync(path.resolve(root, target), 'utf8'))
-		return canvas && canvas.document && typeof canvas.document === 'object' ? canvas.document.theme : null
+		if (!canvas || typeof canvas !== 'object')
+			return null
+		// A document keeps it in `document.theme`; a presentation in `presentation.theme`.
+		if (canvas.document && typeof canvas.document === 'object')
+			return canvas.document.theme
+		if (canvas.presentation && typeof canvas.presentation === 'object')
+			return canvas.presentation.theme
+		return null
 	} catch {
 		return null
 	}

@@ -15,6 +15,8 @@ const { validate } = require('../lib/validate')
 const { catalog } = require('../lib/catalog')
 const schema = require('../lib/schema')
 const { PKG_VERSION } = require('../lib/pkgmeta')
+const themestore = require('../lib/themestore')
+const { setPresentationTheme, createPresentation } = require('../lib/jsonedit')
 
 const fixture = (name) => fs.readFileSync(path.join(__dirname, 'fixtures', name), 'utf8')
 const codes = (r) => r.errors.map((e) => e.code)
@@ -253,4 +255,106 @@ test('the slide layout registry is the single source of truth for validator and 
 		assert.ok(catalog('slide').layouts[layout], `${layout} is rendered by the catalog`)
 		assert.equal(schema.SHAPES[shapeName].properties.layout.enum[0], layout, 'the shape pins its own layout name')
 	}
+})
+
+// ================================================================ Phase B: write path
+
+const DECK_RAW = [
+	'{',
+	'\t"instantcanvas": 1,',
+	`\t"createdWith": "${PKG_VERSION}",`,
+	'\t"title": "Quarterly",',
+	'\t"presentation": {',
+	'\t\t"aspect": "16:9",',
+	'\t\t"footer": {',
+	'\t\t\t"right": "Slide {{slideNumber}} / {{totalSlides}}"',
+	'\t\t}',
+	'\t},',
+	'\t"slides": [',
+	'\t\t{ "layout": "title", "title": "Quarterly Review" },',
+	'\t\t{ "layout": "closing", "title": "Thanks" }',
+	'\t]',
+	'}',
+	'',
+].join('\n')
+
+test('jsonedit splices presentation.theme into an existing presentation, byte-identical outside it', () => {
+	const canvas = JSON.parse(DECK_RAW)
+	const spliced = setPresentationTheme(DECK_RAW, canvas, { preset: 'midnight' })
+	assert.ok(spliced !== null, 'the splice was proven correct')
+	const after = JSON.parse(spliced)
+	assert.deepEqual(after.presentation.theme, { preset: 'midnight' })
+	assert.ok(!after.document, 'a deck NEVER gains a document')
+	// Every non-presentation line of the original survives verbatim.
+	for (const line of DECK_RAW.split('\n'))
+		if (line.trim() && !/presentation|theme/.test(line))
+			assert.ok(spliced.includes(line), `untouched: ${JSON.stringify(line)}`)
+	// And the file is identical once the spliced member is removed.
+	delete after.presentation.theme
+	assert.deepEqual(after, canvas)
+})
+
+test('jsonedit creates the presentation member above slides when the deck has none', () => {
+	const raw = [
+		'{',
+		'\t"instantcanvas": 1,',
+		`\t"createdWith": "${PKG_VERSION}",`,
+		'\t"title": "Bare",',
+		'\t"slides": [',
+		'\t\t{ "layout": "title", "title": "Hi" }',
+		'\t]',
+		'}',
+		'',
+	].join('\n')
+	const canvas = JSON.parse(raw)
+	const spliced = createPresentation(raw, canvas, { theme: { accent: '#eb4a26' } })
+	assert.ok(spliced !== null)
+	const after = JSON.parse(spliced)
+	assert.deepEqual(after.presentation, { theme: { accent: '#eb4a26' } })
+	assert.ok(!after.document, 'still no document')
+	assert.ok(Object.keys(after).indexOf('presentation') < Object.keys(after).indexOf('slides'), 'presentation sits above slides')
+	assert.equal(validate(spliced).ok, true)
+})
+
+test('themestore routes a deck theme into presentation.theme — never a document', () => {
+	const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ic-ts-'))
+	// A deck with a presentation object → splice into presentation.theme.
+	fs.writeFileSync(path.join(root, 'a.canvas.json'), DECK_RAW)
+	const ra = themestore.applyTheme(root, 'a.canvas.json', { preset: 'midnight' })
+	assert.equal(ra.target, 'canvas')
+	const a = JSON.parse(fs.readFileSync(path.join(root, 'a.canvas.json'), 'utf8'))
+	assert.deepEqual(a.presentation.theme, { preset: 'midnight' })
+	assert.ok(!a.document)
+
+	// A deck with NO presentation object → create presentation, still no document.
+	fs.writeFileSync(path.join(root, 'b.canvas.json'), JSON.stringify({ instantcanvas: 1, createdWith: PKG_VERSION, title: 'B', slides: [{ layout: 'title', title: 'x' }] }, null, 2) + '\n')
+	themestore.applyTheme(root, 'b.canvas.json', { accent: '#eb4a26', palette: ['#eb4a26', '#47b5c2'] })
+	const b = JSON.parse(fs.readFileSync(path.join(root, 'b.canvas.json'), 'utf8'))
+	assert.deepEqual(b.presentation.theme, { accent: '#eb4a26', palette: ['#eb4a26', '#47b5c2'] })
+	assert.ok(!b.document, 'creating a theme on a deck must never conjure a document')
+	assert.equal(validate(fs.readFileSync(path.join(root, 'b.canvas.json'), 'utf8')).ok, true)
+})
+
+test('clearing a deck-declared presentation.theme is refused (THEME_DECLARED_IN_CANVAS)', () => {
+	const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ic-ts-'))
+	fs.writeFileSync(path.join(root, 'd.canvas.json'), JSON.stringify({ instantcanvas: 1, createdWith: PKG_VERSION, title: 'D', presentation: { theme: { preset: 'midnight' } }, slides: [{ layout: 'title', title: 'x' }] }, null, 2) + '\n')
+	assert.throws(() => themestore.applyTheme(root, 'd.canvas.json', null), (e) => e.code === 'THEME_DECLARED_IN_CANVAS')
+})
+
+test('planTheme names a deck as target "canvas", never blocked and never creating a file', () => {
+	const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ic-ts-'))
+	fs.writeFileSync(path.join(root, 'e.canvas.json'), DECK_RAW)
+	const plan = themestore.planTheme(root, 'e.canvas.json')
+	assert.equal(plan.target, 'canvas')
+	assert.equal(plan.blocked, null, 'a deck is never blocked — it has no interactive block')
+	assert.equal(plan.creates, null, 'no new file appears — the theme lands in the deck itself')
+	assert.equal(plan.declares, false, 'and no document is declared')
+})
+
+test('themeFor resolves a deck-declared theme to concrete hex with source "canvas"', () => {
+	const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ic-ts-'))
+	const tf = themestore.themeFor(root, 'x.canvas.json', { preset: 'midnight' })
+	assert.equal(tf.themeSource, 'canvas')
+	assert.match(tf.theme.accent, /^#[0-9a-f]{6}$/i, 'the browser and print inherit concrete hex')
+	assert.equal(tf.theme.mode, 'dark', 'a dark preset resolves to dark paper')
 })

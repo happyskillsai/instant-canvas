@@ -372,6 +372,50 @@ test('kernel: a DISPLAY canvas with no document object gains one; an INTERACTIVE
 	assert.equal(ws.json.target, 'workspace')
 })
 
+test('kernel: a presentation resolves and writes presentation.theme, never a document', async () => {
+	const rel = 'deck.canvas.json'
+	const raw = `{
+\t"instantcanvas": 1,
+\t"createdWith": "${PKG_VERSION}",
+\t"title": "Deck",
+\t"presentation": {
+\t\t"aspect": "16:9"
+\t},
+\t"slides": [{"layout": "title", "title": "Hi"}]
+}
+`
+	fs.writeFileSync(path.join(K.root, rel), raw)
+
+	// The plan names a deck as target "canvas" — never blocked, never declaring a document.
+	const plan = await httpReq({ port: K.port, path: `/api/theme/plan?path=${rel}`, headers: K.auth })
+	assert.equal(plan.json.target, 'canvas')
+	assert.equal(plan.json.blocked, null)
+	assert.equal(plan.json.declares, false)
+
+	const save = await httpReq({
+		port: K.port, method: 'POST', path: '/api/theme', headers: K.auth,
+		body: { path: rel, theme: { preset: 'midnight' } },
+	})
+	assert.equal(save.status, 200)
+	assert.equal(save.json.target, 'canvas')
+	const after = fs.readFileSync(path.join(K.root, rel), 'utf8')
+	assert.ok(after.includes('\t\t"aspect": "16:9"'), 'the rest of the file did not move')
+	assert.deepEqual(JSON.parse(after).presentation.theme, { preset: 'midnight' })
+	assert.ok(!JSON.parse(after).document, 'a deck NEVER gains a document (DOCUMENT_ON_PRESENTATION)')
+
+	// /api/canvas now hands the page the resolved dark theme, sourced from the canvas, so
+	// the browser and `print` inherit concrete hex identically.
+	const load = await httpReq({ port: K.port, path: `/api/canvas?path=${rel}`, headers: K.auth })
+	assert.equal(load.json.themeSource, 'canvas')
+	assert.match(load.json.theme.accent, /^#[0-9a-f]{6}$/i)
+	assert.equal(load.json.theme.mode, 'dark')
+
+	// The declared theme is the author's contract — the reader cannot delete it from here.
+	const reset = await httpReq({ port: K.port, method: 'POST', path: '/api/theme', headers: K.auth, body: { path: rel, theme: null } })
+	assert.equal(reset.status, 409)
+	assert.equal(reset.json.error.code, 'THEME_DECLARED_IN_CANVAS')
+})
+
 test('kernel: a workspace keeps its own palettes, offered beside the built-in presets', async () => {
 	const theme = { accent: '#0054fe', palette: ['#0054fe', '#00b4d8', '#ff8800'] }
 	const save = await httpReq({ port: K.port, method: 'POST', path: '/api/theme/palette', headers: K.auth, body: { name: 'My brand', theme } })
