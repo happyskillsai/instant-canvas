@@ -1344,6 +1344,49 @@ function renderKpi(block) {
 	return `<div class="block kpis">${cards}</div>`
 }
 
+/**
+ * Make every KPI value fit its card, deterministically.
+ *
+ * A KPI value is a single line (`white-space: nowrap`) whose font-size is
+ * `calc(base * var(--kpi-fit))`. This measures each value against the width its card
+ * actually gives it and, if any overflow, shrinks the WHOLE ROW by the worst-case ratio —
+ * so `US$16,800,000` and `1.2%` scale together and the grid stays even. The alternative
+ * (letting each value size its own card) makes a ragged row of unequal boxes; a uniform
+ * shrink keeps the clean grid and never clips. Measured, so it is the same every time for
+ * the same content and box — and it degrades safely: a value can only get smaller, never
+ * taller, so it cannot break the document packer's sheet-height invariant.
+ */
+function fitKpiRow(row) {
+	const values = [...row.querySelectorAll('.value')]
+	if (!values.length)
+		return
+	row.style.removeProperty('--kpi-fit') // measure at full size; the values inherit the var
+	let ratio = 1
+	for (const v of values)
+		if (v.clientWidth > 0 && v.scrollWidth > v.clientWidth + 1)
+			ratio = Math.min(ratio, v.clientWidth / v.scrollWidth)
+	if (ratio < 1)
+		// One custom property on the row, inherited by every value — so the whole row scales
+		// together, and only the row carries a (CSSOM, CSP-exempt) inline style.
+		row.style.setProperty('--kpi-fit', (Math.max(ratio, 0.35) * 0.97).toFixed(3))
+}
+
+const fitKpiValues = (scope = document) => { for (const row of scope.querySelectorAll('.kpis')) fitKpiRow(row) }
+
+/** Fit every KPI row now, keep it fit as its card width changes, and re-fit once a
+ *  late-loading webfont settles (text metrics shift). Observers ride state.observers, so a
+ *  re-render disposes them. A row's width does not change when a value shrinks, so no loop. */
+function mountKpis(scope = document) {
+	for (const row of scope.querySelectorAll('.kpis')) {
+		fitKpiRow(row)
+		const ro = new ResizeObserver(() => fitKpiRow(row))
+		ro.observe(row)
+		state.observers.push(ro)
+	}
+	if (document.fonts && document.fonts.ready)
+		document.fonts.ready.then(() => fitKpiValues(scope)).catch(() => {})
+}
+
 function renderTable(block) {
 	const numeric = (col) => ['number', 'currency', 'percent'].includes(col.format)
 	const alignClass = (col) => (col.align ? (col.align === 'right' ? 'num' : '') : numeric(col) ? 'num' : '')
@@ -3468,6 +3511,7 @@ async function renderDocumentView(main, canvas) {
 		mountCodeCopy(htmlView)
 
 	mountCharts(flatBlocks, deckEl)
+	mountKpis(rootEl)
 	if (state.docView === 'html')
 		moveChartsTo(rootEl, 'html')
 	syncViewToggle()
@@ -3676,6 +3720,7 @@ async function renderPresentationView(main, canvas) {
 	state.observers.push(ro)
 
 	await autofitSlides(stripEl)
+	mountKpis(stripEl)
 	syncViewToggle()
 
 	// A hot reload rebuilt the filmstrip (and re-mounted every chart) beneath a live
@@ -3768,6 +3813,7 @@ function stageShow(index) {
 	holder.appendChild(slide)
 	mountCodeCopy(slide, { button: false })
 	autofitOne(slide)
+	fitKpiValues(slide)
 	stageMoveChartsIn(slide)
 	fitStage()
 	$('stageBlack').hidden = true // navigating unblanks
@@ -4014,6 +4060,7 @@ async function renderCanvas() {
 	applyDocumentTheme(main.querySelector('.canvas'), docTheme())
 	mountCodeCopy(main)
 	mountCharts(blocks)
+	mountKpis(main)
 	wireInteractive(blocks)
 	syncViewToggle()
 }

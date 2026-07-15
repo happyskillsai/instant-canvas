@@ -87,7 +87,7 @@ function driveDeck(rel, expectSlides) {
 				// A style="" attribute in MARKUP. The geometry ones (.slide transform,
 				// .slide-holder width/height, the scrim) are CSSOM — exempt and expected.
 				styleAttrOffenders: [...document.querySelectorAll('.pres-mode [style]')]
-					.filter((el) => !el.matches('.slide, .slide-holder, .cover-scrim') && !el.closest('.chart-box'))
+					.filter((el) => !el.matches('.slide, .slide-holder, .cover-scrim, .kpis') && !el.closest('.chart-box'))
 					.map((el) => el.className).slice(0, 6),
 				// Topbar (D9).
 				presentShown: !document.getElementById('presentBtn').hidden,
@@ -98,6 +98,11 @@ function driveDeck(rel, expectSlides) {
 				paletteEnabled: !document.getElementById('paletteBtn').disabled,
 				sidebarDeckGlyph: !!document.querySelector('.item .doc-ico svg'),
 				titleFontPx: (() => { const h = document.querySelector('.st-title .st-h1'); return h ? parseFloat(getComputedStyle(h).fontSize) : 0 })(),
+				// KPI values must FIT their cards — a wide currency value shrinks the whole
+				// row uniformly (--kpi-fit) rather than clipping.
+				kpiValueCount: document.querySelectorAll('.kpi .value').length,
+				kpiOverflowing: [...document.querySelectorAll('.kpi .value')].filter((v) => v.scrollWidth > v.clientWidth + 1).length,
+				kpiRowFitted: [...document.querySelectorAll('.slide .kpis')].some((r) => r.style.getPropertyValue('--kpi-fit')),
 			};
 		})()`)
 	})
@@ -208,6 +213,12 @@ test('the deck is CSP-clean: no injected <style>, no style="" markup, zero viola
 	assert.deepEqual(gallery.csp, [], 'zero CSP violations')
 	assert.equal(gallery.styleEls, 0, 'no injected <style> element')
 	assert.deepEqual(gallery.styleAttrOffenders, [], 'all layout is class-based; only CSSOM geometry carries inline style')
+})
+
+test('KPI values fit their cards deterministically — a wide value shrinks the whole row, never clips', { skip: browserSkip }, () => {
+	assert.ok(gallery.kpiValueCount >= 4, 'the deck carries a four-card KPI row')
+	assert.equal(gallery.kpiOverflowing, 0, 'no KPI value overflows its card — measured scrollWidth <= clientWidth')
+	assert.ok(gallery.kpiRowFitted, 'a wide currency value ("US$16,800,000") triggered the measured shrink-to-fit')
 })
 
 test('backgrounds, footers and notes render as browse chrome', { skip: browserSkip }, () => {

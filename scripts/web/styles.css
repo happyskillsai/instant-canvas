@@ -365,7 +365,11 @@ button{font:inherit;cursor:pointer}
 .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px}
 .kpi{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:14px 16px;box-shadow:var(--shadow)}
 .kpi .label{color:var(--muted);font-size:12px}
-.kpi .value{font-size:24px;font-weight:680;letter-spacing:-.02em;margin:4px 0 2px}
+/* A KPI value is a single line whose size shrinks to fit its card (--kpi-fit, set by
+   fitKpiRow after measuring — deterministic, and applied uniformly across the row so a
+   long "US$16,800,000" and a short "1.2%" scale together). nowrap: a metric never wraps
+   mid-number. Whatever survives is width-fit, never clipped. */
+.kpi .value{font-size:calc(24px * var(--kpi-fit,1));white-space:nowrap;font-weight:680;letter-spacing:-.02em;margin:4px 0 2px}
 .kpi .delta{font-size:12px;font-weight:600}
 .kpi .delta.up{color:var(--green)} .kpi .delta.down{color:var(--red)} .kpi .delta.flat{color:var(--muted)}
 
@@ -377,10 +381,15 @@ button{font:inherit;cursor:pointer}
 .chart-box.swept{height:400px}
 .chart-box.tall.swept{height:540px}
 
+/* The table BLOCK wears the same theme-aware skin as a markdown table: a tinted header
+   and zebra body rows, both color-mixed over --accent so they follow the app theme AND a
+   document's / a deck's own accent on paper (light or dark). Consistency across the app. */
 table.tbl{width:100%;border-collapse:collapse;font-size:13px}
 table.tbl th{text-align:left;color:var(--muted);font-weight:600;font-size:11.5px;letter-spacing:.03em;
-	text-transform:uppercase;padding:8px 12px;border-bottom:1px solid var(--border)}
+	text-transform:uppercase;padding:8px 12px;
+	background:color-mix(in srgb,var(--accent) 8%,var(--panel-2));border-bottom:1px solid var(--border)}
 table.tbl td{padding:9px 12px;border-bottom:1px solid var(--border-2)}
+table.tbl tbody tr:nth-child(even) td{background:color-mix(in srgb,var(--accent) 5%,transparent)}
 table.tbl tr:last-child td{border-bottom:none}
 table.tbl td.num,table.tbl th.num{text-align:right;font-variant-numeric:tabular-nums}
 
@@ -1165,7 +1174,7 @@ body.modal-open .main{overflow:hidden}
 .slide .kpi{flex:1 1 0;min-width:0;background:var(--panel);border:1px solid var(--border);
 	border-radius:14px;padding:20px 24px}
 .slide .kpi .label{font-size:.72em;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
-.slide .kpi .value{font-size:2em;font-weight:700;letter-spacing:-.02em;margin-top:.15em}
+.slide .kpi .value{font-size:calc(2em * var(--kpi-fit,1));font-weight:700;letter-spacing:-.02em;margin-top:.15em}
 .slide .kpi .delta{font-size:.78em;margin-top:.3em}
 .slide .tbl{font-size:.8em}
 

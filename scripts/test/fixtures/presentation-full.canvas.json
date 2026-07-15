@@ -30,8 +30,10 @@
 			"body": [
 				{ "type": "markdown", "text": "- Revenue up **12% QoQ**\n- Two new enterprise logos\n- Gross margin steady at 71%" },
 				{ "type": "kpi", "cards": [
-					{ "label": "Revenue", "value": 128000, "format": "currency", "delta": { "value": 0.12, "label": "QoQ" } },
-					{ "label": "New logos", "value": 2, "format": "number" }
+					{ "label": "Revenue", "value": 16800000, "format": "currency", "delta": { "value": 0.12, "label": "QoQ" } },
+					{ "label": "ARR", "value": 42300000, "format": "currency", "delta": { "value": 0.22, "label": "QoQ" } },
+					{ "label": "Net revenue retention", "value": 1.18, "format": "percent" },
+					{ "label": "Logo churn", "value": 0.012, "format": "percent", "delta": { "value": -0.003, "label": "vs Q2", "positiveIs": "down" } }
 				] }
 			],
 			"notes": "Lead with the revenue number; the logos are the story."

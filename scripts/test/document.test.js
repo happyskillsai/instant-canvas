@@ -447,7 +447,7 @@ const SNAPSHOT_JS = `
 			csp: window.__csp || [],
 			styleEls: document.querySelectorAll('style').length,
 			offenders: [...document.querySelectorAll('.canvas [style]')]
-				.filter((el) => !el.closest('.chart-box') && !el.matches('.sheet,.deck,.deck-scale,.cover-scrim'))
+				.filter((el) => !el.closest('.chart-box') && !el.matches('.sheet,.deck,.deck-scale,.cover-scrim,.kpis'))
 				.map((el) => el.className).slice(0, 5),
 		};
 	})()
@@ -1089,7 +1089,7 @@ const DECK_SNAPSHOT_JS = `
 			csp: window.__csp || [],
 			styleEls: document.querySelectorAll('style').length,
 			offenders: [...document.querySelectorAll('.canvas [style]')]
-				.filter((el) => !el.closest('.chart-box') && !el.matches('.sheet,.deck,.deck-scale,.cover-scrim'))
+				.filter((el) => !el.closest('.chart-box') && !el.matches('.sheet,.deck,.deck-scale,.cover-scrim,.kpis'))
 				.map((el) => el.className).slice(0, 5),
 		};
 	})()
