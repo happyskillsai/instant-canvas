@@ -201,6 +201,7 @@ function loadCanvasFile(rel, { as = null } = {}) {
 	const canvas = JSON.parse(raw)
 	resolveMarkdownSrc(canvas)
 	resolveDocumentAssets(canvas)
+	resolvePresentationAssets(canvas)
 	// A document keeps its theme in `document.theme`; a presentation keeps it in
 	// `presentation.theme`. Both resolve through the same `themeFor` pipeline to concrete
 	// hex, so the browser and `print` inherit the answer identically (a deck never carries
@@ -391,32 +392,46 @@ function resolveMarkdownSrc(canvas, { native = false } = {}) {
  * error (ASSET_TOO_LARGE / MISSING_SOURCE), so reaching these branches means the file
  * changed under us since.
  */
-function resolveDocumentAssets(canvas) {
-	const doc = canvas && canvas.document
-	if (!doc || typeof doc !== 'object')
-		return
-	for (const key of ['cover', 'backCover']) {
-		const section = doc[key]
-		if (!section || typeof section !== 'object')
-			continue
-
-		if (typeof section.logo === 'string' && !/^data:/i.test(section.logo)) {
-			const uri = inlineImageFile(ROOT, section.logo, ROOT, MAX_CANVAS_BYTES)
-			if (uri)
-				section.logo = uri
-			else
-				delete section.logo
-		}
-
-		const bg = section.background
-		if (!bg || typeof bg !== 'object' || typeof bg.src !== 'string' || /^data:/i.test(bg.src))
-			continue
+/**
+ * Inline a section's `logo` and `background.src` (a cover, a back cover, or a slide) as
+ * data: URIs. A logo that cannot be inlined is dropped (no logo beats a broken image); a
+ * background that cannot be inlined takes the whole `background` object with it, rather than
+ * leaving a scrim washing over nothing.
+ */
+function inlineSectionAssets(section) {
+	if (typeof section.logo === 'string' && !/^data:/i.test(section.logo)) {
+		const uri = inlineImageFile(ROOT, section.logo, ROOT, MAX_CANVAS_BYTES)
+		if (uri)
+			section.logo = uri
+		else
+			delete section.logo
+	}
+	const bg = section.background
+	if (bg && typeof bg === 'object' && typeof bg.src === 'string' && !/^data:/i.test(bg.src)) {
 		const uri = inlineImageFile(ROOT, bg.src, ROOT, MAX_COVER_IMAGE_BYTES)
 		if (uri)
 			bg.src = uri
 		else
 			delete section.background
 	}
+}
+
+function resolveDocumentAssets(canvas) {
+	const doc = canvas && canvas.document
+	if (!doc || typeof doc !== 'object')
+		return
+	for (const key of ['cover', 'backCover'])
+		if (doc[key] && typeof doc[key] === 'object')
+			inlineSectionAssets(doc[key])
+}
+
+/** The same pass for a presentation: slide backgrounds and logos, inlined once per slide. */
+function resolvePresentationAssets(canvas) {
+	if (!Array.isArray(canvas && canvas.slides))
+		return
+	for (const slide of canvas.slides)
+		if (slide && typeof slide === 'object')
+			inlineSectionAssets(slide)
 }
 
 function interactiveBlockOf(canvas) {

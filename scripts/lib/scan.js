@@ -34,6 +34,10 @@ function canvasEntry(root, rel) {
 		kind: 'canvas',
 		title: typeof parsed.title === 'string' ? parsed.title : path.basename(rel, '.json'),
 		interactive: collectBlocks(parsed).some(({ block }) => isInteractiveBlock(block)),
+		// A presentation is still kind "canvas" (the scan, delete counts and marker
+		// semantics are untouched) but carries a flag the sidebar renders as a distinct
+		// glyph — the reader must tell a deck from a dashboard before clicking.
+		...(Array.isArray(parsed.slides) ? { deck: true } : {}),
 	}
 }
 

@@ -47,6 +47,10 @@ const state = {
 	// canvas's own default (deck iff it declares `document`).
 	docViewChoice: null,
 	docLand: false, // true while the current canvas is rendered through the deck machinery
+	presLand: false, // true while the current canvas is a presentation (the filmstrip)
+	presFit: null, // re-runs the filmstrip scale fit; set by each presentation render
+	presIndex: 0, // the slide the reader is on (drives where Present starts)
+	presenting: false, // true while the fullscreen/in-viewport stage is up
 	docToc: null, // reader override for the TOC: null = auto (on when there is content), true/false = forced
 	docTocOn: false, // what the last deck render actually did (drives the toggle button state)
 	docEntries: 0, // how many TOC entries the last deck render derived
@@ -88,6 +92,8 @@ const LUCIDE = {
 	'house': '<path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"/><path d="M3 10a2 2 0 0 1 .709-1.528l7-6a2 2 0 0 1 2.582 0l7 6A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
 	'info': '<circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/>',
 	'plus': '<path d="M5 12h14"/><path d="M12 5v14"/>',
+	'presentation': '<path d="M2 3h20"/><path d="M21 3v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V3"/><path d="m7 21 5-5 5 5"/>',
+	'play': '<path d="M5 3 19 12 5 21z"/>',
 	'lock': '<rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>',
 	'octagon-alert': '<path d="M12 16h.01"/><path d="M12 8v4"/><path d="M15.312 2a2 2 0 0 1 1.414.586l4.688 4.688A2 2 0 0 1 22 8.688v6.624a2 2 0 0 1-.586 1.414l-4.688 4.688a2 2 0 0 1-1.414.586H8.688a2 2 0 0 1-1.414-.586l-4.688-4.688A2 2 0 0 1 2 15.312V8.688a2 2 0 0 1 .586-1.414l4.688-4.688A2 2 0 0 1 8.688 2z"/>',
 	'triangle-alert': '<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/>',
@@ -324,10 +330,10 @@ function documentPalette(t) {
 const themeIsDeclared = () => Object.keys(state.themeDeclared || {}).length > 0
 
 function palette() {
-	// Sheets are paper: a document charts on its own theme over a light sheet,
-	// regardless of the app theme. The app chrome AROUND the deck still follows
+	// Sheets and slides are paper: a document or a deck charts on its own theme over its
+	// own surface, regardless of the app theme. The app chrome AROUND it still follows
 	// the app theme via CSS variables.
-	if (state.docLand)
+	if (state.docLand || state.presLand)
 		return documentPalette(docTheme())
 
 	// Off the deck the APP theme owns the ink — a dark app must not draw dark axis text
@@ -1159,7 +1165,7 @@ function renderTree() {
 		// that this README carries a cover and a theme, and where they live.
 		const items = g.canvases.map((c) => `
 			<div class="item ${c.id === state.activeId ? 'active' : ''}" data-canvas="${esc(c.id)}" title="${esc(c.id)}${c.enhanced ? ` — enhanced by ${esc(c.enhanced)} (cover, theme, page setup)` : ''}">
-				${c.kind === 'document' ? `<span class="doc-ico">${icon('file-text')}</span>` : '<span class="dot"></span>'}${esc(c.title)}${c.enhanced ? '<span class="enh-dot" aria-label="enhanced by a companion canvas"></span>' : ''}
+				${c.deck ? `<span class="doc-ico">${icon('presentation')}</span>` : c.kind === 'document' ? `<span class="doc-ico">${icon('file-text')}</span>` : '<span class="dot"></span>'}${esc(c.title)}${c.enhanced ? '<span class="enh-dot" aria-label="enhanced by a companion canvas"></span>' : ''}
 			</div>`).join('')
 		return `<div class="group ${isC ? 'collapsed' : ''}">
 			<div class="group-row" data-group="${esc(g.name)}" ${isRoot ? `title="Canvases and documents directly inside the workspace folder (${esc(state.tree.root)})"` : ''}>
@@ -3254,6 +3260,19 @@ function paperControl(id, { loaded, enabled, reason, on, label }) {
 }
 
 function syncViewToggle() {
+	// A presentation owns the view-toggle slot with a Present control instead of the
+	// deck/continuous pair (D9): a deck has no continuous twin. The TOC and running-strip
+	// buttons stay in place but disable — a deck has neither — and the palette stays live.
+	$('presentBtn').hidden = !state.presLand
+	if (state.presLand) {
+		$('viewToggle').hidden = true
+		$('printBtn').hidden = false
+		paperControl('tocBtn', { loaded: true, enabled: false, on: false, label: '', reason: 'A presentation has no table of contents — its structure is its slides' })
+		paperControl('stripsBtn', { loaded: true, enabled: false, on: false, label: '', reason: 'A presentation\'s footer is declared in its JSON ("presentation.footer"), not toggled here' })
+		paperControl('paletteBtn', { loaded: true, enabled: true, on: !$('palettePanel').hidden, label: 'Deck colors — preset and tokens', reason: '' })
+		return
+	}
+
 	// The view is presentation, so the toggle shows for EVERY loaded canvas —
 	// including ones that cannot deck, whose deck button explains itself on
 	// click instead of hiding (a hidden control teaches nothing).
@@ -3453,6 +3472,199 @@ async function renderDocumentView(main, canvas) {
 	syncViewToggle()
 }
 
+// ---------------------------------------------------------------- presentation mode (the filmstrip)
+//
+// A slides canvas renders as a filmstrip: fixed-geometry slide boxes stacked vertically,
+// each scaled to fit the pane by ONE transform, with browse chrome (a "Slide N of M" label,
+// an overflow badge, speaker notes) beneath. Same discipline as the deck — a slide box is
+// one printed page by construction — minus the packer: slides are assigned, never flowed.
+// Present (Phase D) reuses these live chart nodes.
+
+// The PowerPoint-standard page sizes, in px at 96dpi (so a 1280px box IS 13.333in). Print
+// uses the inch values for @page (Phase E); screen and print agree by construction.
+const SLIDE_GEO = {
+	'4:3': { wPx: 960, hPx: 720, wIn: '10in', hIn: '7.5in' },
+	'16:9': { wPx: 1280, hPx: 720, wIn: '13.333in', hIn: '7.5in' },
+}
+const slideGeometry = (presentation) => SLIDE_GEO[presentation && presentation.aspect === '4:3' ? '4:3' : '16:9']
+
+/** Every display block across a slide's regions, in reading order — the flat list mountCharts
+ *  indexes into, so a chart-box's data-chart points at the right block. */
+function collectSlideBlocksInto(slide, out) {
+	const push = (arr) => { if (Array.isArray(arr)) for (const b of arr) if (b && typeof b === 'object') out.push(b) }
+	push(slide.body)
+	push(slide.left)
+	push(slide.right)
+	if (Array.isArray(slide.cells))
+		for (const c of slide.cells)
+			if (c && typeof c === 'object') push(c.blocks)
+}
+
+/** A region's blocks as HTML. A lone chart/KPI fills its region (the CSS flexes it). */
+function renderSlideBlocks(blocks, flat) {
+	return (blocks || []).map((b) => {
+		if (!b || typeof b !== 'object') return ''
+		if (b.type === 'markdown') return renderMarkdown(b)
+		if (b.type === 'kpi') return renderKpi(b)
+		if (b.type === 'table') return renderTable(b)
+		if (b.type === 'chart') return `<div class="block card slide-chart">${b.title ? `<div class="chart-title">${esc(b.title)}</div>` : ''}<div class="chart-box" data-chart="${flat.indexOf(b)}"></div></div>`
+		return ''
+	}).join('')
+}
+
+const slideLogo = (src) => (typeof src === 'string' && src) ? `<img class="slide-logo" src="${esc(src)}" alt="">` : ''
+
+const SLIDE_HTML = {
+	title: (s) => `<div class="slide-region st-center st-title">${slideLogo(s.logo)}<h1 class="st-h1">${esc(s.title || '')}</h1>${s.subtitle ? `<div class="st-sub">${esc(s.subtitle)}</div>` : ''}${(s.author || s.date) ? `<div class="st-meta">${[s.author, s.date].filter(Boolean).map(esc).join('  ·  ')}</div>` : ''}</div>`,
+	section: (s) => `<div class="slide-region st-center st-section"><h2 class="st-h1">${esc(s.title || '')}</h2>${s.subtitle ? `<div class="st-sub">${esc(s.subtitle)}</div>` : ''}</div>`,
+	content: (s, flat) => `${s.title ? `<div class="slide-heading">${esc(s.title)}</div>` : ''}<div class="slide-region slide-body">${renderSlideBlocks(s.body, flat)}</div>`,
+	'two-column': (s, flat) => {
+		const col = (heading, blocks) => `<div class="slide-col">${heading ? `<div class="col-heading">${esc(heading)}</div>` : ''}<div class="slide-region col-body">${renderSlideBlocks(blocks, flat)}</div></div>`
+		return `${s.title ? `<div class="slide-heading">${esc(s.title)}</div>` : ''}<div class="slide-2col split-${esc(s.split || '1-1')}">${col(s.leftHeading, s.left)}${col(s.rightHeading, s.right)}</div>`
+	},
+	quadrant: (s, flat) => {
+		const cell = (c) => `<div class="slide-cell">${c && c.heading ? `<div class="cell-heading">${esc(c.heading)}</div>` : ''}<div class="slide-region cell-body">${renderSlideBlocks(c && c.blocks, flat)}</div></div>`
+		return `${s.title ? `<div class="slide-heading">${esc(s.title)}</div>` : ''}<div class="slide-quad">${(s.cells || []).slice(0, 4).map(cell).join('')}</div>`
+	},
+	statement: (s) => `<div class="slide-region st-center st-statement"><div class="st-text">${esc(s.text || '')}</div>${s.attribution ? `<div class="st-attrib">${esc(s.attribution)}</div>` : ''}</div>`,
+	closing: (s) => `<div class="slide-region st-center st-closing">${slideLogo(s.logo)}<h2 class="st-h1">${esc(s.title || '')}</h2>${s.subtitle ? `<div class="st-sub">${esc(s.subtitle)}</div>` : ''}</div>`,
+}
+
+const FOOTLESS = new Set(['title', 'closing'])
+const SLIDE_VAR_RE = /\{\{\s*(slideNumber|totalSlides)\s*\}\}/g
+
+/** The declared running footer, on every slide but title/closing, unless "footer": false. */
+function slideFooterHtml(slide, presentation, index, total) {
+	const f = presentation && presentation.footer
+	if (FOOTLESS.has(slide.layout) || slide.footer === false || !f || typeof f !== 'object')
+		return ''
+	const sub = (s) => typeof s === 'string' ? s.replace(SLIDE_VAR_RE, (_, v) => (v === 'slideNumber' ? index + 1 : total)) : ''
+	const slot = (cls, s) => `<div class="sf ${cls}">${esc(sub(s))}</div>`
+	if (!f.left && !f.center && !f.right)
+		return ''
+	return `<div class="slide-footer">${slot('sf-l', f.left)}${slot('sf-c', f.center)}${slot('sf-r', f.right)}</div>`
+}
+
+/** One slide box at true geometry — the layout content plus its footer, with an optional
+ *  full-bleed background (furniture layouts only). Scaled later by fitStrip. */
+function buildSlide(slide, presentation, index, total, geo, flat) {
+	const box = document.createElement('div')
+	box.className = `slide slide-${slide.layout}`
+	box.dataset.slide = String(index)
+	box.style.width = geo.wPx + 'px'
+	box.style.height = geo.hPx + 'px'
+	// The cover machinery, reused verbatim: image → scrim (appended first, z-index 0) →
+	// content. Allowed only on title/section/statement/closing (the validator warns off the
+	// rest), but applyCoverBackground is a no-op without a background regardless.
+	applyCoverBackground(box, slide.background)
+	const render = SLIDE_HTML[slide.layout] || (() => '')
+	box.insertAdjacentHTML('beforeend', render(slide, flat) + slideFooterHtml(slide, presentation, index, total))
+	return box
+}
+
+/** Scale every slide box to fit the pane with one transform, and size its holder to the
+ *  scaled box so the browse chrome flows correctly beneath it. All slides share one scale. */
+function fitStrip(main, geo) {
+	const avail = Math.max(320, main.clientWidth - 64)
+	const scale = Math.min(1, avail / geo.wPx)
+	const sw = Math.round(geo.wPx * scale), sh = Math.round(geo.hPx * scale)
+	for (const holder of main.querySelectorAll('.slide-holder')) {
+		holder.style.width = sw + 'px'
+		holder.style.height = sh + 'px'
+		const slide = holder.querySelector('.slide')
+		if (slide)
+			slide.style.transform = scale < 1 ? `scale(${scale})` : ''
+	}
+}
+
+/** Autofit (D6): a region that overflows steps its type scale down through at most three
+ *  class-based steps; still overflowing → clip it and show the filmstrip-only badge. Runs
+ *  after fonts settle — a badge that measures a half-laid-out slide lies. */
+async function autofitSlides(stripEl) {
+	if (document.fonts && document.fonts.ready)
+		await document.fonts.ready.catch(() => {})
+	for (const holder of stripEl.querySelectorAll('.slide-holder')) {
+		const slide = holder.querySelector('.slide')
+		if (!slide)
+			continue
+		const overflowing = () => [...slide.querySelectorAll('.slide-region')].some((r) => r.scrollHeight > r.clientHeight + 1)
+		let level = 0
+		while (level < 3 && overflowing()) {
+			if (level)
+				slide.classList.remove('fit-' + level)
+			level++
+			slide.classList.add('fit-' + level)
+		}
+		if (overflowing()) {
+			slide.classList.add('clipped')
+			const badge = holder.querySelector('.slide-badge')
+			if (badge)
+				badge.hidden = false
+		}
+	}
+}
+
+async function renderPresentationView(main, canvas) {
+	const presentation = canvas.presentation && typeof canvas.presentation === 'object' ? canvas.presentation : {}
+	const geo = slideGeometry(presentation)
+	state.presLand = true
+	state.docLand = false
+
+	main.innerHTML = '<div class="canvas pres-mode"><div class="strip"><div class="strip-scale"></div></div></div>'
+	const rootEl = main.querySelector('.pres-mode')
+	// A slide is its own surface, like a sheet: it takes the FULL token set (paper included),
+	// and dark decks are normal. The colorway feeds charts through palette() → the template.
+	applyDocumentTheme(rootEl, docTheme())
+	const stripEl = main.querySelector('.strip-scale')
+
+	const slides = Array.isArray(canvas.slides) ? canvas.slides : []
+	const total = slides.length
+	const flat = []
+	for (const s of slides)
+		if (s && typeof s === 'object') collectSlideBlocksInto(s, flat)
+
+	slides.forEach((slide, i) => {
+		if (!slide || typeof slide !== 'object')
+			return
+		const item = document.createElement('div')
+		item.className = 'slide-item'
+		const holder = document.createElement('div')
+		holder.className = 'slide-holder'
+		holder.appendChild(buildSlide(slide, presentation, i, total, geo, flat))
+		const badge = document.createElement('div')
+		badge.className = 'slide-badge'
+		badge.hidden = true
+		badge.textContent = 'content overflows this slide'
+		holder.appendChild(badge)
+		item.appendChild(holder)
+		const meta = document.createElement('div')
+		meta.className = 'slide-meta'
+		meta.textContent = `Slide ${i + 1} of ${total}`
+		item.appendChild(meta)
+		if (typeof slide.notes === 'string' && slide.notes.trim()) {
+			const notes = document.createElement('div')
+			notes.className = 'slide-notes'
+			notes.textContent = slide.notes
+			item.appendChild(notes)
+		}
+		stripEl.appendChild(item)
+	})
+
+	// A fence in a slide gets its wrapper but no button: a scaled filmstrip slide is no
+	// place to copy from, and presenting/print hold no buttons at all.
+	mountCodeCopy(stripEl, { button: false })
+	mountCharts(flat, stripEl)
+
+	state.presFit = () => fitStrip(main, geo)
+	state.presFit()
+	const ro = new ResizeObserver(() => state.presFit && state.presFit())
+	ro.observe(main)
+	state.observers.push(ro)
+
+	await autofitSlides(stripEl)
+	syncViewToggle()
+}
+
 // ---------------------------------------------------------------- canvas view
 
 function renderErrors(id, errors) {
@@ -3479,6 +3691,7 @@ async function renderCanvas() {
 	if (!state.activeId) {
 		state.canvasDoc = null
 		state.docLand = false
+		state.presLand = false
 		main.innerHTML = renderEmpty()
 		syncViewToggle()
 		return
@@ -3488,6 +3701,7 @@ async function renderCanvas() {
 		const errors = json && json.errors
 		state.canvasDoc = null
 		state.docLand = false
+		state.presLand = false
 		main.innerHTML = `<div class="canvas">
 			<div class="canvas-head"><h1>${esc(state.activeId)}</h1><div class="sub">${esc(state.activeId)}</div></div>
 			${errors ? renderErrors(state.activeId, errors) : `<div class="placeholder">Could not load this canvas (HTTP ${status}).</div>`}
@@ -3506,6 +3720,14 @@ async function renderCanvas() {
 	state.themeDeclared = json.themeDeclared || {}
 	state.themeSource = json.themeSource || 'default'
 	state.themeDirty = false
+
+	// A slides canvas is a presentation — a sibling of the document deck, not a variant of
+	// it. It routes to the filmstrip before any of the deck/continuous machinery below.
+	if (Array.isArray(canvas.slides)) {
+		await renderPresentationView(main, canvas)
+		return
+	}
+	state.presLand = false
 
 	// The view is presentation: any display canvas can render as paper. A declared
 	// `document` opens as the deck and everything else opens continuous — but only

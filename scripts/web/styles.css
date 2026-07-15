@@ -1055,6 +1055,159 @@ body.modal-open .main{overflow:hidden}
 .pal-btn.primary:hover{filter:brightness(1.08)}
 .pal-note{margin:10px 0 0;font-size:11px;line-height:1.45;color:var(--muted)}
 
+/* ------------------------------------------------------------- presentation mode
+   A slides canvas renders as a FILMSTRIP: fixed-geometry slide boxes stacked and scaled
+   to fit the pane by one transform, with browse chrome (a "Slide N of M" label, an overflow
+   badge, speaker notes) BENEATH each box. The chrome sits outside the scaled box so it stays
+   readable. A slide is its own surface, like a sheet — it takes the full --doc-* token set,
+   paper included, and dark decks are first-class. Geometry (px width/height, the transform)
+   is set through CSSOM in app.js; the CSP drops style="" but exempts programmatic assignment.
+
+   The "Present" control owns the view-toggle slot (a deck has no continuous twin). Its box
+   is one printed page by construction — see the @media print block for the 1:1 mapping. */
+
+/* the deck-glyph defaults, mirroring .doc-mode */
+.pres-mode{
+	--doc-accent:#eb4a26; --doc-paper:#ffffff; --doc-surface:#ffffff; --doc-text:#1a1d24;
+	--doc-muted:#6b7280; --doc-border:#e6e8ec; --doc-link:#eb4a26;
+}
+.pres-mode{padding:0}
+.strip{padding:20px 0 60px}
+.strip-scale{display:flex;flex-direction:column;align-items:center;gap:10px}
+.slide-item{display:flex;flex-direction:column;align-items:center;margin-bottom:26px;max-width:100%}
+.slide-holder{position:relative;margin:0 auto}
+
+/* Browse chrome — NOT scaled, so it stays readable however small the slide is. */
+.slide-meta{margin-top:10px;font-size:12.5px;color:var(--muted);font-weight:600;letter-spacing:.02em;text-align:center}
+.slide-notes{margin-top:6px;max-width:760px;font-size:13.5px;line-height:1.5;color:var(--muted);
+	text-align:center;white-space:pre-wrap;padding:0 16px}
+.slide-badge{position:absolute;top:10px;right:10px;z-index:6;background:var(--amber,#f59e0b);color:#1a1200;
+	font-size:11px;font-weight:700;letter-spacing:.01em;padding:4px 9px;border-radius:7px;
+	box-shadow:0 2px 6px rgba(16,20,30,.28)}
+.slide-badge[hidden]{display:none}
+
+/* The slide box: the light token set, wired to --doc-* with the literal fallbacks (an
+   unthemed deck renders on the defaults), exactly like .sheet. Fixed geometry, clipped. */
+.slide{
+	--bg:#f4f5f8; --panel:var(--doc-surface,#ffffff); --panel-2:#fafbfc;
+	--text:var(--doc-text,#1a1d24); --muted:var(--doc-muted,#6b7280);
+	--border:var(--doc-border,#e6e8ec); --border-2:#eef0f3;
+	--accent:var(--doc-accent,#eb4a26); --accent-soft:#fbe7e0;
+	--green:#10b981; --amber:#f59e0b; --red:#ef4444;
+	--code-kw:#6d28d9; --code-str:#047857; --code-num:#b45309; --code-fn:#0e7490;
+	--code-var:#be185d; --code-cmt:#6b7280; --code-meta:#4b5563; --code-add:#065f46; --code-del:#b91c1c;
+	--slide-fs:1;
+	color-scheme:light;
+	position:absolute;top:0;left:0;transform-origin:top left;
+	box-sizing:border-box;overflow:hidden;display:flex;flex-direction:column;
+	padding:46px 64px 58px;
+	background:var(--doc-paper,#fff);color:var(--text);
+	font-size:calc(24px * var(--slide-fs));line-height:1.35;
+	box-shadow:0 2px 8px rgba(16,20,30,.16),0 20px 50px rgba(16,20,30,.2);
+	border-radius:2px;
+}
+/* Dark paper: the semantic layer the --doc-* tokens cannot carry, mirroring .sheet's. */
+.pres-mode[data-paper="dark"] .slide{
+	--bg:#0e1014; --panel-2:#1b1f29; --border-2:#1f242e; --accent-soft:#2a1610;
+	--green:#34d399; --amber:#fbbf24; --red:#f87171;
+	--code-kw:#c4b5fd; --code-str:#6ee7b7; --code-num:#fcd34d; --code-fn:#67e8f9;
+	--code-var:#f9a8d4; --code-cmt:#8b93a1; --code-meta:#9aa3b0; --code-add:#6ee7b7; --code-del:#fca5a5;
+	color-scheme:dark;
+	box-shadow:0 0 0 1px rgba(255,255,255,.08),0 20px 50px rgba(0,0,0,.5);
+}
+.slide a{color:var(--doc-link,var(--doc-accent,#eb4a26))}
+
+/* Regions: the flex children autofit measures. min-height:0 + overflow:hidden make
+   scrollHeight the content height and clientHeight the space it was given. */
+.slide-region{min-height:0;overflow:hidden}
+.slide .block{margin:0}
+.slide-heading{flex:0 0 auto;font-size:1.5em;font-weight:700;letter-spacing:-.015em;
+	margin-bottom:.55em;color:var(--text)}
+
+/* centered furniture layouts: title, section, statement, closing */
+.st-center{flex:1 1 auto;display:flex;flex-direction:column;justify-content:center;align-items:center;
+	text-align:center;gap:.42em}
+.st-h1{margin:0;font-weight:700;letter-spacing:-.02em;line-height:1.08;color:var(--text)}
+.st-title .st-h1{font-size:2.85em}
+.st-section .st-h1{font-size:2.25em}
+.st-closing .st-h1{font-size:2.35em}
+.st-sub{font-size:1.2em;color:var(--muted);line-height:1.3}
+.st-meta{font-size:.86em;color:var(--muted);letter-spacing:.02em;margin-top:.5em}
+.st-statement .st-text{font-size:2.4em;font-weight:600;line-height:1.16;letter-spacing:-.015em;color:var(--text)}
+.st-attrib{font-size:1.05em;color:var(--muted)}
+.slide-logo{max-height:64px;max-width:200px;margin-bottom:.35em;object-fit:contain}
+
+/* content: a title over a body of blocks that fills the rest */
+.slide-body{flex:1 1 auto;display:flex;flex-direction:column;gap:18px}
+
+/* two-column: a comparison or any two-up content */
+.slide-2col{flex:1 1 auto;min-height:0;display:grid;gap:44px}
+.slide-2col.split-1-1{grid-template-columns:1fr 1fr}
+.slide-2col.split-1-2{grid-template-columns:1fr 2fr}
+.slide-2col.split-2-1{grid-template-columns:2fr 1fr}
+.slide-col{display:flex;flex-direction:column;min-height:0}
+.col-heading{flex:0 0 auto;font-size:1.05em;font-weight:700;color:var(--accent);
+	margin-bottom:.5em;padding-bottom:.35em;border-bottom:2px solid var(--accent)}
+.col-body{flex:1 1 auto;display:flex;flex-direction:column;gap:14px}
+
+/* quadrant: a 2x2 grid of four cells */
+.slide-quad{flex:1 1 auto;min-height:0;display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:26px}
+.slide-cell{display:flex;flex-direction:column;min-height:0;background:var(--panel);
+	border:1px solid var(--border);border-radius:12px;padding:22px 24px}
+.cell-heading{flex:0 0 auto;font-size:1.02em;font-weight:700;color:var(--accent);margin-bottom:.4em}
+.cell-body{flex:1 1 auto;display:flex;flex-direction:column;gap:10px}
+
+/* a lone chart / KPI row FILLS its region */
+.slide .slide-chart{flex:1 1 auto;min-height:0;display:flex;flex-direction:column}
+.slide .chart-title{font-size:.82em;font-weight:600;color:var(--muted);margin-bottom:6px}
+.slide .chart-box{flex:1 1 auto;width:100%;height:auto;min-height:0}
+.slide .kpis{display:flex;gap:22px;flex-wrap:wrap}
+.slide .kpi{flex:1 1 0;min-width:0;background:var(--panel);border:1px solid var(--border);
+	border-radius:14px;padding:20px 24px}
+.slide .kpi .label{font-size:.72em;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+.slide .kpi .value{font-size:2em;font-weight:700;letter-spacing:-.02em;margin-top:.15em}
+.slide .kpi .delta{font-size:.78em;margin-top:.3em}
+.slide .tbl{font-size:.8em}
+
+/* slide markdown: tighter than a document, sized to be read from across a room */
+.slide .md{line-height:1.4}
+.slide .md>:first-child{margin-top:0}
+.slide .md>:last-child{margin-bottom:0}
+.slide .md h1,.slide .md h2,.slide .md h3{margin:.5em 0 .35em;line-height:1.15}
+.slide .md h1{font-size:1.5em}.slide .md h2{font-size:1.28em}.slide .md h3{font-size:1.1em}
+.slide .md p,.slide .md ul,.slide .md ol{margin:.4em 0}
+.slide .md li{margin:.28em 0}
+.slide .md ul,.slide .md ol{padding-left:1.15em}
+.slide .md pre{white-space:pre-wrap;overflow-wrap:anywhere}
+
+/* autofit: three class-based type-scale steps before clipping (D6) */
+.slide.fit-1{--slide-fs:.9}
+.slide.fit-2{--slide-fs:.8}
+.slide.fit-3{--slide-fs:.7}
+
+/* declared running footer, on every slide but title/closing */
+.slide-footer{position:absolute;left:64px;right:64px;bottom:22px;display:flex;
+	align-items:baseline;font-size:.6em;color:var(--muted);gap:16px}
+.slide-footer .sf{flex:1 1 0;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.slide-footer .sf-c{text-align:center}
+.slide-footer .sf-r{text-align:right}
+
+/* full-bleed background (furniture layouts): image -> scrim -> content, reusing the cover
+   machinery. z-index on flex items needs NO position (the .sheet cover lesson). */
+.slide.has-bg{background-repeat:no-repeat}
+.slide.has-bg .cover-scrim{position:absolute;inset:0;z-index:0}
+.slide.has-bg>*:not(.cover-scrim){z-index:1}
+.slide.has-ink,.slide.has-ink .st-h1,.slide.has-ink .st-text{color:var(--cover-ink)}
+.slide.has-ink .st-sub,.slide.has-ink .st-meta,.slide.has-ink .st-attrib{color:var(--cover-ink);opacity:.82}
+
+/* the Present control: island pill in the view-toggle slot */
+.present-btn{display:flex;align-items:center;gap:6px;padding:5px 13px;border:none;border-radius:999px;
+	background:var(--island-hover);color:var(--island-fg);flex:0 0 auto}
+.present-btn:hover{background:rgba(255,255,255,.18)}
+.present-btn[hidden]{display:none}
+.present-btn .lucide{width:15px;height:15px}
+.present-label{font-size:12.5px;font-weight:600;letter-spacing:.01em}
+
 @media print{
 	.pal{display:none !important}
 	html{print-color-adjust:exact;-webkit-print-color-adjust:exact}
