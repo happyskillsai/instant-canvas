@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-07-15
+
 ### Changed
 - **Sidebar folders start collapsed; the active canvas's folder opens itself.** With the
   recursive scan a workspace can list dozens of collections, and a wall of expanded
