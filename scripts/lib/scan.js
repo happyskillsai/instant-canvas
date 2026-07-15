@@ -106,9 +106,39 @@ function entriesInDir(root, relDir, index) {
 }
 
 /**
+ * Every directory under the root, as relative paths, at ANY depth — parents
+ * before their children, siblings A→Z. Dot-entries and node_modules are
+ * skipped wholesale, and a symlinked directory is never followed (a dirent's
+ * isDirectory() is false for symlinks): the scan lists the tree, it must not
+ * wander out of it or loop inside it. The watcher's per-directory fallback
+ * walks this same list, so what the sidebar shows is what hot reload covers.
+ */
+function dirsUnder(root, relDir = '') {
+	const abs = relDir ? path.join(root, relDir) : root
+	let dirents = []
+	try {
+		dirents = fs.readdirSync(abs, { withFileTypes: true })
+	} catch {
+		return [] // unreadable directory → nothing below it
+	}
+	const out = []
+	const dirs = dirents
+		.filter((d) => d.isDirectory() && !isSkippable(d.name))
+		.sort((a, b) => a.name.localeCompare(b.name))
+	for (const d of dirs) {
+		const rel = relDir ? path.join(relDir, d.name) : d.name
+		out.push(rel, ...dirsUnder(root, rel))
+	}
+	return out
+}
+
+/**
  * Scan a workspace: canvases and markdown documents at the root (collection
- * "(root)", listed first) plus one subfolder level (subfolder name =
- * collection). Dot-entries and node_modules skipped; collections sorted A→Z.
+ * "(root)", listed first) plus EVERY folder in the tree that holds at least
+ * one renderable entry (collection name = the folder's relative path). A
+ * folder with nothing renderable in it is not listed — the sidebar shows
+ * answers, not directory structure. Dot-entries and node_modules skipped;
+ * collections in tree order (a folder before its subfolders, siblings A→Z).
  *
  * The companion index is built ONCE, up front, and threaded through — a companion
  * lookup per document would re-read every canvas in the tree for every markdown file
@@ -120,47 +150,19 @@ function scan(root) {
 	const rootEntries = entriesInDir(root, '', index)
 	if (rootEntries.length)
 		collections.push({ name: '(root)', canvases: rootEntries })
-	let dirs = []
-	try {
-		dirs = fs.readdirSync(root, { withFileTypes: true })
-			.filter((d) => d.isDirectory() && !isSkippable(d.name))
-			.map((d) => d.name)
-			.sort((a, b) => a.localeCompare(b))
-	} catch { /* unreadable root → empty tree */ }
-	for (const dir of dirs) {
+	for (const dir of dirsUnder(root)) {
 		const entries = entriesInDir(root, dir, index)
 		if (entries.length)
-			collections.push({ name: dir, canvases: entries })
+			collections.push({ name: dir.split(path.sep).join('/'), canvases: entries })
 	}
 	const tally = (kind) => collections.reduce((a, c) => a + c.canvases.filter((e) => e.kind === kind).length, 0)
 	return {
 		collections,
-		// `count` stays the canvas count it has always been — the delete dialog and
-		// the sidebar stat both mean canvases by it, and a document is not one.
+		// `count` stays the canvas count it has always been — the sidebar stat
+		// means canvases by it, and a document is not one.
 		count: tally('canvas'),
 		docCount: tally('document'),
 	}
 }
 
-/**
- * What a directory would expose as a workspace (same 2-level depth as scan),
- * counted by kind. The folder browser asks "is there anything to see in here",
- * and a folder of markdown answers yes — so documents count, but they are
- * counted apart, because a badge that says "canvases" must mean canvases.
- */
-function counts(dir) {
-	try {
-		const t = scan(dir)
-		return { canvases: t.count, docs: t.docCount }
-	} catch {
-		return { canvases: 0, docs: 0 }
-	}
-}
-
-/** Total renderable entries a directory would expose. */
-function canvasCount(dir) {
-	const c = counts(dir)
-	return c.canvases + c.docs
-}
-
-module.exports = { scan, counts, canvasCount, readCanvasFile, MAX_CANVAS_BYTES }
+module.exports = { scan, dirsUnder, readCanvasFile, MAX_CANVAS_BYTES }

@@ -159,24 +159,6 @@ test('hardening: WRITE_FAILED, SESSION_TIMEOUT, INTERNAL_ERROR, and cross-worksp
 		assert.equal(malformed.status, 400)
 		assert.equal(malformed.json.error.code, 'INTERNAL_ERROR')
 
-		// cross-workspace open spawns a second kernel and returns its tokenized URL
-		const other = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'ic-hard2-')))
-		fs.copyFileSync(path.join(__dirname, 'fixtures', 'valid-display.canvas.json'), path.join(other, 'r.canvas.json'))
-		const opened2 = await api('POST', '/api/workspace/open', { path: other })
-		assert.equal(opened2.status, 200)
-		assert.match(opened2.json.url, /^http:\/\/127\.0\.0\.1:\d+\/\?token=/)
-		const otherEntry = await registry.readAlive(other)
-		assert.ok(otherEntry, 'second kernel registered')
-		assert.notEqual(otherEntry.port, entry.port)
-		const stop2 = await api('POST', '/api/workspace/open', { path: other }) // reuse, not respawn
-		assert.equal(new URL(stop2.json.url).port, String(otherEntry.port))
-		// shut the second kernel down
-		await new Promise((resolve) => {
-			const req = http.request({ host: '127.0.0.1', port: otherEntry.port, method: 'POST', path: '/api/shutdown', headers: { 'X-IC-Token': otherEntry.token, 'Content-Type': 'application/json', 'Content-Length': 2 } }, (res) => { res.resume(); res.on('end', resolve) })
-			req.on('error', resolve)
-			req.write('{}')
-			req.end()
-		})
 	} finally {
 		fs.chmodSync(path.join(root, 'ro'), 0o755)
 		await api('POST', '/api/shutdown', {}).catch(() => {})

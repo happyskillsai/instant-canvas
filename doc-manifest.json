@@ -67,7 +67,7 @@
         "Hot reload",
         "Version handshake"
       ],
-      "line_count": 175,
+      "line_count": 172,
       "links_to": [
         "docs/canvas-schema.md",
         "docs/cli.md",
@@ -217,7 +217,7 @@
     },
     {
       "dangling": false,
-      "description": "The browser app — shell, sidebar, canvas search, folder browser, block renderers, bespoke form widgets, chart mapping, sweeps, theming, and the CSP constraints that shape the code.",
+      "description": "The browser app — shell, sidebar, canvas search, block renderers, bespoke form widgets, chart mapping, sweeps, theming, and the CSP constraints that shape the code.",
       "has_frontmatter": true,
       "headings": [
         "Frontend",
@@ -232,7 +232,7 @@
         "CSP shim",
         "Icons and vendored assets"
       ],
-      "line_count": 111,
+      "line_count": 110,
       "links_to": [
         "docs/architecture.md",
         "docs/canvas-schema.md",
@@ -629,7 +629,7 @@
         "Security regressions",
         "Browser verification"
       ],
-      "line_count": 100,
+      "line_count": 99,
       "links_to": [
         "docs/gotchas/frontend.md",
         "docs/gotchas/testing.md",

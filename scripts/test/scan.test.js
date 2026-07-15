@@ -5,7 +5,7 @@ const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
-const { scan, canvasCount } = require('../lib/scan')
+const { scan } = require('../lib/scan')
 const { Sessions } = require('../lib/session')
 
 const FIXTURES = path.join(__dirname, 'fixtures')
@@ -18,21 +18,24 @@ function makeRoot() {
 	fs.copyFileSync(path.join(FIXTURES, 'valid-form.canvas.json'), path.join(root, 'zeta', 'form.canvas.json'))
 	fs.mkdirSync(path.join(root, 'alpha'))
 	fs.copyFileSync(path.join(FIXTURES, 'valid-display.canvas.json'), path.join(root, 'alpha', 'x.canvas.json'))
-	fs.mkdirSync(path.join(root, 'alpha', 'nested')) // depth 2 — ignored
+	fs.mkdirSync(path.join(root, 'alpha', 'nested')) // depth 2 — the scan reaches it
 	fs.copyFileSync(path.join(FIXTURES, 'valid-display.canvas.json'), path.join(root, 'alpha', 'nested', 'deep.canvas.json'))
+	fs.mkdirSync(path.join(root, 'alpha', 'empty')) // no renderable file → never listed
 	fs.writeFileSync(path.join(root, 'package.json'), '{"name":"not-a-canvas"}')
 	fs.writeFileSync(path.join(root, 'notes.txt'), 'not json')
 	return root
 }
 
-test('scan: marker discrimination, 2-level depth, (root) first, A→Z ordering', () => {
+test('scan: marker discrimination, any depth, (root) first, tree ordering', () => {
 	const root = makeRoot()
 	const tree = scan(root)
-	assert.deepEqual(tree.collections.map((c) => c.name), ['(root)', 'alpha', 'zeta'])
+	// A folder before its subfolders, siblings A→Z; a folder with nothing
+	// renderable in it ("alpha/empty") is not a collection.
+	assert.deepEqual(tree.collections.map((c) => c.name), ['(root)', 'alpha', 'alpha/nested', 'zeta'])
 	assert.deepEqual(tree.collections[0].canvases.map((c) => c.id), ['10-a.canvas.json', '20-b.canvas.json'])
-	assert.equal(tree.count, 4, 'depth-2 nested canvas and non-canvases excluded')
-	assert.equal(tree.collections[2].canvases[0].interactive, true)
-	assert.equal(canvasCount(root), 4)
+	assert.deepEqual(tree.collections[2].canvases.map((c) => c.id), ['alpha/nested/deep.canvas.json'])
+	assert.equal(tree.count, 5, 'canvases at every depth counted; non-canvases excluded')
+	assert.equal(tree.collections[3].canvases[0].interactive, true)
 })
 
 test('scan: oversized json and invalid json are ignored', () => {

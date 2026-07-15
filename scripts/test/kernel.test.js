@@ -528,61 +528,21 @@ test('kernel: interactive open creates a session; polling and cancel round-trip'
 	assert.equal(done.json.result.status, 'cancelled')
 })
 
-test('kernel: browse lists directories with canvas counts', async () => {
-	const r = await httpReq({ port: K.port, method: 'POST', path: '/api/browse', headers: K.auth, body: { dir: K.root } })
-	assert.equal(r.status, 200)
-	const marketing = r.json.entries.find((e) => e.name === 'marketing')
-	assert.equal(marketing.canvasCount, 2)
-	assert.ok(!r.json.entries.some((e) => e.name === 'node_modules' || e.name.startsWith('.')))
-	assert.equal(typeof r.json.parent, 'string')
-})
-
-test('kernel: browse counts a markdown-only folder as worth opening, but not as canvases', async () => {
-	// The badge answers "is there anything to see in here" — a folder of markdown
-	// says yes. It must not call them canvases: nothing there can be deleted, and
-	// the two counts drive two different promises.
-	const dir = path.join(K.root, 'docsonly')
-	fs.mkdirSync(dir)
-	fs.writeFileSync(path.join(dir, 'a.md'), '# A\n')
-	fs.writeFileSync(path.join(dir, 'b.md'), '# B\n')
-
-	const r = await httpReq({ port: K.port, method: 'POST', path: '/api/browse', headers: K.auth, body: { dir: K.root } })
-	const entry = r.json.entries.find((e) => e.name === 'docsonly')
-	assert.equal(entry.canvasCount, 2, 'worth opening')
-	assert.equal(entry.canvases, 0, 'but none of them are canvases')
-	assert.equal(entry.docs, 2)
-
-	// And delete would find nothing to remove — which is why the sidebar offers no
-	// delete button for a collection like this one.
-	const del = await httpReq({ port: K.port, method: 'POST', path: '/api/collection/delete', headers: K.auth, body: { name: 'docsonly' } })
-	assert.equal(del.json.removedCanvases, 0)
-	assert.equal(del.json.removedFolder, false, 'the documents are still there, so the folder stays')
-	assert.ok(fs.existsSync(path.join(dir, 'a.md')), 'a document is never deleted')
-})
-
-test('kernel: collection delete removes canvas files only, refuses root and traversal', async () => {
-	const dir = path.join(K.root, 'todelete')
+test('kernel: the removed reader-facing routes are gone — 404, and nothing is deleted or listed', async () => {
+	// /api/browse (the only unconfined route this kernel ever had),
+	// /api/workspace/open and /api/collection/delete were removed with the
+	// sidebar "+" and the folder delete. A 404 here is the perimeter holding:
+	// every remaining route answers only for the workspace it serves.
+	const dir = path.join(K.root, 'undeletable')
 	fs.mkdirSync(dir)
 	fs.copyFileSync(path.join(FIXTURES, 'valid-display.canvas.json'), path.join(dir, 'a.canvas.json'))
-	fs.copyFileSync(path.join(FIXTURES, 'valid-display.canvas.json'), path.join(dir, 'b.canvas.json'))
-	fs.writeFileSync(path.join(dir, 'keep.txt'), 'not a canvas')
 
-	const r = await httpReq({ port: K.port, method: 'POST', path: '/api/collection/delete', headers: K.auth, body: { name: 'todelete' } })
-	assert.equal(r.status, 200)
-	assert.equal(r.json.removedCanvases, 2)
-	assert.equal(r.json.removedFolder, false, 'folder kept — it still holds a non-canvas file')
-	assert.ok(fs.existsSync(path.join(dir, 'keep.txt')), 'non-canvas file untouched')
-	assert.ok(!fs.existsSync(path.join(dir, 'a.canvas.json')))
-
-	fs.unlinkSync(path.join(dir, 'keep.txt'))
-	const again = await httpReq({ port: K.port, method: 'POST', path: '/api/collection/delete', headers: K.auth, body: { name: 'todelete' } })
-	assert.equal(again.json.removedFolder, true, 'now-empty folder removed')
-	assert.ok(!fs.existsSync(dir))
-
-	assert.equal((await httpReq({ port: K.port, method: 'POST', path: '/api/collection/delete', headers: K.auth, body: { name: '(root)' } })).status, 400)
-	assert.equal((await httpReq({ port: K.port, method: 'POST', path: '/api/collection/delete', headers: K.auth, body: { name: '../evil' } })).status, 400)
-	assert.equal((await httpReq({ port: K.port, method: 'POST', path: '/api/collection/delete', headers: K.auth, body: { name: '.hidden' } })).status, 400)
-	assert.equal((await httpReq({ port: K.port, method: 'POST', path: '/api/collection/delete', headers: K.auth, body: { name: 'nope' } })).status, 404)
+	for (const p of ['/api/browse', '/api/workspace/open', '/api/collection/delete']) {
+		const r = await httpReq({ port: K.port, method: 'POST', path: p, headers: K.auth, body: { dir: K.root, path: K.root, name: 'undeletable' } })
+		assert.equal(r.status, 404, `${p} must not exist`)
+	}
+	assert.ok(fs.existsSync(path.join(dir, 'a.canvas.json')), 'nothing was deleted by the dead route')
+	fs.rmSync(dir, { recursive: true, force: true })
 })
 
 test('kernel: shutdown removes the registry entry and exits 0', async () => {

@@ -7,14 +7,12 @@
 const http = require('node:http')
 const fs = require('node:fs')
 const path = require('node:path')
-const os = require('node:os')
 const crypto = require('node:crypto')
-const { spawn } = require('node:child_process')
 
 const { normalizeRoot, insideRoot, stateDir } = require('./lib/paths')
 const registry = require('./lib/registry')
 const { registerSecret, redact, errorOut } = require('./lib/redact')
-const { scan, counts, readCanvasFile, MAX_CANVAS_BYTES } = require('./lib/scan')
+const { scan, dirsUnder, readCanvasFile, MAX_CANVAS_BYTES } = require('./lib/scan')
 const { validate, collectBlocks, isInteractiveBlock, flattenFields } = require('./lib/validate')
 const { readMarkdownSrc, inlineLocalImages, inlineImageFile, hasMarkdownExtension, renderableMarkdown, MAX_COVER_IMAGE_BYTES } = require('./lib/markdownsrc')
 const { virtualCanvasFor } = require('./lib/mdcanvas')
@@ -742,70 +740,6 @@ async function route(req, res, url) {
 		}
 	}
 
-	// Delete a sidebar collection: removes only CANVAS files (marker-checked)
-	// directly inside the depth-1 subfolder, then the folder itself if empty.
-	// Non-canvas content is never touched; "(root)" (the workspace) is refused.
-	if (method === 'POST' && p === '/api/collection/delete') {
-		const body = await readBody(req)
-		const name = String(body.name || '')
-		if (!name || name === '(root)' || name.includes('/') || name.includes('\\') || name.startsWith('.'))
-			return sendJson(res, 400, { ok: false, message: 'Only first-level collection folders can be deleted.' })
-		const dir = path.join(ROOT, name)
-		if (!insideRoot(ROOT, dir) || !fs.existsSync(dir) || !fs.statSync(dir).isDirectory())
-			return sendJson(res, 404, { ok: false, message: 'No such collection folder.' })
-		let removedCanvases = 0
-		for (const entry of fs.readdirSync(dir)) {
-			const abs = path.join(dir, entry)
-			if (entry.endsWith('.json') && readCanvasFile(abs)) {
-				fs.unlinkSync(abs)
-				removedCanvases++
-			}
-		}
-		let removedFolder = false
-		if (fs.readdirSync(dir).length === 0) {
-			fs.rmdirSync(dir)
-			removedFolder = true
-		}
-		klog('collection deleted:', name, `(${removedCanvases} canvases, folder removed: ${removedFolder})`)
-		return sendJson(res, 200, { ok: true, removedCanvases, removedFolder })
-	}
-
-	if (method === 'POST' && p === '/api/browse') {
-		const body = await readBody(req)
-		const dir = path.resolve(String(body.dir || os.homedir()))
-		let names
-		try {
-			names = fs.readdirSync(dir, { withFileTypes: true })
-		} catch {
-			return sendJson(res, 400, { ok: false, message: 'Cannot list that directory.' })
-		}
-		const entries = names
-			.filter((d) => d.isDirectory() && !d.name.startsWith('.') && d.name !== 'node_modules')
-			.sort((a, b) => a.name.localeCompare(b.name))
-			.map((d) => {
-				const abs = path.join(dir, d.name)
-				const c = counts(abs)
-				// canvasCount stays the total (it answers "is this folder worth
-				// opening"); the split is what the badge needs to name them honestly.
-				return { name: d.name, path: abs, canvasCount: c.canvases + c.docs, canvases: c.canvases, docs: c.docs }
-			})
-		const parent = path.dirname(dir)
-		return sendJson(res, 200, { ok: true, dir, parent: parent === dir ? null : parent, entries })
-	}
-
-	if (method === 'POST' && p === '/api/workspace/open') {
-		const body = await readBody(req)
-		const target = path.resolve(String(body.path || ''))
-		if (!fs.existsSync(target) || !fs.statSync(target).isDirectory())
-			return sendJson(res, 400, { ok: false, message: 'Not a directory.' })
-		if (normalizeRoot(target) === NORM_ROOT)
-			return sendJson(res, 200, { ok: true, url: `http://127.0.0.1:${PORT}/?token=${TOKEN}` })
-		const entry = await ensureKernelFor(target)
-		if (!entry)
-			return sendJson(res, 502, { ok: false, error: { code: 'KERNEL_UNREACHABLE', message: 'Could not start a kernel for that folder.' } })
-		return sendJson(res, 200, { ok: true, url: `http://127.0.0.1:${entry.port}/?token=${entry.token}` })
-	}
-
 	if (method === 'POST' && p === '/api/shutdown') {
 		sendJson(res, 200, { ok: true, stopping: true })
 		setTimeout(() => shutdown(0, 'shutdown requested'), 30)
@@ -813,35 +747,6 @@ async function route(req, res, url) {
 	}
 
 	return sendJson(res, 404, { ok: false, message: 'Not found.' })
-}
-
-// Reuse-or-spawn a kernel for another root, using this kernel's own code
-// (accepted asymmetry per spec).
-async function ensureKernelFor(target) {
-	let entry = await registry.readAlive(target)
-	if (entry)
-		return entry
-	const lock = await registry.acquireSpawnLock(target)
-	if (!lock.acquired)
-		return lock.entry
-	try {
-		const child = spawn(process.execPath, [__filename, target], {
-			detached: process.platform !== 'win32',
-			stdio: 'ignore',
-			windowsHide: true,
-		})
-		child.unref()
-		const deadline = Date.now() + 10000
-		while (Date.now() < deadline) {
-			entry = await registry.readAlive(target)
-			if (entry)
-				return entry
-			await new Promise((r) => setTimeout(r, 250))
-		}
-		return null
-	} finally {
-		lock.release()
-	}
 }
 
 // ---------------------------------------------------------------- static
@@ -1048,16 +953,12 @@ function startWatcher() {
 	try {
 		fs.watch(ROOT, { recursive: true }, onFsEvent)
 	} catch {
-		// Recursive watch unsupported → per-directory watchers over the 2-level scan depth.
+		// Recursive watch unsupported → per-directory watchers over the same tree
+		// the scan walks, so everything the sidebar lists hot-reloads.
 		fs.watch(ROOT, (e, f) => onFsEvent(e, f))
-		let dirs = []
-		try {
-			dirs = fs.readdirSync(ROOT, { withFileTypes: true })
-				.filter((d) => d.isDirectory() && !d.name.startsWith('.') && d.name !== 'node_modules')
-		} catch { /* empty */ }
-		for (const d of dirs) {
+		for (const d of dirsUnder(ROOT)) {
 			try {
-				fs.watch(path.join(ROOT, d.name), (e, f) => onFsEvent(e, path.join(d.name, f || '')))
+				fs.watch(path.join(ROOT, d), (e, f) => onFsEvent(e, path.join(d, f || '')))
 			} catch { /* directory vanished */ }
 		}
 		klog('recursive fs.watch unavailable — using per-directory watchers')

@@ -113,10 +113,12 @@ test.before(async () => {
 						text: el.textContent.trim(),
 					})),
 					stats: (document.getElementById('wsStats') || {}).textContent || '',
-				// A delete button that would delete nothing must not be offered.
+				// Folder delete was removed outright — no group may offer one.
+				delButtons: document.querySelectorAll('#tree [data-del-group], #tree .grp-del').length,
+				// Folders are collapsed by default; only the active canvas's folder opens.
 				groups: [...document.querySelectorAll('#tree .group')].map((g) => ({
 					name: (g.querySelector('.group-row') || {}).dataset.group,
-					deletable: !!g.querySelector('[data-del-group]'),
+					collapsed: g.classList.contains('collapsed'),
 				})),
 					h1: (md.querySelector('h1') || {}).textContent || '',
 					text: md.textContent,
@@ -162,15 +164,21 @@ test('the sidebar lists the markdown file itself, distinguished from a canvas', 
 	assert.match(snap.stats, /2 canvases · 3 docs · 3 groups/, 'canvases and documents are counted apart')
 })
 
-test('a collection with nothing deletable is offered no delete button', { skip, timeout: 120_000 }, () => {
-	// Delete removes marker-verified canvases and nothing else. On a folder of
-	// documents the dialog would promise zero files and the click would do
-	// nothing — a control that lies. The kernel agrees: it deletes no document
-	// and, because they remain, does not remove the folder either.
-	const byName = Object.fromEntries(snap.groups.map((g) => [g.name, g.deletable]))
-	assert.equal(byName.mixed, true, 'a folder holding a canvas can be emptied of canvases')
-	assert.equal(byName.docsonly, false, 'a folder holding only documents cannot')
-	assert.equal(byName['(root)'], false, 'the workspace root is never deletable')
+test('the sidebar offers no folder delete — the feature was removed outright', { skip, timeout: 120_000 }, () => {
+	// The reader's browser can change what a file SAYS (a theme), never destroy
+	// it. Folder deletion was removed with the sidebar "+": the affordance must
+	// be GONE from the DOM, not merely hidden by CSS.
+	assert.equal(snap.delButtons, 0)
+})
+
+test('folders start collapsed; only the active canvas\'s folder is open', { skip, timeout: 120_000 }, () => {
+	// A recursive workspace can list dozens of collections — a wall of expanded
+	// folders buries the one canvas being read. The open document (README.md,
+	// at the root) derives its group open; every other folder starts shut.
+	const byName = Object.fromEntries(snap.groups.map((g) => [g.name, g.collapsed]))
+	assert.equal(byName['(root)'], false, 'the folder holding the open canvas is expanded')
+	assert.equal(byName.mixed, true, 'a folder the reader is not in starts collapsed')
+	assert.equal(byName.docsonly, true, 'a folder the reader is not in starts collapsed')
 })
 
 test('a README renders as a document — HTML gone, badge labeled, content intact', { skip, timeout: 120_000 }, () => {

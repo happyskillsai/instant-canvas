@@ -21,11 +21,11 @@ Chrome echoes the request's `Host` back when it builds `webSocketDebuggerUrl`. S
 
 ## Waiting for an element does not mean the app is listening
 
-The topbar and sidebar ship in the static `index.html`, so `#openSearch` and `#openFolder` exist from the first paint — long before `app.js` runs and attaches their click handlers. A browser test that polls for the *element* and then clicks it clicks into the void: the handler is not bound yet, nothing opens, and the failure surfaces much later as a timeout on some unrelated step. Poll for the app instead — `window.ic && window.ic.state.tree` — which only exists once `app.js` has booted. Both `browse.test.js` and `search.test.js` do.
+The topbar and sidebar ship in the static `index.html`, so a control like `#openSearch` exists from the first paint — long before `app.js` runs and attaches its click handler. A browser test that polls for the *element* and then clicks it clicks into the void: the handler is not bound yet, nothing opens, and the failure surfaces much later as a timeout on some unrelated step. Poll for the app instead — `window.ic && window.ic.state.tree` — which only exists once `app.js` has booted. `search.test.js` does.
 
 ## A throwing `waitFor` in a `before` hook reports the wrong failure
 
-When one driving step never happens, a helper that throws sinks the whole `test.before` hook, and *every* top-level test in the file then fails with the same "timed out waiting for X" — including the ones that had nothing to do with X. The first run of `browse.test.js` reported five failures for one broken step, and none of the messages named the real defect. Make the poll return `false` on timeout (`until()`), record it in the snapshot, and let one assertion fail with a real message. Reserve throwing for genuine environment failures, like the app never booting.
+When one driving step never happens, a helper that throws sinks the whole `test.before` hook, and *every* top-level test in the file then fails with the same "timed out waiting for X" — including the ones that had nothing to do with X. The first run of the since-removed `browse.test.js` reported five failures for one broken step, and none of the messages named the real defect. Make the poll return `false` on timeout (`until()`), record it in the snapshot, and let one assertion fail with a real message. Reserve throwing for genuine environment failures, like the app never booting.
 
 ## A new test that cannot fail is worse than no test
 
@@ -35,7 +35,7 @@ The render smoke test was written, passed, and proved nothing until the bug it t
 
 `registry.readAlive()` proves liveness with a **500 ms health ping, and unregisters the entry when that ping times out** — which is exactly right in production (it is what makes `kill -9` recovery automatic) and a trap in a test. Under full-suite load a dozen kernels and several headless Chromes are already up, the ping loses its race, and `readAlive` cheerfully deletes the registry entry of a kernel that is listening perfectly happily. Every later poll then finds nothing, and the hook concludes *"kernel did not come up"* about a kernel you can `curl` by hand.
 
-The blast radius is the part that hurts. `scripts/test/index.js` requires every test file into **one process**, so a top-level `test.before` is a hook on the *root* suite: one throwing hook fails **every test in the suite** — 243 of them — all reporting an error that names a file which is not the one that failed. Two suites had this and both were fine until the suite grew heavy enough to lose the race, at which point `npm test` went from green to 243 red with no code change to the runtime at all.
+The blast radius is the part that hurts. `scripts/test/index.js` requires every test file into **one process**, so a top-level `test.before` is a hook on the *root* suite: one throwing hook fails **every test in the suite** — 243 of them at the time — all reporting an error that names a file which is not the one that failed. Two suites had this and both were fine until the suite grew heavy enough to lose the race, at which point `npm test` went from green to 243 red with no code change to the runtime at all.
 
 So a before hook polls `registry.read()` (raw, no side effect), confirms liveness with its own `/healthz` request, and gives load a deadline it cannot beat. `print.test.js` learned this first and its comment says so; `kernel.test.js` and `document.test.js` now do the same. **Never call `readAlive` from a hook whose failure takes the suite with it.**
 

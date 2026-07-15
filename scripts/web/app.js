@@ -34,7 +34,7 @@ const state = {
 	tree: null,
 	activeId: null,
 	activePage: 0,
-	collapsed: new Set(),
+	groupOpen: new Map(), // group name → reader's explicit open/closed choice; absent = derived from activeId
 	charts: [], // {el, block} for every mounted Plotly graph in the current view
 	observers: [],
 	canvasDoc: null,
@@ -81,16 +81,13 @@ const LUCIDE = {
 	'chevron-left': '<path d="m15 18-6-6 6-6"/>',
 	'chevron-right': '<path d="m9 18 6-6-6-6"/>',
 	'clock': '<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>',
-	'corner-left-up': '<path d="M14 9 9 4 4 9"/><path d="M20 20h-7a4 4 0 0 1-4-4V4"/>',
 	'eye': '<path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/>',
 	'eye-off': '<path d="M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49"/><path d="M14.084 14.158a3 3 0 0 1-4.242-4.242"/><path d="M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143"/><path d="m2 2 20 20"/>',
 	'file-text': '<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/>',
 	'folder': '<path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/>',
-	'folder-open': '<path d="m6 14 1.5-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.54 6a2 2 0 0 1-1.95 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H18a2 2 0 0 1 2 2v2"/>',
 	'house': '<path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"/><path d="M3 10a2 2 0 0 1 .709-1.528l7-6a2 2 0 0 1 2.582 0l7 6A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
 	'info': '<circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/>',
 	'plus': '<path d="M5 12h14"/><path d="M12 5v14"/>',
-	'trash-2': '<path d="M10 11v6"/><path d="M14 11v6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>',
 	'lock': '<rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>',
 	'octagon-alert': '<path d="M12 16h.01"/><path d="M12 8v4"/><path d="M15.312 2a2 2 0 0 1 1.414.586l4.688 4.688A2 2 0 0 1 22 8.688v6.624a2 2 0 0 1-.586 1.414l-4.688 4.688a2 2 0 0 1-1.414.586H8.688a2 2 0 0 1-1.414-.586l-4.688-4.688A2 2 0 0 1 2 15.312V8.688a2 2 0 0 1 .586-1.414l4.688-4.688A2 2 0 0 1 8.688 2z"/>',
 	'triangle-alert': '<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/>',
@@ -1129,12 +1126,27 @@ function findCanvas(id) {
 	return null
 }
 
+/** The collection a canvas id lives in — its folder path, or "(root)" at the top. */
+const groupOf = (id) => (id && id.includes('/') ? id.slice(0, id.lastIndexOf('/')) : id ? '(root)' : null)
+
+// Folders are CLOSED by default — a recursive workspace can hold dozens of
+// collections, and a wall of expanded folders buries the one canvas being
+// read. The group holding the active canvas derives open, so the sidebar
+// always shows where the reader is; everything else stays shut until the
+// reader opens it. Their explicit clicks (state.groupOpen) outrank the
+// derivation both ways — collapsing the active group is respected until the
+// next navigation into it (route() clears that override, because opening a
+// canvas must reveal it).
+function groupIsOpen(g) {
+	return state.groupOpen.has(g.name) ? state.groupOpen.get(g.name) : g.name === groupOf(state.activeId)
+}
+
 function renderTree() {
 	const tree = $('tree')
 	if (!state.tree) { tree.innerHTML = '' ; return }
 	const rootBase = state.tree.root.split('/').filter(Boolean).pop() || state.tree.root
 	tree.innerHTML = state.tree.collections.map((g) => {
-		const isC = state.collapsed.has(g.name)
+		const isC = !groupIsOpen(g)
 		const isRoot = g.name === '(root)' // canvases living directly in the workspace folder
 		// A document is a markdown file the runtime renders as itself — same click,
 		// same canvas, but it was not authored for us, so it does not wear the
@@ -1149,16 +1161,10 @@ function renderTree() {
 			<div class="item ${c.id === state.activeId ? 'active' : ''}" data-canvas="${esc(c.id)}" title="${esc(c.id)}${c.enhanced ? ` — enhanced by ${esc(c.enhanced)} (cover, theme, page setup)` : ''}">
 				${c.kind === 'document' ? `<span class="doc-ico">${icon('file-text')}</span>` : '<span class="dot"></span>'}${esc(c.title)}${c.enhanced ? '<span class="enh-dot" aria-label="enhanced by a companion canvas"></span>' : ''}
 			</div>`).join('')
-		// Delete removes marker-verified canvases and nothing else, so a folder that
-		// holds only documents has nothing for it to remove. Offering the button
-		// there would be a control that lies: the dialog would promise zero files
-		// and the click would do nothing.
-		const deletable = !isRoot && g.canvases.some((c) => c.kind !== 'document')
 		return `<div class="group ${isC ? 'collapsed' : ''}">
 			<div class="group-row" data-group="${esc(g.name)}" ${isRoot ? `title="Canvases and documents directly inside the workspace folder (${esc(state.tree.root)})"` : ''}>
 				<span class="caret">${icon('chevron-down')}</span>${icon(isRoot ? 'house' : 'folder')}
 				<span class="gname">${esc(isRoot ? rootBase : g.name)}</span>
-				${deletable ? `<button class="grp-del" data-del-group="${esc(g.name)}" title="Delete this folder's canvases from disk">${icon('trash-2')}</button>` : ''}
 			</div>
 			<div class="items">${items}</div>
 		</div>`
@@ -1214,49 +1220,12 @@ $('rootpathGroup').addEventListener('click', async () => {
 	flashCopied($('rootpathCopy'), await copyText(fullRootPath))
 })
 
-async function deleteCollection(name) {
-	const group = state.tree && state.tree.collections.find((c) => c.name === name)
-	// Canvases only: the kernel deletes marker-verified *.json and nothing else,
-	// so a folder's markdown documents are listed here but never removed — the
-	// count must promise exactly what the delete does.
-	const entries = group ? group.canvases : []
-	const count = entries.filter((c) => c.kind !== 'document').length
-	const docs = entries.length - count
-	const yes = await askConfirmation({
-		title: `Delete folder "${name}"?`,
-		bodyHtml: `<p>This deletes the <b>${count}</b> canvas file${count === 1 ? '' : 's'} inside <code>${esc(name)}/</code> from disk.
-			${docs ? `Its <b>${docs}</b> markdown document${docs === 1 ? '' : 's'} and all other non-canvas files are left alone` : 'Non-canvas files are left alone'};
-			the folder itself is removed only if it ends up empty.</p>`,
-		confirmLabel: 'Delete',
-	})
-	if (!yes)
-		return
-	const { status, json } = await api('/api/collection/delete', { method: 'POST', body: JSON.stringify({ name }) })
-	if (status === 200 && json && json.ok) {
-		toast(`Deleted ${json.removedCanvases} canvas${json.removedCanvases === 1 ? '' : 'es'}${json.removedFolder ? ' and removed the folder' : ''}.`)
-		if (state.activeId && state.activeId.startsWith(name + '/'))
-			location.hash = ''
-		const ws = await api('/api/workspace')
-		if (ws.json && ws.json.ok) {
-			state.tree = ws.json
-			renderTree()
-			renderCanvas()
-		}
-	} else {
-		toast('Could not delete: ' + ((json && json.message) || `HTTP ${status}`))
-	}
-}
-
 $('tree').addEventListener('click', (e) => {
-	const del = e.target.closest('[data-del-group]')
-	if (del) {
-		deleteCollection(del.dataset.delGroup)
-		return
-	}
 	const g = e.target.closest('[data-group]')
 	if (g) {
 		const name = g.dataset.group
-		state.collapsed.has(name) ? state.collapsed.delete(name) : state.collapsed.add(name)
+		const grp = state.tree && state.tree.collections.find((c) => c.name === name)
+		state.groupOpen.set(name, grp ? !groupIsOpen(grp) : true)
 		renderTree()
 		return
 	}
@@ -4443,6 +4412,10 @@ function route() {
 	if (id !== state.activeId) {
 		state.activeId = id
 		state.activePage = 0
+		// Navigating to a canvas must reveal it: drop any manual collapse on its
+		// folder so the derived open state wins again.
+		if (id)
+			state.groupOpen.delete(groupOf(id))
 	}
 	renderTree()
 	renderCanvas()
@@ -4500,146 +4473,9 @@ function connectWs() {
 	ws.onerror = () => ws.close()
 }
 
-// ---------------------------------------------------------------- folder browser
-
-$('openFolder').addEventListener('click', () => openFolderModal())
-
+// The last path segment: the search modal labels a canvas by its file name and
+// the workspace by its folder name.
 const baseName = (p) => p.replace(/[\\/]+$/, '').split(/[\\/]/).pop() || p
-
-/** Split an absolute path into cumulative {label, path} breadcrumb segments. */
-function crumbSegments(p) {
-	const sep = !p.startsWith('/') && p.includes('\\') ? '\\' : '/'
-	const segs = []
-	let acc = ''
-	p.split(/[\\/]/).forEach((part, i) => {
-		if (i === 0) {
-			acc = part || sep
-			segs.push({ label: acc, path: acc })
-			return
-		}
-		if (!part) return
-		acc += (acc.endsWith(sep) ? '' : sep) + part
-		segs.push({ label: part, path: acc })
-	})
-	return segs
-}
-
-async function openFolderModal() {
-	const ov = document.createElement('div')
-	ov.className = 'overlay'
-	ov.innerHTML = `<div class="modal">
-		<div class="modal-head">${icon('folder-open')} Open workspace folder</div>
-		<div class="modal-body">
-			<div class="fb-crumb" id="fbCrumb"></div>
-			<div class="fb-list" id="fbList"></div>
-			<div class="fb-hint">Click a folder to select it, ${icon('chevron-right')} or double-click to browse inside. Folders that already contain canvases or markdown documents show a ✓ badge.</div>
-		</div>
-		<div class="modal-foot">
-			<button class="btn ghost" data-close>Cancel</button>
-			<button class="btn primary" id="fbOpen">Open →</button>
-		</div>
-	</div>`
-	const close = () => {
-		ov.remove()
-		document.removeEventListener('keydown', onKey)
-	}
-	function onKey(ev) {
-		if (ev.key === 'Escape') close()
-	}
-	ov.addEventListener('click', (ev) => {
-		if (ev.target === ov || ev.target.closest('[data-close]'))
-			close()
-	})
-	document.addEventListener('keydown', onKey)
-	document.body.appendChild(ov)
-
-	let dir = state.tree ? state.tree.root : ''
-	let parent = null
-	let selected = dir
-
-	const crumbEl = ov.querySelector('#fbCrumb')
-	const listEl = ov.querySelector('#fbList')
-	const openBtn = ov.querySelector('#fbOpen')
-
-	openBtn.addEventListener('click', async () => {
-		openBtn.disabled = true
-		openBtn.textContent = 'Opening…'
-		const { json } = await api('/api/workspace/open', { method: 'POST', body: JSON.stringify({ path: selected }) })
-		if (json && json.ok && json.url)
-			window.location = json.url
-		else {
-			toast('Could not open that folder' + (json && json.error ? `: ${json.error.code}` : '.'))
-			openBtn.disabled = false
-			syncSelection()
-		}
-	})
-
-	/** Reflect `selected` in the row highlight and the Open button, without re-listing. */
-	function syncSelection() {
-		listEl.querySelectorAll('.fb-row[data-path]').forEach((row) => {
-			row.classList.toggle('sel', row.dataset.path === selected)
-		})
-		openBtn.textContent = `Open ${baseName(selected)} →`
-		openBtn.title = selected
-	}
-
-	/** List `target`; only commit it as the current directory once the kernel confirms. */
-	async function navigate(target) {
-		const { json } = await api('/api/browse', { method: 'POST', body: JSON.stringify({ dir: target }) })
-		if (!json || !json.ok) {
-			toast('Cannot list that directory.')
-			return
-		}
-		dir = json.dir
-		parent = json.parent
-		selected = dir
-		draw(json.entries)
-	}
-
-	function draw(entries) {
-		crumbEl.innerHTML = crumbSegments(dir).map((seg, i, all) => {
-			const cur = i === all.length - 1
-			return `${i ? '<span class="fb-sep">/</span>' : ''}<button type="button" class="fb-seg${cur ? ' cur' : ''}" data-dir="${esc(seg.path)}">${esc(seg.label)}</button>`
-		}).join('')
-		crumbEl.title = dir
-
-		// The badge answers "is this folder worth opening". It names what it counted:
-		// a folder of markdown IS worth opening, but those are not canvases.
-		const fbTally = (en) => [
-			...(en.canvases ? [`${en.canvases} canvas${en.canvases === 1 ? '' : 'es'}`] : []),
-			...(en.docs ? [`${en.docs} doc${en.docs === 1 ? '' : 's'}`] : []),
-		].join(' · ')
-
-		const up = parent ? `<div class="fb-row" data-up>${icon('corner-left-up')} ..</div>` : ''
-		const rows = entries.map((en) => `
-			<div class="fb-row" data-path="${esc(en.path)}">
-				${icon('folder')} <span class="fb-name">${esc(en.name)}</span>
-				${en.canvasCount > 0 ? `<span class="fb-badge">${icon('check')} workspace (${fbTally(en)})</span>` : ''}
-				<button type="button" class="fb-into" data-into="${esc(en.path)}" title="Browse inside ${esc(en.name)}" aria-label="Browse inside ${esc(en.name)}">${icon('chevron-right')}</button>
-			</div>`).join('')
-		listEl.innerHTML = up + (rows || '<div class="fb-row fb-none">(no subfolders)</div>')
-
-		listEl.querySelectorAll('.fb-row[data-path]').forEach((row) => {
-			row.addEventListener('click', (ev) => {
-				if (ev.target.closest('[data-into]')) return
-				selected = row.dataset.path
-				syncSelection()
-			})
-			row.addEventListener('dblclick', () => navigate(row.dataset.path))
-		})
-		listEl.querySelectorAll('[data-into]').forEach((btn) => {
-			btn.addEventListener('click', () => navigate(btn.dataset.into))
-		})
-		const upRow = listEl.querySelector('[data-up]')
-		if (upRow)
-			upRow.addEventListener('click', () => navigate(parent))
-		crumbEl.querySelectorAll('[data-dir]').forEach((btn) => {
-			btn.addEventListener('click', () => navigate(btn.dataset.dir))
-		})
-		syncSelection()
-	}
-	navigate(dir)
-}
 
 // ---------------------------------------------------------------- canvas search
 //

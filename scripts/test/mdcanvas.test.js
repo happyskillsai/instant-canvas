@@ -18,7 +18,7 @@ const path = require('node:path')
 
 const { virtualCanvasFor } = require('../lib/mdcanvas')
 const { markdownTitle, renderableMarkdown, stripRawHtml, htmlImagesToMarkdown, placeholderRemoteImages } = require('../lib/markdownsrc')
-const { scan, canvasCount } = require('../lib/scan')
+const { scan } = require('../lib/scan')
 const { PKG_VERSION } = require('../lib/pkgmeta')
 
 function workspace() {
@@ -125,10 +125,10 @@ test('scan lists markdown documents beside canvases: kind, canvases-first orderi
 	fs.mkdirSync(path.join(root, 'docs'))
 	fs.writeFileSync(path.join(root, 'docs', 'guide.mdx'), '# Guide\n')
 	fs.mkdirSync(path.join(root, 'docs', 'deep'))
-	fs.writeFileSync(path.join(root, 'docs', 'deep', 'buried.md'), '# Buried\n') // depth 2 — out of scan range
+	fs.writeFileSync(path.join(root, 'docs', 'deep', 'buried.md'), '# Buried\n') // depth 2 — the scan reaches it
 
 	const tree = scan(root)
-	assert.deepEqual(tree.collections.map((c) => c.name), ['(root)', 'docs'])
+	assert.deepEqual(tree.collections.map((c) => c.name), ['(root)', 'docs', 'docs/deep'])
 
 	const rootEntries = tree.collections[0].canvases
 	assert.deepEqual(rootEntries.map((e) => `${e.kind}:${e.id}`), [
@@ -137,14 +137,13 @@ test('scan lists markdown documents beside canvases: kind, canvases-first orderi
 		'document:untitled.md',
 	], '.env and notes.txt are not documents')
 
-	assert.deepEqual(tree.collections[1].canvases.map((e) => e.id), ['docs/guide.mdx'], 'depth-2 markdown excluded, like a depth-2 canvas')
+	assert.deepEqual(tree.collections[1].canvases.map((e) => e.id), ['docs/guide.mdx'])
 	assert.equal(tree.collections[1].canvases[0].title, 'Guide')
+	assert.deepEqual(tree.collections[2].canvases.map((e) => e.id), ['docs/deep/buried.md'], 'a nested folder with a renderable file is its own collection')
 
-	// `count` still means canvases — the delete dialog promises by it.
+	// `count` still means canvases — the sidebar stat promises by it.
 	assert.equal(tree.count, 1)
-	assert.equal(tree.docCount, 3)
-	// The folder browser asks "is there anything to see in here"; markdown answers yes.
-	assert.equal(canvasCount(root), 4)
+	assert.equal(tree.docCount, 4)
 })
 
 test('an oversized markdown file is listed by neither the scan nor the virtual-canvas route', () => {

@@ -37,8 +37,9 @@ const { hasMarkdownExtension } = require('./markdownsrc')
  * and nothing changes.
  */
 
-// Same reach as the workspace scan: the root, plus one subfolder level. A companion
-// deeper than the sidebar can see would be a companion the reader cannot find.
+// Same reach as the workspace scan: every folder in the tree, at any depth. The two
+// walks must agree — a companion the scan can see but this index cannot resolve would
+// list the canvas AND its document as two unrelated rows.
 const isSkippable = (name) => name.startsWith('.') || name === 'node_modules'
 
 const toRel = (p) => String(p || '').split(path.sep).join('/')
@@ -51,33 +52,31 @@ function enhancesOf(canvas) {
 	return typeof v === 'string' && v.trim() ? toRel(v.trim()) : null
 }
 
-/** Every `*.json` the scan would see: the root plus one subfolder level. */
+/** Every `*.json` the scan would see: every folder in the tree, at any depth. */
 function canvasFilesIn(root) {
 	const out = []
-	const listJson = (relDir) => {
+	const walk = (relDir) => {
 		const abs = relDir ? path.join(root, relDir) : root
-		let names = []
+		let dirents = []
 		try {
-			names = fs.readdirSync(abs)
+			dirents = fs.readdirSync(abs, { withFileTypes: true })
 		} catch {
-			return
+			return // unreadable directory → nothing to index below it
 		}
-		for (const n of names.sort((a, b) => a.localeCompare(b))) {
-			if (isSkippable(n) || !n.endsWith('.json'))
-				continue
-			out.push(relDir ? `${relDir}/${n}` : n)
+		const sorted = dirents
+			.filter((d) => !isSkippable(d.name))
+			.sort((a, b) => a.name.localeCompare(b.name))
+		for (const d of sorted) {
+			if (d.isFile() && d.name.endsWith('.json'))
+				out.push(relDir ? `${relDir}/${d.name}` : d.name)
+		}
+		// A symlinked directory is never followed, same as the scan's walk.
+		for (const d of sorted) {
+			if (d.isDirectory())
+				walk(relDir ? `${relDir}/${d.name}` : d.name)
 		}
 	}
-	listJson('')
-	let dirs = []
-	try {
-		dirs = fs.readdirSync(root, { withFileTypes: true })
-			.filter((d) => d.isDirectory() && !isSkippable(d.name))
-			.map((d) => d.name)
-			.sort((a, b) => a.localeCompare(b))
-	} catch { /* unreadable root → nothing to index */ }
-	for (const dir of dirs)
-		listJson(dir)
+	walk('')
 	return out
 }
 

@@ -2,6 +2,35 @@
 
 ## [Unreleased]
 
+### Changed
+- **Sidebar folders start collapsed; the active canvas's folder opens itself.** With the
+  recursive scan a workspace can list dozens of collections, and a wall of expanded
+  folders buried the canvas being read. The folder holding the open canvas derives
+  open — navigation (sidebar, search, an agent's `open`) always reveals where the
+  reader is — while every other folder stays shut until clicked. Manual toggles win
+  over the derived state, and navigating into a manually collapsed folder reopens it.
+- **The sidebar lists every folder that holds something renderable, at any depth.** The
+  workspace scan is fully recursive: a folder containing a valid canvas or a markdown
+  document appears as its own collection, named by its relative path (`reports/2026/q3`);
+  a folder with nothing renderable in it is not listed. Dot-entries, `node_modules`, and
+  symlinked directories are skipped, as ever. The companion index and the non-recursive
+  `fs.watch` fallback walk the same tree, so a deep companion still binds and a deep edit
+  still hot-reloads.
+
+### Removed
+- **In-browser workspace switching** — the sidebar "+" button, the folder-browser modal,
+  and the `POST /api/browse` / `POST /api/workspace/open` kernel routes. `/api/browse`
+  was deliberately unconfined (its whole job was to leave the workspace root); with it
+  gone, every kernel route answers only for the workspace it serves. Opening a workspace
+  is the CLI's job: run `npx -y @happyskillsai/instant-canvas open` from the folder
+  itself. The recursive sidebar removes the "+"'s other reason to exist — folders with
+  renderable content appear on their own.
+- **Folder deletion from the sidebar** — the hover-revealed trash button, its
+  confirmation dialog, and the `POST /api/collection/delete` route. The reader's browser
+  may change what a file *says* (a theme), never destroy files; deletion belongs to the
+  filesystem and the agent. A browser test now pins the absence of any delete affordance
+  in the tree.
+
 ## [0.7.0] - 2026-07-15
 
 ### Added
