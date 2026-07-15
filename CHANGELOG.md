@@ -2,6 +2,22 @@
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-07-15
+
+### Changed
+- **Markdown notes and tables now carry the palette instead of gray.** A blockquote
+  used to render as muted gray text behind a gray left-bar; it is now a rounded callout
+  — an accent left-stripe over a soft `--accent`-tinted surface — so a note reads as a
+  note at a glance. Markdown tables got the same treatment: rounded corners, a lightly
+  tinted header, and zebra body rows for scanning down a column.
+
+  Every tint is a `color-mix()` over the already-themed `--accent`, so one declaration
+  adapts to the app's light *and* dark theme, and to a document's own brand accent on
+  paper — nothing is hard-coded gray and no value is duplicated across the theme blocks.
+  Rounded corners required switching the table to `border-collapse: separate`, with the
+  on-screen scroll box doing the corner clipping; the printed deck keeps its tables
+  unclipped by design, so a wide table on paper still folds rather than losing columns.
+
 ## [0.6.0] - 2026-07-14
 
 ### Fixed
