@@ -2537,15 +2537,16 @@ function docGeometry(doc) {
  *  A constructed stylesheet is CSSOM, so the CSP's style-src does not apply;
  *  the interpolated values are derived from validated enums and mm lengths. */
 let pageRuleSheet = null
-function setPageRule(geo) {
+function setPageSize(cssSize) {
 	try {
 		if (!pageRuleSheet) {
 			pageRuleSheet = new CSSStyleSheet()
 			document.adoptedStyleSheets = [...document.adoptedStyleSheets, pageRuleSheet]
 		}
-		pageRuleSheet.replaceSync(`@page { size: ${geo.wMm}mm ${geo.hMm}mm; margin: 0 }`)
+		pageRuleSheet.replaceSync(`@page { size: ${cssSize}; margin: 0 }`)
 	} catch { /* constructed stylesheets unavailable — the print dialog's paper choice rules */ }
 }
+const setPageRule = (geo) => setPageSize(`${geo.wMm}mm ${geo.hMm}mm`)
 
 function newSheet(geo, cls) {
 	const sheet = document.createElement('section')
@@ -3551,8 +3552,11 @@ function buildSlide(slide, presentation, index, total, geo, flat) {
 	const box = document.createElement('div')
 	box.className = `slide slide-${slide.layout}`
 	box.dataset.slide = String(index)
-	box.style.width = geo.wPx + 'px'
-	box.style.height = geo.hPx + 'px'
+	// Sized in INCHES, the same unit as the @page, so print is 1:1 with no rounding: a px box
+	// (1280px = 13.3333in) is a hair wider than a "13.333in" page and each slide then doubled
+	// onto a second page. On screen the sub-px difference is invisible; the transform scales it.
+	box.style.width = geo.wIn
+	box.style.height = geo.hIn
 	// The cover machinery, reused verbatim: image → scrim (appended first, z-index 0) →
 	// content. Allowed only on title/section/statement/closing (the validator warns off the
 	// rest), but applyCoverBackground is a no-op without a background regardless.
@@ -3616,6 +3620,9 @@ async function renderPresentationView(main, canvas) {
 	const geo = slideGeometry(presentation)
 	state.presLand = true
 	state.docLand = false
+	// One slide per landscape page, print==screen by construction: the box is 1280x720px =
+	// 960x540pt = exactly the @page Chrome produces for "13.333in 7.5in" (§6.2, verified).
+	setPageSize(`${geo.wIn} ${geo.hIn}`)
 
 	main.innerHTML = '<div class="canvas pres-mode"><div class="strip"><div class="strip-scale"></div></div></div>'
 	const rootEl = main.querySelector('.pres-mode')

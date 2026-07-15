@@ -310,6 +310,23 @@ test('theme: a canvas that does not parse reports the default rather than crashi
 	assert.deepEqual(r.json.themeDeclared, {})
 })
 
+test('theme: a PRESENTATION declares its theme in presentation.theme, and the CLI reports it', () => {
+	const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'ic-themecli-pres-')))
+	// A deck keeps its theme in "presentation.theme", not "document.theme" — the CLI's bare
+	// report must read the right envelope member (declaredThemeOf), or an agent asking what a
+	// deck is wearing hears "default" while it is plainly midnight.
+	fs.writeFileSync(path.join(root, 'slidedeck.canvas.json'), JSON.stringify({
+		instantcanvas: 1, createdWith: PKG_VERSION, title: 'Deck',
+		presentation: { theme: { preset: 'midnight' } },
+		slides: [{ layout: 'title', title: 'Hi' }],
+	}, null, '\t') + '\n')
+	const r = ic(root, 'theme', 'slidedeck.canvas.json')
+	assert.equal(r.code, 0, JSON.stringify(r.json))
+	assert.equal(r.json.themeSource, 'canvas', 'the deck itself declares the theme')
+	assert.deepEqual(r.json.themeDeclared, { preset: 'midnight' })
+	assert.equal(r.json.theme.mode, 'dark', 'midnight resolves to dark paper')
+})
+
 test('validate: the colors inside skills-config.json are ours to police, and we do', () => {
 	const root = workspace()
 	const cfg = path.join(root, CONFIG_NAME)

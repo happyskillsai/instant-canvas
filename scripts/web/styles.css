@@ -1238,19 +1238,38 @@ body.presenting.cursor-hidden .stage{cursor:none}
 	   (mountCodeCopy's `{button: false}`), so there is nothing to hide. Hiding a
 	   button that should not exist is a fact that rots — this way a test can
 	   assert paper holds zero of them. */
-	body:has(.deck) .topbar,
-	body:has(.deck) .sidebar{display:none !important}
-	body:has(.deck) .app{display:block;height:auto}
-	body:has(.deck) .body{display:block}
-	body:has(.deck) .main{overflow:visible;padding:0;margin:0}
-	body:has(.deck) .canvas{padding:0;margin:0}
-	body:has(.deck){background:#fff}
+	body:has(.deck) .topbar, body:has(.pres-mode) .topbar,
+	body:has(.deck) .sidebar, body:has(.pres-mode) .sidebar{display:none !important}
+	body:has(.deck) .app, body:has(.pres-mode) .app{display:block;height:auto}
+	body:has(.deck) .body, body:has(.pres-mode) .body{display:block}
+	body:has(.deck) .main, body:has(.pres-mode) .main{overflow:visible;padding:0;margin:0}
+	body:has(.deck) .canvas, body:has(.pres-mode) .canvas{padding:0;margin:0}
+	body:has(.deck), body:has(.pres-mode){background:#fff}
 	/* the deck prints no matter which view is on screen */
 	.doc-html{display:none !important}
 	.doc-mode .deck{display:block !important;position:static !important;padding:0;height:auto !important}
 	.deck-scale{transform:none !important;display:block}
 	.sheet{box-shadow:none;margin:0}
 	.sheet:not(:last-child){break-after:page;page-break-after:always}
+
+	/* PRESENTATION: one slide box per landscape page. The browse chrome (labels, notes,
+	   badges) is gone; the slide is reset to scale(1) at its true geometry (1280x720px =
+	   the @page). The filmstrip wrappers (.slide-item, .slide-holder) become `display:
+	   contents` so each .slide is a DIRECT flow child of the page block — exactly the .sheet
+	   structure that prints 1:1. A nested, absolutely-positioned box each doubled its page.
+	   Same box-height invariant as a sheet: overflow:hidden clips, so a slide never spills. */
+	/* The .body carries a 12px padding for the on-screen gutter; unreset it offsets the first
+	   slide 12px down, so a 720px slide spills 12px onto a second page — 2N pages for N slides. */
+	body:has(.pres-mode) .body{padding:0 !important;margin:0}
+	.strip, .pres-mode{padding:0 !important;margin:0}
+	.strip-scale{display:block;gap:0;margin:0}
+	.slide-item, .slide-holder{display:contents}
+	.slide-meta, .slide-notes, .slide-badge{display:none !important}
+	/* position:relative (not static, and overriding the filmstrip's absolute): in flow so
+	   each slide is its own page, AND a containing block so the absolute footer and scrim sit
+	   on the slide — the same thing .sheet keeps in print. */
+	.slide{position:relative !important;transform:none !important;box-shadow:none;border-radius:0;margin:0}
+	.slide-item:not(:last-child) .slide{break-after:page;page-break-after:always}
 }
 
 /* ------------------------------------------------------------------- responsive

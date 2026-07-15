@@ -384,9 +384,12 @@ async function cmdPrint(args) {
 				error: { code: 'INVALID_SPEC', message: `Canvas failed validation with ${verdict.errorCount} error(s).`, errors: verdict.errors },
 				timestamp: now(),
 			}, 1)
-		if (!JSON.parse(raw).document)
+		const parsed = JSON.parse(raw)
+		// A presentation prints too — one landscape page per slide. A slides canvas needs no
+		// "document" (they are mutually exclusive: DOCUMENT_ON_PRESENTATION).
+		if (!parsed.document && !Array.isArray(parsed.slides))
 			specError('INVALID_SPEC',
-				`${rel} is not a document canvas — print renders the paper deck, which needs an envelope-level "document" object. Add "document": {} (see \`catalog document\`), or use \`open\` for the continuous view.`)
+				`${rel} is not a document or a presentation — print renders paper, which needs an envelope-level "document" object or a "slides" deck. Add "document": {} (see \`catalog document\`), author "slides" (see \`catalog presentation\`), or use \`open\` for the continuous view.`)
 	}
 
 	// An explicit CHROME_PATH is authoritative: pointing it at a missing binary
@@ -424,7 +427,8 @@ async function cmdPrint(args) {
 		while (!ready && Date.now() < deadline) {
 			ready = await evaluate(`(() => {
 				if (!window.ic || !window.ic.state.tree) return false;
-				if (!document.querySelectorAll('.deck .sheet').length) return false;
+				// A document decks into '.deck .sheet'; a presentation into '.strip-scale .slide'.
+				if (!document.querySelectorAll('.deck .sheet, .strip-scale .slide').length) return false;
 				// A chart's legend sits on its tick labels until fitLegendBelow() has
 				// relayouted it, and .main-svg exists before that lands.
 				if (window.ic.state.fits) return false;
@@ -437,7 +441,7 @@ async function cmdPrint(args) {
 		if (!ready)
 			throw new Error('The document never finished rendering (sheets or charts missing after 60 s).')
 		await pause(1200) // let the last chart settle its SVG/WebGL
-		const pages = await evaluate('document.querySelectorAll(\'.deck .sheet\').length')
+		const pages = await evaluate('document.querySelectorAll(\'.deck .sheet\').length || document.querySelectorAll(\'.strip-scale .slide\').length')
 		const pdf = await send('Page.printToPDF', {
 			printBackground: true,
 			preferCSSPageSize: true,

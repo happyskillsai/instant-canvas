@@ -29,6 +29,16 @@ const CHROME = findChrome()
 const skip = CHROME ? false : 'Chrome not found — set CHROME_PATH to run the print tests'
 
 const pdfPageCount = (buf) => Math.max(...[...buf.toString('latin1').matchAll(/\/Count\s+(\d+)/g)].map((m) => Number(m[1])))
+// Every page's MediaBox as "WxH" in pt (from the [0 0 W H] box), deduplicated.
+const pdfPageSizes = (buf) => [...new Set([...buf.toString('latin1')
+	.matchAll(/\/MediaBox\s*\[\s*[\d.]+\s+[\d.]+\s+([\d.]+)\s+([\d.]+)\s*\]/g)]
+	.map((m) => `${Math.round(+m[1])}x${Math.round(+m[2])}`))]
+
+// PDF TEXT assertions need poppler (byte-greps are unreliable — a rendered string may be
+// FlateDecode-compressed out of the raw bytes), so they skip with a message without it.
+let hasPoppler = true
+try { execFileSync('pdftotext', ['-v'], { stdio: 'ignore' }) } catch { hasPoppler = false }
+const pdfText = (file) => execFileSync('pdftotext', [file, '-'], { encoding: 'utf8' })
 
 function runCli(args, env = {}) {
 	try {
@@ -52,6 +62,8 @@ let printedMd = null
 let mdPdf = null
 let printedCover = null
 let coverPdf = null
+let presDeck = null
+let presPdf = null
 
 test.before(async () => {
 	root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'ic-print-ws-')))
@@ -100,6 +112,13 @@ test.before(async () => {
 	printedCover = runCli(['print', path.join(root, 'notes.md'), '--out', path.join(root, 'out', 'notes.pdf'), '--workspace', root])
 	if (printedCover.code === 0)
 		coverPdf = fs.readFileSync(path.join(root, 'out', 'notes.pdf'))
+
+	// A PRESENTATION prints too: one landscape page per slide. The fixture carries a
+	// SPEAKER-NOTE-MARKER in a slide's notes (which print must exclude) and a background.
+	fs.copyFileSync(path.join(FIXTURES, 'presentation-full.canvas.json'), path.join(root, 'deck.canvas.json'))
+	presDeck = runCli(['print', path.join(root, 'deck.canvas.json'), '--out', path.join(root, 'out', 'deck.pdf'), '--workspace', root])
+	if (presDeck.code === 0)
+		presPdf = fs.readFileSync(path.join(root, 'out', 'deck.pdf'))
 })
 
 test.after(() => {
@@ -180,6 +199,40 @@ test('a markdown file prints with no canvas and no "document" object at all', { 
 	// The invariant that carries document mode: sheets ARE the pages. It must hold
 	// for a deck the browser was told to build, not just one a canvas declared.
 	assert.equal(pdfPageCount(mdPdf), printedMd.json.pages, 'sheets ARE the pages — by construction')
+})
+
+test('print renders a PRESENTATION: one landscape page per slide, /Count == slide count', { skip, timeout: 120_000 }, () => {
+	assert.equal(presDeck.code, 0, JSON.stringify(presDeck.json))
+	assert.equal(presDeck.json.status, 'printed')
+	assert.equal(presDeck.json.pages, 8, 'the fixture has 8 slides')
+	// The sheets-are-pages invariant, for a deck: /Count in the PDF equals the reported count.
+	assert.equal(pdfPageCount(presPdf), presDeck.json.pages, 'slides ARE the pages — by construction, no sliver doubling')
+	// §6.2: the page size matches the 16:9 aspect — 13.333in x 7.5in = 960 x 540 pt, uniform.
+	assert.deepEqual(pdfPageSizes(presPdf), ['960x540'], 'every page is a 16:9 landscape slide')
+})
+
+test('a presentation PDF excludes speaker notes and browse chrome (pdftotext)', { skip: skip || !hasPoppler, timeout: 120_000 }, (t) => {
+	if (!hasPoppler) {
+		t.diagnostic('pdftotext (poppler) not found — the note-exclusion assertion skipped')
+		return
+	}
+	// pdftotext breaks large centered type into separate runs ("Financial\nResults"), so
+	// normalize whitespace before matching phrases — the same care document.test.js takes.
+	const text = pdfText(path.join(root, 'out', 'deck.pdf'))
+	const norm = text.replace(/\s+/g, ' ')
+	// The note marker lives in slide 1's "notes"; print must not carry it into the PDF.
+	assert.ok(!norm.includes('SPEAKER-NOTE-MARKER'), 'speaker notes never reach the PDF')
+	// The filmstrip's "Slide N of M" browse label is not printed either (the footer uses "/").
+	assert.ok(!/Slide \d+ of \d+/.test(norm), 'the browse label is filmstrip-only')
+	// But the content and the declared footer DO print.
+	assert.match(norm, /Financial Results/, 'slide content is in the PDF text layer')
+	assert.match(norm, /Slide \d+ \/ 8/, 'the declared running footer prints')
+})
+
+test('leak regression holds for a presentation PDF too', { skip, timeout: 120_000 }, () => {
+	const bytes = presPdf.toString('latin1')
+	assert.ok(kernelToken && !bytes.includes(kernelToken), 'the token never reaches the deck PDF')
+	assert.ok(!bytes.includes('127.0.0.1'), 'the origin never reaches the deck PDF')
 })
 
 test('print without --out teaches the flag', () => {
