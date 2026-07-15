@@ -4,14 +4,57 @@
 // `npx -y @happyskillsai/instant-canvas catalog`. Progressive disclosure by design:
 //   catalog            → lean index: one-liners only, no schemas
 //   catalog <name>     → ONE full schema (block, chart kind, field type,
-//                        'fieldset', 'sweep', 'document', 'theme', 'envelope')
+//                        'fieldset', 'sweep', 'document', 'theme',
+//                        'presentation', 'slide', 'envelope')
 //   catalog --full     → everything at once (large; avoid unless needed)
 
-const { VERSION, ENVELOPE, BLOCKS, FIELD_TYPES, CHART_KINDS, UNSUPPORTED_CHARTS, SHAPES } = require('./schema')
+const { VERSION, ENVELOPE, BLOCKS, FIELD_TYPES, CHART_KINDS, UNSUPPORTED_CHARTS, SHAPES, SLIDE_LAYOUTS } = require('./schema')
 const { PKG_VERSION } = require('./pkgmeta')
 const { presetList } = require('./theme')
 
 const THEME_PRESETS = presetList()
+
+// One validated example per slide layout (the presentation.test.js contract proves each
+// validates). Reused by `catalog slide` and stitched into the `catalog presentation` deck.
+const SLIDE_EXAMPLES = {
+	title: { layout: 'title', title: 'Q3 Business Review', subtitle: 'Revenue, growth, and outlook', author: 'Finance Team', date: 'July 2026' },
+	section: { layout: 'section', title: 'Financial Results', subtitle: 'The numbers behind the quarter' },
+	content: {
+		layout: 'content', title: 'Highlights',
+		body: [
+			{ type: 'markdown', text: '- Revenue up **12% QoQ**\n- Two new enterprise logos' },
+			{ type: 'chart', kind: 'bar', title: 'Revenue by region', data: [{ region: 'APAC', rev: 42 }, { region: 'EMEA', rev: 61 }], encoding: { x: 'region', y: 'rev' } },
+		],
+	},
+	'two-column': {
+		layout: 'two-column', title: 'Before vs after', leftHeading: 'Before', rightHeading: 'After', split: '1-1',
+		left: [{ type: 'markdown', text: 'Manual pipeline, a 3-day cycle.' }],
+		right: [{ type: 'markdown', text: 'Automated, a 20-minute cycle.' }],
+	},
+	quadrant: {
+		layout: 'quadrant', title: 'SWOT',
+		cells: [
+			{ heading: 'Strengths', blocks: [{ type: 'markdown', text: 'Strong brand.' }] },
+			{ heading: 'Weaknesses', blocks: [{ type: 'markdown', text: 'Thin support team.' }] },
+			{ heading: 'Opportunities', blocks: [{ type: 'markdown', text: 'A new region opening.' }] },
+			{ heading: 'Threats', blocks: [{ type: 'markdown', text: 'Two funded rivals.' }] },
+		],
+	},
+	statement: { layout: 'statement', text: 'Ship less, learn more.', attribution: '— The team' },
+	closing: { layout: 'closing', title: 'Thank you', subtitle: 'questions@acme.com' },
+}
+
+const PRESENTATION_EXAMPLE = {
+	instantcanvas: 1,
+	createdWith: PKG_VERSION,
+	title: 'Q3 Business Review',
+	presentation: {
+		aspect: '16:9',
+		theme: { preset: 'midnight' },
+		footer: { left: 'Q3 Review', right: 'Slide {{slideNumber}} / {{totalSlides}}' },
+	},
+	slides: [SLIDE_EXAMPLES.title, SLIDE_EXAMPLES.section, SLIDE_EXAMPLES.content, SLIDE_EXAMPLES.closing],
+}
 
 function renderProperty(spec) {
 	const out = { type: Array.isArray(spec.type) ? spec.type.join(' | ') : spec.type }
@@ -134,7 +177,7 @@ function lead(text) {
 function leanIndex() {
 	return {
 		version: VERSION,
-		usage: 'This is the lean index. Pull ONE full schema at a time with `catalog <name>` (a block, a chart kind, a field type, "fieldset", "sweep", "document", "theme", or "envelope"). `catalog --full` dumps everything (large).',
+		usage: 'This is the lean index. Pull ONE full schema at a time with `catalog <name>` (a block, a chart kind, a field type, "fieldset", "sweep", "document", "theme", "presentation", "slide", or "envelope"). `catalog --full` dumps everything (large).',
 		markdownFiles: 'A .md/.mdx/.markdown file that ALREADY EXISTS needs no canvas: `open <file.md>` renders it, `print <file.md> --out <f.pdf>` prints it. Author a canvas only for data you wrangled, or to put markdown beside other blocks.',
 		envelope: 'Every canvas: {"instantcanvas":1,"createdWith":<written by `stamp`, never by you>,"title":...,then "blocks":[...] XOR "pages":[{"name","blocks"}]} — `catalog envelope`',
 		companionCanvas: 'A .md has NO envelope, so it cannot hold a cover, a theme, a running header or page geometry. Give it one: a canvas declaring {"enhances":"README.md"} (plus a markdown block whose "src" is that file) is its COMPANION — write it as README.canvas.json. The companion then SUPERSEDES the document: `open README.md` and `print README.md` both render it, and the sidebar still shows one entry — `catalog envelope`',
@@ -144,6 +187,8 @@ function leanIndex() {
 		fieldTypes: oneLiners(FIELD_TYPES, (f) => lead(f.description)),
 		chartSweep: 'Any chart kind becomes a parameter sweep with {"sweep":{"label"?,"frames":[{"label","data"}]}} instead of "data": a slider steps through frames you precompute — `catalog sweep`',
 		documentMode: 'Envelope "document":{...} renders the canvas as print-ready paper sheets (cover, contents, header/footer, back cover, brand theme; display blocks only) that print 1:1 — `catalog document`',
+		presentationMode: 'Envelope "slides":[...] (XOR "blocks"/"pages") renders a SLIDE DECK: a filmstrip in the browser, a fullscreen Present mode, one landscape PDF page per slide from `print`. Deck settings (aspect, theme, footer) live in "presentation":{...} — `catalog presentation`',
+		slideLayouts: 'Seven slide layouts — title, section, content, two-column, quadrant, statement, closing — each filling its regions with display blocks (markdown/chart/table/kpi); a lone chart fills its region. Forms, confirms and sweeps are refused on a slide — `catalog slide`',
 		documentTheme: `Document colors, charts included: "document":{"theme":{"preset":"forest|dracula|okabe|…"}} — ${THEME_PRESETS.length} presets, ${THEME_PRESETS.filter((p) => p.mode !== 'dark').length} on light paper and ${THEME_PRESETS.filter((p) => p.mode === 'dark').length} on dark (dark paper prints dark); each brings a chart colorway, and any token (accent, paper, text, …) overrides it. A markdown file keeps its theme in its COMPANION canvas, beside its cover — \`catalog theme\` for the names`,
 		formLayout: 'Group fields with {"type":"fieldset","legend","columns":1-3,"fields":[...]} inside fields[]; per-field "span" widens, "ui":"buttons"|"pills" restyles select/radio/checkboxGroup — `catalog fieldset`',
 		validation: 'Per-field rules NEST under "validation": {"type":"secret","validation":{minLength,maxLength,pattern,patternMessage,min,max,step,protocols}} — enforced live and server-side. Flat on the field they are unknown properties: the canvas still validates and the rule silently does not exist.',
@@ -176,12 +221,15 @@ function fullCatalog() {
 		document: catalog('document'),
 		theme: catalog('theme'),
 		sweep: catalog('sweep'),
+		presentation: catalog('presentation'),
+		slide: catalog('slide'),
 	}
 }
 
 /**
  * catalog()          → lean index
- * catalog(name)      → one full schema: block | chart kind | field type | 'fieldset' | 'envelope'
+ * catalog(name)      → one full schema: block | chart kind | field type | 'fieldset' |
+ *                      'sweep' | 'document' | 'theme' | 'presentation' | 'slide' | 'envelope'
  * catalog('--full')  → everything
  */
 function catalog(name) {
@@ -263,6 +311,40 @@ function catalog(name) {
 				},
 			},
 		}
+	if (name === 'presentation')
+		return {
+			presentation: true,
+			...renderShape(SHAPES.presentation),
+			slidesEnvelope: '"slides" is the third XOR member of the envelope, beside "blocks" and "pages": {"instantcanvas":1,"createdWith":…,"title":…,"presentation":{…},"slides":[{"layout":…},…]}. Each slide names a layout — see `catalog slide`.',
+			notes: [
+				'A "slides" deck is a PRESENTATION — a third envelope member, XOR with "blocks" and "pages". Slides are ASSIGNED, not packed: you place content on each slide via its layout, and nothing breaks, flows or reflows across slides (that is what documents are for). Author one slide at a time.',
+				'Aspect is "16:9" (default — 13.333in × 7.5in) or "4:3" (10in × 7.5in): the PowerPoint-standard page sizes, so the exported PDF reads as slides everywhere. Every slide is landscape.',
+				'"theme" is the document color system unchanged — a preset plus any token override, charts included (`catalog theme`). DARK PRESETS ARE FIRST-CLASS here: a deck lives on a screen, so "midnight" / "dracula" / "tokyo" are normal, not exotic. The reader can repaint it from the browser palette control, which writes back into "presentation.theme".',
+				'A "footer" runs on every slide EXCEPT the title and closing: {"left","center","right"}, with {{slideNumber}} and {{totalSlides}} substituted (other {{vars}} render literally). Any single slide drops the footer with "footer": false.',
+				'Speaker "notes" on a slide show ONLY beneath it in the browser filmstrip — never on the presenting stage, never in the printed PDF.',
+				'A projector and a PDF can neither submit nor drag, so a form, a confirm, or a chart "sweep" anywhere under "slides" is refused (PRESENTATION_INTERACTIVE_BLOCK). Ship the one frame you want as plain "data"; collect input in a separate form canvas.',
+				'Print it with `npx -y @happyskillsai/instant-canvas print <deck.canvas.json> --out <deck.pdf>`: one landscape page per slide, notes and filmstrip chrome excluded (requires a local Chrome). To just show it, `open <deck.canvas.json>`.',
+			],
+			example: PRESENTATION_EXAMPLE,
+		}
+	if (name === 'slide') {
+		const layouts = {}
+		for (const [layout, shapeName] of Object.entries(SLIDE_LAYOUTS))
+			layouts[layout] = { ...renderShape(SHAPES[shapeName]), example: SLIDE_EXAMPLES[layout] }
+		return {
+			slide: true,
+			description: 'One slide in a "slides" deck. Every slide names a "layout" (one of the seven below); the layout decides which regions the slide has, and the regions hold the existing DISPLAY blocks — markdown, chart, table, kpi. The deck-level settings (aspect, theme, footer) live in the envelope\'s "presentation" object, not on a slide.',
+			layouts,
+			notes: [
+				'The seven layouts: "title" and "closing" (deck bookends), "section" (a divider), "content" (a title over a "body" of blocks), "two-column" (left/right, a comparison with leftHeading/rightHeading), "quadrant" (a 2×2 of four "cells"), and "statement" (one big line or quote).',
+				'A lone chart or KPI row FILLS its region — do not pad a single chart with extra markdown to enlarge it; one block gets the whole stage on its own. And ship category labels WHOLE: the runtime sizes a region-filling chart and elides long ticks itself, so pre-truncating a name in the JSON only destroys it everywhere.',
+				'A full-bleed "background" (the cover-photo shape: src/size/position/scrim/ink) is allowed ONLY on the four furniture layouts — title, section, statement, closing. content/two-column/quadrant carry body text, and a photo behind body text is unreadable. A photo behind ANY text needs a "scrim" — an "ink" alone is a bet on the pixels you cannot see.',
+				'A quadrant has EXACTLY FOUR "cells", in reading order: top-left, top-right, bottom-left, bottom-right.',
+				'A projector and a PDF can neither submit nor drag: a form, a confirm, or a chart "sweep" inside a slide is refused (PRESENTATION_INTERACTIVE_BLOCK).',
+				'Speaker "notes" show only beneath the slide in the browser filmstrip — never presented, never printed. Any slide but title/closing drops the running footer with "footer": false.',
+			],
+		}
+	}
 	if (BLOCKS[name]) {
 		const out = { block: name, ...renderBlock(name, BLOCKS[name]) }
 		if (name === 'chart')
@@ -278,7 +360,7 @@ function catalog(name) {
 		err.code = 'INVALID_SPEC'
 		throw err
 	}
-	const err = new Error(`Unknown catalog entry "${name}". Blocks: ${Object.keys(BLOCKS).join(', ')}. Chart kinds: ${Object.keys(CHART_KINDS).join(', ')}. Field types: ${Object.keys(FIELD_TYPES).join(', ')}. Also: envelope, fieldset, sweep, document, --full.`)
+	const err = new Error(`Unknown catalog entry "${name}". Blocks: ${Object.keys(BLOCKS).join(', ')}. Chart kinds: ${Object.keys(CHART_KINDS).join(', ')}. Field types: ${Object.keys(FIELD_TYPES).join(', ')}. Also: envelope, fieldset, sweep, document, theme, presentation, slide, --full.`)
 	err.code = 'INVALID_SPEC'
 	throw err
 }

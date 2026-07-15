@@ -216,6 +216,129 @@ const SHAPES = {
 			page: { type: 'object', itemShape: 'documentPage', description: 'Paper size, orientation and margin.' },
 		},
 	},
+
+	// --- presentation mode (envelope-level) ----------------------------------
+	// A canvas whose envelope carries `slides[]` renders as a SLIDE DECK — a filmstrip in
+	// the browser, a fullscreen presenting mode, and one landscape page per slide from
+	// `print`. The layouts are a fixed vocabulary (seven names), so the agent picks an
+	// arrangement and fills its regions with the existing display blocks; it never authors
+	// slide CSS. `presentation` carries the settings nobody can derive.
+	presentationFooter: {
+		description: 'A running footer strip shown on every slide except the title and closing. {{slideNumber}} and {{totalSlides}} are substituted; other {{vars}} render literally. Any single slide drops it with "footer": false.',
+		properties: {
+			left: { type: 'string', description: 'Left-aligned text.', example: 'Q3 Review' },
+			center: { type: 'string', description: 'Centered text.' },
+			right: { type: 'string', description: 'Right-aligned text.', example: 'Slide {{slideNumber}} / {{totalSlides}}' },
+		},
+	},
+	presentation: {
+		description: 'Presentation settings — the deck-level choices nobody can derive from the slides themselves. Every key is optional, and this object holds NO slide content: it only turns "slides" into a themed, footed deck at a chosen aspect ratio. Present it only alongside "slides".',
+		properties: {
+			aspect: { type: 'string', enum: ['16:9', '4:3'], default: '16:9', description: 'Slide aspect ratio. "16:9" is 13.333in × 7.5in, "4:3" is 10in × 7.5in — the PowerPoint-standard page sizes, so an exported PDF reads as slides everywhere.' },
+			theme: { type: 'object', itemShape: 'documentTheme', description: 'Color system — a named preset plus any token override (strict hex), exactly like a document theme. Dark presets are first-class here: a deck lives on a screen. Reader-overridable from the browser palette control, which writes its choice back here.' },
+			footer: { type: 'object', itemShape: 'presentationFooter', description: 'A running footer on every slide but the title and closing. Declared text only — {{slideNumber}} / {{totalSlides}} are substituted.' },
+		},
+	},
+	slideCell: {
+		description: 'One quadrant cell: an optional heading over its own display blocks.',
+		properties: {
+			heading: { type: 'string', description: 'Cell heading.', example: 'Strengths' },
+			blocks: { type: 'array', required: true, itemShape: 'block', description: 'Display blocks filling this cell.' },
+		},
+	},
+	slideTitle: {
+		description: 'The deck opener: a big title, optional subtitle, author and date, over an optional full-bleed background. Carries no footer.',
+		properties: {
+			layout: { type: 'string', required: true, enum: ['title'] },
+			title: { type: 'string', required: true, description: 'The deck title.', example: 'Q3 Business Review' },
+			subtitle: { type: 'string', description: 'Line under the title.', example: 'Revenue, growth, and outlook' },
+			author: { type: 'string', description: 'Presenter or team.', example: 'Finance Team' },
+			date: { type: 'string', description: 'Freeform date line.', example: 'July 2026' },
+			logo: { type: 'string', description: 'The small MARK — not a full-bleed image, use "background" for that. Workspace-local path or a data:image/ URI; remote URLs refused.', example: 'assets/logo.svg' },
+			background: { type: 'object', itemShape: 'documentCoverBackground', description: 'A full-bleed image behind the whole slide. A photo behind text NEEDS a "scrim". Allowed on title/section/statement/closing only.' },
+			notes: { type: 'string', description: 'Speaker notes — shown only beneath the slide in the browser filmstrip, never on the presenting stage and never in the PDF.' },
+		},
+	},
+	slideSection: {
+		description: 'A section divider: a heading (and optional subtitle) announcing the next part of the deck, over an optional background.',
+		properties: {
+			layout: { type: 'string', required: true, enum: ['section'] },
+			title: { type: 'string', required: true, description: 'Section heading.', example: 'Financial Results' },
+			subtitle: { type: 'string', description: 'Line under the heading.', example: 'The numbers behind the quarter' },
+			background: { type: 'object', itemShape: 'documentCoverBackground', description: 'A full-bleed image behind the slide. A photo behind text NEEDS a "scrim".' },
+			footer: { type: 'boolean', description: 'Set false to hide the deck footer on this slide.' },
+			notes: { type: 'string', description: 'Speaker notes — shown only in the browser filmstrip, never presented and never printed.' },
+		},
+	},
+	slideContent: {
+		description: 'The workhorse: an optional title over a "body" of display blocks. A lone chart or KPI row FILLS the slide, so a single block gets the whole stage.',
+		properties: {
+			layout: { type: 'string', required: true, enum: ['content'] },
+			title: { type: 'string', description: 'Slide title.', example: 'Highlights' },
+			body: { type: 'array', required: true, itemShape: 'block', description: 'Display blocks (markdown, chart, table, kpi) filling the slide. One block fills the stage; several stack.' },
+			footer: { type: 'boolean', description: 'Set false to hide the deck footer on this slide.' },
+			notes: { type: 'string', description: 'Speaker notes — shown only in the browser filmstrip, never presented and never printed.' },
+		},
+	},
+	slideTwoColumn: {
+		description: 'Two side-by-side regions — a comparison (add "leftHeading"/"rightHeading") or any two-up content. "split" tunes the column ratio.',
+		properties: {
+			layout: { type: 'string', required: true, enum: ['two-column'] },
+			title: { type: 'string', description: 'Slide title.', example: 'Before vs after' },
+			left: { type: 'array', required: true, itemShape: 'block', description: 'Display blocks in the left column.' },
+			right: { type: 'array', required: true, itemShape: 'block', description: 'Display blocks in the right column.' },
+			leftHeading: { type: 'string', description: 'Optional heading over the left column — makes the slide a comparison.', example: 'Before' },
+			rightHeading: { type: 'string', description: 'Optional heading over the right column.', example: 'After' },
+			split: { type: 'string', enum: ['1-1', '1-2', '2-1'], default: '1-1', description: 'Column width ratio: "1-1" equal, "1-2" narrow-left, "2-1" narrow-right.' },
+			footer: { type: 'boolean', description: 'Set false to hide the deck footer on this slide.' },
+			notes: { type: 'string', description: 'Speaker notes — shown only in the browser filmstrip, never presented and never printed.' },
+		},
+	},
+	slideQuadrant: {
+		description: 'A 2×2 grid of four cells — a SWOT, a 2×2 matrix, four quadrants of anything.',
+		properties: {
+			layout: { type: 'string', required: true, enum: ['quadrant'] },
+			title: { type: 'string', description: 'Slide title.', example: 'SWOT' },
+			cells: { type: 'array', required: true, itemShape: 'slideCell', description: 'EXACTLY FOUR cells, in reading order: top-left, top-right, bottom-left, bottom-right.' },
+			footer: { type: 'boolean', description: 'Set false to hide the deck footer on this slide.' },
+			notes: { type: 'string', description: 'Speaker notes — shown only in the browser filmstrip, never presented and never printed.' },
+		},
+	},
+	slideStatement: {
+		description: 'One big line — a quote, a takeaway, or a full-bleed image with a caption. "text" is the statement; "attribution" is the small line under it.',
+		properties: {
+			layout: { type: 'string', required: true, enum: ['statement'] },
+			text: { type: 'string', required: true, description: 'The statement, shown large and centered.', example: 'Ship less, learn more.' },
+			attribution: { type: 'string', description: 'Small line under the statement (a source or author).', example: '— The team' },
+			background: { type: 'object', itemShape: 'documentCoverBackground', description: 'A full-bleed image behind the statement. A photo behind text NEEDS a "scrim".' },
+			footer: { type: 'boolean', description: 'Set false to hide the deck footer on this slide.' },
+			notes: { type: 'string', description: 'Speaker notes — shown only in the browser filmstrip, never presented and never printed.' },
+		},
+	},
+	slideClosing: {
+		description: 'The closing slide, mirroring the title: a sign-off, optional subtitle and logo, over an optional background. Carries no footer.',
+		properties: {
+			layout: { type: 'string', required: true, enum: ['closing'] },
+			title: { type: 'string', description: 'Closing headline.', example: 'Thank you' },
+			subtitle: { type: 'string', description: 'Line under it (a contact address, a URL).', example: 'questions@acme.com' },
+			logo: { type: 'string', description: 'The small mark. Workspace-local path or a data:image/ URI; remote URLs refused.', example: 'assets/logo.svg' },
+			background: { type: 'object', itemShape: 'documentCoverBackground', description: 'A full-bleed image behind the slide. A photo behind text NEEDS a "scrim".' },
+			notes: { type: 'string', description: 'Speaker notes — shown only in the browser filmstrip, never presented and never printed.' },
+		},
+	},
+}
+
+// Slide layout name → its SHAPES entry. The single source of truth both the validator
+// (per-layout dispatch, the layout enum's "did you mean") and the catalog (rendering all
+// seven) read, so they cannot drift.
+const SLIDE_LAYOUTS = {
+	title: 'slideTitle',
+	section: 'slideSection',
+	content: 'slideContent',
+	'two-column': 'slideTwoColumn',
+	quadrant: 'slideQuadrant',
+	statement: 'slideStatement',
+	closing: 'slideClosing',
 }
 
 // ---------------------------------------------------------------------------
@@ -689,7 +812,7 @@ const BLOCKS = {
 BLOCKS.chart.properties.kind.enum = Object.keys(CHART_KINDS)
 
 const ENVELOPE = {
-	description: 'A canvas file: one renderable document. Top level must carry "instantcanvas": 1 (the marker doubles as the discriminator during workspace scans) and "createdWith" (written by `stamp`, never by hand). EXACTLY ONE of "blocks" or "pages". A canvas that declares "enhances" is the COMPANION of a markdown file — the way a .md gets a cover, a theme, or anything else a "document" carries.',
+	description: 'A canvas file: one renderable document. Top level must carry "instantcanvas": 1 (the marker doubles as the discriminator during workspace scans) and "createdWith" (written by `stamp`, never by hand). EXACTLY ONE of "blocks", "pages" or "slides" ("slides" renders a presentation deck). A canvas that declares "enhances" is the COMPANION of a markdown file — the way a .md gets a cover, a theme, or anything else a "document" carries.',
 	properties: {
 		instantcanvas: { type: 'number', required: true, enum: [VERSION], description: 'Contract version marker. Must be 1.', example: 1 },
 		createdWith: {
@@ -705,9 +828,11 @@ const ENVELOPE = {
 			description: 'Workspace-relative path to a markdown file this canvas is the COMPANION of. A plain .md has no envelope — it IS the canvas, synthesised in memory — so it has nowhere to keep a cover, a theme, a running header, or page geometry. Declaring "enhances" gives it one: WHEN A MARKDOWN FILE HAS A COMPANION, THE COMPANION IS WHAT RUNS, everywhere and uniformly — `open <file.md>` renders it, `print <file.md>` prints it, and the sidebar shows ONE entry (the document, badged), never two. The convention is to name the file <base>.canvas.json beside <base>.md, but that is only what we write by default: the DECLARATION is the mechanism, so renaming the companion changes nothing. Carry a markdown block whose "src" is this same path — a companion that does not render its own document is almost certainly a mistake.',
 			example: 'README.md',
 		},
-		document: { type: 'object', itemShape: 'document', description: 'Document furnishings + default view: opens the canvas as paper sheets (cover, contents, running header/footer, back cover, brand theme) that print 1:1. Any display canvas can also be toggled into document view in the browser. Display blocks only. See `catalog document`.' },
-		blocks: { type: 'array', itemShape: 'block', description: 'Ordered blocks (single-page canvas). XOR with "pages".' },
-		pages: { type: 'array', itemShape: 'page', description: 'Named tabs, each with its own blocks. XOR with "blocks". In document mode each page becomes a chapter.' },
+		document: { type: 'object', itemShape: 'document', description: 'Document furnishings + default view: opens the canvas as paper sheets (cover, contents, running header/footer, back cover, brand theme) that print 1:1. Any display canvas can also be toggled into document view in the browser. Display blocks only. Not valid beside "slides" (a deck is not a paper document). See `catalog document`.' },
+		presentation: { type: 'object', itemShape: 'presentation', description: 'Presentation settings (aspect, theme, footer) for a "slides" deck. Present ONLY with "slides"; it configures the deck and holds no content. See `catalog presentation`.' },
+		blocks: { type: 'array', itemShape: 'block', description: 'Ordered blocks (single-page canvas). XOR with "pages" and "slides".' },
+		pages: { type: 'array', itemShape: 'page', description: 'Named tabs, each with its own blocks. XOR with "blocks" and "slides". In document mode each page becomes a chapter.' },
+		slides: { type: 'array', description: 'An ordered slide deck — renders as a PRESENTATION instead of a page or paper document. XOR with "blocks" and "pages". Each slide names one of seven layouts (title, section, content, two-column, quadrant, statement, closing) and fills its regions with display blocks. Interactive blocks and chart sweeps are refused. See `catalog slide`.' },
 	},
 	example: {
 		instantcanvas: 1,
@@ -722,4 +847,4 @@ const ENV_KEY_RE = /^[A-Za-z_][A-Za-z0-9_]*$/
 // Accepted URL schemes for "url" fields unless validation.protocols narrows them.
 const DEFAULT_URL_PROTOCOLS = ['http', 'https', 'ftp', 'ftps', 'sftp', 'ws', 'wss', 'file', 'mailto']
 
-module.exports = { VERSION, ENVELOPE, BLOCKS, FIELD_TYPES, CHART_KINDS, UNSUPPORTED_CHARTS, SHAPES, ENV_KEY_RE, DEFAULT_URL_PROTOCOLS }
+module.exports = { VERSION, ENVELOPE, BLOCKS, FIELD_TYPES, CHART_KINDS, UNSUPPORTED_CHARTS, SHAPES, SLIDE_LAYOUTS, ENV_KEY_RE, DEFAULT_URL_PROTOCOLS }

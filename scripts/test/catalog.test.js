@@ -46,7 +46,14 @@ test('bare catalog is the LEAN index: one-liners for everything, no schemas (pro
 	// unbrandable, which is what it was until this shipped. One line, and it points at
 	// `catalog envelope`. The cap is not a budget to spend: it is what stops the next
 	// entry from being written as a paragraph.
-	assert.ok(JSON.stringify(lean).length < 8400, 'index stays small: ' + JSON.stringify(lean).length)
+	//
+	// Raised 8400 → 9000 for PRESENTATION mode: two entries (presentationMode, slideLayouts),
+	// same argument again and no other. An agent that cannot see "slides" here has no way to
+	// learn a canvas can be a deck at all — it would keep faking a presentation out of a
+	// document. The seven layout names ARE the payload (an agent picks one without a second
+	// call), and each entry points at its schema (`catalog presentation` / `catalog slide`).
+	// The raise stays inside the spec's ≤ 9500 ceiling; the fragment guard below still holds.
+	assert.ok(JSON.stringify(lean).length < 9000, 'index stays small: ' + JSON.stringify(lean).length)
 
 	// The defects that forced the rewrite, pinned so they cannot return: no entry may
 	// be a fragment, end mid-abbreviation, or carry an unbalanced paren. This is what

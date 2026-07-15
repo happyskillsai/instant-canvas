@@ -67,7 +67,7 @@ Commands:
   theme --list                 Every preset and every saved palette, as JSON.
   catalog [name] [--full]      Lean index; <name> = block | chart kind | field
                                type | fieldset | sweep | document | theme |
-                               envelope for ONE full schema.
+                               presentation | slide | envelope for ONE full schema.
   status [--workspace <dir>]   Report the workspace kernel state.
   stop [--workspace <dir>]     Stop the workspace kernel.
 

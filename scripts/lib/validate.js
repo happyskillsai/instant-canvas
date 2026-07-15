@@ -2,7 +2,7 @@
 
 const fs = require('node:fs')
 const path = require('node:path')
-const { ENVELOPE, BLOCKS, FIELD_TYPES, CHART_KINDS, UNSUPPORTED_CHARTS, SHAPES, ENV_KEY_RE, VERSION } = require('./schema')
+const { ENVELOPE, BLOCKS, FIELD_TYPES, CHART_KINDS, UNSUPPORTED_CHARTS, SHAPES, SLIDE_LAYOUTS, ENV_KEY_RE, VERSION } = require('./schema')
 const { PKG_VERSION, CREATED_WITH_RE } = require('./pkgmeta')
 const { insideRoot } = require('./paths')
 const { MARKDOWN_EXTENSIONS, IMAGE_MIME, NOT_A_FILE_RE, MAX_COVER_IMAGE_BYTES, hasMarkdownExtension, stripFrontmatter, readMarkdownText, scanMarkdownSource } = require('./markdownsrc')
@@ -589,6 +589,67 @@ const TEMPLATE_VARS = ['pageNumber', 'totalPages']
 const TEMPLATE_RE = /\{\{\s*([^{}]*?)\s*\}\}/g
 
 /**
+ * The strict-hex color rules for a theme object — every single-color token and every
+ * palette entry. Shared by `document.theme` and `presentation.theme`, which carry the
+ * exact same contract (one color system, two sinks): they all reach `setProperty`, and
+ * CSSOM was observed accepting the literal string "javascript:alert(1)", so nothing
+ * looser than strict hex may pass. An unknown `preset` needs no check here — it is an
+ * enum in the registry, so checkObject already refuses it with a "did you mean" hint.
+ */
+function checkThemeColors(theme, base, ctx) {
+	if (typeOf(theme) !== 'object')
+		return
+	const checkColor = (value, p) => {
+		if (typeof value === 'string' && !HEX_COLOR_RE.test(value))
+			ctx.error('INVALID_COLOR', p, `${JSON.stringify(value)} is not a hex color.`, {
+				got: value,
+				expected: '#rgb or #rrggbb',
+				hint: 'Theme colors are injected into live CSS and chart templates; only strict hex passes. Named colors, rgb(), and anything else are refused.',
+				example: { theme: { accent: '#0054fe' } },
+			})
+	}
+	for (const key of THEME_TOKEN_KEYS)
+		checkColor(theme[key], `${base}.${key}`)
+
+	if (Array.isArray(theme.palette)) {
+		if (theme.palette.length < MIN_PALETTE || theme.palette.length > MAX_PALETTE)
+			ctx.error('INVALID_SPEC', `${base}.palette`, `A palette holds ${MIN_PALETTE} to ${MAX_PALETTE} colors, got ${theme.palette.length}.`, {
+				got: theme.palette.length,
+				expected: `${MIN_PALETTE}–${MAX_PALETTE} hex colors`,
+				example: { theme: { palette: ['#0054fe', '#00b4d8'] } },
+			})
+		theme.palette.forEach((c, i) => {
+			if (typeof c !== 'string')
+				ctx.error('INVALID_PROPERTY_TYPE', `${base}.palette[${i}]`, `Palette entries must be strings, got ${typeOf(c)}.`, { got: typeOf(c), expected: 'string' })
+			else
+				checkColor(c, `${base}.palette[${i}]`)
+		})
+	}
+}
+
+/**
+ * Unknown {{vars}} in a running strip render literally, so they warn. Shared by a
+ * document's header/footer ({{pageNumber}}/{{totalPages}}) and a presentation's footer
+ * ({{slideNumber}}/{{totalSlides}}) — same UNKNOWN_TEMPLATE_VAR machinery, different var set.
+ */
+function checkStripVars(strip, base, allowed, ctx) {
+	if (typeOf(strip) !== 'object')
+		return
+	const list = allowed.map((v) => `{{${v}}}`).join(', ')
+	for (const slot of ['left', 'center', 'right']) {
+		const text = strip[slot]
+		if (typeof text !== 'string')
+			continue
+		for (const m of text.matchAll(TEMPLATE_RE)) {
+			if (!allowed.includes(m[1]))
+				ctx.warn('UNKNOWN_TEMPLATE_VAR', `${base}.${slot}`, `Unknown template variable {{${m[1]}}} — it will render literally.`, {
+					hint: `Available variables: ${list}.`,
+				})
+		}
+	}
+}
+
+/**
  * Value rules the registry's vocabulary cannot express. The shapes themselves
  * (types, enums, required, unknown-property warnings) come from SHAPES via
  * checkObject; this adds the document-only semantics:
@@ -615,55 +676,11 @@ function checkDocument(canvas, ctx) {
 			})
 	}
 
-	const theme = doc.theme
-	if (typeOf(theme) === 'object') {
-		const checkColor = (value, p) => {
-			if (typeof value === 'string' && !HEX_COLOR_RE.test(value))
-				ctx.error('INVALID_COLOR', p, `${JSON.stringify(value)} is not a hex color.`, {
-					got: value,
-					expected: '#rgb or #rrggbb',
-					hint: 'Theme colors are injected into live CSS and chart templates; only strict hex passes. Named colors, rgb(), and anything else are refused.',
-					example: { theme: { accent: '#0054fe' } },
-				})
-		}
-		// Every single-color token, not just the accent: they all reach setProperty.
-		// An unknown `preset` needs no check here — it is an enum in the registry, so
-		// checkObject already refuses it with the same "did you mean" hint. Adding a
-		// second check would report one typo as two errors.
-		for (const key of THEME_TOKEN_KEYS)
-			checkColor(theme[key], `document.theme.${key}`)
-
-		if (Array.isArray(theme.palette)) {
-			if (theme.palette.length < MIN_PALETTE || theme.palette.length > MAX_PALETTE)
-				ctx.error('INVALID_SPEC', 'document.theme.palette', `A palette holds ${MIN_PALETTE} to ${MAX_PALETTE} colors, got ${theme.palette.length}.`, {
-					got: theme.palette.length,
-					expected: `${MIN_PALETTE}–${MAX_PALETTE} hex colors`,
-					example: { theme: { palette: ['#0054fe', '#00b4d8'] } },
-				})
-			theme.palette.forEach((c, i) => {
-				if (typeof c !== 'string')
-					ctx.error('INVALID_PROPERTY_TYPE', `document.theme.palette[${i}]`, `Palette entries must be strings, got ${typeOf(c)}.`, { got: typeOf(c), expected: 'string' })
-				else
-					checkColor(c, `document.theme.palette[${i}]`)
-			})
-		}
-	}
-
-	for (const strip of ['header', 'footer']) {
-		if (typeOf(doc[strip]) !== 'object')
-			continue
-		for (const slot of ['left', 'center', 'right']) {
-			const text = doc[strip][slot]
-			if (typeof text !== 'string')
-				continue
-			for (const m of text.matchAll(TEMPLATE_RE)) {
-				if (!TEMPLATE_VARS.includes(m[1]))
-					ctx.warn('UNKNOWN_TEMPLATE_VAR', `document.${strip}.${slot}`, `Unknown template variable {{${m[1]}}} — it will render literally.`, {
-						hint: 'Available variables: {{pageNumber}}, {{totalPages}}.',
-					})
-			}
-		}
-	}
+	// Theme colors and running-strip template vars are the exact same contract a
+	// presentation carries, so both run the shared helpers (a parallel copy would be a bug).
+	checkThemeColors(doc.theme, 'document.theme', ctx)
+	checkStripVars(doc.header, 'document.header', TEMPLATE_VARS, ctx)
+	checkStripVars(doc.footer, 'document.footer', TEMPLATE_VARS, ctx)
 
 	if (typeOf(doc.page) === 'object' && typeof doc.page.margin === 'string' && !MARGIN_MM_RE.test(doc.page.margin))
 		ctx.error('INVALID_SPEC', 'document.page.margin', `${JSON.stringify(doc.page.margin)} is not a millimeter length.`, {
@@ -726,10 +743,10 @@ const BACKGROUND_EXAMPLE = {
  * silent drop. A full-bleed image lands in the canvas payload AND in the PDF, and nobody
  * should ship a 40 MB PDF by accident — least of all without being told.
  */
-function checkCoverBackground(bg, base, ctx) {
+function checkCoverBackground(bg, base, ctx, { illegibleCode = 'COVER_TEXT_MAY_BE_ILLEGIBLE', subject = 'cover' } = {}) {
 	if (typeof bg.src === 'string')
 		checkDocumentLogo(bg.src, `${base}.src`, ctx, {
-			kindLabel: 'cover background',
+			kindLabel: `${subject} background`,
 			example: BACKGROUND_EXAMPLE,
 			maxBytes: MAX_COVER_IMAGE_BYTES,
 		})
@@ -796,9 +813,9 @@ function checkCoverBackground(bg, base, ctx) {
 	// WARNING, never an error — an author who knows their photograph is dark may set an ink
 	// and ignore this, which is exactly the judgment call a warning is for.
 	if (typeof bg.src === 'string' && scrim === undefined)
-		ctx.warn('COVER_TEXT_MAY_BE_ILLEGIBLE', base, bg.ink === undefined
-			? 'This cover puts text over an image with no "scrim" and no "ink" — a dark photo swallows the near-black title, and a light one swallows a white subtitle.'
-			: 'This cover sets an "ink" but no "scrim". An ink cannot see the pixels behind it: white text is legible over a dark photo and invisible over a bright one, and nothing here can tell which this image is.', {
+		ctx.warn(illegibleCode, base, bg.ink === undefined
+			? `This ${subject} puts text over an image with no "scrim" and no "ink" — a dark photo swallows the near-black title, and a light one swallows a white subtitle.`
+			: `This ${subject} sets an "ink" but no "scrim". An ink cannot see the pixels behind it: white text is legible over a dark photo and invisible over a bright one, and nothing here can tell which this image is.`, {
 			hint: 'Add a "scrim" ({color, opacity}) — a flat wash between the image and the text is the only thing that makes the contrast certain. Keep the "ink" as well: the two together are what a photographic cover normally needs.',
 			example: BACKGROUND_EXAMPLE,
 		})
@@ -863,6 +880,150 @@ function checkDocumentLogo(src, p, ctx, { kindLabel = 'logo', example = LOGO_EXA
 			hint: 'A full-bleed image is embedded in the canvas payload AND in the PDF, so its weight is paid twice. Resize or re-compress it — a cover reproduces perfectly well at print resolution.',
 			example,
 		})
+}
+
+// ---------------------------------------------------------------- presentation
+
+const PRESENTATION_TEMPLATE_VARS = ['slideNumber', 'totalSlides']
+
+const PRESENTATION_EXAMPLE = {
+	instantcanvas: 1,
+	title: 'Q3 Business Review',
+	presentation: { aspect: '16:9', theme: { preset: 'midnight' }, footer: { right: 'Slide {{slideNumber}} / {{totalSlides}}' } },
+	slides: [
+		{ layout: 'title', title: 'Q3 Business Review', subtitle: 'Revenue and growth' },
+		{ layout: 'content', title: 'Highlights', body: [{ type: 'markdown', text: '- Revenue up **12% QoQ**' }] },
+		{ layout: 'closing', title: 'Thank you' },
+	],
+}
+
+/**
+ * A slides canvas is a presentation deck. What the registry cannot express, and this adds:
+ *   - The three-way envelope conflicts: a "presentation" object with no "slides"
+ *     (PRESENTATION_NEEDS_SLIDES), and a "document" beside "slides" (DOCUMENT_ON_PRESENTATION).
+ *     The blocks/pages/slides XOR itself lives in validate(), beside the existing one.
+ *   - Per-slide dispatch on "layout": each of the seven layouts has its own SHAPES entry,
+ *     so checkObject does types/required-regions/unknown-property warnings for free; a bad
+ *     layout name gets the same "did you mean" as any other enum.
+ *   - The value rules a shape cannot carry: a quadrant has exactly four cells; theme colors
+ *     are strict hex; unknown footer {{vars}} warn; a background needs a scrim behind text.
+ *   - The refusal: paper and a projector can neither submit nor drag, so a form, a confirm
+ *     or a chart sweep anywhere under slides is a teaching error (D5). This is also why
+ *     MULTIPLE_INTERACTIVE_BLOCKS is unreachable on a deck — every interactive block is
+ *     refused outright before two could ever coexist.
+ */
+function checkPresentation(canvas, ctx) {
+	const pres = canvas.presentation
+	const hasSlides = canvas.slides !== undefined
+
+	if (typeOf(pres) === 'object' && !hasSlides)
+		ctx.error('PRESENTATION_NEEDS_SLIDES', 'presentation', 'A "presentation" object configures a slide deck, but this canvas has no "slides".', {
+			hint: 'Move your content into "slides" (each slide names a layout and fills its regions), or remove "presentation".',
+			example: PRESENTATION_EXAMPLE,
+		})
+
+	if (hasSlides && canvas.document !== undefined)
+		ctx.error('DOCUMENT_ON_PRESENTATION', 'document', 'A presentation cannot also carry a "document" — a slide deck is not a paper document.', {
+			hint: 'A presentation keeps its theme, footer and aspect in "presentation", not "document". Remove "document" (move any theme into "presentation.theme").',
+			example: PRESENTATION_EXAMPLE,
+		})
+
+	// presentation.theme colors and presentation.footer vars — the shape itself (aspect enum,
+	// token types, unknown props) is already checked via the envelope's itemShape.
+	if (typeOf(pres) === 'object') {
+		checkThemeColors(pres.theme, 'presentation.theme', ctx)
+		checkStripVars(pres.footer, 'presentation.footer', PRESENTATION_TEMPLATE_VARS, ctx)
+	}
+
+	if (!Array.isArray(canvas.slides))
+		return // type already reported by checkObject
+	if (!canvas.slides.length)
+		ctx.error('INVALID_SPEC', 'slides', 'A presentation needs at least one slide.', {
+			expected: '>= 1 slide',
+			example: PRESENTATION_EXAMPLE,
+		})
+
+	canvas.slides.forEach((slide, i) => {
+		const p = `slides[${i}]`
+		if (typeOf(slide) !== 'object') {
+			ctx.error('INVALID_PROPERTY_TYPE', p, `Each slide must be an object, got ${typeOf(slide)}.`, { got: typeOf(slide), expected: 'object' })
+			return
+		}
+		const shapeName = SLIDE_LAYOUTS[slide.layout]
+		if (!shapeName) {
+			if (slide.layout === undefined)
+				ctx.error('MISSING_REQUIRED_PROPERTY', `${p}.layout`, 'Every slide requires a "layout" naming one of the seven arrangements.', {
+					expected: Object.keys(SLIDE_LAYOUTS),
+					example: { layout: 'content', body: [{ type: 'markdown', text: '## Point' }] },
+				})
+			else {
+				const near = typeof slide.layout === 'string' ? closest(slide.layout, Object.keys(SLIDE_LAYOUTS)) : null
+				ctx.error('INVALID_ENUM_VALUE', `${p}.layout`, `${JSON.stringify(slide.layout)} is not a valid slide layout.`, {
+					got: slide.layout,
+					expected: Object.keys(SLIDE_LAYOUTS),
+					...(near ? { hint: `Did you mean "${near}"?` } : {}),
+				})
+			}
+			return
+		}
+
+		// Types, required regions, and unknown-property warnings for this layout — for free.
+		checkObject(slide, SHAPES[shapeName].properties, p, ctx)
+
+		if (slide.layout === 'quadrant' && Array.isArray(slide.cells) && slide.cells.length !== 4)
+			ctx.error('INVALID_SPEC', `${p}.cells`, `A quadrant has exactly 4 cells (top-left, top-right, bottom-left, bottom-right), got ${slide.cells.length}.`, {
+				got: slide.cells.length,
+				expected: '4 cells',
+				example: { layout: 'quadrant', cells: [{ blocks: [] }, { blocks: [] }, { blocks: [] }, { blocks: [] }] },
+			})
+
+		if (typeOf(slide.background) === 'object')
+			checkCoverBackground(slide.background, `${p}.background`, ctx, { illegibleCode: 'SLIDE_TEXT_MAY_BE_ILLEGIBLE', subject: 'slide' })
+
+		if (typeof slide.logo === 'string')
+			checkDocumentLogo(slide.logo, `${p}.logo`, ctx)
+	})
+
+	// Interactive blocks anywhere under slides are refused (D5). checkObject already
+	// validated each block through the region path; this is only the projector/paper refusal.
+	for (const { block, path: bp } of collectSlideBlocks(canvas)) {
+		if (typeOf(block) !== 'object')
+			continue
+		if (block.type === 'form' || block.type === 'confirm')
+			ctx.error('PRESENTATION_INTERACTIVE_BLOCK', bp, `A slide cannot contain a "${block.type}" block — a projected or printed slide can neither submit nor confirm.`, {
+				got: block.type,
+				hint: 'Drop the block. Collect input in a separate form canvas, or show the one result you want as a plain display block.',
+			})
+		else if (block.type === 'chart' && block.sweep !== undefined)
+			ctx.error('PRESENTATION_INTERACTIVE_BLOCK', `${bp}.sweep`, 'A chart sweep cannot render on a slide — a projector cannot drag a slider and paper cannot animate.', {
+				hint: 'Ship the one frame you want as plain "data" (drop "sweep").',
+			})
+	}
+}
+
+/** Every block across every slide region, with its path — for the interactive-block refusal. */
+function collectSlideBlocks(canvas) {
+	const out = []
+	if (!Array.isArray(canvas.slides))
+		return out
+	const push = (arr, ap) => {
+		if (Array.isArray(arr))
+			arr.forEach((b, j) => out.push({ block: b, path: `${ap}[${j}]` }))
+	}
+	canvas.slides.forEach((slide, i) => {
+		if (typeOf(slide) !== 'object')
+			return
+		const p = `slides[${i}]`
+		push(slide.body, `${p}.body`)
+		push(slide.left, `${p}.left`)
+		push(slide.right, `${p}.right`)
+		if (Array.isArray(slide.cells))
+			slide.cells.forEach((cell, c) => {
+				if (typeOf(cell) === 'object')
+					push(cell.blocks, `${p}.cells[${c}].blocks`)
+			})
+	})
+	return out
 }
 
 // ---------------------------------------------------------------- enhances
@@ -1061,13 +1222,13 @@ function validate(source, opts = {}) {
 	if (typeof canvas.enhances === 'string')
 		ctx.enhances = canvas.enhances.trim()
 
-	checkObject(canvas, ENVELOPE.properties, '', ctx, { skip: ['blocks', 'pages', 'createdWith'] })
+	checkObject(canvas, ENVELOPE.properties, '', ctx, { skip: ['blocks', 'pages', 'slides', 'createdWith'] })
 
-	const hasBlocks = canvas.blocks !== undefined, hasPages = canvas.pages !== undefined
-	if (hasBlocks && hasPages)
-		ctx.error('INVALID_SPEC', '', 'A canvas takes EXACTLY ONE of "blocks" or "pages", not both.', { example: ENVELOPE.example })
-	else if (!hasBlocks && !hasPages)
-		ctx.error('MISSING_REQUIRED_PROPERTY', 'blocks', 'A canvas requires "blocks" (single page) or "pages" (tabs).', {
+	const members = ['blocks', 'pages', 'slides'].filter((k) => canvas[k] !== undefined)
+	if (members.length > 1)
+		ctx.error('INVALID_SPEC', '', `A canvas takes EXACTLY ONE of "blocks", "pages", or "slides", not ${members.map((m) => `"${m}"`).join(' + ')}.`, { example: ENVELOPE.example })
+	else if (members.length === 0)
+		ctx.error('MISSING_REQUIRED_PROPERTY', 'blocks', 'A canvas requires "blocks" (single page), "pages" (tabs), or "slides" (a presentation deck).', {
 			expected: 'array',
 			example: ENVELOPE.example,
 		})
@@ -1085,6 +1246,9 @@ function validate(source, opts = {}) {
 	if (typeOf(canvas.document) === 'object')
 		checkDocument(canvas, ctx)
 
+	if (canvas.slides !== undefined || typeOf(canvas.presentation) === 'object')
+		checkPresentation(canvas, ctx)
+
 	return finish(ctx, canvas)
 }
 
@@ -1092,12 +1256,14 @@ function finish(ctx, canvas) {
 	const ok = ctx.errors.length === 0
 	const result = { ok, errorCount: ctx.errors.length, errors: ctx.errors, warnings: ctx.warnings }
 	if (ok && canvas) {
-		const blocks = collectBlocks(canvas)
+		const isDeck = Array.isArray(canvas.slides)
+		const blocks = isDeck ? collectSlideBlocks(canvas) : collectBlocks(canvas)
 		result.canvas = {
 			title: canvas.title,
 			pages: Array.isArray(canvas.pages) ? canvas.pages.length : 1,
 			blocks: blocks.length,
 			interactive: blocks.some(({ block }) => isInteractiveBlock(block)),
+			...(isDeck ? { slides: canvas.slides.length } : {}),
 		}
 	}
 	return result
@@ -1107,7 +1273,8 @@ function finish(ctx, canvas) {
 function renderHuman(result, fileLabel = 'canvas') {
 	const lines = []
 	if (result.ok) {
-		lines.push(`✓ ${fileLabel} is valid (${result.canvas ? result.canvas.blocks + ' blocks' : 'ok'})`)
+		const summary = result.canvas ? (result.canvas.slides != null ? `${result.canvas.slides} slides` : `${result.canvas.blocks} blocks`) : 'ok'
+		lines.push(`✓ ${fileLabel} is valid (${summary})`)
 	} else {
 		lines.push(`✗ ${fileLabel}: ${result.errorCount} error(s)`)
 		for (const e of result.errors)

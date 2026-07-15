@@ -1,0 +1,89 @@
+{
+	"instantcanvas": 1,
+	"createdWith": "0.8.1",
+	"title": "Q3 Business Review",
+	"presentation": {
+		"aspect": "16:9",
+		"theme": { "preset": "midnight" },
+		"footer": {
+			"left": "Q3 Business Review",
+			"right": "Slide {{slideNumber}} / {{totalSlides}}"
+		}
+	},
+	"slides": [
+		{
+			"layout": "title",
+			"title": "Q3 Business Review",
+			"subtitle": "Revenue, growth, and outlook",
+			"author": "Finance Team",
+			"date": "July 2026",
+			"notes": "Welcome the room and set the agenda. SPEAKER-NOTE-MARKER"
+		},
+		{
+			"layout": "section",
+			"title": "Financial Results",
+			"subtitle": "The numbers behind the quarter"
+		},
+		{
+			"layout": "content",
+			"title": "Highlights",
+			"body": [
+				{ "type": "markdown", "text": "- Revenue up **12% QoQ**\n- Two new enterprise logos\n- Gross margin steady at 71%" },
+				{ "type": "kpi", "cards": [
+					{ "label": "Revenue", "value": 128000, "format": "currency", "delta": { "value": 0.12, "label": "QoQ" } },
+					{ "label": "New logos", "value": 2, "format": "number" }
+				] }
+			],
+			"notes": "Lead with the revenue number; the logos are the story."
+		},
+		{
+			"layout": "content",
+			"title": "Revenue by region",
+			"body": [
+				{ "type": "chart", "kind": "bar", "title": "Revenue by region ($000s)", "data": [
+					{ "region": "APAC", "rev": 42 },
+					{ "region": "EMEA", "rev": 61 },
+					{ "region": "AMER", "rev": 25 }
+				], "encoding": { "x": "region", "y": "rev" } }
+			],
+			"footer": false
+		},
+		{
+			"layout": "two-column",
+			"title": "Before vs after",
+			"leftHeading": "Before",
+			"rightHeading": "After",
+			"split": "1-1",
+			"left": [{ "type": "markdown", "text": "Manual pipeline, a 3-day cycle, weekly reporting." }],
+			"right": [{ "type": "markdown", "text": "Automated, a 20-minute cycle, live dashboards." }]
+		},
+		{
+			"layout": "quadrant",
+			"title": "SWOT",
+			"cells": [
+				{ "heading": "Strengths", "blocks": [{ "type": "markdown", "text": "Strong brand, high NRR." }] },
+				{ "heading": "Weaknesses", "blocks": [{ "type": "markdown", "text": "Thin support team." }] },
+				{ "heading": "Opportunities", "blocks": [{ "type": "markdown", "text": "A new region opening." }] },
+				{ "heading": "Threats", "blocks": [{ "type": "markdown", "text": "Two well-funded rivals." }] }
+			]
+		},
+		{
+			"layout": "statement",
+			"text": "Ship less, learn more.",
+			"attribution": "— The team",
+			"background": {
+				"src": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+				"size": "cover",
+				"position": "center",
+				"scrim": { "color": "#000000", "opacity": 0.4 },
+				"ink": "#ffffff"
+			},
+			"notes": "Pause here. This is the line they should remember."
+		},
+		{
+			"layout": "closing",
+			"title": "Thank you",
+			"subtitle": "questions@acme.com"
+		}
+	]
+}
