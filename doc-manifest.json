@@ -67,7 +67,7 @@
         "Hot reload",
         "Version handshake"
       ],
-      "line_count": 172,
+      "line_count": 175,
       "links_to": [
         "docs/canvas-schema.md",
         "docs/cli.md",
@@ -125,6 +125,7 @@
         "Sweeps: a slider over precomputed frames",
         "Document mode",
         "A cover is a sheet, so it can carry a background image",
+        "Presentation mode",
         "The theme: one color system, two sinks",
         "The companion canvas: the envelope a markdown file never had",
         "Custom palettes: a library, not a preset name",
@@ -132,7 +133,7 @@
         "Validator behavior",
         "Catalog: progressive disclosure"
       ],
-      "line_count": 303,
+      "line_count": 354,
       "links_to": [
         "docs/architecture.md",
         "docs/cli.md",
@@ -187,7 +188,7 @@
         "Result contract (stdout of `open`)",
         "The agent workflow"
       ],
-      "line_count": 130,
+      "line_count": 132,
       "links_to": [
         "docs/architecture.md",
         "docs/canvas-schema.md",
@@ -226,13 +227,14 @@
         "Mounting",
         "Sweeps",
         "Document mode: the deck and the packer",
+        "Presentation mode: the filmstrip and the stage",
         "Bespoke form widgets",
         "Layout",
         "Theming",
         "CSP shim",
         "Icons and vendored assets"
       ],
-      "line_count": 110,
+      "line_count": 121,
       "links_to": [
         "docs/architecture.md",
         "docs/canvas-schema.md",
@@ -333,9 +335,10 @@
         "A sheet 3 px too tall prints a silent sliver page",
         "Constraint API quirks around custom widgets",
         "A CSS `url()` cannot carry the per-request token, so a tokened asset gate 403s `@font-face` SILENTLY",
-        "A responsive `@media` block must sit LAST, or a same-specificity base rule beats it"
+        "A responsive `@media` block must sit LAST, or a same-specificity base rule beats it",
+        "Printing a presentation, every slide came out on TWO pages — and the culprit was 12px of screen gutter"
       ],
-      "line_count": 246,
+      "line_count": 264,
       "links_to": [
         "docs/architecture.md",
         "docs/security.md"
@@ -629,7 +632,7 @@
         "Security regressions",
         "Browser verification"
       ],
-      "line_count": 99,
+      "line_count": 101,
       "links_to": [
         "docs/gotchas/frontend.md",
         "docs/gotchas/testing.md",

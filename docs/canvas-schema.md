@@ -196,6 +196,57 @@ Neither is defaulted on: silently tinting somebody's photograph would be presump
 
 **TOC page numbers come from the deck's own pagination.** Because sheets are literal page boxes, the packer knows exactly which sheet every heading and chapter name landed on, and the TOC prints those numbers with dotted leaders. They are exact on screen, for `instantcanvas print`, and for Cmd+P at default settings. The honest caveat (which originally kept numbers out entirely — revisited at the user's request): a human who manually overrides paper size or scale *in the print dialog* can make Chrome repaginate, and printed numbers cannot follow. The `notes` in `catalog document` carry this caveat for agents.
 
+## Presentation mode
+
+A canvas whose envelope carries `slides[]` — the **third XOR member** beside `blocks` and `pages`, one or more slides — renders as a **slide deck**: a scrollable filmstrip in the browser, a fullscreen presenting stage with the standard keyboard vocabulary, and one landscape page per slide from `print`. It is a **sibling of document mode, not a rewrite** — `stamp`, `validate`, the catalog, the workspace scan, hot reload and the theme system are inherited, not rebuilt. The optional `presentation` object carries the deck-level choices nobody can derive from the slides, and holds **no slide content**:
+
+- **`aspect`** — `"16:9"` (default, `13.333in × 7.5in`) or `"4:3"` (`10in × 7.5in`). These are the PowerPoint-standard page sizes on purpose, so an exported PDF reads as slides everywhere.
+- **`theme`** — the same shape as `document.theme` (`SHAPES.documentTheme`, reused verbatim): a named preset plus any strict-hex token override, all 22 presets. Dark presets are **first-class** here — a deck lives on a screen, where a dark deck is normal, not the expensive-to-print exception it is on paper.
+- **`footer`** — `{left, center, right}` with `{{slideNumber}}`/`{{totalSlides}}` substituted through the same `UNKNOWN_TEMPLATE_VAR` machinery as the document strips. Shown on every slide except `title` and `closing`; any slide opts out with `"footer": false`.
+
+**Seven layouts, a fixed vocabulary.** Each is a `SHAPES` entry (`slideTitle` … `slideClosing`) named by `SLIDE_LAYOUTS` in `schema.js` — the single map both `validate.js` (per-layout dispatch, plus the layout enum's "did you mean") and `catalog.js` (rendering all seven) read, so they cannot drift. The agent picks an arrangement and fills its regions with the existing **display** blocks only (`markdown`, `chart`, `table`, `kpi`), validated by the same block machinery reached through the slide paths (`slides[2].body[0]`); it never authors slide CSS.
+
+- `title` / `closing` — deck opener and sign-off: a big title, optional subtitle/author/date/`logo`, over an optional `background`. Neither carries a footer.
+- `section` — a divider heading (and optional subtitle) announcing the next part.
+- `content` — the workhorse: an optional `title` over a `body` of blocks; a lone chart or KPI row fills the stage.
+- `two-column` — `left`/`right` regions, optional `leftHeading`/`rightHeading` (which make it a comparison), and a `split` ratio (`1-1` | `1-2` | `2-1`).
+- `quadrant` — a 2×2 grid of **exactly four** `cells`, each `{heading?, blocks[]}`, in reading order (a SWOT, a 2×2 matrix).
+- `statement` — one big line: `text` plus optional `attribution`, over an optional `background`.
+
+```jsonc
+{
+  "instantcanvas": 1, "createdWith": "0.9.0", "title": "Q3 Business Review",
+  "presentation": {
+    "aspect": "16:9",                                 // XOR "4:3"
+    "theme":  { "preset": "midnight" },               // dark is first-class on a screen
+    "footer": { "right": "{{slideNumber}} / {{totalSlides}}" }
+  },
+  "slides": [                                          // XOR "blocks" XOR "pages"; ≥ 1
+    { "layout": "title",      "title": "Q3 Business Review", "subtitle": "Revenue & outlook", "author": "Finance" },
+    { "layout": "section",    "title": "Financial Results" },
+    { "layout": "content",    "title": "Revenue", "body": [{ "type": "chart", "kind": "bar", /* … */ }] },
+    { "layout": "two-column", "leftHeading": "Before", "rightHeading": "After",
+                              "left": [ /* Block[] */ ], "right": [ /* Block[] */ ], "split": "1-1" },
+    { "layout": "quadrant",   "title": "SWOT",
+                              "cells": [ { "heading": "Strengths", "blocks": [ /* … */ ] } /* exactly 4: TL,TR,BL,BR */ ] },
+    { "layout": "statement",  "text": "Ship less, learn more.", "attribution": "— The team" },
+    { "layout": "closing",    "title": "Thank you", "subtitle": "questions@acme.com" }
+  ]
+}
+```
+
+`checkPresentation` in `validate.js` (a sibling of `checkDocument`) adds only what the registry cannot express — shapes, types, enums, required regions and unknown-property warnings all come from `SHAPES` via `checkObject`, and a bad `layout` is an `INVALID_ENUM_VALUE` with a did-you-mean:
+
+- The three-way XOR conflicts: **`PRESENTATION_NEEDS_SLIDES`** (a `presentation` object with no `slides`) and **`DOCUMENT_ON_PRESENTATION`** (a `document` beside `slides` — a deck keeps its theme and settings in `presentation`, not `document`).
+- **`PRESENTATION_INTERACTIVE_BLOCK`** — a `form`/`confirm` block, or any chart carrying `sweep`, anywhere under `slides`. It mirrors `DOCUMENT_INTERACTIVE_BLOCK` (a projected slide and a printed slide can do neither), and it is what makes `MULTIPLE_INTERACTIVE_BLOCKS` unreachable on a deck.
+- The `quadrant`-exactly-four-`cells` rule, and the footer template-var warning.
+
+**`background` rides the document cover's asset ladder** — the same shape and validation (`src`/`size`/`position`/`scrim`/`ink`), the same `REMOTE_ASSET_BLOCKED` / `insideRoot` / `IMAGE_MIME` / byte-cap checks through the shared `checkCoverBackground` and `checkDocumentLogo`, and the same no-scrim warning, here named **`SLIDE_TEXT_MAY_BE_ILLEGIBLE`** (the `COVER_TEXT_MAY_BE_ILLEGIBLE` family). It is allowed only on the four **furniture** layouts (`title`/`section`/`statement`/`closing`) — a photo behind body text is unreadable, so on a content-bearing layout it is simply not in the shape and an author who adds it there gets an `UNKNOWN_PROPERTY` warning.
+
+**Slides are assigned, never packed.** There is no reflow and no automatic slide breaks; a slide is a fixed box, exactly like a sheet, which is what keeps screen == PDF by construction. When a region overflows anyway, autofit steps its type scale down through **≤ 3** class-based steps; a region still overflowing is **clipped** (`overflow: hidden`, geometry preserved) and flagged with a "content overflows this slide" badge **in the filmstrip only** — never on the presenting stage, never in the PDF, because a clipped slide is an authoring signal, not something to show an audience. Per-slide speaker **`notes`** (a string) follow the same rule: shown only beneath the slide in the filmstrip, never presented and never printed.
+
+The catalog documents all of this on the deterministic surface: `catalog presentation` (settings, envelope framing, agent-rule notes, a valid deck example) and `catalog slide` (all seven layouts, one validated example each), both included in `catalog --full`.
+
 ## The theme: one color system, two sinks
 
 `lib/theme.js` (`catalog theme`) owns the document's colors, and it is the *only* place the rules live — the kernel resolves a declared theme to concrete hex before the browser ever sees it (see [architecture.md](architecture.md)). A theme is a **named preset plus any token override**, and stopping at the preset is the expected case:
@@ -284,7 +335,7 @@ Common shape: `{name, label, type, required?, placeholder?, help?, default?, opt
 
 `validate(source, {root})` collects **all** errors in one pass — never fail-fast, never throws for spec problems. Every error carries `code`, `path` (e.g. `pages[1].blocks[0].encoding.y[1]`), `message`, and usually `got`, `expected`, a Levenshtein/alias-driven `hint` ("Did you mean \"range\"?"), and a correct `example`. Unknown properties are **warnings**, not errors. `INVALID_JSON` includes line/column. This is the deterministic half of the agentic loop: the agent writes, the validator names the exact defect and its fix, the agent retries until `{"ok": true}`.
 
-Error codes: `INVALID_JSON, INVALID_SPEC, UNSUPPORTED_VERSION, MISSING_CREATED_WITH(warn in the kernel), INVALID_CREATED_WITH(warn in the kernel), UNKNOWN_BLOCK_TYPE, UNKNOWN_FIELD_TYPE, UNKNOWN_PROPERTY(warn), MISSING_REQUIRED_PROPERTY, INVALID_PROPERTY_TYPE, INVALID_ENUM_VALUE, DUPLICATE_FIELD_NAME, MULTIPLE_INTERACTIVE_BLOCKS, DOCUMENT_INTERACTIVE_BLOCK, INVALID_COLOR, UNKNOWN_TEMPLATE_VAR(warn), ENCODING_KEY_NOT_IN_DATA, INVALID_ENV_KEY, PATH_OUTSIDE_WORKSPACE, MISSING_SOURCE, REMOTE_ASSET_BLOCKED, ASSET_TOO_LARGE, MDX_NOT_RENDERED(warn), RAW_HTML_NOT_RENDERED(warn), COVER_TEXT_MAY_BE_ILLEGIBLE(warn)` — plus the three companion codes: `DUPLICATE_ENHANCES, COMPANION_DOES_NOT_RENDER(warn), COMPANION_WITHOUT_DOCUMENT(warn)` — plus runtime codes surfaced by the CLI/kernel: `SECRET_RETURN_BLOCKED, WRITE_FAILED, SESSION_TIMEOUT, KERNEL_UNREACHABLE, CHROME_REQUIRED, BROWSER_OPEN_FAILED(warn), INVALID_THEME, THEME_DECLARED_IN_CANVAS, THEME_NEEDS_DOCUMENT, INVALID_PALETTE_NAME, PALETTE_NAME_TAKEN, TOO_MANY_PALETTES, CONFIG_UNREADABLE, INTERNAL_ERROR`.
+Error codes: `INVALID_JSON, INVALID_SPEC, UNSUPPORTED_VERSION, MISSING_CREATED_WITH(warn in the kernel), INVALID_CREATED_WITH(warn in the kernel), UNKNOWN_BLOCK_TYPE, UNKNOWN_FIELD_TYPE, UNKNOWN_PROPERTY(warn), MISSING_REQUIRED_PROPERTY, INVALID_PROPERTY_TYPE, INVALID_ENUM_VALUE, DUPLICATE_FIELD_NAME, MULTIPLE_INTERACTIVE_BLOCKS, DOCUMENT_INTERACTIVE_BLOCK, PRESENTATION_NEEDS_SLIDES, DOCUMENT_ON_PRESENTATION, PRESENTATION_INTERACTIVE_BLOCK, INVALID_COLOR, UNKNOWN_TEMPLATE_VAR(warn), ENCODING_KEY_NOT_IN_DATA, INVALID_ENV_KEY, PATH_OUTSIDE_WORKSPACE, MISSING_SOURCE, REMOTE_ASSET_BLOCKED, ASSET_TOO_LARGE, MDX_NOT_RENDERED(warn), RAW_HTML_NOT_RENDERED(warn), COVER_TEXT_MAY_BE_ILLEGIBLE(warn), SLIDE_TEXT_MAY_BE_ILLEGIBLE(warn)` — plus the three companion codes: `DUPLICATE_ENHANCES, COMPANION_DOES_NOT_RENDER(warn), COMPANION_WITHOUT_DOCUMENT(warn)` — plus runtime codes surfaced by the CLI/kernel: `SECRET_RETURN_BLOCKED, WRITE_FAILED, SESSION_TIMEOUT, KERNEL_UNREACHABLE, CHROME_REQUIRED, BROWSER_OPEN_FAILED(warn), INVALID_THEME, THEME_DECLARED_IN_CANVAS, THEME_NEEDS_DOCUMENT, INVALID_PALETTE_NAME, PALETTE_NAME_TAKEN, TOO_MANY_PALETTES, CONFIG_UNREADABLE, INTERNAL_ERROR`.
 
 The six theme codes are **write boundaries, never a canvas's shape** — they are raised by `lib/themestore.js`, which is to say by both doors into it: the browser's `POST /api/theme` / `POST /api/theme/palette` and the CLI's `theme` command, reported as an HTTP status on one and an exit-1 error object on the other. `INVALID_THEME` means a theme was refused rather than sanitized; `THEME_DECLARED_IN_CANVAS` means a reset was refused because the canvas is what declares the theme; **`THEME_NEEDS_DOCUMENT`** means the canvas holds a form, a confirm or a sweep, so it cannot carry a `document` at all and therefore has nowhere to keep a theme (see [architecture.md](architecture.md)). The three palette codes concern the workspace's own library, never a document. `CONFIG_UNREADABLE` is `skills-config.json` existing but not parsing — deliberately loud, because *absent is not corrupt*.
 

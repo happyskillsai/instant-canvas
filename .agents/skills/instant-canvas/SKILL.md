@@ -121,6 +121,7 @@ stop [--workspace <dir>]
   "enhances": "README.md",        // optional; makes this the COMPANION of a markdown file — see above
   "document": { /* … */ },        // optional; REQUIRED to `print` a canvas — see below
   "blocks": [ /* Block[] */ ]      // XOR "pages": [{"name": "Tab", "blocks": [...]}]
+                                  // XOR "slides": [...] — a PRESENTATION deck (see Presentations)
 }
 ```
 
@@ -194,6 +195,37 @@ Adding a `document` object is **not** a reason to print. It is what makes a canv
 **It only moves the axis the image actually overflows**, and this catches people out: an image whose aspect is *wider than the page* — which on portrait A4 (aspect 0.71) means a square photo **and** any landscape photo — is cropped **left/right**, so the **first** number is the live one and the second does nothing. Only an image *taller* than the page is cropped top/bottom.
 
 `backCover.background` is the same shape and entirely independent. Both are inlined server-side and reach the **PDF**, not just the screen. An oversize image is a hard `ASSET_TOO_LARGE` error, never a silent truncation — a full-bleed photo is paid for twice, in the canvas and in the PDF.
+
+## Presentations: a deck of slides
+
+A canvas whose envelope carries **`slides`** (a third XOR member, beside `blocks` and `pages`) renders as a **slide deck**: a scrollable filmstrip in the browser, a fullscreen **Present** mode, and — through `print` — one landscape page per slide. Pull the contract with **`$IC catalog presentation`** (the deck settings) and **`$IC catalog slide`** (the seven layouts, one example each) — those are the deterministic surface; do not guess the shape from here.
+
+```jsonc
+{
+  "instantcanvas": 1, "createdWith": "…", "title": "Q3 Business Review",
+  "presentation": {                         // optional deck settings
+    "aspect": "16:9",                       // "16:9" (default) | "4:3"
+    "theme":  {"preset": "midnight"},       // the SAME theme system — dark decks are first-class here
+    "footer": {"right": "Slide {{slideNumber}} / {{totalSlides}}"}  // every slide but title/closing
+  },
+  "slides": [                               // XOR blocks/pages; >= 1 slide
+    {"layout": "title",   "title": "Q3 Business Review", "subtitle": "…"},
+    {"layout": "section", "title": "Financial Results"},
+    {"layout": "content", "title": "Highlights", "body": [ /* display Block[] */ ]},
+    {"layout": "closing", "title": "Thank you"}
+  ]
+}
+```
+
+Rules an agent must not get wrong:
+
+- **Seven layouts**: `title`, `section`, `content` (a `body` of blocks), `two-column` (`left`/`right`, a comparison with `leftHeading`/`rightHeading`), `quadrant` (exactly four `cells`), `statement` (a big `text`), `closing`. Regions hold the existing **display** blocks (`markdown`, `chart`, `table`, `kpi`).
+- **Slides are assigned, not packed.** You put content on each slide; nothing flows or breaks across slides (that is what documents are for). A **lone chart or KPI fills its region** — do not pad it, and ship category labels whole (the runtime elides long ticks).
+- **A projector and a PDF can neither submit nor drag**, so a `form`, a `confirm`, or a chart `sweep` anywhere in a slide is refused (`PRESENTATION_INTERACTIVE_BLOCK`).
+- **A background** (`src`/`size`/`position`/`scrim`/`ink`, the cover-photo shape) is allowed **only** on `title`/`section`/`statement`/`closing`. A photo behind text still needs a `scrim`.
+- **`notes`** on a slide are speaker notes — shown only in the browser filmstrip, never presented and never printed.
+- **Envelope conflicts**: `presentation` without `slides` is `PRESENTATION_NEEDS_SLIDES`; a `document` beside `slides` is `DOCUMENT_ON_PRESENTATION` (a deck keeps its theme in `presentation.theme`, not `document`).
+- **`print deck.canvas.json --out deck.pdf`** prints the deck — but the *"never print unless the user asked"* rule above covers decks too. `open` shows it; `print` writes a file only when asked.
 
 ## Colors: `document.theme`
 

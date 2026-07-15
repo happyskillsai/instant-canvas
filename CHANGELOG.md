@@ -2,6 +2,26 @@
 
 ## [Unreleased]
 
+### Added
+- **Presentation mode: a canvas can be a slide deck.** A canvas whose envelope carries
+  `slides` (a third XOR member beside `blocks`/`pages`) renders as a deck. Each slide names
+  one of **seven layouts** — `title`, `section`, `content`, `two-column`, `quadrant`,
+  `statement`, `closing` — and fills its regions with the existing display blocks
+  (`markdown`, `chart`, `table`, `kpi`); a lone chart or KPI fills its region. An optional
+  `presentation` object carries the settings nobody can derive: `aspect` (`16:9` default or
+  `4:3`), `theme` (the same 22-preset system, with dark decks first-class), and a running
+  `footer` (`{{slideNumber}}` / `{{totalSlides}}`). The browser shows a scrollable
+  **filmstrip** with speaker notes and overflow badges, and a **Present** control that takes
+  the deck fullscreen (or in-viewport when the browser refuses) with the standard keyboard
+  vocabulary — arrows / space / PgUp / PgDn / Home / End / number-jump / `B` blank / `Esc`.
+  `print deck.canvas.json --out deck.pdf` prints one landscape page per slide, notes
+  excluded. Interactive blocks and chart sweeps are refused on a slide
+  (`PRESENTATION_INTERACTIVE_BLOCK`); a `document` beside `slides` is `DOCUMENT_ON_PRESENTATION`;
+  a `presentation` without `slides` is `PRESENTATION_NEEDS_SLIDES`. The contract is on the
+  deterministic surface: `catalog presentation` and `catalog slide`. Zero new dependencies,
+  zero new block types, zero agent-authored CSS — the theme system, cover backgrounds, the
+  print pipeline and the one theme write path are reused whole.
+
 ### Fixed
 - **The README logo no longer collides with the title's underline on GitHub.** The
   right-aligned mark sat beside the h1, whose full-width bottom border drew straight

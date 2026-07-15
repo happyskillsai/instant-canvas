@@ -246,6 +246,23 @@ test('catalog(name) resolves presentation and slide by name', () => {
 	assert.doesNotThrow(() => catalog('slide'))
 })
 
+// The whole feature is unreachable to an agent that is not told it exists — the same
+// contract-rot guard the document/companion tests apply, for presentations.
+const SKILL = fs.readFileSync(path.join(__dirname, '..', '..', '.agents', 'skills', 'instant-canvas', 'SKILL.md'), 'utf8')
+
+test('SKILL.md teaches presentations and points at the deterministic surface', () => {
+	assert.match(SKILL, /"slides"/, 'the slides envelope member is shown')
+	assert.match(SKILL, /catalog presentation/, 'and points at the settings schema')
+	assert.match(SKILL, /catalog slide/, 'and at the layouts schema — the shape lives there, not in prose')
+	// The seven layout names an agent picks from without a second call.
+	for (const layout of ['title', 'section', 'content', 'two-column', 'quadrant', 'statement', 'closing'])
+		assert.ok(SKILL.includes(layout), `SKILL.md names the "${layout}" layout`)
+	// The refusal an agent must not trip. (That each named code is actually EMITTED by a
+	// surface is pinned by catalog.test.js's "names only error codes the runtime can emit".)
+	for (const code of ['PRESENTATION_INTERACTIVE_BLOCK', 'DOCUMENT_ON_PRESENTATION', 'PRESENTATION_NEEDS_SLIDES'])
+		assert.ok(SKILL.includes(code), `SKILL.md teaches ${code}`)
+})
+
 // ---------------------------------------------------------------- registry drift
 
 test('the slide layout registry is the single source of truth for validator and catalog', () => {
