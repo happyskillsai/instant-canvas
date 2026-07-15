@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="256" height="256" role="img" aria-label="InstantCanvas">
+	<title>InstantCanvas</title>
+	<!-- The InstantCanvas mark (from assets/logo.svg). Fixed fills, no CSS vars: a favicon
+	     is fetched as an isolated document and cannot read the page's custom properties. -->
+	<defs><clipPath id="ic-fav-clip"><rect width="100" height="100" rx="12"/></clipPath></defs>
+	<g clip-path="url(#ic-fav-clip)">
+		<rect width="100" height="100" fill="#0054fe"/>
+		<path fill="#00184d" d="M50 0A17.5 17.5 0 0 1 56.006 3.926L96.074 43.994A17.5 17.5 0 0 1 100 50L100 100L0 100L0 0Z"/>
+	</g>
+</svg>

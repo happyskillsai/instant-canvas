@@ -22,7 +22,7 @@
         "Project Structure",
         "Documentation"
       ],
-      "line_count": 116,
+      "line_count": 118,
       "links_to": [
         "docs/architecture.md",
         "docs/canvas-schema.md",
@@ -232,7 +232,7 @@
         "CSP shim",
         "Icons and vendored assets"
       ],
-      "line_count": 110,
+      "line_count": 111,
       "links_to": [
         "docs/architecture.md",
         "docs/canvas-schema.md",
@@ -247,6 +247,7 @@
         "scripts/web/app.js",
         "scripts/web/csp-shim.js",
         "scripts/web/styles.css",
+        "scripts/web/favicon.svg",
         "scripts/web/vendor/**",
         "assets/logo.svg"
       ],

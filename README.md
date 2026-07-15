@@ -1,5 +1,7 @@
 # InstantCanvas
 
+> **InstantCanvas is a [HappySkills](https://happyskills.ai) project.** HappySkills is its parent and steward — the project is built, maintained, and shepherded under the HappySkills umbrella.
+
 Death to the admin panel: a local, schema-driven canvas runtime that lets coding agents render data visually (charts, tables, KPIs, markdown) and safely collect user input — forms, secrets, confirmations — in the user's browser, with values written straight to local files and **never entering the chat**.
 
 ## Table of Contents
