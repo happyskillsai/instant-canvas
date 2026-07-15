@@ -1,4 +1,4 @@
-<img src="assets/logo.svg" alt="The InstantCanvas mark — a navy square with a vermilion folded corner" width="96" align="right" />
+<p align="center"><img src="assets/logo.svg" alt="The InstantCanvas mark — a navy square with a vermilion folded corner" width="96" /></p>
 
 # InstantCanvas
 

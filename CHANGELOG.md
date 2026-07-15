@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### Fixed
+- **The README logo no longer collides with the title's underline on GitHub.** The
+  right-aligned mark sat beside the h1, whose full-width bottom border drew straight
+  through it. The mark now sits centered above the title (`<p align="center">`), where
+  no rule crosses it; the title stays a markdown h1, which is what names the document
+  in the app's sidebar.
+
 ## [0.8.1] - 2026-07-15
 
 ### Changed
