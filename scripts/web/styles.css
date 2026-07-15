@@ -78,8 +78,8 @@
    above. Per-canvas values from document.theme (validated strict hex) override
    them via CSSOM setProperty in applyDocumentTheme(). */
 .doc-mode{
-	--doc-accent:#6366f1; --doc-paper:#ffffff; --doc-surface:#ffffff; --doc-text:#1a1d24;
-	--doc-muted:#6b7280; --doc-border:#e6e8ec; --doc-link:#6366f1;
+	--doc-accent:#eb4a26; --doc-paper:#ffffff; --doc-surface:#ffffff; --doc-text:#1a1d24;
+	--doc-muted:#6b7280; --doc-border:#e6e8ec; --doc-link:#eb4a26;
 }
 
 *{box-sizing:border-box}
@@ -732,7 +732,7 @@ body.modal-open .main{overflow:hidden}
 	--bg:#f4f5f8; --panel:var(--doc-surface,#ffffff); --panel-2:#fafbfc;
 	--text:var(--doc-text,#1a1d24); --muted:var(--doc-muted,#6b7280);
 	--border:var(--doc-border,#e6e8ec); --border-2:#eef0f3;
-	--accent:var(--doc-accent,#6366f1); --accent-soft:#eef0fe;
+	--accent:var(--doc-accent,#eb4a26); --accent-soft:#fbe7e0;
 	--green:#10b981; --amber:#f59e0b; --red:#ef4444;
 	--code-kw:#6d28d9; --code-str:#047857; --code-num:#b45309; --code-fn:#0e7490;
 	--code-var:#be185d; --code-cmt:#6b7280; --code-meta:#4b5563; --code-add:#065f46; --code-del:#b91c1c;
@@ -755,7 +755,7 @@ body.modal-open .main{overflow:hidden}
 
    Values mirror the app's own :root[data-theme="dark"] block — keep them in step. */
 .doc-mode[data-paper="dark"] .sheet{
-	--bg:#0e1014; --panel-2:#1b1f29; --border-2:#1f242e; --accent-soft:#20233a;
+	--bg:#0e1014; --panel-2:#1b1f29; --border-2:#1f242e; --accent-soft:#2a1610;
 	--green:#34d399; --amber:#fbbf24; --red:#f87171;
 	--code-kw:#c4b5fd; --code-str:#6ee7b7; --code-num:#fcd34d; --code-fn:#67e8f9;
 	--code-var:#f9a8d4; --code-cmt:#8b93a1; --code-meta:#9aa3b0; --code-add:#6ee7b7; --code-del:#fca5a5;
@@ -766,7 +766,7 @@ body.modal-open .main{overflow:hidden}
 }
 
 /* Links take --doc-link, which falls back to the accent (one decision, two tokens). */
-.sheet .md a{color:var(--doc-link,var(--doc-accent,#6366f1))}
+.sheet .md a{color:var(--doc-link,var(--doc-accent,#eb4a26))}
 
 /* The continuous view takes the BRAND (accent, links, and — via the Plotly template —
    the chart colorway) but NOT the paper: it is a screen view and still follows the
@@ -775,8 +775,8 @@ body.modal-open .main{overflow:hidden}
    `.doc-html` half of a document that has been decked, and a plain `.canvas` that never
    entered document land at all. Without the second, the palette control would be a
    picker that visibly does nothing on most of the canvases you open. */
-.doc-mode .doc-html,.canvas:not(.doc-mode){--accent:var(--doc-accent,#6366f1)}
-.doc-mode .doc-html .md a,.canvas:not(.doc-mode) .md a{color:var(--doc-link,var(--doc-accent,#6366f1))}
+.doc-mode .doc-html,.canvas:not(.doc-mode){--accent:var(--doc-accent,#eb4a26)}
+.doc-mode .doc-html .md a,.canvas:not(.doc-mode) .md a{color:var(--doc-link,var(--doc-accent,#eb4a26))}
 /* flow-root: edge margins stay INSIDE the body/fragment boxes, so cumulative
    measurement in the packer sees exactly what the fixed sheet will contain. */
 .sheet-body{flex:1 1 auto;min-height:0;display:flow-root}

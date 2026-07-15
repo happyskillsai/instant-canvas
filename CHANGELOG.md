@@ -14,6 +14,14 @@
   `.canvas`/`.sheet`, and both reset the chrome's Inter — so charts, tables, and paper
   render byte-identically to before. Semantic colors (KPI green/amber/red) and the code
   syntax palette are likewise left alone.
+- **The default document palette is now HappySkills orange, so an un-themed document
+  renders on-brand.** The `default` preset's primary moved from indigo `#6366f1` to
+  vermilion `#EB4A26`, and its categorical colorway was re-designed around it —
+  `#EB4A26 · #2E6FD8 · #0E9384 · #9B51E0 · #D6336C` — validated for colorblind separation
+  and surface contrast (dataviz six-checks) on both white and dark paper. Links and the
+  heatmap ramp follow the new primary. The change is only to the *default*: every other
+  preset (Ocean, Forest, Ember, Okabe-Ito, …) and every custom palette is untouched, and
+  a document that declares its own theme is unaffected. Semantic KPI/syntax colors stay put.
 
 ### Fixed
 - **Vendored web fonts are served without the per-kernel token.** A CSS `url()` cannot

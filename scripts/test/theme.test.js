@@ -23,10 +23,10 @@ const tmpRoot = () => fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'ic-
 test('theme: an absent theme resolves to the built-in default, unchanged', () => {
 	const r = theme.resolve(null)
 	assert.equal(r.preset, 'default')
-	assert.equal(r.accent, '#6366f1')
+	assert.equal(r.accent, '#eb4a26')
 	assert.equal(r.paper, '#ffffff')
 	assert.equal(r.text, '#1a1d24')
-	assert.deepEqual(r.palette, ['#6366f1', '#10b981', '#f59e0b', '#ec4899', '#06b6d4'])
+	assert.deepEqual(r.palette, ['#eb4a26', '#2e6fd8', '#0e9384', '#9b51e0', '#d6336c'])
 })
 
 test('theme: every key of every preset resolves to strict hex', () => {
@@ -61,7 +61,7 @@ test('theme: a lone accent leads the colorway, but an explicit palette outranks 
 	// Losing that gives you a blue heading over a green first series.
 	const lone = theme.resolve({ accent: '#0054fe' })
 	assert.equal(lone.palette[0], '#0054fe')
-	assert.equal(lone.palette[1], '#10b981', 'the rest still come from the preset')
+	assert.equal(lone.palette[1], '#2e6fd8', 'the rest still come from the preset')
 
 	const withPreset = theme.resolve({ preset: 'forest', accent: '#0054fe' })
 	assert.equal(withPreset.palette[0], '#0054fe')
@@ -89,7 +89,7 @@ test('theme: resolve() DROPS junk rather than passing it through to setProperty'
 	// resolve() also runs on a hand-edited config the validator never sees, so a
 	// value like this must not reach live CSS just because it came by that door.
 	const r = theme.resolve({ accent: 'javascript:alert(1)', preset: 'nope', palette: ['red', '#00ff00'] })
-	assert.equal(r.accent, '#6366f1', 'the junk accent is dropped')
+	assert.equal(r.accent, '#eb4a26', 'the junk accent is dropped')
 	assert.equal(r.preset, 'default', 'an unknown preset falls back')
 	assert.equal(r.palette[0], '#00ff00', 'only the hex survives the filter')
 })

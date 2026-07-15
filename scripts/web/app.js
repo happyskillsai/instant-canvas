@@ -237,14 +237,14 @@ const FONT = '-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial
 const TRANSPARENT = 'rgba(0,0,0,0)'
 
 const LIGHT = {
-	color: ['#6366f1', '#10b981', '#f59e0b', '#ec4899', '#06b6d4'],
+	color: ['#eb4a26', '#2e6fd8', '#0e9384', '#9b51e0', '#d6336c'],
 	text: '#1a1d24', muted: '#6b7280', border: '#e6e8ec', panel: '#ffffff',
-	ramp: '#eef0fe', down: '#ef4444',
+	ramp: 'rgba(235,74,38,0.12)', down: '#ef4444',
 }
 const DARK = {
-	color: ['#818cf8', '#34d399', '#fbbf24', '#f472b6', '#22d3ee'],
+	color: ['#eb4a26', '#2e6fd8', '#0e9384', '#9b51e0', '#d6336c'],
 	text: '#e7e9ee', muted: '#98a0ad', border: '#242a35', panel: '#161922',
-	ramp: '#20233a', down: '#f87171',
+	ramp: 'rgba(235,74,38,0.12)', down: '#f87171',
 }
 
 function plotlyTemplate(p) {

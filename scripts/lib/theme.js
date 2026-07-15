@@ -87,9 +87,9 @@ const TOKEN_KEYS = ['accent', 'paper', 'surface', 'text', 'muted', 'border', 'li
 const PRESETS = {
 	default: {
 		label: 'Default',
-		description: 'The indigo the runtime has always shipped.',
-		accent: '#6366f1',
-		palette: ['#6366f1', '#10b981', '#f59e0b', '#ec4899', '#06b6d4'],
+		description: 'HappySkills orange, with a colorblind-checked companion set. The runtime default.',
+		accent: '#eb4a26',
+		palette: ['#eb4a26', '#2e6fd8', '#0e9384', '#9b51e0', '#d6336c'],
 	},
 	slate: {
 		label: 'Slate',

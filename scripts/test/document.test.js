@@ -836,7 +836,7 @@ test('a reader-toggled deck derives its TOC and paints paper-light charts', { sk
 	assert.ok(!labels.includes('Trend'), `the chart title is not a TOC entry (got: ${labels.join(' | ')})`)
 	assert.ok(d.tocRows.every((r) => /^\d+$/.test(r.num)), 'auto-TOC entries carry page numbers')
 	// Paper is light even though the canvas declared no theme (and the app may be dark).
-	assert.equal(d.traceColor, '#6366f1', 'charts use the LIGHT palette, not the app palette')
+	assert.equal(d.traceColor, '#eb4a26', 'charts use the LIGHT palette, not the app palette')
 })
 
 test('with no headings, block titles ARE the structure — so the TOC lists them', { skip: browserSkip, timeout: 120_000 }, () => {
