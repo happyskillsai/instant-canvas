@@ -185,3 +185,72 @@ test('hardening: WRITE_FAILED, SESSION_TIMEOUT, INTERNAL_ERROR, and cross-worksp
 			child.kill('SIGKILL')
 	}
 })
+
+// The token gates every route except /healthz and the vendored web fonts. The fonts
+// MUST be exempt: styles.css references them through a CSS url() that cannot carry the
+// per-request token, so a tokened gate 403s them SILENTLY and the chrome falls back to a
+// system font with nothing in the console (this shipped once and was caught only by
+// asserting the font loaded in a real browser). The exemption must also be NARROW —
+// widening it to any other asset would hand an unauthenticated caller the app's code.
+test('hardening: vendored fonts serve WITHOUT a token; every other asset stays gated', { skip: process.platform === 'win32' }, async () => {
+	const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'ic-font-')))
+	fs.copyFileSync(path.join(__dirname, 'fixtures', 'valid-display.canvas.json'), path.join(root, 'r.canvas.json'))
+
+	const child = spawn(process.execPath, [KERNEL, root], { env: { ...process.env }, stdio: 'ignore' })
+	let entry = null
+	const deadline = Date.now() + 8000
+	while (Date.now() < deadline && !entry) {
+		entry = await registry.readAlive(root)
+		if (!entry) await sleep(150)
+	}
+	assert.ok(entry, 'kernel up')
+
+	// A raw GET that sends NO token (neither query nor header) — the whole point.
+	const getNoToken = (pathname) => new Promise((resolve, reject) => {
+		const req = http.request({ host: '127.0.0.1', port: entry.port, method: 'GET', path: pathname }, (res) => {
+			const chunks = []
+			res.on('data', (c) => chunks.push(c))
+			res.on('end', () => resolve({ status: res.statusCode, type: res.headers['content-type'], bytes: Buffer.concat(chunks).length }))
+		})
+		req.on('error', reject)
+		req.end()
+	})
+
+	try {
+		// 1. Every @font-face weight serves untokened, as the real font MIME.
+		for (const w of [400, 500, 600, 700]) {
+			const r = await getNoToken(`/assets/vendor/inter-latin-${w}-normal.woff2`)
+			assert.equal(r.status, 200, `inter ${w} must serve without a token`)
+			assert.equal(r.type, 'font/woff2', `inter ${w} must serve as font/woff2, or nosniff may reject it`)
+			assert.ok(r.bytes > 1000, `inter ${w} returned a body`)
+		}
+
+		// 2. The exemption is NARROW: the app's own code is still gated without a token.
+		for (const asset of ['/assets/app.js', '/assets/styles.css', '/assets/vendor/plotly.min.js']) {
+			const r = await getNoToken(asset)
+			assert.equal(r.status, 403, `${asset} must stay behind the token`)
+		}
+
+		// 3. A non-font file cannot ride the woff2 exemption, and traversal is refused.
+		assert.equal((await getNoToken('/assets/vendor/VENDORED.md')).status, 403, 'only .woff2 is exempt')
+		assert.equal((await getNoToken('/assets/vendor/../../kernel.js')).status, 403, 'traversal via the exempt prefix is refused')
+
+		// 4. With a valid token, the gated assets come back — the gate is the token, not the path.
+		const withToken = await new Promise((resolve, reject) => {
+			const req = http.request({ host: '127.0.0.1', port: entry.port, method: 'GET', path: '/assets/styles.css', headers: { 'X-IC-Token': entry.token } }, (res) => { res.resume(); res.on('end', () => resolve(res.statusCode)) })
+			req.on('error', reject)
+			req.end()
+		})
+		assert.equal(withToken, 200, 'styles.css serves with the token')
+	} finally {
+		await new Promise((resolve) => {
+			const req = http.request({ host: '127.0.0.1', port: entry.port, method: 'POST', path: '/api/shutdown', headers: { 'X-IC-Token': entry.token, 'Content-Type': 'application/json', 'Content-Length': 2 } }, (res) => { res.resume(); res.on('end', resolve) })
+			req.on('error', resolve)
+			req.write('{}')
+			req.end()
+		})
+		await sleep(200)
+		if (child.exitCode === null && child.signalCode === null)
+			child.kill('SIGKILL')
+	}
+})

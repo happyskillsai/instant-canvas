@@ -1,7 +1,22 @@
-/* InstantCanvas shell — ported from prototype/index.html (the locked UI contract). */
+/* InstantCanvas shell — ported from prototype/index.html (the locked UI contract).
+
+   The APP CHROME (topbar island, sidebar) wears the HappySkills brand: a black
+   fully-rounded "island", a lavender-grey shell, and the vermilion accent — served
+   in Inter (SIL OFL, self-hosted; see vendor/VENDORED.md). This is deliberately the
+   *app* palette only. A rendered document keeps its OWN theme: `--accent` is remapped
+   to `--doc-accent` inside `.canvas`/`.sheet` (below), so nothing here reaches the
+   charts, tables, or paper — the main pane renders exactly as it did before. */
+@font-face{font-family:'Inter';font-style:normal;font-weight:400;font-display:swap;
+	src:url('/assets/vendor/inter-latin-400-normal.woff2') format('woff2')}
+@font-face{font-family:'Inter';font-style:normal;font-weight:500;font-display:swap;
+	src:url('/assets/vendor/inter-latin-500-normal.woff2') format('woff2')}
+@font-face{font-family:'Inter';font-style:normal;font-weight:600;font-display:swap;
+	src:url('/assets/vendor/inter-latin-600-normal.woff2') format('woff2')}
+@font-face{font-family:'Inter';font-style:normal;font-weight:700;font-display:swap;
+	src:url('/assets/vendor/inter-latin-700-normal.woff2') format('woff2')}
 :root{
-	--bg:#f4f5f8; --panel:#ffffff; --panel-2:#fafbfc; --text:#1a1d24; --muted:#6b7280;
-	--border:#e6e8ec; --border-2:#eef0f3; --accent:#6366f1; --accent-soft:#eef0fe;
+	--bg:#f4f5f8; --shell:#e3e3e9; --panel:#ffffff; --panel-2:#fafbfc; --text:#1a1d24; --muted:#6b7280;
+	--border:#e6e8ec; --border-2:#eef0f3; --accent:#eb4a26; --accent-soft:#fbe7e0;
 	--green:#10b981; --amber:#f59e0b; --red:#ef4444; --shadow:0 1px 2px rgba(16,20,30,.06),0 8px 24px rgba(16,20,30,.06);
 	--scrim:rgba(10,12,18,.45);
 	--c1:#6366f1; --c2:#10b981; --c3:#f59e0b; --c4:#ec4899; --c5:#06b6d4;
@@ -10,13 +25,19 @@
 	--fset-border:#c3cad5;
 	--logo-base:#00184d; --logo-accent:#0054fe;
 	--gutter:40px;
+	/* HappySkills chrome tokens. The island is black in BOTH themes. --tint is the
+	   neutral hover/active wash for sidebar rows (accent is used sparingly, never as a
+	   nav fill). --shell is the lavender canvas the island and sidebar card float on. */
+	--tint:rgba(0,0,0,.05); --tint-strong:rgba(0,0,0,.08);
+	--island:#000000; --island-fg:#ffffff; --island-fg-dim:rgba(255,255,255,.6);
+	--island-hover:rgba(255,255,255,.1); --island-pill:#ffffff; --island-pill-fg:#15161a;
 	--code-kw:#6d28d9; --code-str:#047857; --code-num:#b45309; --code-fn:#0e7490;
 	--code-var:#be185d; --code-cmt:#6b7280; --code-meta:#4b5563; --code-add:#065f46; --code-del:#b91c1c;
 	color-scheme:light;
 }
 :root[data-theme="dark"]{
-	--bg:#0e1014; --panel:#161922; --panel-2:#1b1f29; --text:#e7e9ee; --muted:#98a0ad;
-	--border:#242a35; --border-2:#1f242e; --accent:#818cf8; --accent-soft:#20233a;
+	--bg:#0e1014; --shell:#0a0c10; --panel:#161922; --panel-2:#1b1f29; --text:#e7e9ee; --muted:#98a0ad;
+	--border:#242a35; --border-2:#1f242e; --accent:#eb4a26; --accent-soft:#2a1610;
 	--green:#34d399; --amber:#fbbf24; --red:#f87171; --shadow:0 1px 2px rgba(0,0,0,.3),0 12px 32px rgba(0,0,0,.35);
 	--scrim:rgba(0,0,0,.6);
 	--c1:#818cf8; --c2:#34d399; --c3:#fbbf24; --c4:#f472b6; --c5:#22d3ee;
@@ -24,14 +45,17 @@
 	--inp-shadow:none;
 	--fset-border:#2d3442;
 	--logo-base:#2a3a6b; --logo-accent:#2f6bff;
+	--tint:rgba(255,255,255,.06); --tint-strong:rgba(255,255,255,.1);
+	--island:#000000; --island-fg:#ffffff; --island-fg-dim:rgba(255,255,255,.6);
+	--island-hover:rgba(255,255,255,.1); --island-pill:#26262e; --island-pill-fg:#e7e9ee;
 	--code-kw:#c4b5fd; --code-str:#6ee7b7; --code-num:#fcd34d; --code-fn:#67e8f9;
 	--code-var:#f9a8d4; --code-cmt:#8b93a1; --code-meta:#9aa3b0; --code-add:#6ee7b7; --code-del:#fca5a5;
 	color-scheme:dark;
 }
 @media (prefers-color-scheme:dark){
 	:root:not([data-theme]){
-		--bg:#0e1014; --panel:#161922; --panel-2:#1b1f29; --text:#e7e9ee; --muted:#98a0ad;
-		--border:#242a35; --border-2:#1f242e; --accent:#818cf8; --accent-soft:#20233a;
+		--bg:#0e1014; --shell:#0a0c10; --panel:#161922; --panel-2:#1b1f29; --text:#e7e9ee; --muted:#98a0ad;
+		--border:#242a35; --border-2:#1f242e; --accent:#eb4a26; --accent-soft:#2a1610;
 		--green:#34d399; --amber:#fbbf24; --red:#f87171; --shadow:0 1px 2px rgba(0,0,0,.3),0 12px 32px rgba(0,0,0,.35);
 		--scrim:rgba(0,0,0,.6);
 		--c1:#818cf8; --c2:#34d399; --c3:#fbbf24; --c4:#f472b6; --c5:#22d3ee;
@@ -39,6 +63,9 @@
 		--inp-shadow:none;
 		--fset-border:#2d3442;
 		--logo-base:#2a3a6b; --logo-accent:#2f6bff;
+		--tint:rgba(255,255,255,.06); --tint-strong:rgba(255,255,255,.1);
+		--island:#000000; --island-fg:#ffffff; --island-fg-dim:rgba(255,255,255,.6);
+		--island-hover:rgba(255,255,255,.1); --island-pill:#26262e; --island-pill-fg:#e7e9ee;
 		--code-kw:#c4b5fd; --code-str:#6ee7b7; --code-num:#fcd34d; --code-fn:#67e8f9;
 		--code-var:#f9a8d4; --code-cmt:#8b93a1; --code-meta:#9aa3b0; --code-add:#6ee7b7; --code-del:#fca5a5;
 		color-scheme:dark;
@@ -73,70 +100,91 @@
 .inp-wrap .eye .lucide{width:16px;height:16px;display:block}
 .placeholder .lucide{vertical-align:-0.2em}
 html,body{height:100%}
-body{margin:0;background:var(--bg);color:var(--text);
-	font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+body{margin:0;background:var(--shell);color:var(--text);
+	font:14px/1.5 'Inter',-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
 	-webkit-font-smoothing:antialiased;}
+/* The main pane renders documents in the ORIGINAL system stack, untouched by the
+   chrome's Inter — "don't touch the main pane" made literal. Both the continuous view
+   (.canvas) and paper (.sheet) reset, so on-screen and printed documents are
+   byte-identical to before the rebrand. */
+.canvas,.sheet{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
 button{font:inherit;cursor:pointer}
 
 /* layout */
-.app{display:flex;flex-direction:column;height:100vh}
-.topbar{display:flex;align-items:center;gap:12px;padding:10px 14px;background:var(--panel);
-	border-bottom:1px solid var(--border);flex:0 0 auto}
-.brand{display:flex;align-items:center;gap:8px;font-weight:650;letter-spacing:-.01em}
-.brand .logo{width:20px;height:20px;flex:0 0 auto;display:block}
-.brand .logo .ic-logo-base{fill:var(--logo-base)}
-.brand .logo .ic-logo-accent{fill:var(--logo-accent)}
+.app{display:flex;flex-direction:column;height:100vh;background:var(--shell)}
+/* The HappySkills "island": a black, fully-rounded bar floating on the lavender shell,
+   black in BOTH themes. Its children (brand wordmark, path pill, controls) invert to
+   light. The float is contrast + margin, not a heavy shadow. */
+.topbar{display:flex;align-items:center;gap:10px;margin:12px 12px 0;padding:8px 8px 8px 18px;
+	background:var(--island);border-radius:999px;flex:0 0 auto;box-shadow:0 6px 20px rgba(0,0,0,.16)}
+.brand{display:flex;align-items:center;gap:10px;flex:0 0 auto;padding-left:2px;color:var(--island-fg)}
+/* HappySkills wordmark, inlined so it can be themed — a linked SVG cannot see the page's
+   custom properties (see gotchas/frontend.md). Its letter paths are fill:currentColor,
+   so `color` drives them: white on the black island. */
+.brand .logo{height:17px;width:auto;flex:0 0 auto;display:block;color:var(--island-fg)}
+/* The product name rides beside the parent wordmark, dimmed, behind a hairline divider. */
+.brand .product{font-size:12.5px;font-weight:500;letter-spacing:.01em;color:var(--island-fg-dim);
+	padding-left:10px;border-left:1px solid rgba(255,255,255,.18);white-space:nowrap}
 /* Path + copy button, joined into one control: the border and radius that used to sit
    on the path itself move to the group, so the two read as a single object rather than
    a label with a button parked next to it. The path keeps `flex:1` INSIDE the group —
    fitRootPath() binary-searches how much of the head to elide against its clientWidth,
    so it must remain the element that absorbs the topbar's spare width. */
-.rootpath-group{display:flex;align-items:stretch;flex:1;min-width:80px;
-	border:1px solid var(--border);border-radius:7px;background:var(--panel-2);overflow:hidden}
-.rootpath-group:hover{border-color:var(--inp-border-hover)}
-.rootpath{color:var(--muted);font-size:12.5px;padding:3px 8px;border:none;background:none;
+/* The workspace-path pill takes the silhouette of HappySkills' white search pill: a
+   white rounded field carrying the path, with a vermilion circular action button on the
+   trailing edge — here it copies the path rather than searches, but the shape is the
+   brand's. The path keeps flex:1 so fitRootPath() can still elide the head against its
+   clientWidth. */
+.rootpath-group{display:flex;align-items:center;flex:1;min-width:80px;
+	background:var(--island-pill);border-radius:999px;padding:3px 3px 3px 4px;gap:4px;overflow:hidden}
+.rootpath{color:var(--island-pill-fg);font-size:12.5px;padding:4px 8px;border:none;background:none;
 	flex:1;min-width:0;text-align:left;
 	white-space:nowrap;overflow:hidden;text-overflow:clip;
 	font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
-.rootpath:hover{color:var(--text)}
-.rootpath-copy{flex:0 0 auto;display:inline-flex;align-items:center;padding:0 8px;
-	border:none;border-left:1px solid var(--border);background:none;color:var(--muted)}
-.rootpath-copy:hover{background:var(--panel);color:var(--text)}
-.rootpath:focus-visible,.rootpath-copy:focus-visible{outline:none;box-shadow:inset 0 0 0 2px var(--accent-soft)}
+.rootpath:hover{color:var(--island-pill-fg)}
+.rootpath-copy{flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;
+	width:27px;height:27px;border:none;border-radius:50%;background:var(--accent);color:#fff}
+.rootpath-copy:hover{filter:brightness(1.07)}
+.rootpath:focus-visible{outline:none;box-shadow:inset 0 0 0 2px var(--accent-soft)}
+.rootpath-copy:focus-visible{outline:none;box-shadow:0 0 0 2px var(--island),0 0 0 4px var(--accent)}
 .rootpath-copy .lucide{width:14px;height:14px;display:block}
-.rootpath-copy.copied{color:var(--green)}
-.rootpath-copy.failed{color:var(--red)}
+.rootpath-copy.copied{background:var(--green)}
+.rootpath-copy.failed{background:var(--red)}
 .spacer{flex:1}
-.tbtn{display:inline-flex;align-items:center;gap:6px;padding:6px 11px;border-radius:8px;
-	border:1px solid var(--border);background:var(--panel);color:var(--text);
-	white-space:nowrap;flex:0 0 auto}
-.tbtn:hover{background:var(--panel-2)}
-.tbtn.primary{background:var(--accent);color:#fff;border-color:transparent}
-.tbtn.icon{padding:6px 9px}
-.tbtn.active{background:var(--accent-soft);color:var(--accent)}
+/* Island controls: ghost buttons that sit on black — no border, a translucent white
+   wash on hover, and a stronger wash for the "on"/active paper controls. */
+.tbtn{display:inline-flex;align-items:center;gap:6px;padding:7px 10px;border-radius:999px;
+	border:none;background:transparent;color:var(--island-fg);
+	white-space:nowrap;flex:0 0 auto;opacity:.85}
+.tbtn:hover{background:var(--island-hover);opacity:1}
+.tbtn.primary{background:var(--accent);color:#fff}
+.tbtn.icon{padding:8px}
+.tbtn.active{background:rgba(255,255,255,.16);color:var(--island-fg);opacity:1}
 /* Paper-only controls (TOC, running strips, colors) stay in the bar off the deck and
    go dim instead of vanishing — a control that disappears teaches nothing, and one
    that disappears under the cursor moves every other control while you reach for it.
    Their `title` says which view they need; the cursor says they are not pressable. */
 .tbtn:disabled{opacity:.35;cursor:not-allowed}
-.tbtn:disabled:hover{background:var(--panel)}
+.tbtn:disabled:hover{background:transparent}
 
-.body{display:flex;flex:1;min-height:0}
-/* sidebar */
-.sidebar{width:260px;flex:0 0 260px;background:var(--panel);border-right:1px solid var(--border);
-	display:flex;flex-direction:column;overflow:hidden}
-.side-head{padding:12px 12px 8px 16px;font-size:11px;font-weight:700;letter-spacing:.08em;color:var(--muted);
+/* The body sits on the lavender shell; the sidebar and the main pane float on it as
+   rounded surfaces with a gap between, HappySkills-style — no hard border seams. */
+.body{display:flex;flex:1;min-height:0;gap:12px;padding:12px;background:var(--shell)}
+/* sidebar — a white card on the lavender shell (was a full-height panel with a border seam) */
+.sidebar{width:260px;flex:0 0 260px;background:var(--panel);border:1px solid var(--border);
+	border-radius:16px;display:flex;flex-direction:column;overflow:hidden}
+.side-head{padding:14px 12px 8px 16px;font-size:11px;font-weight:600;letter-spacing:.14em;color:var(--muted);
 	display:flex;align-items:center;justify-content:space-between}
 .side-actions{display:flex;align-items:center;gap:6px}
-.side-add{width:22px;height:22px;border:1px solid var(--border);background:var(--panel);color:var(--muted);
-	border-radius:6px;display:flex;align-items:center;justify-content:center;padding:0}
-.side-add:hover{color:var(--accent);border-color:var(--accent);background:var(--accent-soft)}
+.side-add{width:24px;height:24px;border:none;background:transparent;color:var(--muted);
+	border-radius:8px;display:flex;align-items:center;justify-content:center;padding:0}
+.side-add:hover{color:var(--text);background:var(--tint)}
 .side-add .lucide{width:13px;height:13px}
 .tree{flex:1;overflow:auto;padding:0 8px 10px}
 .group{margin-bottom:2px}
 .group-row{display:flex;align-items:center;gap:6px;padding:6px 8px;border-radius:7px;color:var(--muted);
 	font-weight:600;font-size:12.5px;user-select:none;cursor:pointer}
-.group-row:hover{background:var(--panel-2);color:var(--text)}
+.group-row:hover{background:var(--tint);color:var(--text)}
 .group-row .gname{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .grp-del{opacity:0;border:none;background:none;color:var(--muted);display:flex;align-items:center;
 	padding:3px;border-radius:6px;flex:0 0 auto;transition:opacity .1s}
@@ -148,8 +196,11 @@ button{font:inherit;cursor:pointer}
 .group.collapsed .items{display:none}
 .item{display:flex;align-items:center;gap:8px;padding:6px 10px 6px 26px;border-radius:7px;
 	color:var(--text);cursor:pointer;font-size:13px}
-.item:hover{background:var(--panel-2)}
-.item.active{background:var(--accent-soft);color:var(--accent);font-weight:600}
+.item:hover{background:var(--tint)}
+/* HappySkills active nav: a neutral rounded wash with primary-color text (accent is used
+   sparingly, never as a nav fill). The one accent touch is the active canvas dot. */
+.item.active{background:var(--tint-strong);color:var(--text);font-weight:600}
+.item.active .dot::before{background:var(--accent);opacity:1}
 /* The canvas dot and the document icon share one 14px slot, so a folder holding
    both still reads as a single left-aligned column of titles. */
 .item .dot,.item .doc-ico{flex:0 0 14px;height:14px;display:flex;align-items:center;justify-content:center}
@@ -165,6 +216,8 @@ button{font:inherit;cursor:pointer}
 .item .enh-dot{flex:0 0 6px;width:6px;height:6px;border-radius:50%;margin-left:auto;
 	background:var(--accent);opacity:.85}
 .side-foot{padding:10px 16px;border-top:1px solid var(--border);color:var(--muted);font-size:11.5px}
+/* Footer stats as a HappySkills micro-label: uppercase, tracked, quiet. */
+.side-foot #wsStats{text-transform:uppercase;letter-spacing:.09em;font-size:10.5px;font-weight:600}
 .side-foot .watch{display:flex;align-items:center;gap:6px;margin-top:4px;min-width:0}
 .side-foot .watch #watchState{flex:0 0 auto}
 .side-foot .watch #watchPath{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
@@ -628,12 +681,16 @@ body.modal-open .main{overflow:hidden}
 
 /* deck ⇄ continuous toggle. Always visible while a document canvas is open —
    never hover-gated (a touch screen has no hover). */
-.view-toggle{display:flex;border:1px solid var(--border);border-radius:8px;overflow:hidden;flex:0 0 auto}
+/* Segmented view toggle, restyled for the black island: a translucent track with a
+   white "thumb" for the active segment (white reads on black in both themes). */
+.view-toggle{display:flex;background:var(--island-hover);border:none;border-radius:999px;
+	overflow:hidden;flex:0 0 auto;padding:2px}
 .view-toggle[hidden]{display:none}
-.vt-btn{display:flex;align-items:center;padding:6px 11px;border:none;background:var(--panel);color:var(--muted)}
-.vt-btn+.vt-btn{border-left:1px solid var(--border)}
-.vt-btn:hover{background:var(--panel-2)}
-.vt-btn.active{background:var(--accent-soft);color:var(--accent)}
+.vt-btn{display:flex;align-items:center;padding:5px 10px;border:none;border-radius:999px;
+	background:transparent;color:var(--island-fg-dim)}
+.vt-btn+.vt-btn{border-left:none}
+.vt-btn:hover{background:var(--island-hover);color:var(--island-fg)}
+.vt-btn.active{background:#fff;color:#15161a}
 /* deckable = no; still clickable — the click explains why (a hidden or inert
    control teaches nothing, and touch screens cannot hover a tooltip) */
 .vt-btn.vt-off{opacity:.4}

@@ -2,6 +2,26 @@
 
 ## [Unreleased]
 
+### Changed
+- **The app chrome now wears the HappySkills brand.** The top bar became a black,
+  fully-rounded "island" floating on a lavender-grey shell; the sidebar became a white
+  card with neutral-tint active rows; and the app accent moved from indigo to HappySkills
+  vermilion (`#EB4A26`). The chrome is set in **Inter** (self-hosted, SIL OFL) — Satoshi,
+  HappySkills' display face, was deliberately *not* bundled because its license restricts
+  redistributing the font files and this package ships them, whereas the OFL permits it.
+  **The main pane is untouched by design:** a rendered document keeps its own theme and
+  the original system font — `--accent` is remapped to the document's accent inside
+  `.canvas`/`.sheet`, and both reset the chrome's Inter — so charts, tables, and paper
+  render byte-identically to before. Semantic colors (KPI green/amber/red) and the code
+  syntax palette are likewise left alone.
+
+### Fixed
+- **Vendored web fonts are served without the per-kernel token.** A CSS `url()` cannot
+  carry the token, so the blanket gate would have 403'd `@font-face` *silently* and left
+  the chrome on a system-font fallback with nothing in the console. `GET /assets/vendor/*.woff2`
+  is now exempt — and only that; every other asset stays behind the token, traversal is
+  refused, and the Host-header allowlist still applies.
+
 ## [0.6.1] - 2026-07-15
 
 ### Changed

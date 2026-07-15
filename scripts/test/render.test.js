@@ -183,6 +183,10 @@ test.before(async () => {
 			})()
 		`).catch((e) => ({ clicked: false, error: String(e) }))
 
+		// The chrome's Inter must actually LOAD — a 200 on the woff2 does not prove
+		// @font-face applied. Wait for the font set to settle before reading load state.
+		await evaluate('document.fonts && document.fonts.ready ? document.fonts.ready.then(() => 1) : 1').catch(() => {})
+
 		return evaluate(`
 			(() => {
 				const boxes = [...document.querySelectorAll('.chart-box')];
@@ -195,6 +199,11 @@ test.before(async () => {
 					sliders: document.querySelectorAll('.slider-container').length,
 					railed: document.querySelectorAll('.slider-rail-touch-rect').length,
 					styleEls: document.querySelectorAll('style').length,
+						// The rebrand: the chrome's Inter loaded, and the main pane did NOT
+						// inherit it — documents keep the original system stack (styles.css).
+						interLoaded: !!(document.fonts && [...document.fonts].some((f) => f.family.replace(/["']/g, '').includes('Inter') && f.status === 'loaded')),
+						bodyFont: getComputedStyle(document.body).fontFamily,
+						canvasFont: (document.querySelector('.canvas') ? getComputedStyle(document.querySelector('.canvas')).fontFamily : ''),
 					stub: !!document.getElementById('plotly.js-style-global'),
 					csp: window.__csp || [],
 					pageErrors: window.__pageErrors || [],
@@ -336,6 +345,17 @@ test('markdown renders as a document, with no inline styles for the CSP to drop'
 	assert.equal(snapshot.mdRightAligned, 2, 'the `|---:|` column is right-aligned by class (th + td)')
 	assert.equal(snapshot.mdTasks, 2, 'both task-list items rendered as tasks')
 	assert.equal(snapshot.mdChecked, 1, 'only the [x] item is checked')
+})
+
+test('the chrome loads its vendored Inter, and the main pane keeps the system stack', { skip, timeout: 120_000 }, () => {
+	// The font 403'd SILENTLY once (a CSS url() cannot carry the token) and the chrome
+	// fell back to a system font with nothing in the console. Serving 200 is not enough —
+	// assert the browser actually LOADED and APPLIED it.
+	assert.equal(snapshot.interLoaded, true, 'the vendored Inter woff2 downloaded and reached status "loaded"')
+	assert.match(snapshot.bodyFont, /Inter/, 'the app chrome resolves to Inter first')
+	// The rebrand must not reach the document: the main pane is deliberately reset to the
+	// original system stack, so a rendered canvas is byte-identical to before.
+	assert.doesNotMatch(snapshot.canvasFont, /Inter/, 'the .canvas (main pane) does NOT inherit Inter')
 })
 
 test('fenced code is syntax-highlighted with classes, never inline styles', { skip, timeout: 120_000 }, () => {
