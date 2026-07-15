@@ -3580,6 +3580,21 @@ function fitStrip(main, geo) {
 /** Autofit (D6): a region that overflows steps its type scale down through at most three
  *  class-based steps; still overflowing → clip it and show the filmstrip-only badge. Runs
  *  after fonts settle — a badge that measures a half-laid-out slide lies. */
+/** Step one slide's type scale down until it fits or runs out of steps. Returns true if it
+ *  STILL overflows (→ clip + badge). Natural-geometry measurement, so the same slide gets
+ *  the same fit level in the filmstrip and on the stage regardless of display scale. */
+function autofitOne(slide) {
+	const overflowing = () => [...slide.querySelectorAll('.slide-region')].some((r) => r.scrollHeight > r.clientHeight + 1)
+	let level = 0
+	while (level < 3 && overflowing()) {
+		if (level)
+			slide.classList.remove('fit-' + level)
+		level++
+		slide.classList.add('fit-' + level)
+	}
+	return overflowing()
+}
+
 async function autofitSlides(stripEl) {
 	if (document.fonts && document.fonts.ready)
 		await document.fonts.ready.catch(() => {})
@@ -3587,15 +3602,7 @@ async function autofitSlides(stripEl) {
 		const slide = holder.querySelector('.slide')
 		if (!slide)
 			continue
-		const overflowing = () => [...slide.querySelectorAll('.slide-region')].some((r) => r.scrollHeight > r.clientHeight + 1)
-		let level = 0
-		while (level < 3 && overflowing()) {
-			if (level)
-				slide.classList.remove('fit-' + level)
-			level++
-			slide.classList.add('fit-' + level)
-		}
-		if (overflowing()) {
+		if (autofitOne(slide)) {
 			slide.classList.add('clipped')
 			const badge = holder.querySelector('.slide-badge')
 			if (badge)
@@ -3663,7 +3670,220 @@ async function renderPresentationView(main, canvas) {
 
 	await autofitSlides(stripEl)
 	syncViewToggle()
+
+	// A hot reload rebuilt the filmstrip (and re-mounted every chart) beneath a live
+	// presentation: the previously-moved nodes are gone, so drop the stale records and
+	// re-show the stage at the held index, clamped to the new slide count.
+	if (state.presenting) {
+		pres.movedCharts = []
+		$('stageHolder').textContent = ''
+		stageShow(Math.min(state.presIndex, total - 1))
+	}
 }
+
+// ---------------------------------------------------------------- presenting mode (the stage)
+//
+// The stage is a sibling root filling the screen (fullscreen, or in-viewport when the
+// browser refuses fullscreen — D10): one slide at a time, scaled to the viewport by one
+// transform. The live chart nodes MOVE in from the filmstrip on entry and back on exit
+// (the deck's reparent pattern, never purge + newPlot). The keyboard is scoped to
+// presenting, so ⌘K and / keep their meanings everywhere else.
+
+const pres = { movedCharts: [], jumpBuf: '', jumpTimer: null, cursorTimer: null, canvasId: null }
+
+const presCanvas = () => (state.canvasDoc && Array.isArray(state.canvasDoc.slides) ? state.canvasDoc : null)
+const presSlides = () => { const c = presCanvas(); return c ? c.slides : [] }
+const presSettings = () => { const c = presCanvas(); return c && typeof c.presentation === 'object' ? c.presentation : {} }
+
+/** The flat block list the filmstrip built its chart indices from — rebuilt identically so
+ *  a stage chart placeholder's data-chart points at the same live node. */
+function presFlat() {
+	const flat = []
+	for (const s of presSlides())
+		if (s && typeof s === 'object') collectSlideBlocksInto(s, flat)
+	return flat
+}
+
+function fitStage() {
+	const slide = $('stageHolder').querySelector('.slide')
+	if (!slide)
+		return
+	const geo = slideGeometry(presSettings())
+	const scale = Math.min(window.innerWidth / geo.wPx, window.innerHeight / geo.hPx)
+	slide.style.transform = `scale(${scale})`
+}
+
+/** Move the live filmstrip chart nodes into the freshly-built stage slide, remembering where
+ *  each came from so it can be returned. */
+function stageMoveChartsIn(stageSlide) {
+	const strip = $('main').querySelector('.strip-scale')
+	if (!strip)
+		return
+	for (const placeholder of stageSlide.querySelectorAll('.chart-box[data-chart]')) {
+		const live = strip.querySelector(`.chart-box[data-chart="${placeholder.dataset.chart}"]`)
+		if (!live)
+			continue
+		pres.movedCharts.push({ node: live, home: live.parentElement, before: live.nextSibling })
+		placeholder.replaceWith(live)
+		if (live.classList.contains('js-plotly-plot')) {
+			const entry = state.charts.find((e) => e.el === live)
+			Promise.resolve(window.Plotly.Plots.resize(live)).then(() => fitLegendBelow(live, entry && entry.block))
+		}
+	}
+}
+
+function stageReturnCharts() {
+	for (const rec of pres.movedCharts) {
+		if (!rec.home.isConnected)
+			continue // the filmstrip was rebuilt; the home is gone
+		rec.home.insertBefore(rec.node, rec.before && rec.before.isConnected ? rec.before : null)
+		if (rec.node.classList.contains('js-plotly-plot')) {
+			const entry = state.charts.find((e) => e.el === rec.node)
+			Promise.resolve(window.Plotly.Plots.resize(rec.node)).then(() => fitLegendBelow(rec.node, entry && entry.block))
+		}
+	}
+	pres.movedCharts = []
+}
+
+/** Show slide `index` on the stage: return the current charts, build the slide fresh, move
+ *  its charts in, autofit and scale. Navigating also unblanks a black screen. */
+function stageShow(index) {
+	const slides = presSlides()
+	const total = slides.length
+	if (!total)
+		return
+	index = Math.max(0, Math.min(index, total - 1))
+	state.presIndex = index
+	stageReturnCharts()
+	const holder = $('stageHolder')
+	holder.textContent = ''
+	const slide = buildSlide(slides[index], presSettings(), index, total, slideGeometry(presSettings()), presFlat())
+	holder.appendChild(slide)
+	mountCodeCopy(slide, { button: false })
+	autofitOne(slide)
+	stageMoveChartsIn(slide)
+	fitStage()
+	$('stageBlack').hidden = true // navigating unblanks
+}
+
+function mostVisibleSlide() {
+	const items = [...$('main').querySelectorAll('.slide-item')]
+	if (!items.length)
+		return 0
+	const mid = window.innerHeight / 2
+	let best = 0, bestDist = Infinity
+	items.forEach((it, i) => {
+		const r = it.getBoundingClientRect()
+		const d = Math.abs((r.top + r.bottom) / 2 - mid)
+		if (d < bestDist) { bestDist = d; best = i }
+	})
+	return best
+}
+
+function presentStart() {
+	if (!state.presLand || state.presenting)
+		return
+	state.presIndex = mostVisibleSlide()
+	state.presenting = true
+	pres.canvasId = state.activeId
+	$('stage').hidden = false
+	document.body.classList.add('presenting')
+	stageShow(state.presIndex)
+	wakeCursor()
+	// The Fullscreen API needs a user gesture (this click). If the browser refuses —
+	// headless, an iframe, a policy — presenting continues in-viewport (D10). Never a hard
+	// dependency; the tests drive the in-viewport path and never assert fullscreenElement.
+	const stage = $('stage')
+	if (stage.requestFullscreen)
+		stage.requestFullscreen().catch(() => {})
+}
+
+function stageHide() {
+	if (!state.presenting)
+		return
+	state.presenting = false
+	stageReturnCharts()
+	$('stageHolder').textContent = ''
+	$('stage').hidden = true
+	$('stageBlack').hidden = true
+	$('stageJump').hidden = true
+	pres.jumpBuf = ''
+	document.body.classList.remove('presenting', 'cursor-hidden')
+	clearTimeout(pres.cursorTimer)
+	if (document.fullscreenElement)
+		document.exitFullscreen().catch(() => {})
+	// Return to the filmstrip AT the current slide.
+	const item = $('main').querySelectorAll('.slide-item')[state.presIndex]
+	if (item)
+		item.scrollIntoView({ block: 'center' })
+}
+
+function toggleBlack() {
+	const b = $('stageBlack')
+	b.hidden = !b.hidden
+}
+
+function wakeCursor() {
+	document.body.classList.remove('cursor-hidden')
+	clearTimeout(pres.cursorTimer)
+	pres.cursorTimer = setTimeout(() => {
+		if (state.presenting)
+			document.body.classList.add('cursor-hidden')
+	}, 2000)
+}
+
+const showJump = () => { const j = $('stageJump'); j.hidden = false; j.textContent = pres.jumpBuf }
+function armJumpReset() {
+	clearTimeout(pres.jumpTimer)
+	pres.jumpTimer = setTimeout(() => { pres.jumpBuf = ''; $('stageJump').hidden = true }, 1300)
+}
+
+// The keyboard vocabulary — active ONLY while presenting, and it swallows every key so ⌘K
+// and / keep their meanings elsewhere but do nothing here. Capture phase, so it wins before
+// the app's own shortcuts.
+const NEXT_KEYS = new Set(['ArrowRight', 'ArrowDown', ' ', 'Spacebar', 'PageDown'])
+const PREV_KEYS = new Set(['ArrowLeft', 'ArrowUp', 'PageUp', 'Backspace'])
+document.addEventListener('keydown', (e) => {
+	if (!state.presenting)
+		return
+	e.stopPropagation()
+	const k = e.key
+	if (/^[0-9]$/.test(k)) {
+		pres.jumpBuf += k
+		showJump()
+		armJumpReset()
+		e.preventDefault()
+		return
+	}
+	if (k === 'Enter') {
+		e.preventDefault()
+		if (pres.jumpBuf) {
+			const n = parseInt(pres.jumpBuf, 10)
+			pres.jumpBuf = ''
+			$('stageJump').hidden = true
+			stageShow(n - 1)
+		} else {
+			stageShow(state.presIndex + 1)
+		}
+		return
+	}
+	if (NEXT_KEYS.has(k)) { stageShow(state.presIndex + 1); e.preventDefault() }
+	else if (PREV_KEYS.has(k)) { stageShow(state.presIndex - 1); e.preventDefault() }
+	else if (k === 'Home') { stageShow(0); e.preventDefault() }
+	else if (k === 'End') { stageShow(1e9); e.preventDefault() }
+	else if (k === 'b' || k === 'B') { toggleBlack(); e.preventDefault() }
+	else if (k === 'Escape') { stageHide(); e.preventDefault() }
+}, true)
+
+$('presentBtn').addEventListener('click', presentStart)
+$('stage').addEventListener('click', () => { if (state.presenting) stageShow(state.presIndex + 1) })
+$('stage').addEventListener('mousemove', () => { if (state.presenting) wakeCursor() })
+window.addEventListener('resize', () => { if (state.presenting) fitStage() })
+// A native fullscreen exit (Esc or F11 while in fullscreen) leaves presenting entirely.
+document.addEventListener('fullscreenchange', () => {
+	if (state.presenting && !document.fullscreenElement)
+		stageHide()
+})
 
 // ---------------------------------------------------------------- canvas view
 
@@ -3687,6 +3907,10 @@ function renderEmpty() {
 
 async function renderCanvas() {
 	disposeCharts()
+	// Navigating to a DIFFERENT canvas while presenting leaves the stage; a same-canvas hot
+	// reload keeps it (renderPresentationView re-shows it at the held slide).
+	if (state.presenting && state.activeId !== pres.canvasId)
+		stageHide()
 	const main = $('main')
 	if (!state.activeId) {
 		state.canvasDoc = null

@@ -56,6 +56,15 @@
      mode. Opens the native print dialog (where "Save as PDF" lives). -->
 <button class="print-fab" id="printBtn" hidden title="Print or save as PDF (⌘P) — the sheets are the pages" aria-label="Print or save as PDF"><svg class="lucide" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><path d="M6 9V3a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v6"/><rect x="6" y="14" width="12" height="8" rx="1"/></svg></button>
 
+<!-- Presenting stage: one slide filling the screen (fullscreen, or in-viewport when the
+     browser refuses fullscreen). Persistent so it can be the requestFullscreen target;
+     hidden until Present. The live chart nodes MOVE in from the filmstrip on entry. -->
+<div class="stage" id="stage" hidden>
+	<div class="stage-holder" id="stageHolder"></div>
+	<div class="stage-jump" id="stageJump" hidden aria-hidden="true"></div>
+	<div class="stage-black" id="stageBlack" hidden></div>
+</div>
+
 <!-- Document colors. Unlike the TOC and header/footer toggles — which are pure
      reader preferences and live only in memory — a palette change is PERSISTED,
      because a native .md has no other way to carry a brand and a canvas's theme is

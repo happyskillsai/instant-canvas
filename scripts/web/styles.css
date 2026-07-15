@@ -1208,6 +1208,28 @@ body.modal-open .main{overflow:hidden}
 .present-btn .lucide{width:15px;height:15px}
 .present-label{font-size:12.5px;font-weight:600;letter-spacing:.01em}
 
+/* --------------------------------------------------------- presenting stage
+   One slide filling the screen (fullscreen or in-viewport), scaled to contain the viewport
+   by one transform through CSSOM. The live chart nodes are moved in from the filmstrip; the
+   whole slide is transform-scaled (layout identity over WebGL crispness — D14). */
+.stage{position:fixed;inset:0;z-index:200;background:#000;display:flex;align-items:center;justify-content:center;overflow:hidden}
+.stage[hidden]{display:none}
+.stage-holder{display:flex;align-items:center;justify-content:center;width:100%;height:100%}
+/* On the stage the slide is centered and scaled from its center (the filmstrip scales from
+   the top-left); it is no longer absolutely positioned inside a holder. */
+.stage .slide{position:relative;transform-origin:center center;border-radius:0;box-shadow:none}
+/* B — the black screen (audience-attention convention). */
+.stage-black{position:absolute;inset:0;background:#000;z-index:3}
+.stage-black[hidden]{display:none}
+/* the typed slide-jump buffer */
+.stage-jump{position:absolute;bottom:36px;right:44px;z-index:4;font-size:44px;font-weight:700;
+	color:rgba(255,255,255,.92);background:rgba(0,0,0,.55);padding:6px 20px;border-radius:12px;
+	letter-spacing:.04em;font-variant-numeric:tabular-nums}
+.stage-jump[hidden]{display:none}
+/* cursor auto-hides after ~2s idle while presenting, wakes on move */
+body.presenting.cursor-hidden{cursor:none}
+body.presenting.cursor-hidden .stage{cursor:none}
+
 @media print{
 	.pal{display:none !important}
 	html{print-color-adjust:exact;-webkit-print-color-adjust:exact}

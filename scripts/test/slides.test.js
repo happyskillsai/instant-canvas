@@ -40,7 +40,7 @@ const PROBE = `
 `
 
 const K = { root: null, child: null, port: 0, token: '' }
-let gallery = null, overflow = null
+let gallery = null, overflow = null, presenting = null
 
 /** Drive one deck: wait for the filmstrip, let charts + autofit settle, snapshot. */
 function driveDeck(rel, expectSlides) {
@@ -103,6 +103,52 @@ function driveDeck(rel, expectSlides) {
 	})
 }
 
+/** Drive presenting mode end to end: enter via a real click (fullscreen is refused for a
+ *  synthetic gesture — the tested path is in-viewport, §6.1), then exercise the vocabulary.
+ *  The stage reuses the filmstrip's LIVE chart nodes, so we also prove one moves in and back. */
+function drivePresenting(rel) {
+	const url = 'http://127.0.0.1:' + K.port + '/?token=' + encodeURIComponent(K.token) + '#/c/' + encodeURIComponent(rel)
+	const key = (k) => 'document.dispatchEvent(new KeyboardEvent("keydown",{key:' + JSON.stringify(k) + ',bubbles:true,cancelable:true}))'
+	return withChrome(CHROME, url, { onNewDocument: PROBE }, async ({ evaluate }) => {
+		for (let i = 0; i < 80; i++) {
+			if (await evaluate('document.querySelectorAll(".slide").length') >= 8)
+				break
+			await sleep(250)
+		}
+		await sleep(1600)
+		const r = {}
+		const idx = () => evaluate('window.ic.state.presIndex')
+		// Enter via a real click on the Present control.
+		await evaluate('document.getElementById("presentBtn").click()')
+		await sleep(400)
+		r.entered = await evaluate('window.ic.state.presenting === true && !document.getElementById("stage").hidden && !!document.querySelector("#stageHolder .slide")')
+		// Never assert document.fullscreenElement — a synthetic gesture is refused headless.
+		r.startIndex = await idx()
+		// digits + Enter jump to slide 4 (index 3 — the chart slide).
+		await evaluate(key('4')); await sleep(80); await evaluate(key('Enter')); await sleep(500)
+		r.afterJump = await idx()
+		r.chartMovedToStage = await evaluate('!!document.querySelector("#stageHolder .slide .js-plotly-plot .main-svg")')
+		r.chartsLeftInStrip = await evaluate('document.querySelectorAll(".strip-scale .js-plotly-plot").length')
+		await evaluate(key('ArrowRight')); await sleep(250); r.afterRight = await idx()
+		await evaluate(key('ArrowLeft')); await sleep(250); r.afterLeft = await idx()
+		await evaluate(key(' ')); await sleep(250); r.afterSpace = await idx()
+		await evaluate('document.getElementById("stage").click()'); await sleep(250); r.afterClick = await idx()
+		await evaluate(key('End')); await sleep(200); r.afterEnd = await idx()
+		await evaluate(key('Home')); await sleep(200); r.afterHome = await idx()
+		r.notesOnStage = await evaluate('document.querySelectorAll("#stageHolder .slide-notes").length')
+		await evaluate(key('b')); await sleep(150); r.blanked = await evaluate('!document.getElementById("stageBlack").hidden')
+		await evaluate(key('b')); await sleep(150); r.unblanked = await evaluate('document.getElementById("stageBlack").hidden')
+		// / must NOT open the search modal while presenting (the vocabulary is scoped).
+		await evaluate(key('/')); await sleep(150); r.searchStayedClosed = await evaluate('!!document.querySelector(".csm[hidden]") || !document.querySelector(".csm")')
+		await evaluate(key('Escape')); await sleep(400)
+		r.exited = await evaluate('window.ic.state.presenting === false && document.getElementById("stage").hidden')
+		r.chartBackInStrip = await evaluate('!!document.querySelector(".strip-scale .js-plotly-plot .main-svg")')
+		r.stageEmpty = await evaluate('document.getElementById("stageHolder").children.length === 0')
+		r.csp = await evaluate('window.__csp || []')
+		return r
+	})
+}
+
 test.before(async () => {
 	const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'ic-slides-')))
 	fs.copyFileSync(path.join(FIXTURES, 'presentation-full.canvas.json'), path.join(root, 'gallery.canvas.json'))
@@ -128,6 +174,7 @@ test.before(async () => {
 	if (CHROME) {
 		gallery = await driveDeck('gallery.canvas.json', 8)
 		overflow = await driveDeck('overflow.canvas.json', 2)
+		presenting = await drivePresenting('gallery.canvas.json')
 	}
 })
 
@@ -187,4 +234,34 @@ test('autofit: a region that cannot fit steps its type scale down, then clips wi
 	assert.ok(overflow.clipped >= 1, 'and, still overflowing, was clipped')
 	assert.equal(overflow.visibleBadges, 1, 'with exactly one visible overflow badge — the crammed slide, not the one that fits')
 	assert.deepEqual(overflow.fitLevels[1], [], 'the slide that fits took no autofit step')
+})
+
+// ---------------------------------------------------------------- presenting mode (Phase D)
+
+test('Present enters the stage in-viewport and the standard keyboard vocabulary navigates', { skip: browserSkip }, () => {
+	assert.equal(presenting.entered, true, 'a real click on Present raised the stage with a slide on it')
+	assert.equal(presenting.startIndex, 0, 'presenting starts from the most-visible filmstrip slide')
+	assert.equal(presenting.afterJump, 3, 'digits + Enter jump to slide N (4 → index 3)')
+	assert.equal(presenting.afterRight, 4, '→ advances')
+	assert.equal(presenting.afterLeft, 3, '← goes back')
+	assert.equal(presenting.afterSpace, 4, 'Space advances')
+	assert.equal(presenting.afterClick, 5, 'a click/tap advances')
+	assert.equal(presenting.afterEnd, 7, 'End jumps to the last slide')
+	assert.equal(presenting.afterHome, 0, 'Home jumps to the first')
+})
+
+test('B blanks the screen, / stays inert, notes never reach the stage, Esc returns to the filmstrip', { skip: browserSkip }, () => {
+	assert.equal(presenting.blanked, true, 'B blanks the screen')
+	assert.equal(presenting.unblanked, true, 'B again unblanks it')
+	assert.equal(presenting.searchStayedClosed, true, 'the keyboard is scoped: / does not open search while presenting')
+	assert.equal(presenting.notesOnStage, 0, 'speaker notes are filmstrip-only — never on the stage')
+	assert.equal(presenting.exited, true, 'Esc leaves presenting and hides the stage')
+	assert.deepEqual(presenting.csp, [], 'presenting is CSP-clean')
+})
+
+test('the stage reuses the live chart nodes — moved in on entry, moved back on exit (never purged)', { skip: browserSkip }, () => {
+	assert.equal(presenting.chartMovedToStage, true, 'the chart drew on the stage')
+	assert.equal(presenting.chartsLeftInStrip, 0, 'because its live node MOVED there — not a second copy')
+	assert.equal(presenting.chartBackInStrip, true, 'and returned to the filmstrip, still drawn, on exit')
+	assert.equal(presenting.stageEmpty, true, 'the stage is cleared on exit')
 })
