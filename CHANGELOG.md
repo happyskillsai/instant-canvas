@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.8.1] - 2026-07-15
+
 ### Changed
 - **The InstantCanvas mark now folds in HappySkills vermilion.** The logo's folded
   corner moved from the legacy blue (`#0054fe`) to the brand accent (`#eb4a26`) in the
