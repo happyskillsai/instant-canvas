@@ -326,11 +326,12 @@
         "In the deck, `.md > :first-child` zeroes the margins of EVERY element",
         "The packer measures what exists — a wrapper mounted later silently grows the sheet",
         "A clipped table loses COLUMNS, and `max-width` will not save it",
+        "Rounded table corners need `border-collapse: separate`, and the paper override must stay `overflow: visible`",
         "`overflow:auto` is a scrollbar on screen and a guillotine in print",
         "A sheet 3 px too tall prints a silent sliver page",
         "Constraint API quirks around custom widgets"
       ],
-      "line_count": 228,
+      "line_count": 234,
       "links_to": [],
       "over_size": false,
       "parse_error": null,
