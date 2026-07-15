@@ -5,6 +5,32 @@ The agent-facing contract for InstantCanvas. The runtime ships as the
 and LICENSE, and agents drive the CLI through `npx`. Versions track the runtime
 package they were authored alongside.
 
+## [0.9.0] - 2026-07-16
+
+### Added
+- **Presentation mode — a canvas can be a slide deck.** A canvas whose envelope carries
+  `slides` (a third XOR member beside `blocks`/`pages`) renders as a deck. The contract is
+  on the deterministic surface: `catalog presentation` (deck settings — aspect, theme,
+  footer) and `catalog slide` (the seven layouts — title, section, content, two-column,
+  quadrant, statement, closing — one validated example each). Slide regions hold the
+  existing display blocks (`markdown`/`chart`/`table`/`kpi`); a lone chart or KPI fills its
+  region. Interactive blocks and chart sweeps are refused on a slide
+  (`PRESENTATION_INTERACTIVE_BLOCK`); a `document` beside `slides` is
+  `DOCUMENT_ON_PRESENTATION`; a `presentation` without `slides` is `PRESENTATION_NEEDS_SLIDES`.
+  `print deck.canvas.json --out deck.pdf` prints one landscape page per slide; a deck keeps
+  its theme in `presentation.theme`. SKILL.md gains a "Presentations" section pointing at
+  the catalog.
+
+### Changed
+- **`percent`-format values are documented as fractions.** A `kpi`/`table`/chart value
+  with format `"percent"` is a fraction (`0.41` → `"41%"`) — now stated in the catalog
+  schemas, not only for `delta`.
+
+### Note
+- This bundle also catches the skill registry up to the current runtime: the contract
+  additions from the runtime's 0.7.0–0.8.1 line — document mode, companion canvases, and
+  the `theme` command — were shipped in the npm package but not re-published here until now.
+
 ## [0.6.0] - 2026-07-14
 
 ### Changed
