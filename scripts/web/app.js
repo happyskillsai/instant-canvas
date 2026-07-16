@@ -5724,7 +5724,13 @@ function connectWs() {
 			if (msg.path === state.activeId)
 				renderCanvas() // full re-render; state loss accepted in MVP
 		} else if (msg.type === 'navigate') {
-			location.hash = '#/c/' + encodeURIComponent(msg.path)
+			// A directory navigates to the browse view; a file (or an older kernel that
+			// omits `kind`) to the canvas overlay — an unknown kind is treated as a
+			// file, the safe default (spec §6 uncertainty #6). The #/f/ route renders
+			// from §4.5; until then an unrecognised hash shows the empty pane.
+			location.hash = msg.kind === 'dir'
+				? '#/f/' + (msg.path ? encodeURIComponent(msg.path) : '')
+				: '#/c/' + encodeURIComponent(msg.path)
 			if (msg.path === state.activeId)
 				renderCanvas() // re-open of the already-active canvas (fresh session)
 		} else if (msg.type === 'session') {

@@ -62,12 +62,16 @@ test.before(async () => {
 	fs.writeFileSync(path.join(pics, 'x.heic'), Buffer.from('not a real heic')) // metadata-only card
 	fs.mkdirSync(path.join(pics, 'sub'))
 	fs.writeFileSync(path.join(pics, 'sub', 'm.png'), pngOf(0))
-	// An authored gallery canvas for the hot-reload test (§4.9).
+	// The grid under test is the authored gallery BLOCK's grid (createGallery),
+	// driven through a real canvas — `open <folder>` (the virtual gallery) was
+	// retired in §4.3, and the gallery block renders the identical grid over the
+	// same `pics/` images. This canvas is also the subject of the §4.9 hot-reload
+	// check further down.
 	fs.writeFileSync(path.join(root, 'g2.canvas.json'), JSON.stringify({
 		instantcanvas: 1, createdWith: PKG_VERSION, title: 'G2', blocks: [{ type: 'gallery', src: 'pics', layout: 'grid' }],
 	}))
 
-	const out = execFileSync(process.execPath, [CLI, 'open', 'pics', '--workspace', root, '--no-open'], { cwd: root, encoding: 'utf8' })
+	const out = execFileSync(process.execPath, [CLI, 'open', 'g2.canvas.json', '--workspace', root, '--no-open'], { cwd: root, encoding: 'utf8' })
 	const url = JSON.parse(out).url
 
 	R = await withChrome(CHROME, url, { onNewDocument: PROBE }, async ({ evaluate, send }) => {
@@ -80,7 +84,6 @@ test.before(async () => {
 		await sleep(200)
 		out.tileCount = await evaluate(q('.gt'))
 		out.styleAttrs = await evaluate(q('.gallery [style]')) // must be 0 — all class-based
-		out.headPathOnly = await evaluate(q('.canvas-head.head-doc') + ' === 1') // a folder head shows its path, no h1
 		out.countText = await evaluate('(document.querySelector(".g-count") || {}).textContent || ""')
 		out.initialOrder = await evaluate(tilePaths)
 
@@ -208,7 +211,6 @@ test('gallery: the grid mounts with one tile per image and no inline styles', { 
 	assert.equal(R.steps.mounted, true, 'the gallery mounted')
 	assert.equal(R.tileCount, 7, 'one tile per image (4 png + svg + heic + 1 nested)')
 	assert.equal(R.styleAttrs, 0, 'no style="" attributes anywhere in the gallery')
-	assert.equal(R.headPathOnly, true, 'a virtual gallery head shows the folder path, not a title')
 	assert.match(R.countText, /7 images/)
 	assert.match(R.countText, /1 in subfolders/)
 })

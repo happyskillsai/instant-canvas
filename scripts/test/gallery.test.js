@@ -18,7 +18,6 @@ const {
 	isGalleryImage,
 	galleryMime,
 	listImages,
-	virtualGalleryFor,
 } = require('../lib/gallery')
 const { IMAGE_MIME } = require('../lib/markdownsrc')
 const { VERSION: SCHEMA_VERSION } = require('../lib/schema')
@@ -131,7 +130,6 @@ test('traversal out of the workspace is refused', () => {
 	const root = fixture()
 	assert.equal(listImages(root, '../'), null)
 	assert.equal(listImages(root, '../../etc'), null)
-	assert.equal(virtualGalleryFor(root, '..'), null)
 })
 
 test('a symlinked directory escaping the workspace is never followed', () => {
@@ -185,24 +183,6 @@ test('a file target (not a directory) is null', () => {
 	const root = fixture()
 	assert.equal(listImages(root, 'a.png'), null)
 	assert.equal(listImages(root, 'missing'), null)
-	assert.equal(virtualGalleryFor(root, 'a.png'), null)
-})
-
-test('virtualGalleryFor mirrors mdcanvas conventions and writes nothing', () => {
-	const root = fixture()
-	const before = fs.readdirSync(root).sort()
-	const g = virtualGalleryFor(root, 'holiday')
-	assert.deepEqual(g, {
-		instantcanvas: SCHEMA_VERSION,
-		createdWith: PKG_VERSION,
-		title: 'holiday',
-		blocks: [{ type: 'gallery', src: 'holiday' }],
-	})
-	// The root folder titles from the workspace name and carries src '.'.
-	const groot = virtualGalleryFor(root, '.')
-	assert.equal(groot.title, path.basename(root))
-	assert.equal(groot.blocks[0].src, '.')
-	assert.deepEqual(fs.readdirSync(root).sort(), before, 'nothing written to disk')
 })
 
 // -------------------------------------------------------------- validator (§4.3)

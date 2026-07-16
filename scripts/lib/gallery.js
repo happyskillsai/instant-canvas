@@ -3,8 +3,6 @@
 const fs = require('node:fs')
 const path = require('node:path')
 const { insideRoot } = require('./paths')
-const { VERSION: SCHEMA_VERSION } = require('./schema')
-const { PKG_VERSION } = require('./pkgmeta')
 const { IMAGE_MIME } = require('./markdownsrc')
 
 // ------------------------------------------------------------- extension sets
@@ -193,44 +191,6 @@ function imageStat(root, rel) {
 	}
 }
 
-// -------------------------------------------------------- the virtual gallery
-
-/** The folder's own name — its basename, or the workspace folder's name for the root. */
-function folderTitle(root, relDir) {
-	if (relDir)
-		return path.basename(relDir)
-	return path.basename(path.resolve(root)) || 'Gallery'
-}
-
-/**
- * The canvas a folder *is*, synthesised in memory and never written — the
- * gallery sibling of virtualCanvasFor (lib/mdcanvas.js). `createdWith` is
- * honest: the running runtime authored this object, this instant. Returns
- * `null` when `dirRel` is not a directory inside the root.
- */
-function virtualGalleryFor(root, dirRel) {
-	const relDir = normalizeRelDir(dirRel)
-	const abs = relDir ? path.resolve(root, relDir) : path.resolve(root)
-	if (!insideRoot(root, abs))
-		return null
-	let stat
-	try {
-		stat = fs.statSync(abs)
-	} catch {
-		return null
-	}
-	if (!stat.isDirectory())
-		return null
-	return {
-		instantcanvas: SCHEMA_VERSION,
-		createdWith: PKG_VERSION,
-		title: folderTitle(root, relDir),
-		// The root folder is `'.'`, an explicit workspace-relative reference the
-		// validator resolves to the root and the listing route normalizes back.
-		blocks: [{ type: 'gallery', src: relDir ? toPosix(relDir) : '.' }],
-	}
-}
-
 module.exports = {
 	GALLERY_RENDERABLE,
 	GALLERY_METADATA_ONLY,
@@ -240,5 +200,4 @@ module.exports = {
 	normalizeRelDir,
 	listImages,
 	imageStat,
-	virtualGalleryFor,
 }

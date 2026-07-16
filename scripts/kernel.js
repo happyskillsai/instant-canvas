@@ -16,7 +16,7 @@ const { scan, dirsUnder, readCanvasFile, MAX_CANVAS_BYTES, isExcludedDir } = req
 const { validate, collectBlocks, isInteractiveBlock, flattenFields } = require('./lib/validate')
 const { readMarkdownSrc, inlineLocalImages, inlineImageFile, hasMarkdownExtension, renderableMarkdown, MAX_COVER_IMAGE_BYTES } = require('./lib/markdownsrc')
 const { virtualCanvasFor } = require('./lib/mdcanvas')
-const { listImages, imageStat, virtualGalleryFor, isRenderableImage, isGalleryImage, galleryMime, normalizeRelDir } = require('./lib/gallery')
+const { listImages, imageStat, isRenderableImage, isGalleryImage, galleryMime, normalizeRelDir } = require('./lib/gallery')
 const { listDir } = require('./lib/browse')
 const { dimensions } = require('./lib/imagemeta')
 const { companionFor, enhancesOf } = require('./lib/companion')
@@ -166,23 +166,11 @@ function loadCanvas(rel) {
 		return { status: 200, body: { ok: true, path: rel, canvas, warnings: [], ...themeFor(rel, null) }, canvas }
 	}
 
-	// A directory IS a gallery — its canvas is synthesised in memory, never on disk,
-	// the same way a markdown file synthesises its own. This branch sits AFTER the
-	// markdown branch and BEFORE the canvas-file loader: a directory is not an
-	// open-and-parse risk (statSync reads no bytes), so the `.env`-leak gates that
-	// refuse non-canvas FILES inside loadCanvasFile stay exactly as they are. A folder
-	// has no companion (`enhances` is markdown-only) but can wear the workspace theme.
-	let dstat = null
-	try {
-		dstat = fs.statSync(abs)
-	} catch { /* missing — falls through to the file loader's 404 */ }
-	if (dstat && dstat.isDirectory()) {
-		const canvas = virtualGalleryFor(ROOT, rel)
-		if (!canvas)
-			return { status: 404, body: { ok: false, message: `Folder not found: ${rel}` } }
-		return { status: 200, body: { ok: true, path: rel, canvas, warnings: [], ...themeFor(rel, null) }, canvas }
-	}
-
+	// A directory is NOT a canvas. GET /api/canvas answers only for canvas files and
+	// markdown documents; a folder navigates to the browse view (#/f/) through
+	// /api/open, which handles directories directly. Here it falls through to the
+	// file loader's `.json` gate and becomes a byte-clean 404 — the browser never
+	// asks /api/canvas for a directory.
 	return loadCanvasFile(rel)
 }
 
@@ -461,6 +449,11 @@ function interactiveBlockOf(canvas) {
 
 function canvasUrl(rel) {
 	return `http://127.0.0.1:${PORT}/?token=${TOKEN}#/c/${encodeURIComponent(rel)}`
+}
+
+// The browse view of a folder. The workspace root is `#/f/` with an empty rel.
+function folderUrl(rel) {
+	return `http://127.0.0.1:${PORT}/?token=${TOKEN}#/f/${rel ? encodeURIComponent(rel) : ''}`
 }
 
 function activeSessionFor(rel) {
@@ -796,17 +789,31 @@ async function route(req, res, url) {
 	if (method === 'POST' && p === '/api/open') {
 		const body = await readBody(req)
 		const rel = relCanvasPath(String(body.path || ''))
+		// A directory navigates to the browse view — there is no canvas to load and no
+		// session. loadCanvas no longer synthesises a gallery for a folder, so the
+		// directory is recognised here, before the file loader would 404 it. `lstat`
+		// keeps a symlinked directory out (the browse discipline); the CLI has already
+		// realpath'd its argument, so a legitimate folder arrives as a real directory.
+		const abs = path.resolve(ROOT, rel)
+		let isDir = false
+		if (insideRoot(ROOT, abs)) {
+			try { isDir = fs.lstatSync(abs).isDirectory() } catch { /* missing → treated as a file below */ }
+		}
+		if (isDir) {
+			broadcast({ type: 'navigate', path: rel, kind: 'dir' })
+			return sendJson(res, 200, { ok: true, url: folderUrl(rel) })
+		}
 		const load = loadCanvas(rel)
 		if (load.status !== 200)
 			return sendJson(res, load.status, load.body)
 		const block = interactiveBlockOf(load.canvas)
 		if (!block) {
-			broadcast({ type: 'navigate', path: rel })
+			broadcast({ type: 'navigate', path: rel, kind: 'file' })
 			return sendJson(res, 200, { ok: true, url: canvasUrl(rel) })
 		}
 		const timeoutSeconds = Number.isFinite(body.timeoutSeconds) ? body.timeoutSeconds : block.timeoutSeconds
 		const session = sessions.create(rel, { timeoutSeconds })
-		broadcast({ type: 'navigate', path: rel })
+		broadcast({ type: 'navigate', path: rel, kind: 'file' })
 		klog('session', session.id, 'created for', rel, `(timeout ${session.timeoutSeconds}s)`)
 		return sendJson(res, 200, { ok: true, url: canvasUrl(rel), sessionId: session.id })
 	}

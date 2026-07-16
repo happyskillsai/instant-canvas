@@ -701,16 +701,40 @@ test('kernel: /api/gallery/file streams image bytes with the right Content-Type 
 	assert.equal(gif.headers['content-type'], 'image/gif')
 })
 
-test('kernel: GET /api/canvas on a FOLDER synthesises a gallery canvas, nothing written', async () => {
-	const before = fs.readdirSync(K.root, { recursive: true }).sort().join('|')
+test('kernel: §4.3 GET /api/canvas on a FOLDER is a byte-clean 404 — a directory is not a canvas', async () => {
+	// The virtual gallery canvas is retired: a folder navigates to the browse view,
+	// never renders as a synthesised canvas. The body leaks no bytes of the folder.
 	const r = await httpReq({ port: K.port, path: '/api/canvas?path=photos', headers: K.auth })
-	assert.equal(r.status, 200)
-	assert.equal(r.json.ok, true)
-	assert.equal(r.json.canvas.blocks[0].type, 'gallery')
-	assert.equal(r.json.canvas.blocks[0].src, 'photos')
-	assert.equal(r.json.canvas.createdWith, PKG_VERSION, 'createdWith is honest — the runtime authored it')
-	assert.ok(r.json.theme, 'a folder wears the workspace default theme')
-	assert.equal(fs.readdirSync(K.root, { recursive: true }).sort().join('|'), before, 'nothing written to disk')
+	assert.equal(r.status, 404)
+	assert.equal(r.json.ok, false)
+	assert.equal(r.json.canvas, undefined, 'no synthesised canvas')
+	assert.ok(!r.text.includes('gallery'), 'the body does not carry a gallery block')
+})
+
+test('kernel: §4.3 opening a FOLDER broadcasts navigate kind:"dir" and returns a #/f/ url', async () => {
+	const ws = await wsConnect(K.port, K.token)
+	try {
+		const opened = await httpReq({ port: K.port, method: 'POST', path: '/api/open', headers: K.auth, body: { path: 'photos' } })
+		assert.equal(opened.status, 200)
+		assert.equal(opened.json.ok, true)
+		assert.match(opened.json.url, /#\/f\/photos$/, 'the url routes to the browse view')
+		assert.equal(opened.json.sessionId, undefined, 'a folder has no session')
+		await ws.waitFor((m) => m.type === 'navigate' && m.path === 'photos' && m.kind === 'dir')
+	} finally {
+		ws.close()
+	}
+})
+
+test('kernel: §4.3 opening a FILE broadcasts navigate kind:"file"', async () => {
+	const ws = await wsConnect(K.port, K.token)
+	try {
+		const opened = await httpReq({ port: K.port, method: 'POST', path: '/api/open', headers: K.auth, body: { path: 'report.canvas.json' } })
+		assert.equal(opened.status, 200)
+		assert.match(opened.json.url, /#\/c\/report\.canvas\.json$/)
+		await ws.waitFor((m) => m.type === 'navigate' && m.path === 'report.canvas.json' && m.kind === 'file')
+	} finally {
+		ws.close()
+	}
 })
 
 test('kernel: POST /api/gallery/delete removes exactly the named files and nothing else', async () => {

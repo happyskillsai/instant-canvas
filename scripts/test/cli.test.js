@@ -189,8 +189,8 @@ test('cli: open lifecycle — display open, kernel reuse, kill -9 recovery, stop
 	assert.equal(opened4.code, 0)
 	assert.deepEqual(JSON.parse(fs.readFileSync(resultFile, 'utf8')), opened4.json)
 
-	// a FOLDER opens as a gallery — the envelope is synthesised in memory, exactly
-	// like a markdown file, and nothing is written to disk anywhere in the workspace.
+	// a FOLDER opens to the browse view (#/f/), not a synthesised gallery canvas,
+	// and nothing is written to disk anywhere in the workspace.
 	fs.mkdirSync(path.join(root, 'photos'))
 	fs.writeFileSync(path.join(root, 'photos', 'a.png'), PNG)
 	fs.mkdirSync(path.join(root, 'photos', 'holiday'))
@@ -200,7 +200,7 @@ test('cli: open lifecycle — display open, kernel reuse, kill -9 recovery, stop
 	assert.equal(gallery.code, 0, gallery.stderr)
 	assert.equal(gallery.json.status, 'opened')
 	assert.equal(gallery.json.canvas, 'photos')
-	assert.match(gallery.json.url, /#\/c\/photos$/)
+	assert.match(gallery.json.url, /#\/f\/photos$/)
 	assert.equal(fs.readdirSync(root, { recursive: true }).sort().join('|'), snapBefore, 'open <folder> writes nothing to disk')
 
 	// stop is clean and idempotent
