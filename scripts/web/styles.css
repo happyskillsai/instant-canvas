@@ -87,8 +87,6 @@
 /* Lucide icons: inline SVG, stroke = currentColor, sized by context */
 .lucide{width:1em;height:1em;flex:0 0 auto;vertical-align:-0.15em}
 .tbtn .lucide{width:15px;height:15px}
-.group-row .lucide{width:14px;height:14px}
-.group-row .caret .lucide{width:12px;height:12px;display:block}
 .secbanner > .lucide{width:16px;height:16px;color:var(--accent);margin-top:2px}
 .confirm-head .lucide{width:17px;height:17px}
 .confirm.warning .confirm-head .lucide{color:var(--amber)}
@@ -195,36 +193,39 @@ button{font:inherit;cursor:pointer}
 	border-radius:8px;display:flex;align-items:center;justify-content:center;padding:0}
 .side-add:hover{color:var(--text);background:var(--tint)}
 .side-add .lucide{width:13px;height:13px}
-.tree{flex:1;overflow:auto;padding:0 8px 10px}
-.group{margin-bottom:2px}
-.group-row{display:flex;align-items:center;gap:6px;padding:6px 8px;border-radius:7px;color:var(--muted);
-	font-weight:600;font-size:12.5px;user-select:none;cursor:pointer}
-.group-row:hover{background:var(--tint);color:var(--text)}
-.group-row .gname{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.group-row .caret{transition:transform .12s;opacity:.7;display:inline-flex;align-items:center}
-.group.collapsed .caret{transform:rotate(-90deg)}
-.group.collapsed .items{display:none}
-.item{display:flex;align-items:center;gap:8px;padding:6px 10px 6px 26px;border-radius:7px;
-	color:var(--text);cursor:pointer;font-size:13px}
-.item:hover{background:var(--tint)}
-/* HappySkills active nav: a neutral rounded wash with primary-color text (accent is used
-   sparingly, never as a nav fill). The one accent touch is the active canvas dot. */
-.item.active{background:var(--tint-strong);color:var(--text);font-weight:600}
-.item.active .dot::before{background:var(--accent);opacity:1}
-/* The canvas dot and the document icon share one 14px slot, so a folder holding
-   both still reads as a single left-aligned column of titles. */
-.item .dot,.item .doc-ico{flex:0 0 14px;height:14px;display:flex;align-items:center;justify-content:center}
-.item .dot::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor;opacity:.55}
-.item .doc-ico{opacity:.6}
-.item .doc-ico .lucide{width:13px;height:13px}
-.item:hover .doc-ico,.item.active .doc-ico{opacity:1}
-/* A document with a COMPANION wears an accent dot. The companion itself is not in the
-   tree — one thing, one row — so this is the only thing telling the reader that this
-   markdown file carries a cover and a theme. A control (or a state) the reader cannot
-   see is one that teaches nothing. `margin-left:auto` parks it on the trailing edge,
-   clear of the title, which may be long enough to ellipsize. */
-.item .enh-dot{flex:0 0 6px;width:6px;height:6px;border-radius:50%;margin-left:auto;
-	background:var(--accent);opacity:.85}
+/* The sidebar is a PURE FOLDER TREE. Each folder is a .trow (chevron + glyph +
+   name); nested folders live in a .tkids container that indents them, so nesting
+   gives cumulative indent with no per-row inline style. */
+.tree{flex:1;overflow:auto;padding:6px 8px 10px}
+.trow{display:flex;align-items:center;gap:6px;padding:5px 8px;border-radius:7px;color:var(--text);
+	cursor:pointer;font-size:13px;user-select:none}
+.trow:hover{background:var(--tint)}
+/* HappySkills active nav: a neutral rounded wash, primary-color text — accent is
+   used sparingly, never as a nav fill. */
+.trow.active{background:var(--tint-strong);font-weight:600}
+.trow .tname{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.trow .tfico{flex:0 0 15px;height:15px;display:flex;align-items:center;justify-content:center;opacity:.6}
+.trow:hover .tfico,.trow.active .tfico{opacity:1}
+.trow .tfico .lucide{width:14px;height:14px}
+/* The chevron is its OWN single-click hit target. It points down when expanded and
+   rotates when collapsed; it is dimmed to invisible on a leaf (a folder that turned
+   out to have no subfolders). */
+.tcaret{flex:0 0 16px;width:16px;height:16px;padding:0;border:none;background:transparent;
+	color:var(--muted);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;
+	border-radius:4px;transition:transform .12s}
+.tcaret:hover{background:var(--tint-strong);color:var(--text)}
+.tcaret .lucide{width:12px;height:12px;display:block}
+.trow:not(.expanded) .tcaret{transform:rotate(-90deg)}
+.trow.tleaf .tcaret{visibility:hidden}
+/* A dot-folder is muted — present in the tree, but visibly not part of everyday work. */
+.trow-hidden .tname,.trow-hidden .tfico{opacity:.5}
+.trow-hidden:hover .tname,.trow-hidden.active .tname{opacity:.85}
+.trow-root .tfico{opacity:.85}
+.tkids{padding-left:14px}
+.tkids[hidden]{display:none}
+/* A companion accent dot, reused by the browse view (§4.5) to badge an enhanced
+   document just as the sidebar once did. */
+.enh-dot{flex:0 0 6px;width:6px;height:6px;border-radius:50%;background:var(--accent);opacity:.85}
 .side-foot{padding:10px 16px;border-top:1px solid var(--border);color:var(--muted);font-size:11.5px}
 /* Footer stats as a HappySkills micro-label: uppercase, tracked, quiet. */
 .side-foot #wsStats{text-transform:uppercase;letter-spacing:.09em;font-size:10.5px;font-weight:600}

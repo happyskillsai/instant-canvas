@@ -103,23 +103,7 @@ test.before(async () => {
 		return evaluate(`
 			(() => {
 				const md = document.querySelector('.md');
-				const items = [...document.querySelectorAll('#tree .item')];
 				return {
-					// the sidebar IS the scan
-					sidebar: items.map((el) => ({
-						id: el.dataset.canvas,
-						doc: !!el.querySelector('.doc-ico'),
-						dot: !!el.querySelector('.dot'),
-						text: el.textContent.trim(),
-					})),
-					stats: (document.getElementById('wsStats') || {}).textContent || '',
-				// Folder delete was removed outright — no group may offer one.
-				delButtons: document.querySelectorAll('#tree [data-del-group], #tree .grp-del').length,
-				// Folders are collapsed by default; only the active canvas's folder opens.
-				groups: [...document.querySelectorAll('#tree .group')].map((g) => ({
-					name: (g.querySelector('.group-row') || {}).dataset.group,
-					collapsed: g.classList.contains('collapsed'),
-				})),
 					h1: (md.querySelector('h1') || {}).textContent || '',
 					text: md.textContent,
 					html: md.innerHTML,
@@ -149,37 +133,9 @@ test.after(() => {
 	}
 })
 
-test('the sidebar lists the markdown file itself, distinguished from a canvas', { skip, timeout: 120_000 }, () => {
-	const readme = snap.sidebar.find((i) => i.id === 'README.md')
-	assert.ok(readme, `README.md is not in the sidebar: ${JSON.stringify(snap.sidebar)}`)
-	assert.equal(readme.text, 'Atlas Handbook', 'listed under its H1, not its file name')
-	assert.equal(readme.doc, true, 'documents wear the file icon')
-	assert.equal(readme.dot, false, 'and not the canvas dot')
-
-	const canvas = snap.sidebar.find((i) => i.id === 'report.canvas.json')
-	assert.equal(canvas.dot, true, 'a canvas still wears its dot')
-	assert.equal(canvas.doc, false)
-
-	assert.ok(!snap.sidebar.some((i) => i.id === '.env'), 'a secret is not a document')
-	assert.match(snap.stats, /2 canvases · 3 docs · 3 groups/, 'canvases and documents are counted apart')
-})
-
-test('the sidebar offers no folder delete — the feature was removed outright', { skip, timeout: 120_000 }, () => {
-	// The reader's browser can change what a file SAYS (a theme), never destroy
-	// it. Folder deletion was removed with the sidebar "+": the affordance must
-	// be GONE from the DOM, not merely hidden by CSS.
-	assert.equal(snap.delButtons, 0)
-})
-
-test('folders start collapsed; only the active canvas\'s folder is open', { skip, timeout: 120_000 }, () => {
-	// A recursive workspace can list dozens of collections — a wall of expanded
-	// folders buries the one canvas being read. The open document (README.md,
-	// at the root) derives its group open; every other folder starts shut.
-	const byName = Object.fromEntries(snap.groups.map((g) => [g.name, g.collapsed]))
-	assert.equal(byName['(root)'], false, 'the folder holding the open canvas is expanded')
-	assert.equal(byName.mixed, true, 'a folder the reader is not in starts collapsed')
-	assert.equal(byName.docsonly, true, 'a folder the reader is not in starts collapsed')
-})
+// The sidebar is now a folders-only tree (§4.4); the markdown document itself
+// appears in the browse view (§4.5). Both are covered by tree.test.js. This file
+// stays focused on what only a real browser can prove about markdown DEGRADATION.
 
 test('a README renders as a document — HTML gone, badge labeled, content intact', { skip, timeout: 120_000 }, () => {
 	assert.equal(snap.h1, 'Atlas Handbook')

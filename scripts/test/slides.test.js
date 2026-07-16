@@ -96,7 +96,6 @@ function driveDeck(rel, expectSlides) {
 				tocDisabled: document.getElementById('tocBtn').disabled,
 				stripsDisabled: document.getElementById('stripsBtn').disabled,
 				paletteEnabled: !document.getElementById('paletteBtn').disabled,
-				sidebarDeckGlyph: !!document.querySelector('.item .doc-ico svg'),
 				titleFontPx: (() => { const h = document.querySelector('.st-title .st-h1'); return h ? parseFloat(getComputedStyle(h).fontSize) : 0 })(),
 				// KPI values must FIT their cards — a wide currency value shrinks the whole
 				// row uniformly (--kpi-fit) rather than clipping.
@@ -236,7 +235,8 @@ test('the topbar is a presentation topbar (D9): Present replaces the toggle, TOC
 	assert.equal(gallery.tocDisabled, true, 'a deck has no TOC')
 	assert.equal(gallery.stripsDisabled, true, 'a deck has no running-strip toggle')
 	assert.equal(gallery.paletteEnabled, true, 'colors belong to the document, so the palette stays live')
-	assert.equal(gallery.sidebarDeckGlyph, true, 'the sidebar badges a deck with a distinct glyph')
+	// The sidebar is folders-only now (§4.4); a deck is badged with its glyph in the
+	// browse view instead — asserted in tree.test.js/the browse view test (§4.5).
 })
 
 test('autofit: a region that cannot fit steps its type scale down, then clips with a filmstrip badge (D6)', { skip: browserSkip }, () => {

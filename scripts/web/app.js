@@ -31,10 +31,15 @@ async function api(path, opts = {}) {
 
 const $ = (id) => document.getElementById(id)
 const state = {
-	tree: null,
-	activeId: null,
+	tree: null,           // the scan (/api/workspace) — still fetched, for ⌘K search and the footer stats
+	activeId: null,       // the #/c/ canvas or image currently open, null when browsing a folder
+	browseId: null,       // the #/f/ folder currently open (rel; '' = root), null when a canvas is open
 	activePage: 0,
-	groupOpen: new Map(), // group name → reader's explicit open/closed choice; absent = derived from activeId
+	// The folder tree: children fetched lazily per level, and the reader's explicit
+	// expand/collapse choices. A folder with no explicit choice derives open iff it is
+	// an ancestor of the active folder (the old groupIsOpen rule, on a nested tree).
+	dirChildren: new Map(), // folder rel → [{name, rel, hidden}] child dirs
+	treeOpen: new Map(),    // folder rel → reader's explicit open/closed choice
 	charts: [], // {el, block} for every mounted Plotly graph in the current view
 	observers: [],
 	canvasDoc: null,
@@ -1140,50 +1145,161 @@ function findCanvas(id) {
 	return null
 }
 
-/** The collection a canvas id lives in — its folder path, or "(root)" at the top. */
-const groupOf = (id) => (id && id.includes('/') ? id.slice(0, id.lastIndexOf('/')) : id ? '(root)' : null)
+// ---------------------------------------------------------------- sidebar folder tree
+//
+// The sidebar is a PURE FOLDER TREE of the workspace — no file leaves. Each level
+// is fetched lazily from GET /api/dir?path=<rel>&dirs=1 (cached in state.dirChildren)
+// so a deep tree loads on demand. A row's name click navigates to that folder's
+// browse view (#/f/<rel>); the chevron — its OWN single-click hit target, never a
+// double-click (the folder-browser postmortem, docs/gotchas/frontend.md) — expands
+// or collapses. Dot-folders show muted; .git/node_modules never appear (the kernel
+// omits them from /api/dir).
+//
+// Expansion and active-highlight are INCREMENTAL — an inserted subtree and a class
+// toggle — never a rebuild of the list, because a list that rebuilds under the
+// reader's gesture loses the node the gesture is on. A full rebuild (buildTree)
+// happens only on boot and on a background `workspace` broadcast, never on a click.
 
-// Folders are CLOSED by default — a recursive workspace can hold dozens of
-// collections, and a wall of expanded folders buries the one canvas being
-// read. The group holding the active canvas derives open, so the sidebar
-// always shows where the reader is; everything else stays shut until the
-// reader opens it. Their explicit clicks (state.groupOpen) outrank the
-// derivation both ways — collapsing the active group is respected until the
-// next navigation into it (route() clears that override, because opening a
-// canvas must reveal it).
-function groupIsOpen(g) {
-	return state.groupOpen.has(g.name) ? state.groupOpen.get(g.name) : g.name === groupOf(state.activeId)
+const treeRoot = () => $('tree')
+const treeRowEl = (rel) => [...treeRoot().querySelectorAll('.trow')].find((r) => r.dataset.rel === rel) || null
+const treeKidsEl = (rel) => [...treeRoot().querySelectorAll('.tkids')].find((k) => k.dataset.parent === rel) || null
+
+/** The folder a route points at: the folder for #/f/, the owning folder for a
+ *  #/c/ canvas or image, '' for the workspace root. null when nothing is routed. */
+function activeFolderRel() {
+	if (typeof state.browseId === 'string')
+		return state.browseId
+	const id = state.activeId
+	if (typeof id !== 'string')
+		return null
+	return id.includes('/') ? id.slice(0, id.lastIndexOf('/')) : ''
 }
 
-function renderTree() {
-	const tree = $('tree')
-	if (!state.tree) { tree.innerHTML = '' ; return }
-	const rootBase = state.tree.root.split('/').filter(Boolean).pop() || state.tree.root
-	tree.innerHTML = state.tree.collections.map((g) => {
-		const isC = !groupIsOpen(g)
-		const isRoot = g.name === '(root)' // canvases living directly in the workspace folder
-		// A document is a markdown file the runtime renders as itself — same click,
-		// same canvas, but it was not authored for us, so it does not wear the
-		// canvas dot.
-		//
-		// A document with a COMPANION gets ONE row, not two: the companion canvas is
-		// hidden from the tree (lib/scan.js drops it) because the reader thinks in
-		// documents, not in metadata. But it is BADGED, because an enhancement nobody can
-		// see is an enhancement that teaches nothing — the reader has to be able to tell
-		// that this README carries a cover and a theme, and where they live.
-		const items = g.canvases.map((c) => `
-			<div class="item ${c.id === state.activeId ? 'active' : ''}" data-canvas="${esc(c.id)}" title="${esc(c.id)}${c.enhanced ? ` — enhanced by ${esc(c.enhanced)} (cover, theme, page setup)` : ''}">
-				${c.deck ? `<span class="doc-ico">${icon('presentation')}</span>` : c.kind === 'document' ? `<span class="doc-ico">${icon('file-text')}</span>` : '<span class="dot"></span>'}${esc(c.title)}${c.enhanced ? '<span class="enh-dot" aria-label="enhanced by a companion canvas"></span>' : ''}
-			</div>`).join('')
-		return `<div class="group ${isC ? 'collapsed' : ''}">
-			<div class="group-row" data-group="${esc(g.name)}" ${isRoot ? `title="Canvases and documents directly inside the workspace folder (${esc(state.tree.root)})"` : ''}>
-				<span class="caret">${icon('chevron-down')}</span>${icon(isRoot ? 'house' : 'folder')}
-				<span class="gname">${esc(isRoot ? rootBase : g.name)}</span>
-			</div>
-			<div class="items">${items}</div>
-		</div>`
-	}).join('') || '<div class="tree-empty">(nothing to show yet)</div>'
+/** A folder is open iff the reader chose so; absent a choice, the root and every
+ *  STRICT ANCESTOR of the active folder derive open — so navigating anywhere always
+ *  reveals where the reader is (the groupIsOpen rule, applied to a nested tree). */
+function folderExpanded(rel) {
+	if (rel === '')
+		return true
+	if (state.treeOpen.has(rel))
+		return state.treeOpen.get(rel)
+	const active = activeFolderRel()
+	return typeof active === 'string' && active !== rel && (active + '/').startsWith(rel + '/')
+}
 
+async function fetchDirChildren(rel) {
+	if (state.dirChildren.has(rel))
+		return state.dirChildren.get(rel)
+	const { status, json } = await api('/api/dir?path=' + encodeURIComponent(rel) + '&dirs=1')
+	const dirs = status === 200 && json && json.ok && Array.isArray(json.dirs) ? json.dirs : []
+	state.dirChildren.set(rel, dirs)
+	return dirs
+}
+
+function makeTreeRow(dir, { root = false } = {}) {
+	const row = document.createElement('div')
+	row.className = 'trow' + (dir.hidden ? ' trow-hidden' : '') + (root ? ' trow-root' : '')
+	row.dataset.rel = dir.rel
+	const caret = document.createElement('button')
+	caret.type = 'button'
+	caret.className = 'tcaret'
+	caret.setAttribute('aria-label', 'Expand or collapse folder')
+	caret.innerHTML = icon('chevron-down')
+	const ico = document.createElement('span')
+	ico.className = 'tfico'
+	ico.innerHTML = icon(root ? 'house' : 'folder')
+	const name = document.createElement('span')
+	name.className = 'tname'
+	name.textContent = dir.name
+	row.append(caret, ico, name)
+	return row
+}
+
+/** Ensure `rel`'s children are loaded and shown under `row`, then recurse into any
+ *  child the derivation says is open. Idempotent, and it only touches `rel`'s own
+ *  subtree — a sibling node reference survives an expand (the isConnected rule). */
+async function openInto(row, rel) {
+	if (!row)
+		return
+	let kids = treeKidsEl(rel)
+	if (!kids) {
+		kids = document.createElement('div')
+		kids.className = 'tkids'
+		kids.dataset.parent = rel
+		row.after(kids)
+	}
+	kids.hidden = false
+	row.classList.add('expanded')
+	if (kids.dataset.loaded !== '1') {
+		const dirs = await fetchDirChildren(rel)
+		for (const d of dirs)
+			kids.append(makeTreeRow(d))
+		kids.dataset.loaded = '1'
+		row.classList.toggle('tleaf', dirs.length === 0)
+	}
+	for (const childRow of [...kids.children].filter((c) => c.classList && c.classList.contains('trow'))) {
+		if (folderExpanded(childRow.dataset.rel))
+			await openInto(childRow, childRow.dataset.rel)
+	}
+}
+
+/** The active folder gets the highlight, everyone else loses it — a class toggle. */
+function applyTreeActive() {
+	const active = activeFolderRel()
+	for (const r of treeRoot().querySelectorAll('.trow.active'))
+		r.classList.remove('active')
+	if (typeof active !== 'string')
+		return
+	const row = treeRowEl(active)
+	if (row)
+		row.classList.add('active')
+}
+
+/** Full build — boot and the `workspace` broadcast only. Derivation-driven, so the
+ *  reader's expansions (state.treeOpen) and the active folder survive the refresh. */
+async function buildTree() {
+	const tree = treeRoot()
+	tree.textContent = ''
+	if (!state.tree)
+		return
+	updateSidebarChrome()
+	const rootName = state.tree.root.split('/').filter(Boolean).pop() || state.tree.root
+	const rootRow = makeTreeRow({ name: rootName, rel: '', hidden: false }, { root: true })
+	tree.append(rootRow)
+	await openInto(rootRow, '')
+	applyTreeActive()
+}
+
+/** Route change: a class toggle plus an incremental reveal of the active folder's
+ *  ancestors — never a rebuild. Navigating into a folder clears a manual collapse on
+ *  its ancestors, so opening a canvas always reveals where it lives. */
+async function syncTreeActive() {
+	const active = activeFolderRel()
+	if (typeof active === 'string') {
+		const parts = active ? active.split('/') : []
+		let acc = ''
+		for (let i = 0; i < parts.length - 1; i++) {
+			acc = acc ? acc + '/' + parts[i] : parts[i]
+			state.treeOpen.delete(acc) // navigating in clears a manual collapse on the path
+		}
+		const rootRow = treeRowEl('')
+		if (rootRow)
+			await openInto(rootRow, '')
+		acc = ''
+		for (let i = 0; i < parts.length - 1; i++) {
+			acc = acc ? acc + '/' + parts[i] : parts[i]
+			await openInto(treeRowEl(acc), acc)
+		}
+	}
+	applyTreeActive()
+}
+
+/** Topbar path + footer stats — moved out of the old leaf renderTree, unchanged.
+ *  The stats still come from the scan (/api/workspace), which is fetched for search. */
+function updateSidebarChrome() {
+	if (!state.tree)
+		return
+	const rootBase = state.tree.root.split('/').filter(Boolean).pop() || state.tree.root
 	const n = state.tree.count, nd = state.tree.docCount || 0, ng = state.tree.collections.length
 	$('wsStats').textContent = [
 		`${n} canvas${n === 1 ? '' : 'es'}`,
@@ -1235,16 +1351,28 @@ $('rootpathGroup').addEventListener('click', async () => {
 })
 
 $('tree').addEventListener('click', (e) => {
-	const g = e.target.closest('[data-group]')
-	if (g) {
-		const name = g.dataset.group
-		const grp = state.tree && state.tree.collections.find((c) => c.name === name)
-		state.groupOpen.set(name, grp ? !groupIsOpen(grp) : true)
-		renderTree()
+	// The chevron is its OWN hit target: a single click expands/collapses and does
+	// NOT navigate. (A hidden double-click descend is undiscoverable — the folder-
+	// browser postmortem in docs/gotchas/frontend.md.)
+	const caret = e.target.closest('.tcaret')
+	if (caret) {
+		const row = caret.closest('.trow')
+		const rel = row.dataset.rel
+		if (row.classList.contains('expanded')) {
+			state.treeOpen.set(rel, false)
+			row.classList.remove('expanded')
+			const kids = treeKidsEl(rel)
+			if (kids) kids.hidden = true
+		} else {
+			state.treeOpen.set(rel, true)
+			openInto(row, rel) // incremental — only this folder's subtree is inserted
+		}
 		return
 	}
-	const it = e.target.closest('[data-canvas]')
-	if (it) location.hash = '#/c/' + encodeURIComponent(it.dataset.canvas)
+	// Anywhere else on a row navigates to that folder's browse view.
+	const row = e.target.closest('.trow')
+	if (row)
+		location.hash = '#/f/' + (row.dataset.rel ? encodeURIComponent(row.dataset.rel) : '')
 })
 
 // ---------------------------------------------------------------- display block renderers
@@ -5671,17 +5799,18 @@ function onSessionMessage(msg) {
 // ---------------------------------------------------------------- routing
 
 function route() {
-	const m = /^#\/c\/(.+)$/.exec(location.hash)
-	const id = m ? decodeURIComponent(m[1]) : null
-	if (id !== state.activeId) {
-		state.activeId = id
+	// Two routes: #/c/<rel> opens a canvas or image; #/f/<rel> opens a folder's
+	// browse view ('' = the workspace root). The browse view is rendered from §4.5;
+	// until then, a folder route highlights the tree and leaves the pane empty.
+	const cm = /^#\/c\/(.+)$/.exec(location.hash)
+	const fm = /^#\/f\/(.*)$/.exec(location.hash)
+	const id = cm ? decodeURIComponent(cm[1]) : null
+	const browse = fm ? decodeURIComponent(fm[1]) : null
+	if (id !== state.activeId)
 		state.activePage = 0
-		// Navigating to a canvas must reveal it: drop any manual collapse on its
-		// folder so the derived open state wins again.
-		if (id)
-			state.groupOpen.delete(groupOf(id))
-	}
-	renderTree()
+	state.activeId = id
+	state.browseId = browse
+	syncTreeActive() // class toggle + incremental reveal, never a rebuild
 	renderCanvas()
 }
 window.addEventListener('hashchange', route)
@@ -5711,7 +5840,12 @@ function connectWs() {
 			const { json } = await api('/api/workspace')
 			if (json && json.ok) {
 				state.tree = json
-				renderTree()
+				// The folder structure may have changed (a folder created or removed), so
+				// drop the per-level cache and rebuild the tree — a background event, not a
+				// reader gesture, so a rebuild is fine (buildTree preserves the reader's
+				// expansions and the active folder).
+				state.dirChildren.clear()
+				await buildTree()
 				// A new tree object invalidates the search index; re-filter if it's on screen.
 				if (!$('searchModal').hidden)
 					renderSearch($('csmInput').value)
@@ -5976,6 +6110,7 @@ async function boot() {
 	}
 	state.tree = json
 	connectWs()
+	await buildTree() // the tree must exist before route()'s syncTreeActive reveals into it
 	if (!location.hash) {
 		const first = json.collections.find((g) => g.canvases.length)
 		if (first)
