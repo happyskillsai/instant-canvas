@@ -1,5 +1,5 @@
 ---
-description: The canvas JSON contract — envelope, six block types, 26 chart kinds, 16 field types, fieldset layout, the document theme, validation rules, and the progressive-disclosure catalog.
+description: The canvas JSON contract — envelope, seven block types, 26 chart kinds, 16 field types, fieldset layout, the document theme, validation rules, and the progressive-disclosure catalog.
 tags: [schema, validation, catalog, charts, forms, theme]
 source:
   - scripts/lib/schema.js
@@ -11,12 +11,13 @@ source:
   - scripts/lib/companion.js
   - scripts/lib/markdownsrc.js
   - scripts/lib/mdcanvas.js
+  - scripts/lib/gallery.js
   - scripts/lib/pkgmeta.js
 ---
 
 # Canvas Schema, Validator, and Catalog
 
-`lib/schema.js` is the **single source of truth**. It declares the envelope, the six block types, the 26 chart kinds (`CHART_KINDS`), the 16 field types (`FIELD_TYPES`), the reusable shapes (`SHAPES`), and the documented-unsupported chart kinds (`UNSUPPORTED_CHARTS`). `lib/validate.js` *interprets* that registry; `lib/catalog.js` *renders* it. They cannot drift — a test proves that one registry tweak changes both.
+`lib/schema.js` is the **single source of truth**. It declares the envelope, the seven block types, the 26 chart kinds (`CHART_KINDS`), the 16 field types (`FIELD_TYPES`), the reusable shapes (`SHAPES`), and the documented-unsupported chart kinds (`UNSUPPORTED_CHARTS`). `lib/validate.js` *interprets* that registry; `lib/catalog.js` *renders* it. They cannot drift — a test proves that one registry tweak changes both.
 
 ## Envelope
 
@@ -55,6 +56,7 @@ Severity is the caller's, because the audiences differ. `validate(source, {prove
 | `kpi` | display | Cards with `format` (number/currency/percent/none) and `delta` (signed fraction; green iff sign matches `positiveIs`; ~0 renders flat). |
 | `chart` | display | See chart kinds below. |
 | `table` | display | Columns with per-column `format` and `align`; numeric formats right-align with tabular numerals. |
+| `gallery` | display | A live grid/list of every image under a workspace folder (recursive). The reader sorts, zooms a detail modal, multi-selects and permanently deletes. See [the gallery block](#the-gallery-block). |
 | `form` | interactive | Fields + destination + optional fieldset layout. See [security.md](security.md) for the write path. |
 | `confirm` | interactive | Severity-styled card (`info`/`warning`/`danger`); resolves `confirmed: true/false`. |
 
@@ -74,6 +76,16 @@ So a remote image (`![](https://…)` or a raw `<img src="https://…">`) is a *
 
 Workspace-local images **are** inlined, server-side, as `data:` URIs in the same pass that inlines `src` (see [frontend.md](frontend.md)); the browser only ever sees `data:` or a labeled fallback. The source scan blanks fenced and inline code first, so a README that documents `<table>` or a ```` ```jsx ```` sample is never warned about the code it merely quotes.
 
+## The gallery block
+
+`{"type": "gallery", "src": "photos"}` renders every image under a workspace folder — subfolders included unless `recursive` is false — as a live grid or list. It is the one display block the reader can *act on*: they sort by name / date created / size, open a zoomable detail modal, multi-select, and **permanently delete** files from disk after an exact-count confirmation. The agent authors only the block — it never deletes an image and is not notified when the reader does, because there is no session.
+
+`src` is a **folder**, confined to the workspace (`insideRoot`) and required to be a directory: `checkGallery` in `validate.js` raises `PATH_OUTSIDE_WORKSPACE`, or `MISSING_SOURCE` (saying "is not a folder") when it resolves to a file. Everything else — `recursive`, the `layout` (`grid`/`list`) and `sort` (`by` name/created/size, `dir` asc/desc) enums — is registry-driven, so the type and enum checks come free (`catalog gallery`). `layout` and `sort` are only the *initial* view; the reader changes both and the block does not care.
+
+Renderable formats are exactly the keys of `IMAGE_MIME` (`png jpg jpeg gif webp avif bmp ico svg`), **imported** by `lib/gallery.js` rather than copied so the two lists cannot drift. HEIC/HEIF and TIFF are listed as **metadata-only cards** — a browser cannot draw them, and adding them to `IMAGE_MIME` would let a HEIC "inline" into a markdown `<img>` that renders nothing.
+
+**A gallery cannot render on paper.** It scrolls, selects and deletes, so it is refused in a declared-`document` canvas (`DOCUMENT_INTERACTIVE_BLOCK`) and on a slide (`PRESENTATION_INTERACTIVE_BLOCK`), and its deck toggle is muted in the browser (`gallery` is a `deckBlocker` in **both** `themestore.js` and `app.js`). Because a gallery canvas cannot carry a `document`, it also has nowhere to keep a per-document theme — a theme Save is refused with `THEME_NEEDS_DOCUMENT`, the same answer a form gets. The listing, on-demand dimensions, served bytes and the guarded bulk delete are the kernel's (see [architecture.md](architecture.md) and [security.md](security.md)); the grid, modal and selection are the browser's (see [frontend.md](frontend.md)).
+
 ## The virtual canvas: a markdown file *is* a canvas
 
 An agent never has to write an envelope around a markdown file. The workspace scan lists every `.md` / `.mdx` / `.markdown` file (see [architecture.md](architecture.md)), and when one is opened the kernel synthesises the canvas for it — in memory, per request, **never on disk**:
@@ -86,6 +98,8 @@ An agent never has to write an envelope around a markdown file. The workspace sc
 That is `virtualCanvasFor()` in `lib/mdcanvas.js`, and it is the same `markdown` block an agent would have typed. Everything downstream — image inlining, the deck, the auto-TOC, `print`, hot reload, sidebar search — works with no knowledge that no canvas file exists. `instant-canvas open README.md` and `print README.md --out readme.pdf` follow directly (see [cli.md](cli.md)); `validate` and `stamp` refuse a markdown file, because there is no contract to check and nothing on disk whose birth version could be recorded.
 
 The gate is the extension allowlist, reused rather than reimplemented — this route is a *second* way to name a file for rendering, and the first one already shipped the `src: ".env"` bug. `createdWith` is honest here rather than borrowed: the running runtime is what authored this object, this instant.
+
+**A folder is a virtual canvas too.** `open photos/` synthesises `{…, "blocks": [{"type": "gallery", "src": "photos"}]}` in memory — `virtualGalleryFor()` in `lib/gallery.js`, the gallery sibling of `virtualCanvasFor()` — so the cheapest gallery is the one an agent never writes. `loadCanvas` serves it when the path resolves to an existing directory; `validate` / `stamp` / `print` / `theme` refuse a folder with a teaching error, exactly as they refuse a markdown file (see [cli.md](cli.md)).
 
 **The native view degrades where the authored path teaches.** Behind an agent's `src`, the validator is a teacher: raw HTML warns and a remote image is a hard `REMOTE_ASSET_BLOCKED`, so the agent fixes the file. A README has no such author, we will not rewrite the user's file, and `html: false` *escapes* rather than deletes — leaving it alone means printing `<details>` as literal text and breaking every badge. So `renderableMarkdown()` removes HTML instead of escaping it (keeping the prose the tags wrapped), turns an HTML `<img>` into a markdown image so a README's logo survives, and replaces a remote image with `*(remote image not shown)*`. This is the one deliberate behavioral fork in the project: the same file renders differently viewed natively than behind an authored `src`. See [gotchas/frontend.md](gotchas/frontend.md).
 
@@ -335,7 +349,7 @@ Common shape: `{name, label, type, required?, placeholder?, help?, default?, opt
 
 `validate(source, {root})` collects **all** errors in one pass — never fail-fast, never throws for spec problems. Every error carries `code`, `path` (e.g. `pages[1].blocks[0].encoding.y[1]`), `message`, and usually `got`, `expected`, a Levenshtein/alias-driven `hint` ("Did you mean \"range\"?"), and a correct `example`. Unknown properties are **warnings**, not errors. `INVALID_JSON` includes line/column. This is the deterministic half of the agentic loop: the agent writes, the validator names the exact defect and its fix, the agent retries until `{"ok": true}`.
 
-Error codes: `INVALID_JSON, INVALID_SPEC, UNSUPPORTED_VERSION, MISSING_CREATED_WITH(warn in the kernel), INVALID_CREATED_WITH(warn in the kernel), UNKNOWN_BLOCK_TYPE, UNKNOWN_FIELD_TYPE, UNKNOWN_PROPERTY(warn), MISSING_REQUIRED_PROPERTY, INVALID_PROPERTY_TYPE, INVALID_ENUM_VALUE, DUPLICATE_FIELD_NAME, MULTIPLE_INTERACTIVE_BLOCKS, DOCUMENT_INTERACTIVE_BLOCK, PRESENTATION_NEEDS_SLIDES, DOCUMENT_ON_PRESENTATION, PRESENTATION_INTERACTIVE_BLOCK, INVALID_COLOR, UNKNOWN_TEMPLATE_VAR(warn), ENCODING_KEY_NOT_IN_DATA, INVALID_ENV_KEY, PATH_OUTSIDE_WORKSPACE, MISSING_SOURCE, REMOTE_ASSET_BLOCKED, ASSET_TOO_LARGE, MDX_NOT_RENDERED(warn), RAW_HTML_NOT_RENDERED(warn), COVER_TEXT_MAY_BE_ILLEGIBLE(warn), SLIDE_TEXT_MAY_BE_ILLEGIBLE(warn)` — plus the three companion codes: `DUPLICATE_ENHANCES, COMPANION_DOES_NOT_RENDER(warn), COMPANION_WITHOUT_DOCUMENT(warn)` — plus runtime codes surfaced by the CLI/kernel: `SECRET_RETURN_BLOCKED, WRITE_FAILED, SESSION_TIMEOUT, KERNEL_UNREACHABLE, CHROME_REQUIRED, BROWSER_OPEN_FAILED(warn), INVALID_THEME, THEME_DECLARED_IN_CANVAS, THEME_NEEDS_DOCUMENT, INVALID_PALETTE_NAME, PALETTE_NAME_TAKEN, TOO_MANY_PALETTES, CONFIG_UNREADABLE, INTERNAL_ERROR`.
+Error codes: `INVALID_JSON, INVALID_SPEC, UNSUPPORTED_VERSION, MISSING_CREATED_WITH(warn in the kernel), INVALID_CREATED_WITH(warn in the kernel), UNKNOWN_BLOCK_TYPE, UNKNOWN_FIELD_TYPE, UNKNOWN_PROPERTY(warn), MISSING_REQUIRED_PROPERTY, INVALID_PROPERTY_TYPE, INVALID_ENUM_VALUE, DUPLICATE_FIELD_NAME, MULTIPLE_INTERACTIVE_BLOCKS, DOCUMENT_INTERACTIVE_BLOCK, PRESENTATION_NEEDS_SLIDES, DOCUMENT_ON_PRESENTATION, PRESENTATION_INTERACTIVE_BLOCK, INVALID_COLOR, UNKNOWN_TEMPLATE_VAR(warn), ENCODING_KEY_NOT_IN_DATA, INVALID_ENV_KEY, PATH_OUTSIDE_WORKSPACE, MISSING_SOURCE, REMOTE_ASSET_BLOCKED, ASSET_TOO_LARGE, MDX_NOT_RENDERED(warn), RAW_HTML_NOT_RENDERED(warn), COVER_TEXT_MAY_BE_ILLEGIBLE(warn), SLIDE_TEXT_MAY_BE_ILLEGIBLE(warn)` — plus the three companion codes: `DUPLICATE_ENHANCES, COMPANION_DOES_NOT_RENDER(warn), COMPANION_WITHOUT_DOCUMENT(warn)` — plus runtime codes surfaced by the CLI/kernel: `SECRET_RETURN_BLOCKED, WRITE_FAILED, SESSION_TIMEOUT, KERNEL_UNREACHABLE, CHROME_REQUIRED, BROWSER_OPEN_FAILED(warn), INVALID_THEME, THEME_DECLARED_IN_CANVAS, THEME_NEEDS_DOCUMENT, INVALID_PALETTE_NAME, PALETTE_NAME_TAKEN, TOO_MANY_PALETTES, CONFIG_UNREADABLE, INTERNAL_ERROR` — plus the gallery bulk-delete route's own refusals (`POST /api/gallery/delete`, never a canvas's shape): `NOT_AN_IMAGE, NOT_A_FILE, TOO_MANY_PATHS`.
 
 The six theme codes are **write boundaries, never a canvas's shape** — they are raised by `lib/themestore.js`, which is to say by both doors into it: the browser's `POST /api/theme` / `POST /api/theme/palette` and the CLI's `theme` command, reported as an HTTP status on one and an exit-1 error object on the other. `INVALID_THEME` means a theme was refused rather than sanitized; `THEME_DECLARED_IN_CANVAS` means a reset was refused because the canvas is what declares the theme; **`THEME_NEEDS_DOCUMENT`** means the canvas holds a form, a confirm or a sweep, so it cannot carry a `document` at all and therefore has nowhere to keep a theme (see [architecture.md](architecture.md)). The three palette codes concern the workspace's own library, never a document. `CONFIG_UNREADABLE` is `skills-config.json` existing but not parsing — deliberately loud, because *absent is not corrupt*.
 

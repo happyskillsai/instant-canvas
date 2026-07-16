@@ -8,6 +8,8 @@ source:
   - scripts/lib/session.js
   - scripts/lib/scan.js
   - scripts/lib/mdcanvas.js
+  - scripts/lib/gallery.js
+  - scripts/lib/imagemeta.js
   - scripts/lib/theme.js
   - scripts/lib/themestore.js
   - scripts/lib/skillsconfig.js
@@ -67,8 +69,12 @@ The token reaches the browser via `__IC_TOKEN__` placeholder substitution when t
 | `GET /healthz` | Liveness + identity: `{ok, name, version, workspace, pid, pendingSessions}`. Tokenless. |
 | `GET /`, `GET /assets/*` | App shell and static files (path-normalized; traversal blocked). `*.woff2` fonts serve tokenless with a `font/woff2` MIME; every other asset needs the token. |
 | `GET /api/workspace` | Scanned tree of canvases **and markdown documents** (see below), with `count` and `docCount` reported apart. |
-| `GET /api/canvas?path=` | Parse + validate one canvas, **or** synthesise one for a markdown file (`lib/mdcanvas.js`). Markdown `src` files **and their workspace-local images** are inlined server-side (images as `data:` URIs — the browser never fetches); includes the active session if any, and the **resolved theme** (below). Reads `*.json` and markdown only — anything else is a 404 before it is opened, because a rejected file leaks its own first bytes through `JSON.parse` (see [gotchas/runtime.md](gotchas/runtime.md)). |
+| `GET /api/canvas?path=` | Parse + validate one canvas, **or** synthesise one for a markdown file (`lib/mdcanvas.js`) **or a gallery for a directory** (`lib/gallery.js` `virtualGalleryFor`). Markdown `src` files **and their workspace-local images** are inlined server-side (images as `data:` URIs — the browser never fetches); includes the active session if any, and the **resolved theme** (below). Reads `*.json` and markdown only — anything else is a 404 before it is opened, because a rejected file leaks its own first bytes through `JSON.parse` (see [gotchas/runtime.md](gotchas/runtime.md)); a directory is not an open-and-parse risk, so its branch sits after the file gates and leaves them untouched. |
 | `POST /api/open` | CLI entry: display → broadcast `navigate`; interactive → create a session. |
+| `GET /api/gallery?dir=&recursive=` | The images under a folder, stat-only (`lib/gallery.js` `listImages`): `{dir, items, truncated}` — recursive by default, dot-dirs/`node_modules`/symlinks skipped, capped at 2000 with `truncated` surfaced. 404 when the target is not a directory inside the root. |
+| `GET /api/gallery/meta?path=` | One image's stat fields **plus** its pixel dimensions (`lib/imagemeta.js` — a bounded header sniff, never the whole file). Extension-gated to the image union set **before any open**, so `?path=.env` is a byte-clean 404 (the same `.env` rule as `/api/canvas`). |
+| `GET /api/gallery/file?path=` | The image bytes, streamed. **Renderable extensions only** (a HEIC is a 404 here even though `meta` answers for it), `nosniff`, `Cache-Control: …immutable` — safe because the browser versions the URL with `?v=<mtimeMs>`. `lstat`-refuses a symlink, because the extension gate reads the *link* name and a `photo.png` symlinked at `.env` would otherwise leak the target. |
+| `POST /api/gallery/delete` | Permanently delete a set of images (`{paths}`). Validates the **whole batch** before unlinking any — one non-image / directory / symlink / traversal path fails it all, nothing deleted — never removes a directory, and reports partial failure per file. Reader-only: no session, no agent surface (see [security.md](security.md)). |
 | `GET/POST /api/session/<id>[/submit|/cancel]` | Poll, submit (server-side re-validation + destination write), cancel. |
 | `GET /api/theme/presets` | The twenty-two named presets (fourteen on light paper, eight on dark) — prose and **every** resolved token, not just the two a chip renders (below) — plus the workspace's own `custom` palettes, the token list, and the palette cap. What the browser's palette control renders its chips from. |
 | `POST /api/theme` | Persist the theme the reader picked: `{path, theme, scope?}`. Strict-checked, then routed by **what the document is** (below). |

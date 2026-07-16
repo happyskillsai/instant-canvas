@@ -67,7 +67,7 @@
         "Hot reload",
         "Version handshake"
       ],
-      "line_count": 175,
+      "line_count": 181,
       "links_to": [
         "docs/canvas-schema.md",
         "docs/cli.md",
@@ -85,6 +85,8 @@
         "scripts/lib/session.js",
         "scripts/lib/scan.js",
         "scripts/lib/mdcanvas.js",
+        "scripts/lib/gallery.js",
+        "scripts/lib/imagemeta.js",
         "scripts/lib/theme.js",
         "scripts/lib/themestore.js",
         "scripts/lib/skillsconfig.js",
@@ -112,7 +114,7 @@
     },
     {
       "dangling": false,
-      "description": "The canvas JSON contract — envelope, six block types, 26 chart kinds, 16 field types, fieldset layout, the document theme, validation rules, and the progressive-disclosure catalog.",
+      "description": "The canvas JSON contract — envelope, seven block types, 26 chart kinds, 16 field types, fieldset layout, the document theme, validation rules, and the progressive-disclosure catalog.",
       "has_frontmatter": true,
       "headings": [
         "Canvas Schema, Validator, and Catalog",
@@ -120,6 +122,7 @@
         "`createdWith`: provenance, not compatibility",
         "Blocks",
         "The markdown block",
+        "The gallery block",
         "The virtual canvas: a markdown file *is* a canvas",
         "Chart kinds (26)",
         "Sweeps: a slider over precomputed frames",
@@ -133,7 +136,7 @@
         "Validator behavior",
         "Catalog: progressive disclosure"
       ],
-      "line_count": 354,
+      "line_count": 368,
       "links_to": [
         "docs/architecture.md",
         "docs/cli.md",
@@ -155,6 +158,7 @@
         "scripts/lib/companion.js",
         "scripts/lib/markdownsrc.js",
         "scripts/lib/mdcanvas.js",
+        "scripts/lib/gallery.js",
         "scripts/lib/pkgmeta.js"
       ],
       "source_unresolved": [],
@@ -234,7 +238,7 @@
         "CSP shim",
         "Icons and vendored assets"
       ],
-      "line_count": 121,
+      "line_count": 122,
       "links_to": [
         "docs/architecture.md",
         "docs/canvas-schema.md",
@@ -429,9 +433,10 @@
         "A palette Save spawns a subprocess, and it is not instant",
         "A validator error is a wall of red in someone's browser",
         "A rejected file leaks its own first bytes through `JSON.parse`",
-        "Deleting collections is not `rm -rf`"
+        "Deleting collections is not `rm -rf`",
+        "A route that serves the user's files by extension must refuse a symlink"
       ],
-      "line_count": 125,
+      "line_count": 132,
       "links_to": [],
       "over_size": false,
       "parse_error": null,
@@ -443,7 +448,8 @@
         "scripts/lib/jsonedit.js",
         "scripts/lib/skillsconfig.js",
         "scripts/lib/themestore.js",
-        "scripts/lib/companion.js"
+        "scripts/lib/companion.js",
+        "scripts/lib/gallery.js"
       ],
       "source_unresolved": [],
       "tags": [
@@ -585,7 +591,7 @@
         "Network perimeter",
         "What this does NOT protect against"
       ],
-      "line_count": 61,
+      "line_count": 63,
       "links_to": [
         "docs/architecture.md"
       ],
@@ -603,6 +609,7 @@
         "scripts/lib/themestore.js",
         "scripts/lib/markdownsrc.js",
         "scripts/lib/mdcanvas.js",
+        "scripts/lib/gallery.js",
         "scripts/lib/fsatomic.js",
         "scripts/kernel.js",
         "scripts/instantcanvas.js"
@@ -632,7 +639,7 @@
         "Security regressions",
         "Browser verification"
       ],
-      "line_count": 101,
+      "line_count": 104,
       "links_to": [
         "docs/gotchas/frontend.md",
         "docs/gotchas/testing.md",

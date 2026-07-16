@@ -9,6 +9,7 @@ source:
   - scripts/lib/skillsconfig.js
   - scripts/lib/themestore.js
   - scripts/lib/companion.js
+  - scripts/lib/gallery.js
 ---
 
 # Gotchas — Runtime (kernel & CLI)
@@ -123,3 +124,9 @@ Confinement never applied, because `.env` is *inside* the workspace root. The fi
 The feature this section guarded is **gone**: the sidebar's hover-revealed folder delete, its confirmation dialog, and `POST /api/collection/delete` were removed in 0.8.0 — the reader's browser may change what a file *says* (a theme), never destroy files, and deletion belongs to the filesystem and the agent. `mdview.test.js` pins the absence of any delete affordance in the tree.
 
 Two lessons outlive the feature, because any future destructive surface will face them again. Deletion driven from a UI list must remove exactly what the list shows and nothing more — the old route deleted only marker-verified canvases, kept every other file, removed the folder only if it ended up empty, and refused `(root)`, dot-names and traversal names outright. And the UI over it had to keep two rules in step or the button lied: no delete offered where nothing deletable existed (a folder of markdown documents), and the dialog counting canvases only, saying out loud what was being left alone. **A count in a confirmation is a promise, and it must equal what the delete performs.**
+
+## A route that serves the user's files by extension must refuse a symlink
+
+The gallery streams images straight off disk (`GET /api/gallery/file`), gated by the file's extension — the same `.env` discipline as every other path surface: decide from the extension, never open a file the gate would refuse. But a gallery serves *arbitrary user files*, not a canvas the agent wrote, and that adds a wrinkle the markdown paths never had: **the extension gate reads the LINK name, not the target.** A `photo.png` that is a symlink to `../.env` passes `isRenderableImage('photo.png')`, and because `.env` is a real file *inside* the root, `insideRoot` would admit it too — so it could be streamed back as `image/png`.
+
+So every gallery surface (`listImages`, `imageStat`, the file route, and the delete route in `lib/gallery.js`/`kernel.js`) uses **`lstat`, never `stat`**, and requires a regular file: `lstat().isFile()` is false for a symlink *and* a directory, so one check refuses both. `insideRoot` still realpaths the symlink that escapes the root; the `lstat` refusal is for the one that stays inside it and lies about its type. The general rule: **when a route serves files chosen by extension, the extension describes the link — only `lstat` describes what the link actually is.**

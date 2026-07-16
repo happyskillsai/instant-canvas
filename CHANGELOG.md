@@ -2,6 +2,37 @@
 
 ## [Unreleased]
 
+### Added
+- **Image gallery: a folder of images is a canvas.** A new **`gallery`** block type
+  (`kind: display`, the seventh block) renders every image under a workspace folder —
+  subfolders included — as a live **grid or list**. The reader sorts by name, date created
+  or size in either direction; toggles grid ⇄ list; opens a **detail modal** with wheel /
+  button zoom, drag-pan, prev/next, and full metadata (name, folder, absolute path with a
+  copy button, size, format, exact pixel dimensions from a zero-dependency header sniff,
+  created/modified dates); and multi-selects via a Select button, a **long-press**, or
+  **Cmd/Ctrl-click**, then **permanently deletes** the selection after an exact-count
+  confirmation. Tiles appear and vanish **live** as files change on disk (in-place sync over
+  the existing `workspace` broadcast — never a grid rebuild). Previewable formats are png,
+  jpg, jpeg, gif, webp, avif, bmp, ico and svg; **HEIC and TIFF** are listed as
+  metadata-only cards. A gallery cannot render on paper: it is invalid beside an envelope-level
+  `document` (`DOCUMENT_INTERACTIVE_BLOCK`) and its deck toggle is muted in the browser.
+  Block contract: `{"type": "gallery", "src": "<folder>", "recursive"?, "layout"?, "sort"?}` —
+  see `catalog gallery`.
+- **`open <folder>` renders a folder's images with no canvas file** — the gallery sibling of
+  `open <file.md>`. The runtime synthesises the gallery envelope in memory and writes nothing
+  to disk. `validate`, `stamp`, `print` and `theme` refuse a folder with a teaching error
+  (folders are `open`-only).
+- **Deletion is reader-owned.** Images are served over a tokenized, streamed file route
+  (`GET /api/gallery/file`, renderable extensions only, `immutable` cache keyed by mtime);
+  metadata and the recursive listing come from `GET /api/gallery/meta` and `GET /api/gallery`.
+  Bulk delete (`POST /api/gallery/delete`) validates the whole batch before unlinking any file,
+  refuses the entire request on a single non-image / directory / symlink / traversal path,
+  never removes a directory, and reports partial failure per file. Every gallery surface
+  decides an image from its extension and never opens a file the gate would refuse (the
+  `.env`-leak discipline). The agent is never involved in a delete — no session, no result.
+- Zero new dependencies: dimensions are sniffed from bounded header reads (PNG, JPEG, GIF,
+  WebP, BMP, best-effort SVG/ICO); AVIF/HEIC/TIFF report no dimensions by design.
+
 ## [0.9.0] - 2026-07-16
 
 ### Added

@@ -14,6 +14,7 @@ All commands run via `npx` from any directory — the current directory is the w
 
 - **Presenting wrangled data visually**: metrics, comparisons, reports, query results → `markdown`, `kpi`, `chart`, `table` blocks.
 - **Showing a markdown file that already exists** → just `$IC open report.md`. See below: no canvas, no JSON.
+- **Showing a folder of images** → just `$IC open <folder>` (a live, sortable grid the reader can zoom and delete; no canvas, no JSON), or a `gallery` block to place one beside other blocks.
 - **Collecting credentials, env vars, or multi-field setup input** → a `form` block with `secret` fields and a file destination.
 - **Confirmation before a destructive action** (drop DB, delete infra) → a `confirm` block.
 
@@ -64,6 +65,20 @@ It is an **ordinary canvas** — nothing new to validate, nothing new to learn, 
 
 **When NOT to use**: trivial yes/no questions or one-word answers (just ask in chat); headless environments — CI, SSH without a display — check before invoking. A human must be present at the browser: if `open` cannot launch one it prints the URL on stderr and keeps waiting, but nobody will answer in CI.
 
+## A folder of images needs no canvas
+
+A folder of images is a canvas too. Point at the folder and the runtime renders every image under it (subfolders included) as a live grid or list — the reader sorts, zooms a detail view, and can multi-select and permanently delete:
+
+```bash
+$IC open photos/                            # renders the folder as a gallery; nothing written to disk
+```
+
+Same rule as a markdown file: **do not write a canvas to show a folder you could have opened directly.** `validate`, `stamp`, `print` and `theme` all refuse a folder — there is no contract to check and no paper to print. To place a gallery *beside* other blocks, use the `gallery` block (`$IC catalog gallery` for its full contract): `{"type": "gallery", "src": "photos"}`. Previewable formats are png, jpg, jpeg, gif, webp, avif, bmp, ico and svg; HEIC and TIFF are listed with their metadata but shown as a placeholder card.
+
+**The images are yours to provide** — the runtime never fetches, so there is no way to point a gallery at a remote URL. Download or generate the files into a workspace folder first (the same asset rule a markdown image follows), then `open` that folder or point a `gallery` block's `src` at it.
+
+**Deletion belongs to the reader, not to you.** The reader multi-selects images in the browser and permanently deletes them; you never delete images, and you are not notified when they do — there is no session and no result to read. A gallery cannot render on paper, so it is invalid beside an envelope-level `document`, and its deck toggle is muted in the browser.
+
 ## The secret rule
 
 Never ask the user to paste API keys, tokens, passwords, database URLs, or credentials into the chat. Create a form canvas with `secret` fields and a local destination instead. Never read the written secret files back into context unless the user explicitly asks.
@@ -87,7 +102,7 @@ If `validate` or `open` reports `MISSING_CREATED_WITH`, just run `stamp` and car
 ## Commands
 
 ```
-open <canvas.json | file.md> [--workspace <dir>] [--no-open] [--timeout <s>] [--result <file>]
+open <canvas.json | file.md | folder> [--workspace <dir>] [--no-open] [--timeout <s>] [--result <file>]
 print <canvas.json | file.md> --out <file.pdf> [--workspace <dir>]   # → PDF (needs a local Chrome)
 stamp <canvas.json> [--workspace <dir>] [--retrofit]                 # canvases only
 validate <canvas.json | skills-config.json> [--workspace <dir>]      # not markdown
@@ -269,7 +284,7 @@ $IC theme --list                         # every preset + every saved palette, a
 | a canvas that declares `document` | into its own `document.theme` (spliced as text — the rest of the file is untouched) |
 | a **markdown file** | into its **companion canvas**, *created if absent* — beside its cover and its header |
 | a **display** canvas with no `document` | into a `document` object created for it (it will then open as paper, not continuous) |
-| a canvas holding a **form / confirm / sweep** | **nowhere.** `THEME_NEEDS_DOCUMENT` — `document` is invalid beside an interactive block, so it wears the workspace default and nothing else |
+| a canvas holding a **form / confirm / sweep / gallery** | **nowhere.** `THEME_NEEDS_DOCUMENT` — `document` is invalid beside a block that cannot render on paper, so it wears the workspace default and nothing else |
 
 **Precedence, three levels:** the document's own `document.theme` → the workspace default (`theme` in `skills-config.json`) → the built-in default. The document always has the last word.
 
@@ -320,6 +335,8 @@ Any canvas may contain **at most one** interactive block (`form` or `confirm`). 
 {"type": "table", "columns": [{"key": "customer", "label": "Customer"},
   {"key": "rev", "label": "Revenue", "format": "currency"}],
   "rows": [{"customer": "Acme", "rev": 43000}]}
+
+{"type": "gallery", "src": "photos"}                               // a live grid of a folder's images; the reader deletes, never you
 
 {"type": "form", "destination": {"kind": "env", "path": ".env", "mode": "merge"},  // env | json | none
   "fields": [{"name": "OPENAI_API_KEY", "label": "OpenAI API Key", "type": "secret", "required": true},
