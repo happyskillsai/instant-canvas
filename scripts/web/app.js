@@ -4996,7 +4996,7 @@ function disposeBrowse() {
 	}
 }
 
-const GROUP_ORDER = { canvas: 0, document: 1, image: 2 }
+const GROUP_ORDER = { folder: 0, canvas: 1, document: 2, image: 3 }
 
 async function renderBrowse(main, rel) {
 	const bs = {
@@ -5028,7 +5028,10 @@ async function renderBrowse(main, rel) {
 	async function load() {
 		const { status, json } = await api('/api/dir?path=' + encodeURIComponent(rel))
 		if (status === 200 && json && json.ok) {
-			bs.items = Array.isArray(json.items) ? json.items : []
+			// Child FOLDERS are items too — a second way to navigate the tree, right in
+			// the pane. They render first (GROUP_ORDER), look distinct, and open at #/f/.
+			const folders = (Array.isArray(json.dirs) ? json.dirs : []).map((d) => ({ kind: 'folder', rel: d.rel, name: d.name, hidden: !!d.hidden }))
+			bs.items = [...folders, ...(Array.isArray(json.items) ? json.items : [])]
 			bs.truncated = !!json.truncated
 		} else {
 			bs.items = []
@@ -5061,11 +5064,12 @@ async function renderBrowse(main, rel) {
 	const sortedRels = () => sortedItems().map((i) => i.rel)
 	const itemFor = (r) => bs.items.find((i) => i.rel === r) || null
 
-	/** The overlay's prev/next (§4.6) flips through folder siblings in exactly the
-	 *  order the grid shows, so the displayed order is recorded whenever it changes. */
+	/** The overlay's prev/next (§4.6) flips through the openable siblings in the order
+	 *  the grid shows — folders are navigation, not overlay content, so they are left
+	 *  out of the recorded order. */
 	function recordOrder() {
 		state.browseFolder = rel
-		state.browseOrder = sortedRels()
+		state.browseOrder = sortedItems().filter((i) => i.kind !== 'folder').map((i) => i.rel)
 	}
 
 	// ---------- tiles ----------
@@ -5077,6 +5081,21 @@ async function renderBrowse(main, rel) {
 		tile.dataset.kind = it.kind
 		tile.tabIndex = 0
 		tile.setAttribute('role', 'button')
+
+		if (it.kind === 'folder') {
+			// A subfolder — clearly a folder (the folder glyph in a warm accent chip, a
+			// FOLDER kicker, no file name) and it opens to its own browse view.
+			tile.classList.add('bt-card', 'bt-folder')
+			if (it.hidden) tile.classList.add('bt-hidden')
+			tile.title = it.name
+			const glyph = document.createElement('div'); glyph.className = 'bt-glyph'; glyph.innerHTML = icon('folder')
+			const kicker = document.createElement('div'); kicker.className = 'bt-kicker'; kicker.textContent = 'Folder'
+			const textEl = document.createElement('div'); textEl.className = 'bt-text'
+			const title = document.createElement('div'); title.className = 'bt-title'; title.textContent = it.name
+			textEl.append(title)
+			tile.append(glyph, kicker, textEl)
+			return tile
+		}
 
 		if (isImage(it)) {
 			tile.dataset.mtime = String(Math.round(it.mtimeMs || 0))
@@ -5102,18 +5121,29 @@ async function renderBrowse(main, rel) {
 			}
 			if (bs.selection.has(it.rel)) tile.classList.add('selected')
 		} else {
-			// A canvas or a markdown document — a card, never a thumbnail (§5: no
-			// canvas/document previews). Glyph + title + companion accent dot.
+			// A canvas or a markdown document — an editorial card, never a thumbnail
+			// (§5: no canvas/document previews). A top-anchored vertical stack: the icon
+			// chip (top-left), the kind kicker directly under it, then a bold title (2
+			// lines, ellipsis) and the actual file name (1 line, muted mono, ellipsis).
+			// Full text is in the hover tooltip.
+			tile.classList.add('bt-card')
 			const glyphName = it.kind === 'document' ? 'file-text' : it.deck ? 'presentation' : 'file-json'
-			const glyph = document.createElement('div'); glyph.className = 'bt-glyph'; glyph.innerHTML = icon(glyphName); tile.append(glyph)
-			const title = document.createElement('div'); title.className = 'bt-title'; title.textContent = titleOf(it); tile.append(title)
+			const kindLabel = it.kind === 'document' ? 'Document' : it.deck ? 'Presentation' : 'Canvas'
+			const fileName = it.rel.split('/').pop()
+			const titleText = it.title || fileName
+			tile.title = titleText + '\n' + fileName + (it.enhanced ? '\nEnhanced by ' + it.enhanced : '')
+
+			const glyph = document.createElement('div'); glyph.className = 'bt-glyph'; glyph.innerHTML = icon(glyphName)
+			const kicker = document.createElement('div'); kicker.className = 'bt-kicker'; kicker.textContent = kindLabel
 			if (it.enhanced) {
 				const dot = document.createElement('span'); dot.className = 'enh-dot bt-enh'
-				dot.setAttribute('aria-label', 'enhanced by a companion canvas'); tile.append(dot)
+				dot.setAttribute('aria-label', 'has a companion canvas'); kicker.append(dot)
 			}
-			const badge = document.createElement('div'); badge.className = 'gt-badge bt-badge'
-			badge.textContent = it.kind === 'document' ? 'DOC' : it.deck ? 'DECK' : 'CANVAS'
-			tile.append(badge)
+			const text = document.createElement('div'); text.className = 'bt-text'
+			const title = document.createElement('div'); title.className = 'bt-title'; title.textContent = titleText
+			const fname = document.createElement('div'); fname.className = 'bt-file'; fname.textContent = fileName
+			text.append(title, fname)
+			tile.append(glyph, kicker, text)
 		}
 		return tile
 	}
@@ -5196,6 +5226,15 @@ async function renderBrowse(main, rel) {
 		const info = document.createElement('div'); info.className = 'g-info'
 		const controls = document.createElement('div'); controls.className = 'g-controls'
 
+		// The grid/list toggle is orthogonal to selecting — it stays available in BOTH
+		// modes, so the reader can switch views mid-selection.
+		const viewSeg = () => {
+			const seg = document.createElement('div'); seg.className = 'g-seg g-view'
+			seg.append(makeBtn('g-segbtn g-icononly' + (bs.layout === 'grid' ? ' on' : ''), icon('layout-grid'), () => setLayout('grid'), 'Grid'))
+			seg.append(makeBtn('g-segbtn g-icononly' + (bs.layout === 'list' ? ' on' : ''), icon('list'), () => setLayout('list'), 'List'))
+			return seg
+		}
+
 		if (bs.selecting) {
 			const n = bs.selection.size
 			const label = document.createElement('div'); label.className = 'g-count'
@@ -5205,16 +5244,18 @@ async function renderBrowse(main, rel) {
 			del.disabled = n === 0
 			const clear = makeBtn('g-btn', 'Clear', () => clearSelection(), 'Clear the selection')
 			const done = makeBtn('g-btn', 'Done', () => exitSelect(), 'Leave selection mode')
-			controls.append(del, clear, done)
+			controls.append(viewSeg(), del, clear, done)
 			toolbar.append(info, controls)
 			return
 		}
 
+		const nf = bs.items.filter((i) => i.kind === 'folder').length
 		const nc = bs.items.filter((i) => i.kind === 'canvas').length
 		const nd = bs.items.filter((i) => i.kind === 'document').length
 		const ni = bs.items.filter((i) => i.kind === 'image').length
 		const count = document.createElement('div'); count.className = 'g-count'
 		count.textContent = [
+			...(nf ? [nf + (nf === 1 ? ' folder' : ' folders')] : []),
 			nc + (nc === 1 ? ' canvas' : ' canvases'),
 			nd + (nd === 1 ? ' doc' : ' docs'),
 			ni + (ni === 1 ? ' image' : ' images'),
@@ -5231,11 +5272,7 @@ async function renderBrowse(main, rel) {
 			sortSeg.append(makeBtn('g-segbtn' + (bs.sort.by === s.by ? ' on' : ''), s.label, () => setSort(s.by, null), 'Sort by ' + s.label.toLowerCase()))
 		sortSeg.append(makeBtn('g-segbtn g-dir', bs.sort.dir === 'asc' ? '↑' : '↓', () => setSort(bs.sort.by, bs.sort.dir === 'asc' ? 'desc' : 'asc'), 'Toggle direction'))
 
-		const viewSeg = document.createElement('div'); viewSeg.className = 'g-seg g-view'
-		viewSeg.append(makeBtn('g-segbtn g-icononly' + (bs.layout === 'grid' ? ' on' : ''), icon('layout-grid'), () => setLayout('grid'), 'Grid'))
-		viewSeg.append(makeBtn('g-segbtn g-icononly' + (bs.layout === 'list' ? ' on' : ''), icon('list'), () => setLayout('list'), 'List'))
-
-		controls.append(sortSeg, viewSeg)
+		controls.append(sortSeg, viewSeg())
 		// Select/delete is images-only — the affordance only appears when there is an image.
 		if (ni > 0)
 			controls.append(makeBtn('g-btn', 'Select', () => enterSelect(), 'Select images to delete'))
@@ -5279,17 +5316,20 @@ async function renderBrowse(main, rel) {
 
 	// ---------- pointer / click (delegated, so live tiles work) ----------
 
-	let pressTimer = null, pressRel = null, pressMoved = false, pressX = 0, pressY = 0
+	let pressTimer = null, pressRel = null, pressMoved = false, pressX = 0, pressY = 0, suppressClick = false
 	function cancelPress() { clearTimeout(pressTimer); pressTimer = null }
 
 	tilesWrap.addEventListener('pointerdown', (e) => {
 		const tile = e.target.closest('.gt')
 		if (!tile || (e.button !== undefined && e.button !== 0)) return
-		pressRel = tile.dataset.rel; pressX = e.clientX; pressY = e.clientY; pressMoved = false
+		pressRel = tile.dataset.rel; pressX = e.clientX; pressY = e.clientY; pressMoved = false; suppressClick = false
 		cancelPress()
 		if (tile.dataset.kind === 'image') {
 			pressTimer = setTimeout(() => {
 				pressTimer = null
+				// The long-press ACTS now (select). The click that fires on release must
+				// NOT re-toggle it, or a long-press would select then instantly deselect.
+				suppressClick = true
 				if (!bs.selecting) enterSelect()
 				toggleSelect(pressRel)
 			}, 500)
@@ -5305,16 +5345,19 @@ async function renderBrowse(main, rel) {
 		const tile = e.target.closest('.gt')
 		if (!tile) return
 		const r = tile.dataset.rel
-		const isImg = tile.dataset.kind === 'image'
+		const kind = tile.dataset.kind
+		const isImg = kind === 'image'
 		// A long-press already acted → swallow the click that follows it.
+		if (suppressClick) { suppressClick = false; return }
 		if (pressMoved) { pressMoved = false; return }
 		if (bs.selecting) {
 			if (isImg) toggleSelect(r)
 			return
 		}
 		if (isImg && (e.metaKey || e.ctrlKey)) { enterSelect(); toggleSelect(r); return }
-		// Otherwise navigate — a document, an image, or a canvas all open at #/c/<rel>
-		// (the overlay branches by kind in §4.6/§4.7).
+		// A folder navigates INTO itself (the pane is a second folder navigation); a
+		// document/image/canvas opens at #/c/ (the overlay branches by kind in §4.6/§4.7).
+		if (kind === 'folder') { location.hash = '#/f/' + encodeURIComponent(r); return }
 		location.hash = '#/c/' + encodeURIComponent(r)
 	})
 
