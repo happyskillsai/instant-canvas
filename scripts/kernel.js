@@ -12,7 +12,7 @@ const crypto = require('node:crypto')
 const { normalizeRoot, insideRoot, stateDir } = require('./lib/paths')
 const registry = require('./lib/registry')
 const { registerSecret, redact, errorOut } = require('./lib/redact')
-const { scan, dirsUnder, readCanvasFile, MAX_CANVAS_BYTES } = require('./lib/scan')
+const { scan, dirsUnder, readCanvasFile, MAX_CANVAS_BYTES, isExcludedDir } = require('./lib/scan')
 const { validate, collectBlocks, isInteractiveBlock, flattenFields } = require('./lib/validate')
 const { readMarkdownSrc, inlineLocalImages, inlineImageFile, hasMarkdownExtension, renderableMarkdown, MAX_COVER_IMAGE_BYTES } = require('./lib/markdownsrc')
 const { virtualCanvasFor } = require('./lib/mdcanvas')
@@ -1089,7 +1089,12 @@ function onFsEvent(eventType, filename) {
 	if (!filename)
 		return
 	const rel = String(filename).split(path.sep).join('/')
-	if (rel.split('/').some((seg) => seg.startsWith('.') || seg === 'node_modules'))
+	const segments = rel.split('/')
+	// Browse must reach hidden folders and their content must hot-reload, so the
+	// watcher no longer drops every dot-segment — only the two dirs excluded
+	// everywhere (`.git`, `node_modules`). `.DS_Store` stays filtered by name: it
+	// is pure macOS churn no browse view ever renders.
+	if (segments.some(isExcludedDir) || segments[segments.length - 1] === '.DS_Store')
 		return
 	changedFiles.add(rel)
 	if (debounceTimer)
@@ -1129,7 +1134,12 @@ function startWatcher() {
 		fs.watch(ROOT, { recursive: true }, onFsEvent)
 	} catch {
 		// Recursive watch unsupported → per-directory watchers over the same tree
-		// the scan walks, so everything the sidebar lists hot-reloads.
+		// the scan walks, so everything the sidebar lists hot-reloads. Accepted
+		// blind spot: dirsUnder skips ALL dot-dirs (isSkippable), so an edit inside
+		// a hidden folder is not seen on a platform lacking recursive fs.watch
+		// (exotic Linux). Recursive fs.watch covers macOS/Windows, where hidden
+		// folders DO hot-reload; refining the fallback to walk hidden dirs is
+		// deferred rather than risk re-walking huge `.venv`-class trees per level.
 		fs.watch(ROOT, (e, f) => onFsEvent(e, f))
 		for (const d of dirsUnder(ROOT)) {
 			try {

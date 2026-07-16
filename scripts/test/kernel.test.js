@@ -751,6 +751,45 @@ test('kernel: gallery delete refuses more than 500 paths at once, deleting nothi
 	assert.equal(r.json.error.code, 'TOO_MANY_PATHS')
 })
 
+test('kernel: §4.1 a hidden (non-excluded) folder hot-reloads, and the debounce bounds a churn storm', async () => {
+	// Browse must reach hidden folders, so the watcher no longer drops every
+	// dot-segment — an edit under .claude/ must reach the browser exactly like a
+	// visible one. And the 150 ms debounce must coalesce a burst into a bounded
+	// number of workspace broadcasts, not one per file (spec §6 uncertainty #1).
+	const ws = await wsConnect(K.port, K.token)
+	try {
+		fs.mkdirSync(path.join(K.root, '.claude'), { recursive: true })
+		for (let i = 0; i < 200; i++)
+			fs.writeFileSync(path.join(K.root, '.claude', `n${i}.md`), `# n${i}\n`)
+		// A markdown file inside a hidden dir reaches the browser as a canvas broadcast.
+		const hit = await ws.waitFor((m) => m.type === 'canvas' && m.path.startsWith('.claude/'))
+		assert.ok(hit.path.startsWith('.claude/'), 'a hidden-folder edit reaches broadcast')
+		await sleep(400) // let the debounce window close on the whole burst
+		const storms = ws.messages.filter((m) => m.type === 'workspace').length
+		assert.ok(storms <= 20, `200 hidden-dir writes coalesced to ${storms} workspace broadcasts — the debounce should keep this small, not one per file`)
+	} finally {
+		ws.close()
+	}
+})
+
+test('kernel: §4.1 an edit under .git or node_modules never reaches the watcher', async () => {
+	const ws = await wsConnect(K.port, K.token)
+	try {
+		fs.mkdirSync(path.join(K.root, '.git'), { recursive: true })
+		fs.writeFileSync(path.join(K.root, '.git', 'x.md'), '# git\n')
+		fs.writeFileSync(path.join(K.root, 'node_modules', 'z.md'), '# nm\n')
+		// A control write to a NON-excluded path is the fence: once its broadcast
+		// arrives, any excluded-path broadcast would already be in the buffer.
+		fs.writeFileSync(path.join(K.root, 'control-nav.md'), '# control\n')
+		await ws.waitFor((m) => m.type === 'canvas' && m.path === 'control-nav.md')
+		const leaked = ws.messages.filter((m) => m.path && (m.path.startsWith('.git/') || m.path.startsWith('node_modules/')))
+		assert.deepEqual(leaked, [], 'no broadcast referenced .git or node_modules')
+	} finally {
+		ws.close()
+		try { fs.unlinkSync(path.join(K.root, 'control-nav.md')) } catch { /* best effort */ }
+	}
+})
+
 test('kernel: shutdown removes the registry entry and exits 0', async () => {
 	const exited = new Promise((resolve) => K.child.on('exit', resolve))
 	const r = await httpReq({ port: K.port, method: 'POST', path: '/api/shutdown', headers: K.auth, body: {} })

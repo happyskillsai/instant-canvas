@@ -12,6 +12,19 @@ const { hasMarkdownExtension, markdownTitle, MAX_MARKDOWN_BYTES } = require('./m
 // than pulling every megabyte of prose in the tree through it for a title.
 const TITLE_PROBE_BYTES = 64 * 1024
 
+// The shared exclusion rule for surfaces that DO reach hidden folders (the
+// browse listing, the watcher): `.git` and `node_modules` are excluded there,
+// always, and nothing else. Kept as a Set so every consumer agrees on the one
+// list rather than each hand-rolling `name === '.git' || …`.
+const EXCLUDED_DIRS = new Set(['.git', 'node_modules'])
+const isExcludedDir = (name) => EXCLUDED_DIRS.has(name)
+
+// The SCAN's rule is deliberately stricter: it skips EVERY dot-entry, not just
+// the two excluded dirs. The scan (and companionIndex, which walks the same
+// tree) feed the search/title index, and a `.venv`-class hidden tree can be
+// huge and gains that index nothing — so hidden folders stay unindexed on
+// purpose. Browse and hot reload use isExcludedDir instead, so they still reach
+// (muted) hidden folders while `.git`/`node_modules` stay out everywhere.
 const isSkippable = (name) => name.startsWith('.') || name === 'node_modules'
 
 /**
@@ -169,4 +182,4 @@ function scan(root) {
 	}
 }
 
-module.exports = { scan, dirsUnder, readCanvasFile, MAX_CANVAS_BYTES }
+module.exports = { scan, dirsUnder, readCanvasFile, MAX_CANVAS_BYTES, EXCLUDED_DIRS, isExcludedDir }
