@@ -368,8 +368,11 @@ test.before(async () => {
 	// unregisters a kernel that is listening happily. This is a root-level before
 	// hook in a single-process suite, so the resulting throw failed ALL 243 tests
 	// with an error naming the wrong file. Poll for the entry, confirm liveness
-	// ourselves, and give load a deadline it cannot beat.
-	const deadline = Date.now() + 15_000
+	// ourselves, and give load a deadline it cannot beat. 30s (matching this file's
+	// other waits): the suite has grown more Chrome-driving files, and under a busy
+	// machine this kernel's cold spawn was landing right on the old 15s edge — one
+	// throw here fails the whole single-process suite.
+	const deadline = Date.now() + 30_000
 	while (Date.now() < deadline) {
 		const entry = registry.read(root)
 		if (entry && entry.port && await healthzOk(entry.port)) {

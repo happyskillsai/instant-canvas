@@ -40,6 +40,13 @@ const state = {
 	// an ancestor of the active folder (the old groupIsOpen rule, on a nested tree).
 	dirChildren: new Map(), // folder rel → [{name, rel, hidden}] child dirs
 	treeOpen: new Map(),    // folder rel → reader's explicit open/closed choice
+	// The browse view (#/f/): reader layout/sort preferences (sticky across folders),
+	// plus the displayed order of the open folder — recorded so the overlay's prev/next
+	// (§4.6) can flip through folder siblings in exactly the order the grid shows.
+	browseLayout: 'grid',
+	browseSort: { by: 'name', dir: 'asc' },
+	browseOrder: [],        // [rel] of the open folder's items, in displayed order
+	browseFolder: null,     // which folder browseOrder belongs to
 	charts: [], // {el, block} for every mounted Plotly graph in the current view
 	observers: [],
 	canvasDoc: null,
@@ -93,6 +100,7 @@ const LUCIDE = {
 	'eye': '<path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/>',
 	'eye-off': '<path d="M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49"/><path d="M14.084 14.158a3 3 0 0 1-4.242-4.242"/><path d="M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143"/><path d="m2 2 20 20"/>',
 	'file-text': '<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/>',
+	'file-json': '<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 12a1 1 0 0 0-1 1v1a1 1 0 0 1-1 1 1 1 0 0 1 1 1v1a1 1 0 0 0 1 1"/><path d="M14 18a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1 1 1 0 0 1-1-1v-1a1 1 0 0 0-1-1"/>',
 	'folder': '<path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/>',
 	'house': '<path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"/><path d="M3 10a2 2 0 0 1 .709-1.528l7-6a2 2 0 0 1 2.582 0l7 6A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
 	'image': '<rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/>',
@@ -4116,6 +4124,18 @@ async function renderCanvas() {
 	if (state.presenting && state.activeId !== pres.canvasId)
 		stageHide()
 	const main = $('main')
+	// A folder route (#/f/) renders the browse view — a mixed-type grid of the
+	// folder's renderable items — instead of a canvas.
+	if (typeof state.browseId === 'string') {
+		state.canvasDoc = null
+		state.docLand = false
+		state.presLand = false
+		disposeBrowse()
+		await renderBrowse(main, state.browseId)
+		syncViewToggle()
+		return
+	}
+	disposeBrowse() // leaving the browse view
 	if (!state.activeId) {
 		state.canvasDoc = null
 		state.docLand = false
@@ -4955,6 +4975,413 @@ function createGallery(root, block) {
 			gs.cleanup = []
 		},
 	}
+}
+
+// ---------------------------------------------------------------- browse view (#/f/)
+//
+// One folder's renderable items — canvases, documents, images — as a grid or list.
+// It generalises the gallery's grid to mixed types: the same toolbar/tile/select/
+// delete CSS (the root carries `.gallery` too), the same "sort MOVES nodes, live
+// refresh DIFFS in place, selection is a class toggle" discipline. What differs:
+// items are GROUPED (canvases → documents → images), a click NAVIGATES to the item
+// (#/c/<rel>) rather than opening a modal, and selection/delete are IMAGES ONLY —
+// the reader's browser never destroys a canvas or a document.
+
+let browseInstance = null
+
+function disposeBrowse() {
+	if (browseInstance) {
+		browseInstance.dispose()
+		browseInstance = null
+	}
+}
+
+const GROUP_ORDER = { canvas: 0, document: 1, image: 2 }
+
+async function renderBrowse(main, rel) {
+	const bs = {
+		rel,
+		items: [],
+		truncated: false,
+		layout: state.browseLayout === 'list' ? 'list' : 'grid',
+		sort: state.browseSort,
+		selecting: false,
+		selection: new Set(), // image rels only
+		tiles: new Map(),     // rel -> tile node
+		lastToggled: null,
+		cleanup: [],
+	}
+
+	main.innerHTML = ''
+	const root = document.createElement('div')
+	root.className = 'gallery browse'
+	root.classList.toggle('g-list', bs.layout === 'list')
+	const toolbar = document.createElement('div'); toolbar.className = 'g-toolbar'
+	const tilesWrap = document.createElement('div'); tilesWrap.className = 'g-tiles'
+	const empty = document.createElement('div'); empty.className = 'g-empty'; empty.hidden = true
+	empty.textContent = 'Nothing to show in this folder yet — drop a canvas, a markdown file, or an image in and it appears.'
+	root.append(toolbar, tilesWrap, empty)
+	main.append(root)
+
+	// ---------- data ----------
+
+	async function load() {
+		const { status, json } = await api('/api/dir?path=' + encodeURIComponent(rel))
+		if (status === 200 && json && json.ok) {
+			bs.items = Array.isArray(json.items) ? json.items : []
+			bs.truncated = !!json.truncated
+		} else {
+			bs.items = []
+			bs.truncated = false
+		}
+	}
+
+	const isImage = (it) => it.kind === 'image'
+	const titleOf = (it) => it.title || it.name || it.rel
+
+	function sortVal(it, by) {
+		if (by === 'created') return it.mtimeMs || 0
+		if (by === 'size') return it.size || 0
+		return titleOf(it).toLowerCase()
+	}
+
+	/** Grouped canvases → documents → images (the group order is FIXED, never
+	 *  inverted by direction); the chosen sort applies WITHIN each group. */
+	function sortedItems() {
+		const dir = bs.sort.dir === 'desc' ? -1 : 1
+		return bs.items.slice().sort((a, b) => {
+			const g = GROUP_ORDER[a.kind] - GROUP_ORDER[b.kind]
+			if (g !== 0) return g
+			const av = sortVal(a, bs.sort.by), bv = sortVal(b, bs.sort.by)
+			let c = av < bv ? -1 : av > bv ? 1 : 0
+			if (c === 0) c = a.rel.localeCompare(b.rel)
+			return c * dir
+		})
+	}
+	const sortedRels = () => sortedItems().map((i) => i.rel)
+	const itemFor = (r) => bs.items.find((i) => i.rel === r) || null
+
+	/** The overlay's prev/next (§4.6) flips through folder siblings in exactly the
+	 *  order the grid shows, so the displayed order is recorded whenever it changes. */
+	function recordOrder() {
+		state.browseFolder = rel
+		state.browseOrder = sortedRels()
+	}
+
+	// ---------- tiles ----------
+
+	function buildTile(it) {
+		const tile = document.createElement('div')
+		tile.className = 'gt bt-' + it.kind
+		tile.dataset.rel = it.rel
+		tile.dataset.kind = it.kind
+		tile.tabIndex = 0
+		tile.setAttribute('role', 'button')
+
+		if (isImage(it)) {
+			tile.dataset.mtime = String(Math.round(it.mtimeMs || 0))
+			const check = document.createElement('div'); check.className = 'gt-check'; check.innerHTML = icon('check'); tile.append(check)
+			if (it.renderable) {
+				const img = document.createElement('img')
+				img.className = 'gt-img'; img.loading = 'lazy'; img.decoding = 'async'
+				img.setAttribute('alt', it.name)
+				img.setAttribute('src', galleryFileUrl(it.rel, it.mtimeMs))
+				tile.append(img)
+			} else {
+				const ph = document.createElement('div'); ph.className = 'gt-ph'; ph.innerHTML = icon('image')
+				const label = document.createElement('span'); label.className = 'gt-fmt'
+				label.textContent = (it.name.split('.').pop() || 'file').toUpperCase()
+				ph.append(label); tile.append(ph)
+			}
+			const name = document.createElement('div'); name.className = 'gt-name'; name.textContent = it.name; tile.append(name)
+			if (bs.layout === 'list') {
+				const size = document.createElement('div'); size.className = 'gt-size'; size.textContent = galleryHumanBytes(it.size)
+				const date = document.createElement('div'); date.className = 'gt-date'; date.textContent = galleryDate(it.mtimeMs)
+				const fmt = document.createElement('div'); fmt.className = 'gt-badge'; fmt.textContent = (it.name.split('.').pop() || '').toUpperCase()
+				tile.append(size, date, fmt)
+			}
+			if (bs.selection.has(it.rel)) tile.classList.add('selected')
+		} else {
+			// A canvas or a markdown document — a card, never a thumbnail (§5: no
+			// canvas/document previews). Glyph + title + companion accent dot.
+			const glyphName = it.kind === 'document' ? 'file-text' : it.deck ? 'presentation' : 'file-json'
+			const glyph = document.createElement('div'); glyph.className = 'bt-glyph'; glyph.innerHTML = icon(glyphName); tile.append(glyph)
+			const title = document.createElement('div'); title.className = 'bt-title'; title.textContent = titleOf(it); tile.append(title)
+			if (it.enhanced) {
+				const dot = document.createElement('span'); dot.className = 'enh-dot bt-enh'
+				dot.setAttribute('aria-label', 'enhanced by a companion canvas'); tile.append(dot)
+			}
+			const badge = document.createElement('div'); badge.className = 'gt-badge bt-badge'
+			badge.textContent = it.kind === 'document' ? 'DOC' : it.deck ? 'DECK' : 'CANVAS'
+			tile.append(badge)
+		}
+		return tile
+	}
+
+	/** Full rebuild — first load and a layout toggle only. Never on sort (MOVE) or a
+	 *  live sync (DIFF). */
+	function buildAll() {
+		tilesWrap.textContent = ''
+		bs.tiles.clear()
+		for (const it of sortedItems()) {
+			const tile = buildTile(it)
+			bs.tiles.set(it.rel, tile)
+			tilesWrap.append(tile)
+		}
+		empty.hidden = bs.items.length > 0
+		recordOrder()
+	}
+
+	/** Re-order existing nodes into sort order — MOVE, so a selection survives. */
+	function sortNodes() {
+		for (const r of sortedRels()) {
+			const tile = bs.tiles.get(r)
+			if (tile) tilesWrap.append(tile)
+		}
+		recordOrder()
+	}
+
+	/** Diff the new listing against the mounted tiles: add fresh at sorted position,
+	 *  drop vanished, bump the ?v of any image whose mtime changed. Surviving nodes
+	 *  are never replaced — a selection may hold references into them. */
+	function syncItems(newItems) {
+		const next = new Map(newItems.map((i) => [i.rel, i]))
+		for (const [r, tile] of [...bs.tiles]) {
+			if (!next.has(r)) {
+				tile.remove(); bs.tiles.delete(r); bs.selection.delete(r)
+			}
+		}
+		for (const it of newItems) {
+			const tile = bs.tiles.get(it.rel)
+			if (!tile) continue
+			if (isImage(it)) {
+				const mt = String(Math.round(it.mtimeMs || 0))
+				if (tile.dataset.mtime !== mt) {
+					tile.dataset.mtime = mt
+					const img = tile.querySelector('.gt-img')
+					if (img) img.setAttribute('src', galleryFileUrl(it.rel, it.mtimeMs))
+				}
+			}
+		}
+		bs.items = newItems
+		for (const it of sortedItems()) {
+			if (!bs.tiles.has(it.rel)) {
+				const tile = buildTile(it)
+				bs.tiles.set(it.rel, tile)
+				tilesWrap.append(tile)
+			}
+		}
+		sortNodes()
+		empty.hidden = bs.items.length > 0
+		renderToolbar()
+	}
+
+	async function refresh() {
+		await load()
+		syncItems(bs.items.slice())
+	}
+
+	// ---------- toolbar ----------
+
+	function makeBtn(cls, html, onClick, title) {
+		const b = document.createElement('button')
+		b.type = 'button'; b.className = cls; b.innerHTML = html
+		if (title) b.title = title
+		b.addEventListener('click', onClick)
+		return b
+	}
+
+	function renderToolbar() {
+		toolbar.textContent = ''
+		const info = document.createElement('div'); info.className = 'g-info'
+		const controls = document.createElement('div'); controls.className = 'g-controls'
+
+		if (bs.selecting) {
+			const n = bs.selection.size
+			const label = document.createElement('div'); label.className = 'g-count'
+			label.textContent = n + ' selected'
+			info.append(label)
+			const del = makeBtn('g-btn g-danger', icon('trash-2') + '<span>Delete</span>', () => openDeleteDialog(), 'Delete the selected images')
+			del.disabled = n === 0
+			const clear = makeBtn('g-btn', 'Clear', () => clearSelection(), 'Clear the selection')
+			const done = makeBtn('g-btn', 'Done', () => exitSelect(), 'Leave selection mode')
+			controls.append(del, clear, done)
+			toolbar.append(info, controls)
+			return
+		}
+
+		const nc = bs.items.filter((i) => i.kind === 'canvas').length
+		const nd = bs.items.filter((i) => i.kind === 'document').length
+		const ni = bs.items.filter((i) => i.kind === 'image').length
+		const count = document.createElement('div'); count.className = 'g-count'
+		count.textContent = [
+			nc + (nc === 1 ? ' canvas' : ' canvases'),
+			nd + (nd === 1 ? ' doc' : ' docs'),
+			ni + (ni === 1 ? ' image' : ' images'),
+		].join(' · ')
+		info.append(count)
+		if (bs.truncated) {
+			const trunc = document.createElement('div'); trunc.className = 'g-trunc'
+			trunc.textContent = 'Showing the first ' + bs.items.length + ' — this folder holds more.'
+			info.append(trunc)
+		}
+
+		const sortSeg = document.createElement('div'); sortSeg.className = 'g-seg g-sort'
+		for (const s of G_SORTS)
+			sortSeg.append(makeBtn('g-segbtn' + (bs.sort.by === s.by ? ' on' : ''), s.label, () => setSort(s.by, null), 'Sort by ' + s.label.toLowerCase()))
+		sortSeg.append(makeBtn('g-segbtn g-dir', bs.sort.dir === 'asc' ? '↑' : '↓', () => setSort(bs.sort.by, bs.sort.dir === 'asc' ? 'desc' : 'asc'), 'Toggle direction'))
+
+		const viewSeg = document.createElement('div'); viewSeg.className = 'g-seg g-view'
+		viewSeg.append(makeBtn('g-segbtn g-icononly' + (bs.layout === 'grid' ? ' on' : ''), icon('layout-grid'), () => setLayout('grid'), 'Grid'))
+		viewSeg.append(makeBtn('g-segbtn g-icononly' + (bs.layout === 'list' ? ' on' : ''), icon('list'), () => setLayout('list'), 'List'))
+
+		controls.append(sortSeg, viewSeg)
+		// Select/delete is images-only — the affordance only appears when there is an image.
+		if (ni > 0)
+			controls.append(makeBtn('g-btn', 'Select', () => enterSelect(), 'Select images to delete'))
+		toolbar.append(info, controls)
+	}
+
+	function setLayout(layout) {
+		if (bs.layout === layout) return
+		bs.layout = layout
+		state.browseLayout = layout
+		root.classList.toggle('g-list', layout === 'list')
+		buildAll()
+		renderToolbar()
+	}
+
+	function setSort(by, dir) {
+		bs.sort = { by, dir: dir || bs.sort.dir }
+		state.browseSort = bs.sort
+		sortNodes()
+		renderToolbar()
+	}
+
+	// ---------- selection (images only) ----------
+
+	function enterSelect() { bs.selecting = true; root.classList.add('g-selecting'); renderToolbar() }
+	function exitSelect() { bs.selecting = false; root.classList.remove('g-selecting'); clearSelection(); renderToolbar() }
+	function clearSelection() {
+		for (const r of bs.selection) { const t = bs.tiles.get(r); if (t) t.classList.remove('selected') }
+		bs.selection.clear(); bs.lastToggled = null; renderToolbar()
+	}
+	function toggleSelect(r) {
+		const it = itemFor(r)
+		if (!it || !isImage(it)) return // never a canvas or a document
+		const tile = bs.tiles.get(r)
+		if (!tile) return
+		if (bs.selection.has(r)) { bs.selection.delete(r); tile.classList.remove('selected') }
+		else { bs.selection.add(r); tile.classList.add('selected') }
+		bs.lastToggled = r
+		renderToolbar()
+	}
+
+	// ---------- pointer / click (delegated, so live tiles work) ----------
+
+	let pressTimer = null, pressRel = null, pressMoved = false, pressX = 0, pressY = 0
+	function cancelPress() { clearTimeout(pressTimer); pressTimer = null }
+
+	tilesWrap.addEventListener('pointerdown', (e) => {
+		const tile = e.target.closest('.gt')
+		if (!tile || (e.button !== undefined && e.button !== 0)) return
+		pressRel = tile.dataset.rel; pressX = e.clientX; pressY = e.clientY; pressMoved = false
+		cancelPress()
+		if (tile.dataset.kind === 'image') {
+			pressTimer = setTimeout(() => {
+				pressTimer = null
+				if (!bs.selecting) enterSelect()
+				toggleSelect(pressRel)
+			}, 500)
+		}
+	})
+	tilesWrap.addEventListener('pointermove', (e) => {
+		if (pressTimer && (Math.abs(e.clientX - pressX) > 8 || Math.abs(e.clientY - pressY) > 8)) { pressMoved = true; cancelPress() }
+	})
+	tilesWrap.addEventListener('pointerup', cancelPress)
+	tilesWrap.addEventListener('pointercancel', cancelPress)
+
+	tilesWrap.addEventListener('click', (e) => {
+		const tile = e.target.closest('.gt')
+		if (!tile) return
+		const r = tile.dataset.rel
+		const isImg = tile.dataset.kind === 'image'
+		// A long-press already acted → swallow the click that follows it.
+		if (pressMoved) { pressMoved = false; return }
+		if (bs.selecting) {
+			if (isImg) toggleSelect(r)
+			return
+		}
+		if (isImg && (e.metaKey || e.ctrlKey)) { enterSelect(); toggleSelect(r); return }
+		// Otherwise navigate — a document, an image, or a canvas all open at #/c/<rel>
+		// (the overlay branches by kind in §4.6/§4.7).
+		location.hash = '#/c/' + encodeURIComponent(r)
+	})
+
+	tilesWrap.addEventListener('keydown', (e) => {
+		const tile = e.target.closest('.gt')
+		if (!tile) return
+		if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); tile.click() }
+	})
+
+	// ---------- delete (images only) — the gallery's count-exact confirm ----------
+
+	function openDeleteDialog() {
+		const rels = [...bs.selection]
+		if (!rels.length) return
+		const names = rels.map((r) => { const it = itemFor(r); return it ? it.name : r })
+		document.body.classList.add('modal-open')
+		const overlay = document.createElement('div'); overlay.className = 'g-modal g-confirm'
+		const card = document.createElement('div'); card.className = 'g-cbox'
+		const h = document.createElement('h2')
+		h.textContent = 'Permanently delete ' + rels.length + (rels.length === 1 ? ' image?' : ' images?')
+		const listEl = document.createElement('div'); listEl.className = 'g-clist'
+		for (const name of names) { const li = document.createElement('div'); li.className = 'g-cli'; li.textContent = name; listEl.append(li) }
+		const warn = document.createElement('p'); warn.className = 'g-cwarn'
+		warn.textContent = 'They will be removed from disk. This cannot be undone.'
+		const actions = document.createElement('div'); actions.className = 'g-cactions'
+		const cancel = makeBtn('g-btn', 'Cancel', () => teardown())
+		const confirm = makeBtn('g-btn g-danger', 'Delete ' + rels.length, () => doDelete(rels, teardown))
+		actions.append(cancel, confirm)
+		card.append(h, listEl, warn, actions)
+		overlay.append(card)
+		document.body.append(overlay)
+		overlay.addEventListener('click', (e) => { if (e.target === overlay) teardown() })
+		function teardown() { overlay.remove(); document.body.classList.remove('modal-open') }
+		confirm.focus()
+	}
+
+	async function doDelete(rels, teardown) {
+		const { status, json } = await api('/api/gallery/delete', { method: 'POST', body: JSON.stringify({ paths: rels }) })
+		teardown()
+		if (status !== 200 || !json || !json.ok) {
+			toast('Delete failed' + (json && json.error ? ': ' + json.error.message : '') + '.')
+			return
+		}
+		const okN = json.deleted.length
+		if (json.failed && json.failed.length)
+			toast('Deleted ' + okN + '; could not delete: ' + json.failed.map((f) => f.path.split('/').pop()).join(', '))
+		else
+			toast('Deleted ' + okN + (okN === 1 ? ' image.' : ' images.'))
+		for (const p of json.deleted) {
+			bs.selection.delete(p)
+			const tile = bs.tiles.get(p)
+			if (tile) { tile.remove(); bs.tiles.delete(p) }
+		}
+		bs.items = bs.items.filter((i) => !json.deleted.includes(i.rel))
+		empty.hidden = bs.items.length > 0
+		exitSelect()
+		refresh()
+	}
+
+	browseInstance = {
+		refresh,
+		dispose() { cancelPress() },
+	}
+
+	await load()
+	buildAll()
+	renderToolbar()
 }
 
 $('main').addEventListener('click', async (e) => {
@@ -5854,6 +6281,10 @@ function connectWs() {
 			// gallery re-fetches its listing and syncs IN PLACE — never a rebuild, so a
 			// live selection, a native menu, or the open modal keeps its DOM references.
 			refreshGalleries()
+			// The browse view syncs the same way: refetch /api/dir for the open folder
+			// and diff by path, so a file added inside it appears without a rebuild.
+			if (browseInstance)
+				browseInstance.refresh()
 		} else if (msg.type === 'canvas') {
 			if (msg.path === state.activeId)
 				renderCanvas() // full re-render; state loss accepted in MVP
@@ -6111,11 +6542,10 @@ async function boot() {
 	state.tree = json
 	connectWs()
 	await buildTree() // the tree must exist before route()'s syncTreeActive reveals into it
-	if (!location.hash) {
-		const first = json.collections.find((g) => g.canvases.length)
-		if (first)
-			location.hash = '#/c/' + encodeURIComponent(first.canvases[0].id)
-	}
+	// The app lands on the workspace root's browse view — the one place that shows
+	// the whole workspace, whatever kinds it holds.
+	if (!location.hash)
+		location.hash = '#/f/'
 	route()
 }
 boot()

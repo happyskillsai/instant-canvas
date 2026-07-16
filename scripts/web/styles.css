@@ -1363,6 +1363,36 @@ body.presenting.cursor-hidden .stage{cursor:none}
 .g-cwarn{font-size:13px;color:var(--muted);margin:0 0 16px}
 .g-cactions{display:flex;justify-content:flex-end;gap:8px}
 
+/* ------------------------------------------------------------------- browse view (#/f/)
+   The browse root carries `.gallery` too, so it inherits the grid, toolbar, tiles,
+   selection, list, and delete-dialog styles wholesale. These rules add only what is
+   NEW: the canvas/document CARD tile (glyph + title, never a thumbnail), the count
+   line, and the list-mode card row. Image tiles reuse .gt/.gt-img untouched. */
+.browse{margin:0}
+.browse .g-toolbar{margin:20px 0 14px}
+.browse .gt-name{font-size:12.5px;color:var(--text);margin-top:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:0 2px}
+/* A canvas/document is a card, not a thumbnail (§5: no preview rendering). */
+.bt-card{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;
+	background:var(--panel-2);padding:16px 14px;text-align:center}
+.bt-card:hover{border-color:var(--accent)}
+.bt-glyph{display:flex;align-items:center;justify-content:center}
+.bt-glyph .lucide{width:40px;height:40px;color:var(--muted);stroke-width:1.5}
+.bt-card:hover .bt-glyph .lucide{color:var(--accent)}
+.bt-title{font-size:12.5px;line-height:1.35;color:var(--text);max-height:2.7em;overflow:hidden;
+	display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;word-break:break-word}
+.bt-badge{position:absolute;top:8px;left:8px;background:var(--panel);opacity:.9}
+.bt-enh{position:absolute;top:9px;right:9px;margin:0}
+/* Cards are never selectable — in select mode they dim to say so. */
+.browse.g-selecting .bt-card{opacity:.45;pointer-events:none}
+/* List mode: a card becomes a row (glyph · title · badge), overriding the image-row grid. */
+.browse.g-list .bt-card{display:flex;flex-direction:row;align-items:center;gap:12px;aspect-ratio:auto;
+	padding:9px 12px;text-align:left;min-height:0}
+.browse.g-list .bt-glyph .lucide{width:20px;height:20px}
+.browse.g-list .bt-title{flex:1;max-height:none;-webkit-line-clamp:1;line-clamp:1}
+.browse.g-list .bt-badge{position:static;margin-left:auto}
+.browse.g-list .bt-enh{position:static}
+.browse.g-list .gt-name{margin-top:0}
+
 @media print{
 	.pal{display:none !important}
 	html{print-color-adjust:exact;-webkit-print-color-adjust:exact}
