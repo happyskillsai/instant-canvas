@@ -609,6 +609,47 @@ test('kernel: GET /api/gallery lists images under a folder, recursively', async 
 	assert.equal(r.json.items.find((i) => i.path === 'photos/fake.heic').renderable, false)
 })
 
+test('kernel: GET /api/dir lists a folder — dirs (excluded omitted, dot muted) + grouped items', async () => {
+	const r = await httpReq({ port: K.port, path: '/api/dir?path=', headers: K.auth })
+	assert.equal(r.status, 200)
+	assert.equal(r.json.ok, true)
+	assert.equal(r.json.dir, '')
+	assert.equal(typeof r.json.truncated, 'boolean', 'the truncation flag is always present')
+
+	// dirs: the workspace's real folders, .hidden muted, node_modules never present.
+	assert.ok(r.json.dirs.some((d) => d.name === 'photos' && d.hidden === false))
+	assert.ok(r.json.dirs.some((d) => d.name === '.hidden' && d.hidden === true), 'a dot-dir is listed muted')
+	assert.equal(r.json.dirs.find((d) => d.name === 'node_modules'), undefined, 'node_modules is omitted')
+
+	// items: the root canvas and the markdown document, grouped canvases → documents.
+	// package.json (no marker), .env (dot-file) and secrets.txt (not renderable) are absent.
+	const rels = r.json.items.map((i) => i.rel)
+	assert.ok(rels.includes('report.canvas.json'))
+	assert.ok(rels.includes('guide.md'))
+	assert.equal(rels.includes('package.json'), false)
+	assert.equal(rels.includes('.env'), false)
+	assert.equal(rels.includes('secrets.txt'), false)
+	const kinds = r.json.items.map((i) => i.kind)
+	assert.ok(kinds.lastIndexOf('canvas') < kinds.indexOf('document'), 'canvases group before documents')
+
+	// &dirs=1 returns just the dirs, for lazy tree expansion.
+	const only = await httpReq({ port: K.port, path: '/api/dir?path=&dirs=1', headers: K.auth })
+	assert.equal(only.json.items.length, 0)
+	assert.ok(only.json.dirs.length >= 1)
+})
+
+test('kernel: /api/dir is token-gated, and a non-folder is a byte-clean 404', async () => {
+	assert.equal((await httpReq({ port: K.port, path: '/api/dir?path=' })).status, 403, 'no token → 403')
+	// The .env-leak rule: a file / traversal / missing path is a 404 whose body
+	// carries none of the target's bytes and no V8 parse text.
+	for (const p of ['/api/dir?path=.env', '/api/dir?path=report.canvas.json', '/api/dir?path=../', '/api/dir?path=nope']) {
+		const r = await httpReq({ port: K.port, path: p, headers: K.auth })
+		assert.equal(r.status, 404, p)
+		assert.ok(!r.text.includes('sk-live-topsecret'), `${p} leaked file bytes`)
+		assert.ok(!r.text.includes('API_KEY'), `${p} leaked file bytes`)
+	}
+})
+
 test('kernel: gallery routes are behind the token like every other route', async () => {
 	assert.equal((await httpReq({ port: K.port, path: '/api/gallery?dir=photos' })).status, 403)
 	assert.equal((await httpReq({ port: K.port, path: '/api/gallery/meta?path=photos/a.png' })).status, 403)

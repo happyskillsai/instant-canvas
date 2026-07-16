@@ -182,4 +182,4 @@ function scan(root) {
 	}
 }
 
-module.exports = { scan, dirsUnder, readCanvasFile, MAX_CANVAS_BYTES, EXCLUDED_DIRS, isExcludedDir }
+module.exports = { scan, dirsUnder, entriesInDir, canvasEntry, documentEntry, readCanvasFile, MAX_CANVAS_BYTES, EXCLUDED_DIRS, isExcludedDir }

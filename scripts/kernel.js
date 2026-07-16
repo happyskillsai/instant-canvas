@@ -17,6 +17,7 @@ const { validate, collectBlocks, isInteractiveBlock, flattenFields } = require('
 const { readMarkdownSrc, inlineLocalImages, inlineImageFile, hasMarkdownExtension, renderableMarkdown, MAX_COVER_IMAGE_BYTES } = require('./lib/markdownsrc')
 const { virtualCanvasFor } = require('./lib/mdcanvas')
 const { listImages, imageStat, virtualGalleryFor, isRenderableImage, isGalleryImage, galleryMime, normalizeRelDir } = require('./lib/gallery')
+const { listDir } = require('./lib/browse')
 const { dimensions } = require('./lib/imagemeta')
 const { companionFor, enhancesOf } = require('./lib/companion')
 const { Sessions } = require('./lib/session')
@@ -698,6 +699,21 @@ async function route(req, res, url) {
 			return sendJson(res, load.status, load.body)
 		const active = activeSessionFor(rel)
 		return sendJson(res, 200, { ...load.body, session: active ? { id: active.id, expiresAt: active.expiresAt } : null })
+	}
+
+	// The browse listing: one folder's IMMEDIATE renderable children (canvases,
+	// documents, images — grouped) plus its immediate child directories. Non-
+	// recursive, unlike /api/gallery. `&dirs=1` returns just the dirs, for lazy
+	// tree expansion. A path that is not a real directory inside the root — a
+	// file like `.env`, a symlinked dir, a traversal — is a byte-clean 404: the
+	// body carries no bytes of the target, because listDir decides from the
+	// extension/lstat and never opens it.
+	if (method === 'GET' && p === '/api/dir') {
+		const dirsOnly = url.searchParams.get('dirs') === '1'
+		const result = listDir(ROOT, url.searchParams.get('path') || '', { dirsOnly })
+		if (!result)
+			return sendJson(res, 404, { ok: false, message: 'Not a folder inside this workspace.' })
+		return sendJson(res, 200, { ok: true, ...result })
 	}
 
 	// The listing behind a gallery block: every image under a workspace folder,
