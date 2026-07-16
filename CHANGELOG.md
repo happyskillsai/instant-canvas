@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-07-16
+
 ### Added
 - **Image gallery: a folder of images is a canvas.** A new **`gallery`** block type
   (`kind: display`, the seventh block) renders every image under a workspace folder —
