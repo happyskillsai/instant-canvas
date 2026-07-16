@@ -1239,6 +1239,129 @@ body.modal-open .main{overflow:hidden}
 body.presenting.cursor-hidden{cursor:none}
 body.presenting.cursor-hidden .stage{cursor:none}
 
+/* ----------------------------------------------------------------- gallery
+   Existing tokens only (no new theme vars). All layout is class-based — the CSP
+   drops style="" attributes, so the grid, tiles, selection ring and modal are
+   styled here, and JS only ever sets el.style.transform (CSSOM) on the modal. */
+.gallery{margin:16px 0}
+.g-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px}
+.g-info{display:flex;align-items:baseline;gap:10px;min-width:0;flex-wrap:wrap}
+.g-controls{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.g-count{font-size:13px;color:var(--text);font-weight:500}
+.g-trunc{font-size:12px;color:var(--amber)}
+/* ONE control height across the whole toolbar, so buttons and segmented pills line
+   up. Height is fixed (border-box) and vertical padding is 0 — the difference that
+   made the icon-only grid/list toggle look shorter than the text buttons. */
+.g-btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;height:34px;padding:0 13px;
+	border:1px solid var(--border);background:var(--panel);color:var(--text);border-radius:8px;font-size:13px;cursor:pointer}
+.g-btn:hover{background:var(--tint)}
+.g-btn:disabled{opacity:.5;cursor:default}
+.g-btn .lucide{width:15px;height:15px}
+.g-danger{border-color:var(--red);color:var(--red)}
+.g-danger:hover:not(:disabled){background:var(--red);color:#fff}
+.g-seg{display:inline-flex;align-items:stretch;height:34px;border:1px solid var(--border);border-radius:8px;overflow:hidden}
+.g-segbtn{display:inline-flex;align-items:center;justify-content:center;gap:4px;padding:0 12px;border:none;
+	border-left:1px solid var(--border);background:var(--panel);color:var(--muted);font-size:12.5px;cursor:pointer}
+.g-segbtn:first-child{border-left:none}
+.g-segbtn.g-icononly{padding:0 11px}
+.g-segbtn .lucide{width:16px;height:16px}
+.g-segbtn:hover{color:var(--text);background:var(--tint)}
+.g-segbtn.on{background:var(--accent);color:#fff}
+.g-dir{min-width:40px;font-size:14px}
+
+/* grid */
+.g-tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+.gt{position:relative;aspect-ratio:1;border:1px solid var(--border);border-radius:10px;overflow:hidden;
+	background:var(--panel-2);cursor:pointer}
+.gt:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.gt-img{width:100%;height:100%;object-fit:cover;display:block}
+.gt-ph{width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;
+	gap:6px;color:var(--muted)}
+.gt-ph .lucide{width:34px;height:34px}
+.gt-fmt{font-size:11px;letter-spacing:.05em;color:var(--muted)}
+.gt-check{position:absolute;top:8px;left:8px;width:22px;height:22px;border-radius:50%;border:2px solid #fff;
+	background:var(--scrim);display:none;align-items:center;justify-content:center;z-index:2;
+	box-shadow:0 1px 3px rgba(0,0,0,.3)}
+.gt-check .lucide{width:14px;height:14px;color:#fff;opacity:0}
+.gallery.g-selecting .gt-check{display:flex}
+.gt.selected{outline:3px solid var(--accent);outline-offset:-3px}
+.gt.selected .gt-check{background:var(--accent);border-color:var(--accent)}
+.gt.selected .gt-check .lucide{opacity:1}
+
+/* list */
+.gallery.g-list .g-tiles{display:flex;flex-direction:column;gap:2px}
+.gallery.g-list .gt{aspect-ratio:auto;display:grid;
+	grid-template-columns:44px minmax(0,1fr) auto auto auto auto;align-items:center;gap:12px;
+	padding:6px 10px;border-radius:8px;overflow:visible}
+.gallery.g-list .gt-img,.gallery.g-list .gt-ph{width:40px;height:40px;border-radius:6px}
+.gallery.g-list .gt-ph .lucide{width:20px;height:20px}
+.gallery.g-list .gt-ph .gt-fmt{display:none}
+.gt-name{font-size:13px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.gt-dir{font-size:12px;color:var(--muted);font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+.gt-size,.gt-date{font-size:12px;color:var(--muted);white-space:nowrap}
+.gt-badge{font-size:10px;letter-spacing:.05em;color:var(--muted);border:1px solid var(--border);
+	border-radius:5px;padding:2px 5px}
+.gallery.g-list .gt-check{position:static;grid-column:1;display:none}
+.gallery.g-list.g-selecting .gt-check{display:flex}
+
+.g-empty{padding:40px 16px;text-align:center;color:var(--muted);font-size:13px;
+	border:1px dashed var(--border);border-radius:12px}
+.g-empty[hidden]{display:none}
+
+/* detail modal */
+.g-modal{position:fixed;inset:0;z-index:70;display:flex;background:var(--scrim);
+	backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px)}
+.g-stage{flex:1 1 auto;display:flex;align-items:center;justify-content:center;overflow:hidden;
+	background:var(--panel-2);position:relative}
+.g-stage.zoomed{cursor:grab}
+.g-full{max-width:100%;max-height:100%;object-fit:contain;transform-origin:center center;
+	will-change:transform;user-select:none;-webkit-user-drag:none}
+.g-full[hidden]{display:none}
+.g-full-ph{display:flex;flex-direction:column;align-items:center;gap:12px;color:var(--muted)}
+.g-full-ph[hidden]{display:none}
+.g-full-ph .lucide{width:64px;height:64px}
+.g-noprev{font-size:13px}
+.g-meta{flex:0 0 300px;max-width:80vw;background:var(--panel);border-left:1px solid var(--border);
+	padding:20px 18px;overflow:auto}
+.g-mtitle{font-size:15px;font-weight:600;color:var(--text);margin-bottom:14px;word-break:break-all}
+.g-mrow{display:flex;flex-direction:column;gap:2px;margin-bottom:11px}
+.g-mlabel{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.g-mval{font-size:13px;color:var(--text);word-break:break-word}
+.g-path{display:flex;align-items:flex-start;gap:6px}
+.g-path span{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;word-break:break-all}
+.g-copy{flex:none;border:none;background:transparent;color:var(--muted);cursor:pointer;padding:2px}
+.g-copy:hover{color:var(--accent)}
+.g-copy .lucide{width:14px;height:14px}
+.g-mnote{margin-top:8px;font-size:12px;color:var(--amber)}
+.g-x{position:absolute;top:14px;right:14px;z-index:3;width:34px;height:34px;border:none;border-radius:50%;
+	background:var(--panel);color:var(--text);cursor:pointer;display:flex;align-items:center;justify-content:center;
+	box-shadow:var(--shadow)}
+.g-x .lucide{width:18px;height:18px}
+.g-nav{position:absolute;top:50%;transform:translateY(-50%);z-index:3;width:40px;height:40px;border:none;
+	border-radius:50%;background:var(--panel);color:var(--text);cursor:pointer;display:flex;align-items:center;
+	justify-content:center;box-shadow:var(--shadow)}
+.g-prev{left:14px}
+.g-next{right:314px} /* clear of the 300px metadata panel */
+.g-nav .lucide{width:20px;height:20px}
+.g-zoombar{position:absolute;left:calc(50% - 157px);bottom:18px;transform:translateX(-50%);z-index:3;
+	display:flex;gap:4px;background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:5px;
+	box-shadow:var(--shadow)}
+.g-zbtn{border:none;background:transparent;color:var(--text);cursor:pointer;padding:5px 9px;border-radius:7px;
+	font-size:12.5px;display:inline-flex;align-items:center}
+.g-zbtn:hover{background:var(--tint)}
+.g-zbtn .lucide{width:16px;height:16px}
+
+/* permanent-delete confirmation */
+.g-confirm{align-items:center;justify-content:center;padding:16px}
+.g-cbox{background:var(--panel);border:1px solid var(--border);border-radius:14px;box-shadow:var(--shadow);
+	width:min(440px,94vw);max-height:80vh;display:flex;flex-direction:column;padding:22px}
+.g-cbox h2{margin:0 0 12px;font-size:17px;color:var(--text)}
+.g-clist{overflow:auto;border:1px solid var(--border);border-radius:8px;padding:6px;margin-bottom:12px;max-height:200px}
+.g-cli{font-size:12.5px;color:var(--text);padding:3px 6px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
+	overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.g-cwarn{font-size:13px;color:var(--muted);margin:0 0 16px}
+.g-cactions{display:flex;justify-content:flex-end;gap:8px}
+
 @media print{
 	.pal{display:none !important}
 	html{print-color-adjust:exact;-webkit-print-color-adjust:exact}
@@ -1312,4 +1435,27 @@ body.presenting.cursor-hidden .stage{cursor:none}
 	/* Multi-column fieldsets stack — three inputs across is unreadable on a phone. */
 	.fset-grid.cols-2,.fset-grid.cols-3{grid-template-columns:minmax(0,1fr)}
 	.fset-grid .field.span-2,.fset-grid .field.span-3{grid-column:auto}
+}
+
+/* Gallery modal on a narrow screen: the metadata panel stacks under the image,
+   and the next-arrow returns to the right edge. Kept LAST so these same-
+   specificity rules win the cascade over the base .g-* rules above. */
+@media (max-width:700px){
+	.g-modal{flex-direction:column}
+	.g-meta{flex:0 0 auto;max-width:none;max-height:42vh;border-left:none;border-top:1px solid var(--border)}
+	.g-next{right:14px}
+	.g-zoombar{left:50%}
+}
+
+/* Gallery toolbar on a narrow screen: stack into tidy rows instead of a messy
+   wrap. Row 1 = the count; row 2 = a FULL-WIDTH sort control (big tap targets);
+   row 3 = the grid/list toggle with Select pushed to the right edge. Kept last so
+   these same-specificity rules win the cascade. */
+@media (max-width:600px){
+	.g-toolbar{flex-direction:column;align-items:stretch;gap:10px}
+	.g-controls{width:100%}
+	.g-controls .g-sort{flex:1 1 100%}
+	.g-controls .g-sort .g-segbtn{flex:1 1 auto}
+	.g-controls .g-sort .g-dir{flex:0 0 48px}
+	.g-controls > .g-btn:last-child{margin-left:auto}
 }

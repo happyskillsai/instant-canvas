@@ -90,6 +90,14 @@ const LUCIDE = {
 	'file-text': '<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/>',
 	'folder': '<path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/>',
 	'house': '<path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"/><path d="M3 10a2 2 0 0 1 .709-1.528l7-6a2 2 0 0 1 2.582 0l7 6A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
+	'image': '<rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/>',
+	'layout-grid': '<rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/>',
+	'list': '<path d="M3 12h.01"/><path d="M3 18h.01"/><path d="M3 6h.01"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M8 6h13"/>',
+	'arrow-up-down': '<path d="m21 16-4 4-4-4"/><path d="M17 20V4"/><path d="m3 8 4-4 4 4"/><path d="M7 4v16"/>',
+	'zoom-in': '<circle cx="11" cy="11" r="8"/><line x1="21" x2="16.65" y1="21" y2="16.65"/><line x1="11" x2="11" y1="8" y2="14"/><line x1="8" x2="14" y1="11" y2="11"/>',
+	'zoom-out': '<circle cx="11" cy="11" r="8"/><line x1="21" x2="16.65" y1="21" y2="16.65"/><line x1="8" x2="14" y1="11" y2="11"/>',
+	'maximize': '<path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/>',
+	'trash-2': '<path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/>',
 	'info': '<circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/>',
 	'plus': '<path d="M5 12h14"/><path d="M12 5v14"/>',
 	'presentation': '<path d="M2 3h20"/><path d="M21 3v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V3"/><path d="m7 21 5-5 5 5"/>',
@@ -3250,7 +3258,20 @@ const isNativeDoc = () => MD_FILE_RE.test(state.activeId || '')
  */
 function canvasHead(canvas) {
 	const path = `<div class="sub">${esc(state.activeId)}</div>`
-	return `<div class="canvas-head${isNativeDoc() ? ' head-doc' : ''}">${isNativeDoc() ? '' : `<h1>${esc(canvas.title)}</h1>`}${path}</div>`
+	// A folder opened as a gallery has no author-written title worth shouting — like a
+	// native markdown document, its head just says which folder it is.
+	const pathOnly = isNativeDoc() || isVirtualGallery()
+	return `<div class="canvas-head${pathOnly ? ' head-doc' : ''}">${pathOnly ? '' : `<h1>${esc(canvas.title)}</h1>`}${path}</div>`
+}
+
+/** True while the open canvas is the gallery the runtime synthesised around a folder
+ *  (a single gallery block, and an id that is neither a canvas nor a markdown file). */
+function isVirtualGallery() {
+	const id = state.activeId || ''
+	if (/\.(?:json|md|mdx|markdown)$/i.test(id))
+		return false
+	const c = state.canvasDoc
+	return !!c && Array.isArray(c.blocks) && c.blocks.length === 1 && c.blocks[0] && c.blocks[0].type === 'gallery'
 }
 
 /** What stops a canvas from being viewed as paper: forms and confirms cannot
@@ -3264,6 +3285,7 @@ function deckBlockers(canvas) {
 				continue
 			if (b.type === 'form') blockers.add('a form')
 			else if (b.type === 'confirm') blockers.add('a confirmation')
+			else if (b.type === 'gallery') blockers.add('a gallery')
 			else if (b.type === 'chart' && b.sweep) blockers.add('slider sweeps')
 		}
 	}
@@ -3960,6 +3982,7 @@ function renderEmpty() {
 
 async function renderCanvas() {
 	disposeCharts()
+	disposeGalleries()
 	// Navigating to a DIFFERENT canvas while presenting leaves the stage; a same-canvas hot
 	// reload keeps it (renderPresentationView re-shows it at the held slide).
 	if (state.presenting && state.activeId !== pres.canvasId)
@@ -4042,6 +4065,7 @@ async function renderCanvas() {
 		if (b.type === 'markdown') return renderMarkdown(b)
 		if (b.type === 'kpi') return renderKpi(b)
 		if (b.type === 'table') return renderTable(b)
+		if (b.type === 'gallery') return renderGalleryShell(i)
 		if (b.type === 'chart') return renderChartShell(b, i)
 		if (b.type === 'form') return renderForm(b)
 		if (b.type === 'confirm') return renderConfirm(b)
@@ -4061,8 +4085,748 @@ async function renderCanvas() {
 	mountCodeCopy(main)
 	mountCharts(blocks)
 	mountKpis(main)
+	mountGalleries(blocks)
 	wireInteractive(blocks)
 	syncViewToggle()
+}
+
+// ==================================================================
+// Gallery block — a live grid/list of a folder's images, with a
+// zoomable detail modal, multi-select, and permanent bulk delete.
+//
+// Two rules run through all of it, each a shipped-bug lesson:
+//  - All layout is CLASS-BASED. The CSP silently drops style="" attributes,
+//    so JS sets geometry through CSSOM (el.style.*) only.
+//  - Selection and live refresh are VALUE-SYNCS, never grid rebuilds. The DOM
+//    is not a pure function of state while the reader holds a selection or the
+//    modal holds a node reference — so a select toggles a class, and a live
+//    update diffs by path and moves/updates existing nodes in place.
+// ==================================================================
+
+const LONGPRESS_MS = 500
+const galleryInstances = []
+
+function disposeGalleries() {
+	for (const g of galleryInstances)
+		g.dispose()
+	galleryInstances.length = 0
+}
+
+/** The block renders an empty shell; createGallery populates it after mount
+ *  (the same shell-then-mount pattern charts use). */
+function renderGalleryShell(i) {
+	return `<div class="gallery" data-gallery="${i}"></div>`
+}
+
+function mountGalleries(blocks) {
+	document.querySelectorAll('.gallery[data-gallery]').forEach((el) => {
+		const block = blocks[Number(el.dataset.gallery)]
+		if (block && block.type === 'gallery')
+			galleryInstances.push(createGallery(el, block))
+	})
+}
+
+/** Every mounted gallery re-fetches and syncs in place — the live-refresh hook. */
+function refreshGalleries() {
+	for (const g of galleryInstances)
+		g.refresh()
+}
+
+function normalizeGallerySort(sort) {
+	const by = sort && ['name', 'created', 'size'].includes(sort.by) ? sort.by : 'name'
+	const dir = sort && sort.dir === 'desc' ? 'desc' : 'asc'
+	return { by, dir }
+}
+
+const G_SORTS = [{ by: 'name', label: 'Name' }, { by: 'created', label: 'Created' }, { by: 'size', label: 'Size' }]
+
+function galleryHumanBytes(n) {
+	if (!Number.isFinite(n)) return ''
+	if (n < 1024) return n + ' B'
+	const units = ['KB', 'MB', 'GB', 'TB']
+	let v = n / 1024, u = 0
+	while (v >= 1024 && u < units.length - 1) { v /= 1024; u++ }
+	return v.toFixed(v < 10 ? 1 : 0) + ' ' + units[u]
+}
+
+function galleryDate(ms) {
+	if (!Number.isFinite(ms)) return '—'
+	try { return new Date(ms).toLocaleString() } catch { return '—' }
+}
+
+/** The file route needs the token (an asset URL carries it as a query), and `v`
+ *  is the mtime — a changed file is a changed URL, which is what makes the file
+ *  route's immutable cache safe. */
+function galleryFileUrl(p, v) {
+	return '/api/gallery/file?path=' + encodeURIComponent(p) + '&v=' + Math.round(v || 0) + '&token=' + encodeURIComponent(TOKEN)
+}
+
+function createGallery(root, block) {
+	const gs = {
+		src: typeof block.src === 'string' && block.src ? block.src : '.',
+		recursive: block.recursive !== false,
+		layout: block.layout === 'list' ? 'list' : 'grid',
+		sort: normalizeGallerySort(block.sort),
+		items: [],
+		tiles: new Map(),      // path -> tile element (stable across sorts and live syncs)
+		selection: new Set(),  // selected paths
+		selecting: false,
+		lastToggled: null,
+		truncated: false,
+		suppressClick: false,  // a long-press already acted; swallow the click that follows
+		modal: null,           // { path, z, tx, ty } while the detail modal is open
+		modalEls: null,
+		opener: null,          // the tile that opened the modal, for focus restore
+		cleanup: [],           // document-level listeners to remove on dispose
+	}
+	const topDir = gs.src === '.' ? '' : gs.src
+
+	root.classList.add('gallery')
+	root.classList.toggle('g-list', gs.layout === 'list')
+	const toolbar = document.createElement('div')
+	toolbar.className = 'g-toolbar'
+	const tilesWrap = document.createElement('div')
+	tilesWrap.className = 'g-tiles'
+	const empty = document.createElement('div')
+	empty.className = 'g-empty'
+	empty.hidden = true
+	empty.textContent = 'No images in this folder yet — drop some in and they’ll appear.'
+	root.append(toolbar, tilesWrap, empty)
+
+	// ---------- sorting ----------
+
+	function sortedItems() {
+		const dir = gs.sort.dir === 'desc' ? -1 : 1
+		const by = gs.sort.by
+		return gs.items.slice().sort((a, b) => {
+			let c
+			if (by === 'name') c = a.name.localeCompare(b.name)
+			else if (by === 'created') c = (a.created || 0) - (b.created || 0)
+			else c = (a.size || 0) - (b.size || 0)
+			if (c === 0) c = a.path.localeCompare(b.path)
+			return c * dir
+		})
+	}
+
+	function sortedPaths() {
+		return sortedItems().map((i) => i.path)
+	}
+
+	// ---------- tiles ----------
+
+	function buildTile(item) {
+		const tile = document.createElement('div')
+		tile.className = 'gt'
+		tile.dataset.path = item.path
+		tile.dataset.mtime = String(Math.round(item.modified || 0))
+		tile.tabIndex = 0
+		tile.setAttribute('role', 'button')
+
+		const check = document.createElement('div')
+		check.className = 'gt-check'
+		check.innerHTML = icon('check')
+		tile.append(check)
+
+		if (item.renderable) {
+			const img = document.createElement('img')
+			img.className = 'gt-img'
+			img.loading = 'lazy'
+			img.decoding = 'async'
+			img.setAttribute('alt', item.name)
+			img.setAttribute('src', galleryFileUrl(item.path, item.modified))
+			tile.append(img)
+		} else {
+			const ph = document.createElement('div')
+			ph.className = 'gt-ph'
+			ph.innerHTML = icon('image')
+			const label = document.createElement('span')
+			label.className = 'gt-fmt'
+			label.textContent = (item.format || 'file').toUpperCase()
+			ph.append(label)
+			tile.append(ph)
+		}
+
+		if (gs.layout === 'list') {
+			const name = document.createElement('div'); name.className = 'gt-name'; name.textContent = item.name
+			const dir = document.createElement('div'); dir.className = 'gt-dir'; dir.textContent = item.dir || ''
+			const size = document.createElement('div'); size.className = 'gt-size'; size.textContent = galleryHumanBytes(item.size)
+			const date = document.createElement('div'); date.className = 'gt-date'; date.textContent = galleryDate(item.modified)
+			const fmt = document.createElement('div'); fmt.className = 'gt-badge'; fmt.textContent = (item.format || '').toUpperCase()
+			tile.append(name, dir, size, date, fmt)
+		}
+
+		if (gs.selection.has(item.path))
+			tile.classList.add('selected')
+		return tile
+	}
+
+	/** Full rebuild of the tiles — used on first load and on a layout toggle only.
+	 *  Never on sort (that MOVES nodes) and never on a live sync (that DIFFS). */
+	function buildAll() {
+		tilesWrap.textContent = ''
+		gs.tiles.clear()
+		for (const item of sortedItems()) {
+			const tile = buildTile(item)
+			gs.tiles.set(item.path, tile)
+			tilesWrap.append(tile)
+		}
+		empty.hidden = gs.items.length > 0
+	}
+
+	/** Re-order the existing tile nodes into sort order — MOVE, never rebuild, so a
+	 *  selection and the open modal survive a re-sort. */
+	function sortNodes() {
+		for (const p of sortedPaths()) {
+			const tile = gs.tiles.get(p)
+			if (tile) tilesWrap.append(tile) // appendChild moves an existing node
+		}
+	}
+
+	/** Diff the new listing against the mounted tiles: add fresh ones at their
+	 *  sorted position, drop vanished ones, and bump the ?v of any whose mtime
+	 *  changed. The surviving tile NODES are never replaced. */
+	function syncItems(newItems) {
+		const nextByPath = new Map(newItems.map((i) => [i.path, i]))
+		// Remove vanished tiles and drop them from the selection.
+		for (const [p, tile] of [...gs.tiles]) {
+			if (!nextByPath.has(p)) {
+				tile.remove()
+				gs.tiles.delete(p)
+				gs.selection.delete(p)
+			}
+		}
+		// Update or add.
+		for (const item of newItems) {
+			const tile = gs.tiles.get(item.path)
+			if (!tile)
+				continue // added below, after items are set, so sort order is known
+			const mt = String(Math.round(item.modified || 0))
+			if (tile.dataset.mtime !== mt) {
+				tile.dataset.mtime = mt
+				const img = tile.querySelector('.gt-img')
+				if (img) img.setAttribute('src', galleryFileUrl(item.path, item.modified))
+			}
+		}
+		gs.items = newItems
+		// Insert genuinely new tiles, then re-order everything into sort position.
+		for (const item of sortedItems()) {
+			if (!gs.tiles.has(item.path)) {
+				const tile = buildTile(item)
+				gs.tiles.set(item.path, tile)
+				tilesWrap.append(tile)
+			}
+		}
+		sortNodes()
+		empty.hidden = gs.items.length > 0
+		// If the modal's image vanished from disk, close it with a toast.
+		if (gs.modal && !nextByPath.has(gs.modal.path)) {
+			closeModal()
+			toast('That image is no longer on disk.')
+		}
+		renderToolbar()
+	}
+
+	// ---------- toolbar ----------
+
+	function makeBtn(cls, html, onClick, title) {
+		const b = document.createElement('button')
+		b.type = 'button'
+		b.className = cls
+		b.innerHTML = html
+		if (title) b.title = title
+		b.addEventListener('click', onClick)
+		return b
+	}
+
+	function renderToolbar() {
+		toolbar.textContent = ''
+		const info = document.createElement('div')
+		info.className = 'g-info'
+		const controls = document.createElement('div')
+		controls.className = 'g-controls'
+
+		if (gs.selecting) {
+			const n = gs.selection.size
+			const label = document.createElement('div')
+			label.className = 'g-count'
+			label.textContent = n + ' selected'
+			info.append(label)
+			const del = makeBtn('g-btn g-danger', icon('trash-2') + '<span>Delete</span>', () => openDeleteDialog(), 'Delete the selected images')
+			del.disabled = n === 0
+			const clear = makeBtn('g-btn', 'Clear', () => clearSelection(), 'Clear the selection')
+			const done = makeBtn('g-btn', 'Done', () => exitSelect(), 'Leave selection mode')
+			controls.append(del, clear, done)
+			toolbar.append(info, controls)
+			return
+		}
+
+		const n = gs.items.length
+		const sub = gs.items.filter((i) => i.dir !== topDir).length
+		const count = document.createElement('div')
+		count.className = 'g-count'
+		let text = n + (n === 1 ? ' image' : ' images')
+		if (sub) text += ' · ' + sub + ' in subfolders'
+		count.textContent = text
+		info.append(count)
+		if (gs.truncated) {
+			const trunc = document.createElement('div')
+			trunc.className = 'g-trunc'
+			trunc.textContent = 'Showing the first ' + n + ' — this folder holds more.'
+			info.append(trunc)
+		}
+
+		// Sort — kept exactly as it is: a segmented field control + a direction toggle.
+		const sortSeg = document.createElement('div')
+		sortSeg.className = 'g-seg g-sort'
+		for (const s of G_SORTS)
+			sortSeg.append(makeBtn('g-segbtn' + (gs.sort.by === s.by ? ' on' : ''), s.label, () => setSort(s.by, null), 'Sort by ' + s.label.toLowerCase()))
+		const dirBtn = makeBtn('g-segbtn g-dir', gs.sort.dir === 'asc' ? '↑' : '↓', () => setSort(gs.sort.by, gs.sort.dir === 'asc' ? 'desc' : 'asc'), 'Toggle direction')
+		sortSeg.append(dirBtn)
+
+		// Grid / list — the layout toggle, same segmented style so the two pills read as a pair.
+		const viewSeg = document.createElement('div')
+		viewSeg.className = 'g-seg g-view'
+		const gridBtn = makeBtn('g-segbtn g-icononly' + (gs.layout === 'grid' ? ' on' : ''), icon('layout-grid'), () => setLayout('grid'), 'Grid')
+		const listBtn = makeBtn('g-segbtn g-icononly' + (gs.layout === 'list' ? ' on' : ''), icon('list'), () => setLayout('list'), 'List')
+		viewSeg.append(gridBtn, listBtn)
+
+		const selectBtn = makeBtn('g-btn', 'Select', () => enterSelect(), 'Select images to delete')
+
+		controls.append(sortSeg, viewSeg, selectBtn)
+		toolbar.append(info, controls)
+	}
+
+	function setLayout(layout) {
+		if (gs.layout === layout) return
+		gs.layout = layout
+		root.classList.toggle('g-list', layout === 'list')
+		buildAll()       // a layout change is a structural render; selection rides the Set
+		renderToolbar()
+	}
+
+	function setSort(by, dir) {
+		gs.sort = { by, dir: dir || gs.sort.dir }
+		sortNodes()      // MOVE nodes, do not rebuild — selection and modal survive
+		renderToolbar()
+	}
+
+	// ---------- selection ----------
+
+	function enterSelect() {
+		gs.selecting = true
+		root.classList.add('g-selecting')
+		renderToolbar()
+	}
+
+	function exitSelect() {
+		gs.selecting = false
+		root.classList.remove('g-selecting')
+		clearSelection()
+		renderToolbar()
+	}
+
+	function clearSelection() {
+		for (const p of gs.selection) {
+			const tile = gs.tiles.get(p)
+			if (tile) tile.classList.remove('selected')
+		}
+		gs.selection.clear()
+		gs.lastToggled = null
+		renderToolbar()
+	}
+
+	/** Toggle ONE tile's selection. A class flip + a Set update — never a grid
+	 *  re-render, so the clicked node stays isConnected through the gesture. */
+	function toggleSelect(p) {
+		const tile = gs.tiles.get(p)
+		if (!tile) return
+		if (gs.selection.has(p)) {
+			gs.selection.delete(p)
+			tile.classList.remove('selected')
+		} else {
+			gs.selection.add(p)
+			tile.classList.add('selected')
+		}
+		gs.lastToggled = p
+		renderToolbar()
+	}
+
+	function selectRange(p) {
+		const order = sortedPaths()
+		const from = gs.lastToggled ? order.indexOf(gs.lastToggled) : order.indexOf(p)
+		const to = order.indexOf(p)
+		if (from < 0 || to < 0) return toggleSelect(p)
+		const [lo, hi] = from < to ? [from, to] : [to, from]
+		for (let i = lo; i <= hi; i++) {
+			const path = order[i]
+			gs.selection.add(path)
+			const tile = gs.tiles.get(path)
+			if (tile) tile.classList.add('selected')
+		}
+		gs.lastToggled = p
+		renderToolbar()
+	}
+
+	// ---------- pointer / click handling (delegated, so live tiles work) ----------
+
+	let pressTimer = null, pressPath = null, pressX = 0, pressY = 0, pressMoved = false
+	function cancelPress() { clearTimeout(pressTimer); pressTimer = null }
+
+	tilesWrap.addEventListener('pointerdown', (e) => {
+		const tile = e.target.closest('.gt')
+		if (!tile || (e.button !== undefined && e.button !== 0)) return
+		pressPath = tile.dataset.path; pressX = e.clientX; pressY = e.clientY; pressMoved = false
+		cancelPress()
+		pressTimer = setTimeout(() => {
+			pressTimer = null
+			if (pressMoved) return
+			gs.suppressClick = true // the click that follows a long-press must not re-toggle
+			if (!gs.selecting) enterSelect()
+			toggleSelect(pressPath)
+		}, LONGPRESS_MS)
+	})
+	tilesWrap.addEventListener('pointermove', (e) => {
+		if (pressTimer && (Math.abs(e.clientX - pressX) > 10 || Math.abs(e.clientY - pressY) > 10)) {
+			pressMoved = true
+			cancelPress()
+		}
+	})
+	tilesWrap.addEventListener('pointerup', cancelPress)
+	tilesWrap.addEventListener('pointerleave', cancelPress)
+	tilesWrap.addEventListener('pointercancel', cancelPress)
+
+	tilesWrap.addEventListener('click', (e) => {
+		const tile = e.target.closest('.gt')
+		if (!tile) return
+		const p = tile.dataset.path
+		if (gs.suppressClick) { gs.suppressClick = false; return }
+		if (gs.selecting) {
+			if (e.shiftKey) selectRange(p)
+			else toggleSelect(p)
+			return
+		}
+		if (e.metaKey || e.ctrlKey) {
+			enterSelect()
+			toggleSelect(p)
+			return
+		}
+		openModal(p)
+	})
+
+	// ---------- the detail modal with zoom ----------
+
+	function itemFor(p) {
+		return gs.items.find((i) => i.path === p) || null
+	}
+
+	function openModal(p) {
+		if (gs.modal) closeModal()
+		gs.opener = gs.tiles.get(p) || null
+		gs.modal = { path: p, z: 1, tx: 0, ty: 0 }
+		document.body.classList.add('modal-open')
+
+		const overlay = document.createElement('div')
+		overlay.className = 'g-modal'
+		const stage = document.createElement('div')
+		stage.className = 'g-stage'
+		const img = document.createElement('img')
+		img.className = 'g-full'
+		const ph = document.createElement('div')
+		ph.className = 'g-full-ph'
+		ph.hidden = true
+		ph.innerHTML = icon('image') + '<div class="g-noprev">Preview not supported by browsers</div>'
+		stage.append(img, ph)
+
+		const panel = document.createElement('div')
+		panel.className = 'g-meta'
+
+		const closeBtn = makeBtn('g-x', icon('x'), () => closeModal(), 'Close')
+		const prevBtn = makeBtn('g-nav g-prev', icon('chevron-left'), () => step(-1), 'Previous')
+		const nextBtn = makeBtn('g-nav g-next', icon('chevron-right'), () => step(1), 'Next')
+
+		const zoomBar = document.createElement('div')
+		zoomBar.className = 'g-zoombar'
+		zoomBar.append(
+			makeBtn('g-zbtn', icon('zoom-out'), () => zoomBy(1 / 1.25), 'Zoom out'),
+			makeBtn('g-zbtn', icon('zoom-in'), () => zoomBy(1.25), 'Zoom in'),
+			makeBtn('g-zbtn', 'Fit', () => setFit(), 'Fit'),
+			makeBtn('g-zbtn', '100%', () => setNatural(), 'Actual size'),
+		)
+
+		overlay.append(closeBtn, prevBtn, stage, nextBtn, zoomBar, panel)
+		document.body.append(overlay)
+		gs.modalEls = { overlay, stage, img, ph, panel }
+
+		// Zoom via one CSSOM transform. transform-origin is center (set in CSS).
+		function apply() {
+			img.style.transform = 'translate(' + gs.modal.tx + 'px,' + gs.modal.ty + 'px) scale(' + gs.modal.z + ')'
+			stage.classList.toggle('zoomed', gs.modal.z > 1.001)
+		}
+		function setFit() { gs.modal.z = 1; gs.modal.tx = 0; gs.modal.ty = 0; apply() }
+		function setNatural() {
+			const it = itemFor(gs.modal.path)
+			const rect = img.getBoundingClientRect()
+			if (it && rect.width > 0) {
+				// rect is the fit-scaled size at z=1; natural / fit gives the 100% factor.
+				const fitW = rect.width / gs.modal.z
+				gs.modal.z = Math.max(1, (img.naturalWidth || fitW) / fitW)
+			} else {
+				gs.modal.z = 2
+			}
+			gs.modal.tx = 0; gs.modal.ty = 0
+			apply()
+		}
+		function zoomAbout(factor, cx, cy) {
+			const z2 = Math.min(10, Math.max(1, gs.modal.z * factor))
+			const f = z2 / gs.modal.z
+			gs.modal.tx = cx - f * (cx - gs.modal.tx)
+			gs.modal.ty = cy - f * (cy - gs.modal.ty)
+			gs.modal.z = z2
+			if (gs.modal.z <= 1.001) { gs.modal.tx = 0; gs.modal.ty = 0 }
+			apply()
+		}
+		function zoomBy(factor) { zoomAbout(factor, 0, 0) }
+		gs.modalApply = { setFit, setNatural, zoomAbout, apply }
+
+		stage.addEventListener('wheel', (e) => {
+			e.preventDefault()
+			const r = stage.getBoundingClientRect()
+			zoomAbout(e.deltaY < 0 ? 1.15 : 1 / 1.15, e.clientX - r.left - r.width / 2, e.clientY - r.top - r.height / 2)
+		}, { passive: false })
+
+		stage.addEventListener('dblclick', () => {
+			if (gs.modal.z > 1.001) setFit()
+			else setNatural()
+		})
+
+		// Drag to pan when zoomed past fit.
+		let dragging = false, dragX = 0, dragY = 0
+		stage.addEventListener('pointerdown', (e) => {
+			if (gs.modal.z <= 1.001) return
+			dragging = true; dragX = e.clientX; dragY = e.clientY
+			stage.setPointerCapture(e.pointerId)
+		})
+		stage.addEventListener('pointermove', (e) => {
+			if (!dragging) return
+			gs.modal.tx += e.clientX - dragX
+			gs.modal.ty += e.clientY - dragY
+			dragX = e.clientX; dragY = e.clientY
+			apply()
+		})
+		const endDrag = () => { dragging = false }
+		stage.addEventListener('pointerup', endDrag)
+		stage.addEventListener('pointercancel', endDrag)
+
+		// Decide inside/outside in the CAPTURE phase — the modal owns clicks on its
+		// own chrome, and a bare-backdrop click closes it.
+		overlay.addEventListener('click', (e) => {
+			if (e.target === overlay) closeModal()
+		})
+
+		loadModal(p)
+	}
+
+	function step(delta) {
+		if (!gs.modal) return
+		const order = sortedPaths()
+		let i = order.indexOf(gs.modal.path) + delta
+		if (i < 0) i = 0
+		if (i >= order.length) i = order.length - 1
+		loadModal(order[i])
+	}
+
+	async function loadModal(p) {
+		if (!gs.modal) return
+		gs.modal.path = p
+		gs.modal.z = 1; gs.modal.tx = 0; gs.modal.ty = 0
+		const { img, ph } = gs.modalEls
+		img.style.transform = ''
+		const it = itemFor(p)
+		if (it && it.renderable) {
+			img.hidden = false; ph.hidden = true
+			img.setAttribute('src', galleryFileUrl(p, it.modified))
+		} else {
+			img.hidden = true; ph.hidden = false
+		}
+		const { json } = await api('/api/gallery/meta?path=' + encodeURIComponent(p))
+		if (!gs.modal || gs.modal.path !== p) return // navigated away mid-fetch
+		renderMeta(json && json.ok ? json : null, p)
+	}
+
+	function metaRow(label, valueNode) {
+		const row = document.createElement('div')
+		row.className = 'g-mrow'
+		const l = document.createElement('div'); l.className = 'g-mlabel'; l.textContent = label
+		const v = document.createElement('div'); v.className = 'g-mval'
+		if (typeof valueNode === 'string') v.textContent = valueNode
+		else if (valueNode) v.append(valueNode)
+		row.append(l, v)
+		return row
+	}
+
+	function renderMeta(m, p) {
+		const panel = gs.modalEls.panel
+		panel.textContent = ''
+		if (!m) {
+			panel.append(metaRow('File', p))
+			return
+		}
+		const title = document.createElement('div')
+		title.className = 'g-mtitle'
+		title.textContent = m.name
+		panel.append(title)
+		panel.append(metaRow('Folder', m.dir || '(top level)'))
+
+		const pathVal = document.createElement('div')
+		pathVal.className = 'g-path'
+		const pathText = document.createElement('span')
+		pathText.textContent = m.abspath || m.path
+		const copyBtn = makeBtn('g-copy', icon('copy'), () => { copyText(m.abspath || m.path); toast('Path copied') }, 'Copy path')
+		pathVal.append(pathText, copyBtn)
+		panel.append(metaRow('Path', pathVal))
+
+		panel.append(metaRow('Size', galleryHumanBytes(m.size) + ' (' + (m.size || 0).toLocaleString() + ' bytes)'))
+		panel.append(metaRow('Format', (m.format || '').toUpperCase()))
+		panel.append(metaRow('Dimensions', m.width && m.height ? m.width + ' × ' + m.height : '—'))
+		panel.append(metaRow('Created', galleryDate(m.created)))
+		panel.append(metaRow('Modified', galleryDate(m.modified)))
+		if (!m.renderable) {
+			const note = document.createElement('div')
+			note.className = 'g-mnote'
+			note.textContent = 'Preview not supported by browsers'
+			panel.append(note)
+		}
+	}
+
+	function closeModal() {
+		if (!gs.modal) return
+		if (gs.modalEls && gs.modalEls.overlay) gs.modalEls.overlay.remove()
+		gs.modal = null
+		gs.modalEls = null
+		document.body.classList.remove('modal-open')
+		// Restore focus to the opening tile, or the toolbar if it is gone.
+		const target = gs.opener && gs.opener.isConnected && gs.opener !== document.body ? gs.opener : toolbar.querySelector('button')
+		if (target && target.focus) target.focus()
+		gs.opener = null
+	}
+
+	// ---------- delete ----------
+
+	function openDeleteDialog() {
+		const paths = [...gs.selection]
+		if (!paths.length) return
+		const names = paths.map((p) => { const it = itemFor(p); return it ? it.name : p })
+
+		document.body.classList.add('modal-open')
+		const overlay = document.createElement('div')
+		overlay.className = 'g-modal g-confirm'
+		const card = document.createElement('div')
+		card.className = 'g-cbox'
+		const h = document.createElement('h2')
+		h.textContent = 'Permanently delete ' + paths.length + (paths.length === 1 ? ' image?' : ' images?')
+		const listEl = document.createElement('div')
+		listEl.className = 'g-clist'
+		for (const name of names) {
+			const li = document.createElement('div')
+			li.className = 'g-cli'
+			li.textContent = name
+			listEl.append(li)
+		}
+		const warn = document.createElement('p')
+		warn.className = 'g-cwarn'
+		warn.textContent = 'They will be removed from disk. This cannot be undone.'
+		const actions = document.createElement('div')
+		actions.className = 'g-cactions'
+		const cancel = makeBtn('g-btn', 'Cancel', () => teardown())
+		const confirm = makeBtn('g-btn g-danger', 'Delete ' + paths.length, () => doDelete(paths, teardown))
+		actions.append(cancel, confirm)
+		card.append(h, listEl, warn, actions)
+		overlay.append(card)
+		document.body.append(overlay)
+		overlay.addEventListener('click', (e) => { if (e.target === overlay) teardown() })
+		function teardown() {
+			overlay.remove()
+			if (!gs.modal) document.body.classList.remove('modal-open')
+		}
+		confirm.focus()
+	}
+
+	async function doDelete(paths, teardown) {
+		const { status, json } = await api('/api/gallery/delete', { method: 'POST', body: JSON.stringify({ paths }) })
+		teardown()
+		if (status !== 200 || !json || !json.ok) {
+			toast('Delete failed' + (json && json.error ? ': ' + json.error.message : '') + '.')
+			return
+		}
+		const okN = json.deleted.length
+		if (json.failed && json.failed.length) {
+			toast('Deleted ' + okN + '; could not delete: ' + json.failed.map((f) => f.path.split('/').pop()).join(', '))
+		} else {
+			toast('Deleted ' + okN + (okN === 1 ? ' image.' : ' images.'))
+		}
+		// Tile removal rides the workspace broadcast AND this response — idempotent by
+		// path either way.
+		for (const p of json.deleted) {
+			gs.selection.delete(p)
+			const tile = gs.tiles.get(p)
+			if (tile) { tile.remove(); gs.tiles.delete(p) }
+		}
+		gs.items = gs.items.filter((i) => !json.deleted.includes(i.path))
+		empty.hidden = gs.items.length > 0
+		exitSelect()
+		refresh()
+	}
+
+	// ---------- document-level keys ----------
+
+	function onKey(e) {
+		if (gs.modal) {
+			if (e.key === 'Escape') { e.preventDefault(); closeModal() }
+			else if (e.key === 'ArrowLeft') { e.preventDefault(); step(-1) }
+			else if (e.key === 'ArrowRight') { e.preventDefault(); step(1) }
+			else if (e.key === '+' || e.key === '=') { e.preventDefault(); gs.modalApply.zoomAbout(1.25, 0, 0) }
+			else if (e.key === '-') { e.preventDefault(); gs.modalApply.zoomAbout(1 / 1.25, 0, 0) }
+			return
+		}
+		if (gs.selecting && e.key === 'Escape') { e.preventDefault(); exitSelect() }
+	}
+	document.addEventListener('keydown', onKey)
+	gs.cleanup.push(() => document.removeEventListener('keydown', onKey))
+
+	// ---------- data ----------
+
+	async function load() {
+		const { json } = await api('/api/gallery?dir=' + encodeURIComponent(gs.src) + '&recursive=' + (gs.recursive ? 'true' : 'false'))
+		if (!json || !json.ok) {
+			empty.hidden = false
+			empty.textContent = 'Could not load this folder.'
+			return
+		}
+		gs.items = json.items || []
+		gs.truncated = !!json.truncated
+		buildAll()
+		renderToolbar()
+	}
+
+	async function refresh() {
+		const { json } = await api('/api/gallery?dir=' + encodeURIComponent(gs.src) + '&recursive=' + (gs.recursive ? 'true' : 'false'))
+		if (!json || !json.ok) return
+		gs.truncated = !!json.truncated
+		syncItems(json.items || [])
+	}
+
+	renderToolbar()
+	load()
+
+	return {
+		refresh,
+		dispose() {
+			closeModal()
+			cancelPress()
+			for (const fn of gs.cleanup) fn()
+			gs.cleanup = []
+		},
+	}
 }
 
 $('main').addEventListener('click', async (e) => {
@@ -4952,6 +5716,10 @@ function connectWs() {
 				if (!$('searchModal').hidden)
 					renderSearch($('csmInput').value)
 			}
+			// Images added or removed on disk ride this same broadcast. Each mounted
+			// gallery re-fetches its listing and syncs IN PLACE — never a rebuild, so a
+			// live selection, a native menu, or the open modal keeps its DOM references.
+			refreshGalleries()
 		} else if (msg.type === 'canvas') {
 			if (msg.path === state.activeId)
 				renderCanvas() // full re-render; state loss accepted in MVP
