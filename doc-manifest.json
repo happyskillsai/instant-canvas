@@ -67,7 +67,7 @@
         "Hot reload",
         "Version handshake"
       ],
-      "line_count": 181,
+      "line_count": 185,
       "links_to": [
         "docs/canvas-schema.md",
         "docs/cli.md",
@@ -86,6 +86,7 @@
         "scripts/lib/scan.js",
         "scripts/lib/mdcanvas.js",
         "scripts/lib/gallery.js",
+        "scripts/lib/browse.js",
         "scripts/lib/imagemeta.js",
         "scripts/lib/theme.js",
         "scripts/lib/themestore.js",
@@ -238,7 +239,7 @@
         "CSP shim",
         "Icons and vendored assets"
       ],
-      "line_count": 122,
+      "line_count": 123,
       "links_to": [
         "docs/architecture.md",
         "docs/canvas-schema.md",
@@ -591,7 +592,7 @@
         "Network perimeter",
         "What this does NOT protect against"
       ],
-      "line_count": 63,
+      "line_count": 65,
       "links_to": [
         "docs/architecture.md"
       ],
@@ -610,6 +611,7 @@
         "scripts/lib/markdownsrc.js",
         "scripts/lib/mdcanvas.js",
         "scripts/lib/gallery.js",
+        "scripts/lib/browse.js",
         "scripts/lib/fsatomic.js",
         "scripts/kernel.js",
         "scripts/instantcanvas.js"
@@ -639,7 +641,7 @@
         "Security regressions",
         "Browser verification"
       ],
-      "line_count": 104,
+      "line_count": 107,
       "links_to": [
         "docs/gotchas/frontend.md",
         "docs/gotchas/testing.md",
