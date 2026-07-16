@@ -112,7 +112,7 @@ test('the installed bin is wired to a shebanged entry', { skip }, () => {
 test('the installed bin runs the full agentic loop from a scratch workspace', { skip, timeout: 120_000 }, () => {
 	const lean = runBin(['catalog'])
 	assert.equal(lean.code, 0, lean.stderr)
-	assert.equal(Object.keys(lean.json.blocks).length, 6)
+	assert.equal(Object.keys(lean.json.blocks).length, 7)
 
 	const stamped = runBin(['stamp', 'report.canvas.json'])
 	assert.equal(stamped.code, 0, stamped.stderr)

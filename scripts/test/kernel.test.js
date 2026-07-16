@@ -136,8 +136,18 @@ function makeWorkspace() {
 	fs.writeFileSync(path.join(root, '.hidden', 'h.json'), '{"instantcanvas":1,"title":"no","blocks":[]}')
 	fs.mkdirSync(path.join(root, 'node_modules'))
 	fs.writeFileSync(path.join(root, 'node_modules', 'm.json'), '{"instantcanvas":1,"title":"no","blocks":[]}')
+	// A gallery folder: a real 1x1 PNG, a nested GIF, and a metadata-only HEIC.
+	fs.mkdirSync(path.join(root, 'photos'))
+	fs.writeFileSync(path.join(root, 'photos', 'a.png'), GALLERY_PNG)
+	fs.mkdirSync(path.join(root, 'photos', 'holiday'))
+	fs.writeFileSync(path.join(root, 'photos', 'holiday', 'b.gif'), GALLERY_GIF)
+	fs.writeFileSync(path.join(root, 'photos', 'fake.heic'), Buffer.from('not a real heic'))
 	return root
 }
+
+// A 1x1 transparent PNG, and a 2x2 GIF header (dimensions readable, bytes valid enough).
+const GALLERY_PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64')
+const GALLERY_GIF = (() => { const b = Buffer.alloc(13); b.write('GIF89a', 0, 'ascii'); b.writeUInt16LE(2, 6); b.writeUInt16LE(2, 8); return b })()
 
 // Shared kernel-under-test state (started once, shut down by the last test).
 const K = { root: null, child: null, port: 0, token: '', auth: {} }
@@ -587,6 +597,158 @@ test('kernel: the removed reader-facing routes are gone — 404, and nothing is 
 	}
 	assert.ok(fs.existsSync(path.join(dir, 'a.canvas.json')), 'nothing was deleted by the dead route')
 	fs.rmSync(dir, { recursive: true, force: true })
+})
+
+test('kernel: GET /api/gallery lists images under a folder, recursively', async () => {
+	const r = await httpReq({ port: K.port, path: '/api/gallery?dir=photos', headers: K.auth })
+	assert.equal(r.status, 200)
+	assert.equal(r.json.ok, true)
+	assert.equal(r.json.dir, 'photos')
+	assert.deepEqual(r.json.items.map((i) => i.path).sort(), ['photos/a.png', 'photos/fake.heic', 'photos/holiday/b.gif'])
+	assert.equal(typeof r.json.truncated, 'boolean', 'the truncation flag is always present')
+	assert.equal(r.json.items.find((i) => i.path === 'photos/fake.heic').renderable, false)
+})
+
+test('kernel: gallery routes are behind the token like every other route', async () => {
+	assert.equal((await httpReq({ port: K.port, path: '/api/gallery?dir=photos' })).status, 403)
+	assert.equal((await httpReq({ port: K.port, path: '/api/gallery/meta?path=photos/a.png' })).status, 403)
+	assert.equal((await httpReq({ port: K.port, path: '/api/gallery/file?path=photos/a.png' })).status, 403)
+})
+
+test('kernel: SECURITY — gallery routes decide from the extension and never leak a non-image', async () => {
+	// The .env-leak rule, applied to every gallery surface: a non-image path is a
+	// 404 whose body carries none of the file's bytes.
+	for (const p of ['/api/gallery/meta?path=.env', '/api/gallery/file?path=.env', '/api/gallery/meta?path=secrets.txt', '/api/gallery/file?path=secrets.txt', '/api/gallery/meta?path=report.canvas.json']) {
+		const r = await httpReq({ port: K.port, path: p, headers: K.auth })
+		assert.equal(r.status, 404, p)
+		assert.ok(!r.text.includes('sk-live-topsecret'), `${p} leaked file bytes`)
+		assert.ok(!r.text.includes('API_KEY'), `${p} leaked file bytes`)
+	}
+})
+
+test('kernel: gallery routes refuse traversal, missing folders, and a file-as-folder', async () => {
+	assert.equal((await httpReq({ port: K.port, path: '/api/gallery?dir=../', headers: K.auth })).status, 404)
+	assert.equal((await httpReq({ port: K.port, path: '/api/gallery/file?path=../../etc/hosts', headers: K.auth })).status, 404)
+	assert.equal((await httpReq({ port: K.port, path: '/api/gallery?dir=nope', headers: K.auth })).status, 404)
+	assert.equal((await httpReq({ port: K.port, path: '/api/gallery?dir=report.canvas.json', headers: K.auth })).status, 404)
+})
+
+test('kernel: /api/gallery/meta returns dimensions; a HEIC answers here but its file 404s', async () => {
+	const meta = await httpReq({ port: K.port, path: '/api/gallery/meta?path=photos/a.png', headers: K.auth })
+	assert.equal(meta.status, 200)
+	assert.equal(meta.json.width, 1)
+	assert.equal(meta.json.height, 1)
+	assert.equal(meta.json.format, 'png')
+	assert.equal(typeof meta.json.abspath, 'string')
+
+	const heicMeta = await httpReq({ port: K.port, path: '/api/gallery/meta?path=photos/fake.heic', headers: K.auth })
+	assert.equal(heicMeta.status, 200, 'a HEIC is a metadata-only card')
+	assert.equal(heicMeta.json.width, null)
+	assert.equal(heicMeta.json.renderable, false)
+	const heicFile = await httpReq({ port: K.port, path: '/api/gallery/file?path=photos/fake.heic', headers: K.auth })
+	assert.equal(heicFile.status, 404, 'a browser cannot draw HEIC, so the file route refuses it')
+})
+
+test('kernel: /api/gallery/file streams image bytes with the right Content-Type and an immutable cache', async () => {
+	const png = await httpReq({ port: K.port, path: '/api/gallery/file?path=photos/a.png', headers: K.auth })
+	assert.equal(png.status, 200)
+	assert.equal(png.headers['content-type'], 'image/png')
+	assert.match(png.headers['cache-control'], /immutable/)
+	assert.equal(png.headers['x-content-type-options'], 'nosniff')
+	const gif = await httpReq({ port: K.port, path: '/api/gallery/file?path=photos/holiday/b.gif', headers: K.auth })
+	assert.equal(gif.status, 200)
+	assert.equal(gif.headers['content-type'], 'image/gif')
+})
+
+test('kernel: GET /api/canvas on a FOLDER synthesises a gallery canvas, nothing written', async () => {
+	const before = fs.readdirSync(K.root, { recursive: true }).sort().join('|')
+	const r = await httpReq({ port: K.port, path: '/api/canvas?path=photos', headers: K.auth })
+	assert.equal(r.status, 200)
+	assert.equal(r.json.ok, true)
+	assert.equal(r.json.canvas.blocks[0].type, 'gallery')
+	assert.equal(r.json.canvas.blocks[0].src, 'photos')
+	assert.equal(r.json.canvas.createdWith, PKG_VERSION, 'createdWith is honest — the runtime authored it')
+	assert.ok(r.json.theme, 'a folder wears the workspace default theme')
+	assert.equal(fs.readdirSync(K.root, { recursive: true }).sort().join('|'), before, 'nothing written to disk')
+})
+
+test('kernel: POST /api/gallery/delete removes exactly the named files and nothing else', async () => {
+	const dir = path.join(K.root, 'del1')
+	fs.mkdirSync(dir)
+	for (const n of ['x.png', 'y.png', 'z.png'])
+		fs.writeFileSync(path.join(dir, n), GALLERY_PNG)
+	const r = await httpReq({ port: K.port, method: 'POST', path: '/api/gallery/delete', headers: K.auth, body: { paths: ['del1/x.png', 'del1/z.png'] } })
+	assert.equal(r.status, 200)
+	assert.deepEqual(r.json.deleted.sort(), ['del1/x.png', 'del1/z.png'])
+	assert.deepEqual(r.json.failed, [])
+	assert.equal(fs.existsSync(path.join(dir, 'x.png')), false)
+	assert.equal(fs.existsSync(path.join(dir, 'z.png')), false)
+	assert.equal(fs.existsSync(path.join(dir, 'y.png')), true, 'the unselected sibling survives — the count is a promise')
+})
+
+test('kernel: gallery delete refuses the WHOLE batch on ONE bad path, deleting nothing', async () => {
+	const dir = path.join(K.root, 'del2')
+	fs.mkdirSync(dir)
+	fs.writeFileSync(path.join(dir, 'ok.png'), GALLERY_PNG)
+	fs.writeFileSync(path.join(dir, 'note.json'), '{}')
+	fs.mkdirSync(path.join(dir, 'folder'))
+	const batches = [
+		['del2/ok.png', 'del2/note.json'],  // a .json — not an image
+		['del2/ok.png', '.env'],            // a non-image secret
+		['del2/ok.png', 'del2/folder'],     // a directory
+		['del2/ok.png', '../escape.png'],   // traversal outside the root
+	]
+	let symlinked = true
+	try { fs.symlinkSync(path.join(dir, 'ok.png'), path.join(dir, 'link.png')) } catch { symlinked = false }
+	if (symlinked)
+		batches.push(['del2/ok.png', 'del2/link.png']) // a symlink
+	for (const paths of batches) {
+		const r = await httpReq({ port: K.port, method: 'POST', path: '/api/gallery/delete', headers: K.auth, body: { paths } })
+		assert.equal(r.status, 400, JSON.stringify(paths))
+		assert.equal(r.json.ok, false)
+	}
+	assert.equal(fs.existsSync(path.join(dir, 'ok.png')), true, 'the good file in every refused batch survived — atomic refusal')
+})
+
+test('kernel: gallery delete never removes a directory, even one named like an image', async () => {
+	// A directory named `del.png` passes the extension gate, so it is the lstat guard
+	// (not the extension) that must refuse it — the sharp case for "never a directory".
+	const dir = path.join(K.root, 'del.png')
+	fs.mkdirSync(dir)
+	const r = await httpReq({ port: K.port, method: 'POST', path: '/api/gallery/delete', headers: K.auth, body: { paths: ['del.png'] } })
+	assert.equal(r.status, 400)
+	assert.equal(r.json.error.code, 'NOT_A_FILE')
+	assert.equal(fs.existsSync(dir), true, 'the folder is the user\'s — never removed')
+})
+
+test('kernel: gallery delete reports partial failure per file rather than throwing', async () => {
+	if (process.getuid && process.getuid() === 0)
+		return // root bypasses file permissions, so the undeletable case cannot be staged
+	const dir = path.join(K.root, 'del3')
+	fs.mkdirSync(dir)
+	fs.writeFileSync(path.join(dir, 'a.png'), GALLERY_PNG)
+	const locked = path.join(dir, 'locked')
+	fs.mkdirSync(locked)
+	fs.writeFileSync(path.join(locked, 'b.png'), GALLERY_PNG)
+	fs.chmodSync(locked, 0o555) // r-x, no write → unlink inside fails EACCES
+	try {
+		const r = await httpReq({ port: K.port, method: 'POST', path: '/api/gallery/delete', headers: K.auth, body: { paths: ['del3/a.png', 'del3/locked/b.png'] } })
+		assert.equal(r.status, 200)
+		assert.deepEqual(r.json.deleted, ['del3/a.png'])
+		assert.equal(r.json.failed.length, 1)
+		assert.equal(r.json.failed[0].path, 'del3/locked/b.png')
+		assert.equal(fs.existsSync(path.join(dir, 'a.png')), false, 'the deletable file is gone')
+		assert.equal(fs.existsSync(path.join(locked, 'b.png')), true, 'the undeletable file survives, reported not thrown')
+	} finally {
+		fs.chmodSync(locked, 0o755) // restore so the temp dir can be cleaned up
+	}
+})
+
+test('kernel: gallery delete refuses more than 500 paths at once, deleting nothing', async () => {
+	const paths = Array.from({ length: 501 }, (_, i) => `photos/none${i}.png`)
+	const r = await httpReq({ port: K.port, method: 'POST', path: '/api/gallery/delete', headers: K.auth, body: { paths } })
+	assert.equal(r.status, 400)
+	assert.equal(r.json.error.code, 'TOO_MANY_PATHS')
 })
 
 test('kernel: shutdown removes the registry entry and exits 0', async () => {

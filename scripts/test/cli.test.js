@@ -11,6 +11,9 @@ const CLI = path.join(__dirname, '..', 'instantcanvas.js')
 const FIXTURES = path.join(__dirname, 'fixtures')
 process.env.INSTANTCANVAS_STATE_DIR = process.env.INSTANTCANVAS_STATE_DIR || fs.mkdtempSync(path.join(os.tmpdir(), 'ic-clistate-'))
 
+// A 1x1 transparent PNG, for the gallery `open <folder>` tests.
+const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64')
+
 function run(args, opts = {}) {
 	const r = spawnSync(process.execPath, [CLI, ...args], {
 		encoding: 'utf8',
@@ -93,7 +96,7 @@ test('cli: LEAK REGRESSION — a file that is neither a canvas nor a document is
 test('cli: catalog — lean index by default, one schema per name, --full for everything', () => {
 	const lean = run(['catalog'])
 	assert.equal(lean.code, 0)
-	assert.equal(Object.keys(lean.json.blocks).length, 6)
+	assert.equal(Object.keys(lean.json.blocks).length, 7)
 	assert.equal(Object.keys(lean.json.chartKinds).length, 26)
 	assert.equal(Object.keys(lean.json.fieldTypes).length, 16)
 	assert.ok(!lean.stdout.includes('"properties"'), 'lean index carries no schemas')
@@ -186,6 +189,20 @@ test('cli: open lifecycle — display open, kernel reuse, kill -9 recovery, stop
 	assert.equal(opened4.code, 0)
 	assert.deepEqual(JSON.parse(fs.readFileSync(resultFile, 'utf8')), opened4.json)
 
+	// a FOLDER opens as a gallery — the envelope is synthesised in memory, exactly
+	// like a markdown file, and nothing is written to disk anywhere in the workspace.
+	fs.mkdirSync(path.join(root, 'photos'))
+	fs.writeFileSync(path.join(root, 'photos', 'a.png'), PNG)
+	fs.mkdirSync(path.join(root, 'photos', 'holiday'))
+	fs.writeFileSync(path.join(root, 'photos', 'holiday', 'b.png'), PNG)
+	const snapBefore = fs.readdirSync(root, { recursive: true }).sort().join('|')
+	const gallery = run(['open', 'photos', '--no-open'], { cwd: root })
+	assert.equal(gallery.code, 0, gallery.stderr)
+	assert.equal(gallery.json.status, 'opened')
+	assert.equal(gallery.json.canvas, 'photos')
+	assert.match(gallery.json.url, /#\/c\/photos$/)
+	assert.equal(fs.readdirSync(root, { recursive: true }).sort().join('|'), snapBefore, 'open <folder> writes nothing to disk')
+
 	// stop is clean and idempotent
 	const stop = run(['stop', '--workspace', root])
 	assert.equal(stop.code, 0)
@@ -194,6 +211,26 @@ test('cli: open lifecycle — display open, kernel reuse, kill -9 recovery, stop
 	assert.equal(again.code, 0)
 	const s4 = run(['status', '--workspace', root])
 	assert.equal(s4.json.running, false)
+})
+
+test('cli: a folder is open-only — validate/stamp/print/theme each refuse it, teaching the fix', () => {
+	const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'ic-galcli-')))
+	fs.mkdirSync(path.join(root, 'photos'))
+	fs.writeFileSync(path.join(root, 'photos', 'a.png'), PNG)
+	const before = fs.readdirSync(path.join(root, 'photos')).sort().join('|')
+	for (const [cmd, extra] of [['validate', []], ['stamp', []], ['print', ['--out', 'out.pdf']], ['theme', []]]) {
+		const r = run([cmd, 'photos', ...extra], { cwd: root })
+		assert.equal(r.code, 1, `${cmd} should exit 1`)
+		assert.equal(r.json.error.code, 'INVALID_SPEC', cmd)
+		assert.match(r.json.error.message, /folder/, `${cmd} names it a folder`)
+		assert.match(r.json.error.message, /open/, `${cmd} points at open`)
+	}
+	assert.equal(fs.readdirSync(path.join(root, 'photos')).sort().join('|'), before, 'no refusal touched the folder')
+
+	// a missing folder is a plain failure, not a crash
+	const missing = run(['open', 'nope', '--no-open'], { cwd: root })
+	assert.equal(missing.code, 1)
+	assert.equal(missing.json.status, 'error')
 })
 
 test('cli: an unknown flag is refused with usage, before anything runs', () => {

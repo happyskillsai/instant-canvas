@@ -187,6 +187,24 @@ function assertReadable(abs, command) {
 	const ext = path.extname(abs).toLowerCase()
 	if (ext === '.json' || hasMarkdownExtension(abs))
 		return
+	// A directory is `open`-only: `open <folder>` renders its images as a gallery,
+	// the same way `open <file.md>` renders markdown. Nothing else acts on a folder —
+	// there is no contract to validate, no envelope to stamp, no file to print or theme.
+	let isDir = false
+	try {
+		isDir = fs.statSync(abs).isDirectory()
+	} catch { /* missing — reported by the caller's existence check */ }
+	if (isDir) {
+		if (command === 'open')
+			return
+		const teach = {
+			validate: 'a folder has no contract to check — run `open <folder>` to view its images',
+			stamp: 'a folder has no envelope to stamp — run `open <folder>` to view its images',
+			print: 'a folder has no paper to print — run `open <folder>` to view its images on screen',
+			theme: 'a folder has no theme of its own — run `open <folder>` to view its images',
+		}[command] || `${command} does not act on a folder`
+		specError('INVALID_SPEC', `${path.basename(abs)} is a folder, and ${teach}.`)
+	}
 	specError('INVALID_SPEC',
 		`${path.basename(abs)} is neither a canvas (*.json) nor a markdown document (.md, .mdx, .markdown), so ${command} will not read it.`)
 }
@@ -270,10 +288,12 @@ async function cmdOpen(args) {
 		specError('PATH_OUTSIDE_WORKSPACE',
 			`${canvasAbs} is outside the workspace root ${root}. Pass --workspace <dir> pointing at the folder that contains the canvas.`)
 	assertReadable(canvasAbs, 'open')
+	const isDir = fs.statSync(canvasAbs).isDirectory()
 
-	// A markdown file is already the data; the runtime synthesises the envelope
-	// for it. There is nothing to validate, and nothing for the agent to write.
-	if (!hasMarkdownExtension(rel)) {
+	// A markdown file — or a folder (a gallery) — is already the data; the runtime
+	// synthesises the envelope for it. There is nothing to validate, and nothing for
+	// the agent to write.
+	if (!hasMarkdownExtension(rel) && !isDir) {
 		// Never launch UI for an invalid canvas.
 		const verdict = validate(fs.readFileSync(canvasAbs, 'utf8'), { root, self: rel })
 		log(renderHuman(verdict, rel))

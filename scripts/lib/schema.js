@@ -102,6 +102,13 @@ const SHAPES = {
 			frames: { type: 'array', required: true, itemShape: 'sweepFrame', description: 'Two or more steps, in slider order. Each carries its own data rows.' },
 		},
 	},
+	gallerySort: {
+		description: 'A gallery\'s initial sort order (the reader can change it in the browser).',
+		properties: {
+			by: { type: 'string', enum: ['name', 'created', 'size'], default: 'name', description: 'Sort key: file name, date created, or size.' },
+			dir: { type: 'string', enum: ['asc', 'desc'], default: 'asc', description: 'Sort direction.' },
+		},
+	},
 	fieldset: {
 		description: 'Groups related fields under a legend, optionally as a multi-column grid. Appears as an item of a form\'s "fields" array. Fieldsets cannot be nested.',
 		properties: {
@@ -765,6 +772,27 @@ const BLOCKS = {
 			rows: { type: 'array', required: true, description: 'Array of row objects keyed by column "key".', example: [{ customer: 'Acme', rev: 43000 }] },
 		},
 		example: { type: 'table', title: 'Top customers', columns: [{ key: 'customer', label: 'Customer' }, { key: 'rev', label: 'Revenue', format: 'currency' }], rows: [{ customer: 'Acme', rev: 43000 }] },
+	},
+	gallery: {
+		kind: 'display',
+		description: 'Every image under a workspace folder, as a live grid or list the reader can sort, zoom, select and delete. Set "src" to the folder (recursive unless disabled); tiles appear and vanish as files change on disk. The initial "layout" and "sort" are only the opening view — the reader can change both.',
+		aliases: ['images', 'photos', 'image-grid'],
+		notes: [
+			'If the user just wants to SEE a folder\'s images, do NOT write a canvas — run `open <folder>` and the runtime synthesises the envelope itself, exactly as `open <file.md>` does for markdown. Use this block only to place a gallery beside other blocks.',
+			'Previewable: png, jpg, jpeg, gif, webp, avif, bmp, ico, svg. HEIC/HEIF and TIFF are LISTED with their metadata but shown as a placeholder card — a browser cannot draw them.',
+			'"src" must be a folder INSIDE the workspace root — a path outside it cannot be referenced.',
+			'Deletion is the READER\'s, in the browser: they multi-select and permanently delete. The agent never deletes images and is not notified when the reader does — there is no session and no result to read.',
+			'A gallery cannot render on paper — it scrolls, selects and deletes — so it is invalid beside an envelope-level "document", and its deck toggle is muted in the browser.',
+		],
+		properties: {
+			type: { type: 'string', required: true, enum: ['gallery'] },
+			title: { type: 'string', description: 'Card title shown above the grid.', example: 'Product photos' },
+			src: { type: 'string', required: true, description: 'Workspace-relative path to the FOLDER of images (not a single file). Every image under it is listed — subfolders too, unless "recursive" is false.', example: 'photos' },
+			recursive: { type: 'boolean', default: true, description: 'Include images in subfolders. Set false to list only the top folder.' },
+			layout: { type: 'string', enum: ['grid', 'list'], default: 'grid', description: 'Initial view. The reader can toggle grid ⇄ list.' },
+			sort: { type: 'object', itemShape: 'gallerySort', description: 'Initial sort order — {"by":"name"|"created"|"size","dir":"asc"|"desc"}, default name/asc. Initial only; the reader re-sorts.' },
+		},
+		example: { type: 'gallery', src: 'photos', layout: 'grid', sort: { by: 'created', dir: 'desc' } },
 	},
 	form: {
 		kind: 'interactive',

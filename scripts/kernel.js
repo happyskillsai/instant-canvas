@@ -16,6 +16,8 @@ const { scan, dirsUnder, readCanvasFile, MAX_CANVAS_BYTES } = require('./lib/sca
 const { validate, collectBlocks, isInteractiveBlock, flattenFields } = require('./lib/validate')
 const { readMarkdownSrc, inlineLocalImages, inlineImageFile, hasMarkdownExtension, renderableMarkdown, MAX_COVER_IMAGE_BYTES } = require('./lib/markdownsrc')
 const { virtualCanvasFor } = require('./lib/mdcanvas')
+const { listImages, imageStat, virtualGalleryFor, isRenderableImage, isGalleryImage, galleryMime, normalizeRelDir } = require('./lib/gallery')
+const { dimensions } = require('./lib/imagemeta')
 const { companionFor, enhancesOf } = require('./lib/companion')
 const { Sessions } = require('./lib/session')
 const envfile = require('./lib/envfile')
@@ -160,6 +162,23 @@ function loadCanvas(rel) {
 		if (!canvas)
 			return { status: 404, body: { ok: false, message: `Document not found: ${rel}` } }
 		resolveMarkdownSrc(canvas, { native: true })
+		return { status: 200, body: { ok: true, path: rel, canvas, warnings: [], ...themeFor(rel, null) }, canvas }
+	}
+
+	// A directory IS a gallery — its canvas is synthesised in memory, never on disk,
+	// the same way a markdown file synthesises its own. This branch sits AFTER the
+	// markdown branch and BEFORE the canvas-file loader: a directory is not an
+	// open-and-parse risk (statSync reads no bytes), so the `.env`-leak gates that
+	// refuse non-canvas FILES inside loadCanvasFile stay exactly as they are. A folder
+	// has no companion (`enhances` is markdown-only) but can wear the workspace theme.
+	let dstat = null
+	try {
+		dstat = fs.statSync(abs)
+	} catch { /* missing — falls through to the file loader's 404 */ }
+	if (dstat && dstat.isDirectory()) {
+		const canvas = virtualGalleryFor(ROOT, rel)
+		if (!canvas)
+			return { status: 404, body: { ok: false, message: `Folder not found: ${rel}` } }
 		return { status: 200, body: { ok: true, path: rel, canvas, warnings: [], ...themeFor(rel, null) }, canvas }
 	}
 
@@ -681,6 +700,45 @@ async function route(req, res, url) {
 		return sendJson(res, 200, { ...load.body, session: active ? { id: active.id, expiresAt: active.expiresAt } : null })
 	}
 
+	// The listing behind a gallery block: every image under a workspace folder,
+	// stat-only. 404 when the folder is not a directory inside the root.
+	if (method === 'GET' && p === '/api/gallery') {
+		const dir = url.searchParams.get('dir') || ''
+		const recursive = url.searchParams.get('recursive') !== 'false'
+		const result = listImages(ROOT, dir, { recursive })
+		if (!result)
+			return sendJson(res, 404, { ok: false, message: 'Not a folder inside this workspace.' })
+		const relDir = normalizeRelDir(dir)
+		return sendJson(res, 200, { ok: true, dir: relDir ? relDir.split(path.sep).join('/') : '.', items: result.items, truncated: result.truncated })
+	}
+
+	// One image's full metadata: the stat fields PLUS its pixel dimensions. The
+	// extension gate and confinement run BEFORE any open (imageStat), so a
+	// non-image path — `.env` — is a 404 whose body carries none of the file.
+	if (method === 'GET' && p === '/api/gallery/meta') {
+		const meta = imageStat(ROOT, url.searchParams.get('path') || '')
+		if (!meta)
+			return sendJson(res, 404, { ok: false, message: 'Not an image in this workspace.' })
+		// dimensions() reads a bounded header of a file we have already proven is an
+		// allowed image; HEIC/TIFF answer here (as metadata-only cards) with null dims.
+		const d = dimensions(meta.abspath)
+		return sendJson(res, 200, { ok: true, ...meta, width: d ? d.width : null, height: d ? d.height : null })
+	}
+
+	// The image bytes, streamed. Renderable extensions ONLY — a HEIC is a 404 here
+	// even though /meta answers for it — and the decision is from the extension, never
+	// by opening a file the gate would refuse (the `.env` rule). `?v=<mtimeMs>` makes
+	// the long immutable cache safe: a changed file is a changed URL.
+	if (method === 'GET' && p === '/api/gallery/file')
+		return serveGalleryFile(res, url.searchParams.get('path') || '')
+
+	// The dangerous one. PERMANENT, per-file, reader-initiated. The agent is not
+	// involved at all: no session, no CLI door, no stdout event.
+	if (method === 'POST' && p === '/api/gallery/delete') {
+		const body = await readBody(req)
+		return handleGalleryDelete(res, body)
+	}
+
 	if (method === 'GET' && p === '/api/theme/presets')
 		return sendJson(res, 200, {
 			ok: true,
@@ -815,6 +873,99 @@ function serveAsset(res, rest) {
 		'Cache-Control': 'no-cache',
 	})
 	res.end(data)
+}
+
+/**
+ * Stream one gallery image. The whole security story is two lines before any
+ * open: the extension must be RENDERABLE (never the metadata-only set, never a
+ * non-image), and the path must confine to the root. `lstat` then refuses a
+ * symlink or directory — the gate reads the link name, and a `photo.png`
+ * symlinked at `.env` would otherwise leak the target. A refusal is a generic
+ * JSON 404 that quotes none of the file, exactly as the `.env` rule requires.
+ */
+function serveGalleryFile(res, rel) {
+	if (typeof rel !== 'string' || !isRenderableImage(rel))
+		return sendJson(res, 404, { ok: false, message: 'Not a previewable image.' })
+	const abs = path.resolve(ROOT, rel)
+	if (!insideRoot(ROOT, abs))
+		return sendJson(res, 404, { ok: false, message: 'Not found.' })
+	let st
+	try {
+		st = fs.lstatSync(abs)
+	} catch {
+		return sendJson(res, 404, { ok: false, message: 'Not found.' })
+	}
+	if (!st.isFile())
+		return sendJson(res, 404, { ok: false, message: 'Not found.' })
+	res.writeHead(200, {
+		'Content-Type': galleryMime(rel),
+		'X-Content-Type-Options': 'nosniff',
+		'Cache-Control': 'max-age=31536000, immutable',
+		'Content-Length': st.size,
+	})
+	const stream = fs.createReadStream(abs)
+	stream.on('error', () => { try { res.destroy() } catch { /* client gone */ } })
+	stream.pipe(res)
+}
+
+/**
+ * Permanently delete a set of gallery images. This is a new risk class for the
+ * runtime — every other delete only ever removed a marker-verified canvas it
+ * authored; these are the USER's photos — so every guard exists deliberately:
+ *
+ *  - EVERY path is validated BEFORE ANY file is unlinked, and one bad path fails
+ *    the whole request with NOTHING deleted, naming the offender. The browser can
+ *    only send what the listing gave it, but the browser is not trusted.
+ *  - A path must confine to the root, its extension must be in the image union
+ *    set (never a .json, a .env, a dir name), and `lstat` must show a regular
+ *    file — no directories, no symlinks.
+ *  - A directory is NEVER removed, not even one left empty. This is deliberately
+ *    UNLIKE the old collection delete, which removed its own emptied folder:
+ *    these folders are the user's, not ours.
+ *  - Partial failure (EACCES, ENOENT after a race) is reported per file, never
+ *    thrown, and the response counts equal on-disk reality — a count in a
+ *    confirmation is a promise.
+ */
+function handleGalleryDelete(res, body) {
+	const paths = body && Array.isArray(body.paths) ? body.paths : null
+	if (!paths)
+		return sendJson(res, 400, { ok: false, error: { code: 'INVALID_SPEC', message: '"paths" must be an array of workspace-relative image paths.' } })
+	if (paths.length > 500)
+		return sendJson(res, 400, { ok: false, error: { code: 'TOO_MANY_PATHS', message: `At most 500 images can be deleted per request (got ${paths.length}).` } })
+
+	// Validate the WHOLE batch first; any failure returns before a single unlink.
+	const targets = []
+	for (const rel of paths) {
+		const bad = (code, message) => sendJson(res, 400, { ok: false, error: { code, message, path: typeof rel === 'string' ? rel : String(rel) } })
+		if (typeof rel !== 'string')
+			return bad('INVALID_SPEC', 'Every path must be a string — nothing was deleted.')
+		const abs = path.resolve(ROOT, rel)
+		if (!insideRoot(ROOT, abs))
+			return bad('PATH_OUTSIDE_WORKSPACE', `"${rel}" is outside the workspace root — nothing was deleted.`)
+		if (!isGalleryImage(rel))
+			return bad('NOT_AN_IMAGE', `"${rel}" is not an image — the whole request is refused and nothing was deleted.`)
+		let st = null
+		try { st = fs.lstatSync(abs) } catch { /* missing — reported below */ }
+		if (!st || !st.isFile()) // refuses directories AND symlinks
+			return bad('NOT_A_FILE', `"${rel}" is not a regular file — nothing was deleted.`)
+		targets.push({ rel, abs })
+	}
+
+	// All validated — unlink each, reporting partial failure per file rather than throwing.
+	const deleted = [], failed = []
+	for (const { rel, abs } of targets) {
+		try {
+			fs.unlinkSync(abs)
+			deleted.push(rel)
+		} catch (err) {
+			failed.push({ path: rel, code: err && err.code ? err.code : 'EUNKNOWN' })
+		}
+	}
+	// Log COUNTS only — never into the agent's context, and the reader owns this.
+	klog('gallery delete:', deleted.length, 'deleted,', failed.length, 'failed')
+	// The fs.watch broadcast repaints the grid for free; the body lets the dialog
+	// report honestly without racing the watcher.
+	return sendJson(res, 200, { ok: true, deleted, failed })
 }
 
 // ---------------------------------------------------------------- websocket (hand-rolled, RFC 6455)

@@ -71,6 +71,8 @@ function deckBlockers(canvas) {
 	for (const { block } of collectBlocks(canvas)) {
 		if (isInteractiveBlock(block))
 			out.push(block.type)
+		else if (isObj(block) && block.type === 'gallery')
+			out.push('gallery') // a gallery scrolls/selects/deletes — paper cannot, so it blocks the deck (and a document theme)
 		else if (isObj(block) && block.type === 'chart' && block.sweep !== undefined)
 			out.push('sweep')
 	}

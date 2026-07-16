@@ -13,7 +13,7 @@ test('bare catalog is the LEAN index: one-liners for everything, no schemas (pro
 	const lean = catalog()
 	assert.equal(lean.version, 1)
 	assert.match(lean.usage, /catalog <name>/)
-	assert.deepEqual(Object.keys(lean.blocks).sort(), ['chart', 'confirm', 'form', 'kpi', 'markdown', 'table'])
+	assert.deepEqual(Object.keys(lean.blocks).sort(), ['chart', 'confirm', 'form', 'gallery', 'kpi', 'markdown', 'table'])
 	assert.equal(Object.keys(lean.chartKinds).length, 26)
 	assert.equal(Object.keys(lean.fieldTypes).length, 16)
 	assert.ok(lean.unsupportedChartKinds.map, 'unsupported kinds documented with reasons')
@@ -104,7 +104,8 @@ test('the lean index warns that FLAT validation keys are a silent no-op', () => 
 
 test('catalog --full still exposes the complete contract', () => {
 	const full = catalog('--full')
-	assert.equal(Object.keys(full.blocks).length, 6)
+	assert.equal(Object.keys(full.blocks).length, 7)
+	assert.ok(full.blocks.gallery.properties.src.required, 'the gallery block is in --full')
 	assert.equal(Object.keys(full.chartKinds).length, 26)
 	assert.equal(Object.keys(full.fieldTypes).length, 16)
 	assert.ok(full.blocks.form.properties.destination)

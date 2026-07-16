@@ -271,6 +271,43 @@ function checkBlock(block, base, ctx) {
 	if (block.type === 'chart') checkChart(block, base, ctx)
 	if (block.type === 'table') checkTable(block, base, ctx)
 	if (block.type === 'form') checkForm(block, base, ctx)
+	if (block.type === 'gallery') checkGallery(block, base, ctx)
+}
+
+/**
+ * A gallery's "src" is a FOLDER, and the only value rule the registry cannot
+ * express is that it is a directory inside the workspace. Everything else —
+ * "src" required and a string, the layout/sort enums — comes free from
+ * checkObject, so duplicating it here would report one defect twice.
+ */
+function checkGallery(block, base, ctx) {
+	if (typeof block.src !== 'string')
+		return // a missing or mistyped "src" is already reported by checkObject
+	const p = `${base}.src`
+	const src = block.src
+	if (!ctx.root)
+		return
+	if (!insideRoot(ctx.root, src))
+		return ctx.error('PATH_OUTSIDE_WORKSPACE', p, `"${src}" resolves outside the workspace root — a gallery folder must live inside it.`, {
+			got: src,
+		})
+	const abs = path.resolve(ctx.root, src)
+	let stat = null
+	try {
+		stat = fs.statSync(abs)
+	} catch { /* missing — reported below */ }
+	if (!stat)
+		return ctx.error('MISSING_SOURCE', p, `"${src}" does not exist (resolved to ${abs}).`, {
+			got: src,
+			hint: 'Create the folder, or point "src" at an existing folder of images.',
+			example: BLOCKS.gallery.example,
+		})
+	if (!stat.isDirectory())
+		return ctx.error('MISSING_SOURCE', p, `"${src}" is not a folder — a gallery renders a directory of images, not a single file (resolved to ${abs}).`, {
+			got: src,
+			hint: 'Point "src" at the folder that holds the images. To show one image, reference it from a markdown block instead.',
+			example: BLOCKS.gallery.example,
+		})
 }
 
 function checkMarkdown(block, base, ctx) {
@@ -670,6 +707,11 @@ function checkDocument(canvas, ctx) {
 				got: block.type,
 				hint: 'Drop the block, or remove "document" from the envelope to render this canvas as an interactive page.',
 			})
+		else if (block.type === 'gallery')
+			ctx.error('DOCUMENT_INTERACTIVE_BLOCK', p, 'A gallery cannot render on paper — it scrolls, selects and deletes.', {
+				got: block.type,
+				hint: 'Drop the gallery block, or remove "document" from the envelope to render this canvas interactively.',
+			})
 		else if (block.type === 'chart' && block.sweep !== undefined)
 			ctx.error('DOCUMENT_INTERACTIVE_BLOCK', `${p}.sweep`, 'A chart sweep cannot render in a document canvas — paper cannot drag a slider.', {
 				hint: 'Ship the one frame you want as plain "data" (drop "sweep"), or remove "document" from the envelope.',
@@ -993,6 +1035,11 @@ function checkPresentation(canvas, ctx) {
 			ctx.error('PRESENTATION_INTERACTIVE_BLOCK', bp, `A slide cannot contain a "${block.type}" block — a projected or printed slide can neither submit nor confirm.`, {
 				got: block.type,
 				hint: 'Drop the block. Collect input in a separate form canvas, or show the one result you want as a plain display block.',
+			})
+		else if (block.type === 'gallery')
+			ctx.error('PRESENTATION_INTERACTIVE_BLOCK', bp, 'A gallery cannot render on a slide — a projected or printed slide can neither scroll nor delete.', {
+				got: block.type,
+				hint: 'Drop the gallery. Show the images as a static layout, or render the folder on its own with `open <folder>`.',
 			})
 		else if (block.type === 'chart' && block.sweep !== undefined)
 			ctx.error('PRESENTATION_INTERACTIVE_BLOCK', `${bp}.sweep`, 'A chart sweep cannot render on a slide — a projector cannot drag a slider and paper cannot animate.', {
