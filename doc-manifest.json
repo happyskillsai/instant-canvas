@@ -644,7 +644,7 @@
         "Security regressions",
         "Browser verification"
       ],
-      "line_count": 107,
+      "line_count": 108,
       "links_to": [
         "docs/gotchas/frontend.md",
         "docs/gotchas/testing.md",
