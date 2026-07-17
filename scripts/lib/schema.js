@@ -742,6 +742,10 @@ const BLOCKS = {
 		kind: 'display',
 		description: 'Chart. 26 kinds — 17 general plus 9 scientific/ML (see the catalog "chartKinds" index; `catalog <kind>` gives each kind\'s exact encoding schema + example). Data is inline JSON; "encoding" maps data keys to visual channels per kind; "options" is a raw Plotly figure fragment applied last (escape hatch).',
 		aliases: ['graph', 'plot', 'diagram', 'visualization'],
+		notes: [
+			'Readability is data density times geometry, which "validate" now checks from the JSON against PAPER geometry (A4 content width by default, the declared "document.page" when there is one). The five checks are WARNINGS, never errors — a dense heatmap read as a texture is sometimes deliberate, and a warning never renders in the reader browser: AXIS_TOO_DENSE (too many bar/boxplot/funnel categories for the width), HEATMAP_TOO_DENSE (cells below ~12px on either axis), LABELS_WILL_ELIDE (many category labels past 30 characters), TOO_MANY_SERIES (a legend past ~12 entries), TOO_MANY_SLICES (a pie past ~10 slices). Each warning carries the fix.',
+			'A density warning is a DATA problem, not a layout one — do not answer it by pre-truncating labels or pinning margins in "options". The runtime already elides long ticks at 30 characters (the hover keeps the whole string) and reserves the room the axis and legend both need. Fix the data shape instead: aggregate to a top-N plus an "other" bucket, split into small multiples, or swap to a horizontal bar where a long label gets its own row.',
+		],
 		properties: {
 			type: { type: 'string', required: true, enum: ['chart'] },
 			kind: { type: 'string', required: true, enum: [], description: 'Chart kind — run `catalog` for the one-line index, `catalog <kind>` for its schema.' }, // enum filled below

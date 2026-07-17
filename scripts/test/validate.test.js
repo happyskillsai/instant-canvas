@@ -372,3 +372,141 @@ test('renderHuman produces compact lines', () => {
 	assert.match(text, /✗ broken\.canvas\.json: \d+ error/)
 	assert.match(text, /\[UNKNOWN_FIELD_TYPE\]/)
 })
+
+// ---------------------------------------------------------------- density warnings (§D)
+//
+// Readability = data density × paper geometry, checked from the JSON. WARNINGS only, each
+// carrying {code, path, message, hint, figure}. Every assertion pairs the CLAIM with the
+// BEHAVIOR so the prose cannot rot behind a green suite.
+
+const DENSITY_CODES = ['AXIS_TOO_DENSE', 'HEATMAP_TOO_DENSE', 'LABELS_WILL_ELIDE', 'TOO_MANY_SERIES', 'TOO_MANY_SLICES']
+const densityWarns = (r) => r.warnings.filter((w) => DENSITY_CODES.includes(w.code))
+const dcodes = (r) => densityWarns(r).map((w) => w.code)
+const chartCanvas = (block) => canvas([block])
+const longName = (i) => `Enterprise Account Segment Number ${String(i).padStart(2, '0')} — Renewals Team`
+const barWith = (cats) => chartCanvas({ type: 'chart', kind: 'bar', title: 'B', data: cats.map((c, i) => ({ region: c, v: i })), encoding: { x: 'region', y: 'v' } })
+
+test('density: the dense fixture trips ALL FIVE codes as warnings, ok:true, each with figure+hint+path', () => {
+	const r = validate(fixture('dense.canvas.json'))
+	assert.equal(r.ok, true, `density is advisory — it must never fail a canvas: ${JSON.stringify(r.errors)}`)
+	assert.equal(r.errorCount, 0)
+	const present = new Set(dcodes(r))
+	for (const code of DENSITY_CODES)
+		assert.ok(present.has(code), `${code} must fire on the dense fixture (got: ${[...present].join(', ')})`)
+	for (const w of densityWarns(r)) {
+		assert.equal(typeof w.figure, 'number', `${w.code} carries the derived figure number`)
+		assert.ok(w.hint, `${w.code} teaches the fix`)
+		assert.ok(typeof w.path === 'string' && w.path.startsWith('blocks['), `${w.code} points at the offending block`)
+	}
+	// No stray warnings of any other kind — the fixture is a clean trip of exactly these.
+	assert.deepEqual(r.warnings.filter((w) => !DENSITY_CODES.includes(w.code)), [])
+})
+
+test('AXIS_TOO_DENSE fires on a crammed bar axis and names the math; a sparse axis is silent', () => {
+	const dense = validate(barWith(Array.from({ length: 60 }, (_, i) => `Cat ${i}`)))
+	const w = densityWarns(dense).find((x) => x.code === 'AXIS_TOO_DENSE')
+	assert.ok(w, 'sixty categories on an A4 bar is too dense')
+	assert.equal(w.path, 'blocks[0].encoding.x')
+	assert.match(w.message, /60 categories/)
+	assert.match(w.message, /px per label/)
+	// The behavior, not just the claim: below the threshold, silence.
+	assert.equal(densityWarns(validate(barWith(Array.from({ length: 10 }, (_, i) => `Cat ${i}`)))).length, 0,
+		'ten categories fit — no warning')
+})
+
+test('AXIS_TOO_DENSE targets discrete-mark kinds only: a line curve with many points is silent', () => {
+	// The `waves` lesson: a line/area draws a continuous curve and auto-elides its ticks,
+	// so 60 ordered x-points is the normal readable case, unlike 60 bars.
+	const cats = Array.from({ length: 60 }, (_, i) => `p${i}`)
+	const line = validate(chartCanvas({ type: 'chart', kind: 'line', title: 'L', data: cats.map((c, i) => ({ x: c, y: i })), encoding: { x: 'x', y: 'y' } }))
+	assert.equal(densityWarns(line).length, 0, 'a line is a curve, not sixty labeled marks')
+	// And the same sixty ON A BAR do trip — proving it is the kind, not the data.
+	assert.ok(dcodes(validate(barWith(cats))).includes('AXIS_TOO_DENSE'))
+})
+
+test('categorical detection: a numeric or date axis is continuous, so AXIS_TOO_DENSE stays silent', () => {
+	const numeric = validate(chartCanvas({ type: 'chart', kind: 'bar', title: 'B', data: Array.from({ length: 60 }, (_, i) => ({ x: i, y: i })), encoding: { x: 'x', y: 'y' } }))
+	assert.equal(densityWarns(numeric).length, 0, 'sixty numeric x-values are a continuous axis, not categories')
+	const dated = validate(chartCanvas({ type: 'chart', kind: 'bar', title: 'B', data: Array.from({ length: 60 }, (_, i) => ({ x: `2026-${String((i % 12) + 1).padStart(2, '0')}-15`, y: i })), encoding: { x: 'x', y: 'y' } }))
+	assert.equal(densityWarns(dated).filter((w) => w.code === 'AXIS_TOO_DENSE').length, 0, 'date strings are not categories (prefer under-warning)')
+})
+
+test('LABELS_WILL_ELIDE fires when many labels exceed 30 chars; short labels are silent', () => {
+	const longy = validate(barWith(Array.from({ length: 8 }, (_, i) => longName(i))))
+	const w = densityWarns(longy).find((x) => x.code === 'LABELS_WILL_ELIDE')
+	assert.ok(w, 'eight labels over 30 chars will elide')
+	assert.match(w.message, /exceed 30 characters/)
+	assert.match(w.hint, /horizontal bar/)
+	// Eight SHORT labels: no elide warning (and few enough not to cram).
+	assert.ok(!dcodes(validate(barWith(['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H']))).includes('LABELS_WILL_ELIDE'))
+})
+
+test('HEATMAP_TOO_DENSE fires per-axis with the cell math; a small grid is silent', () => {
+	const rows = Array.from({ length: 80 }, (_, i) => ({ x: `c${i}`, y: `r${i % 50}`, v: i }))
+	const r = validate(chartCanvas({ type: 'chart', kind: 'heatmap', title: 'H', data: rows, encoding: { x: 'x', y: 'y', value: 'v' } }))
+	const ws = densityWarns(r).filter((w) => w.code === 'HEATMAP_TOO_DENSE')
+	assert.equal(ws.length, 2, 'both axes are too dense (80 cols, 50 rows)')
+	assert.ok(ws.some((w) => w.path === 'blocks[0].encoding.x' && /80 columns/.test(w.message)))
+	assert.ok(ws.some((w) => w.path === 'blocks[0].encoding.y' && /50 rows/.test(w.message)))
+	const small = validate(chartCanvas({ type: 'chart', kind: 'heatmap', title: 'H', data: Array.from({ length: 10 }, (_, i) => ({ x: `c${i}`, y: `r${i}`, v: i })), encoding: { x: 'x', y: 'y', value: 'v' } }))
+	assert.equal(densityWarns(small).length, 0, 'a 10×10 grid is readable')
+})
+
+test('TOO_MANY_SERIES fires on a wide y-list and on many distinct series groups', () => {
+	const yKeys = Array.from({ length: 15 }, (_, i) => `s${i}`)
+	const row = { month: 'Jan' }; yKeys.forEach((k, i) => { row[k] = i })
+	const wide = validate(chartCanvas({ type: 'chart', kind: 'line', title: 'L', data: [row], encoding: { x: 'month', y: yKeys } }))
+	const w = densityWarns(wide).find((x) => x.code === 'TOO_MANY_SERIES')
+	assert.ok(w, 'fifteen y-series is a soup legend')
+	assert.match(w.message, /15 series/)
+	// The `series` channel counts distinct groups too.
+	const grouped = validate(chartCanvas({ type: 'chart', kind: 'scatter', title: 'S', data: Array.from({ length: 20 }, (_, i) => ({ x: i, y: i, g: `grp${i % 15}` })), encoding: { x: 'x', y: 'y', series: 'g' } }))
+	assert.ok(dcodes(grouped).includes('TOO_MANY_SERIES'), 'fifteen distinct series groups is soup too')
+	// Twelve or fewer is fine.
+	const ok = Array.from({ length: 10 }, (_, i) => `s${i}`)
+	const okRow = { month: 'Jan' }; ok.forEach((k, i) => { okRow[k] = i })
+	assert.equal(densityWarns(validate(chartCanvas({ type: 'chart', kind: 'line', title: 'L', data: [okRow], encoding: { x: 'month', y: ok } }))).length, 0)
+})
+
+test('TOO_MANY_SLICES fires on an over-sliced pie; ten or fewer is silent', () => {
+	const pie = (n) => chartCanvas({ type: 'chart', kind: 'pie', title: 'P', data: Array.from({ length: n }, (_, i) => ({ team: `Team ${i}`, v: i + 1 })), encoding: { category: 'team', value: 'v' } })
+	const w = densityWarns(validate(pie(15))).find((x) => x.code === 'TOO_MANY_SLICES')
+	assert.ok(w, 'fifteen slices is a ring of slivers')
+	assert.match(w.message, /15 pie slices/)
+	assert.equal(densityWarns(validate(pie(8))).length, 0, 'eight slices reads at a glance')
+})
+
+test('density: the figure number is the block\'s own, resolved across pages', () => {
+	const denseBar = { type: 'chart', kind: 'bar', title: 'B', data: Array.from({ length: 60 }, (_, i) => ({ x: `Cat ${i}`, y: i })), encoding: { x: 'x', y: 'y' } }
+	const densePie = { type: 'chart', kind: 'pie', title: 'P', data: Array.from({ length: 15 }, (_, i) => ({ t: `Team ${i}`, v: i + 1 })), encoding: { category: 't', value: 'v' } }
+	const paged = validate({ instantcanvas: 1, createdWith: PKG_VERSION, title: 'T', pages: [{ name: 'A', blocks: [denseBar] }, { name: 'B', blocks: [densePie] }] })
+	const axis = densityWarns(paged).find((w) => w.code === 'AXIS_TOO_DENSE')
+	const slices = densityWarns(paged).find((w) => w.code === 'TOO_MANY_SLICES')
+	assert.equal(axis.figure, 1, 'the bar is Figure 1')
+	assert.equal(axis.path, 'pages[0].blocks[0].encoding.x')
+	assert.equal(slices.figure, 2, 'the pie is Figure 2 — the path-keyed lookup resolves across pages')
+	assert.equal(slices.path, 'pages[1].blocks[0]')
+})
+
+test('density: geometry is the declared page — a wider page raises the budget', () => {
+	const fiftyEight = Array.from({ length: 58 }, (_, i) => `Cat ${i}`)
+	// On A4 (~680px) 58 categories trip; on landscape letter the content is far wider.
+	assert.ok(dcodes(validate(barWith(fiftyEight))).includes('AXIS_TOO_DENSE'), '58 is too dense on A4')
+	const wide = validate({ instantcanvas: 1, createdWith: PKG_VERSION, title: 'T', document: { page: { size: 'letter', orientation: 'landscape' } },
+		blocks: [{ type: 'chart', kind: 'bar', title: 'B', data: fiftyEight.map((c, i) => ({ region: c, v: i })), encoding: { x: 'region', y: 'v' } }] })
+	assert.ok(!dcodes(wide).includes('AXIS_TOO_DENSE'), 'the same 58 fit on a wide landscape page')
+})
+
+test('density: every shipped canvas in examples/ and demos/ is warning-free (the calibration gate)', () => {
+	const REPO = path.join(__dirname, '..', '..')
+	const files = []
+	for (const dir of ['examples', 'demos'])
+		for (const f of fs.readdirSync(path.join(REPO, dir)).filter((x) => x.endsWith('.canvas.json')))
+			files.push(path.join(REPO, dir, f))
+	assert.ok(files.length >= 5, 'the corpus exists to be checked')
+	for (const file of files) {
+		const r = validate(fs.readFileSync(file, 'utf8'), { root: REPO })
+		assert.deepEqual(densityWarns(r).map((w) => `${w.code}@${w.path}`), [],
+			`${path.relative(REPO, file)} must carry no density warning — move the threshold, not the gate`)
+	}
+})

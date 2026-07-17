@@ -1,0 +1,851 @@
+{
+  "instantcanvas": 1,
+  "createdWith": "0.11.0",
+  "title": "Dense fixture — every density warning at once",
+  "description": "A hard case: trips all five density codes so none of them is unfailable.",
+  "blocks": [
+    {
+      "type": "chart",
+      "kind": "bar",
+      "title": "Revenue by account segment",
+      "data": [
+        {
+          "region": "Northern EMEA Enterprise Accounts Segment 00 — Renewals",
+          "revenue": 0
+        },
+        {
+          "region": "Northern EMEA Enterprise Accounts Segment 01 — Renewals",
+          "revenue": 7
+        },
+        {
+          "region": "Northern EMEA Enterprise Accounts Segment 02 — Renewals",
+          "revenue": 14
+        },
+        {
+          "region": "Northern EMEA Enterprise Accounts Segment 03 — Renewals",
+          "revenue": 21
+        },
+        {
+          "region": "Northern EMEA Enterprise Accounts Segment 04 — Renewals",
+          "revenue": 28
+        },
+        {
+          "region": "Northern EMEA Enterprise Accounts Segment 05 — Renewals",
+          "revenue": 35
+        },
+        {
+          "region": "Northern EMEA Enterprise Accounts Segment 06 — Renewals",
+          "revenue": 42
+        },
+        {
+          "region": "Northern EMEA Enterprise Accounts Segment 07 — Renewals",
+          "revenue": 49
+        },
+        {
+          "region": "Northern EMEA Enterprise Accounts Segment 08 — Renewals",
+          "revenue": 56
+        },
+        {
+          "region": "Northern EMEA Enterprise Accounts Segment 09 — Renewals",
+          "revenue": 63
+        },
+        {
+          "region": "Northern EMEA Enterprise Accounts Segment 10 — Renewals",
+          "revenue": 70
+        },
+        {
+          "region": "Northern EMEA Enterprise Accounts Segment 11 — Renewals",
+          "revenue": 77
+        },
+        {
+          "region": "Northern EMEA Enterprise Accounts Segment 12 — Renewals",
+          "revenue": 84
+        },
+        {
+          "region": "Northern EMEA Enterprise Accounts Segment 13 — Renewals",
+          "revenue": 91
+        },
+        {
+          "region": "Northern EMEA Enterprise Accounts Segment 14 — Renewals",
+          "revenue": 98
+        },
+        {
+          "region": "Northern EMEA Enterprise Accounts Segment 15 — Renewals",
+          "revenue": 5
+        },
+        {
+          "region": "Northern EMEA Enterprise Accounts Segment 16 — Renewals",
+          "revenue": 12
+        },
+        {
+          "region": "Northern EMEA Enterprise Accounts Segment 17 — Renewals",
+          "revenue": 19
+        },
+        {
+          "region": "Northern EMEA Enterprise Accounts Segment 18 — Renewals",
+          "revenue": 26
+        },
+        {
+          "region": "Northern EMEA Enterprise Accounts Segment 19 — Renewals",
+          "revenue": 33
+        },
+        {
+          "region": "Northern EMEA Enterprise Accounts Segment 20 — Renewals",
+          "revenue": 40
+        },
+        {
+          "region": "Northern EMEA Enterprise Accounts Segment 21 — Renewals",
+          "revenue": 47
+        },
+        {
+          "region": "Northern EMEA Enterprise Accounts Segment 22 — Renewals",
+          "revenue": 54
+        },
+        {
+          "region": "Northern EMEA Enterprise Accounts Segment 23 — Renewals",
+          "revenue": 61
+        },
+        {
+          "region": "Northern EMEA Enterprise Accounts Segment 24 — Renewals",
+          "revenue": 68
+        },
+        {
+          "region": "Northern EMEA Enterprise Accounts Segment 25 — Renewals",
+          "revenue": 75
+        },
+        {
+          "region": "Northern EMEA Enterprise Accounts Segment 26 — Renewals",
+          "revenue": 82
+        },
+        {
+          "region": "Northern EMEA Enterprise Accounts Segment 27 — Renewals",
+          "revenue": 89
+        },
+        {
+          "region": "Northern EMEA Enterprise Accounts Segment 28 — Renewals",
+          "revenue": 96
+        },
+        {
+          "region": "Northern EMEA Enterprise Accounts Segment 29 — Renewals",
+          "revenue": 3
+        },
+        {
+          "region": "Northern EMEA Enterprise Accounts Segment 30 — Renewals",
+          "revenue": 10
+        },
+        {
+          "region": "Northern EMEA Enterprise Accounts Segment 31 — Renewals",
+          "revenue": 17
+        },
+        {
+          "region": "Northern EMEA Enterprise Accounts Segment 32 — Renewals",
+          "revenue": 24
+        },
+        {
+          "region": "Northern EMEA Enterprise Accounts Segment 33 — Renewals",
+          "revenue": 31
+        },
+        {
+          "region": "Northern EMEA Enterprise Accounts Segment 34 — Renewals",
+          "revenue": 38
+        },
+        {
+          "region": "Northern EMEA Enterprise Accounts Segment 35 — Renewals",
+          "revenue": 45
+        },
+        {
+          "region": "Northern EMEA Enterprise Accounts Segment 36 — Renewals",
+          "revenue": 52
+        },
+        {
+          "region": "Northern EMEA Enterprise Accounts Segment 37 — Renewals",
+          "revenue": 59
+        },
+        {
+          "region": "Northern EMEA Enterprise Accounts Segment 38 — Renewals",
+          "revenue": 66
+        },
+        {
+          "region": "Northern EMEA Enterprise Accounts Segment 39 — Renewals",
+          "revenue": 73
+        },
+        {
+          "region": "Northern EMEA Enterprise Accounts Segment 40 — Renewals",
+          "revenue": 80
+        },
+        {
+          "region": "Northern EMEA Enterprise Accounts Segment 41 — Renewals",
+          "revenue": 87
+        },
+        {
+          "region": "Northern EMEA Enterprise Accounts Segment 42 — Renewals",
+          "revenue": 94
+        },
+        {
+          "region": "Northern EMEA Enterprise Accounts Segment 43 — Renewals",
+          "revenue": 1
+        },
+        {
+          "region": "Northern EMEA Enterprise Accounts Segment 44 — Renewals",
+          "revenue": 8
+        },
+        {
+          "region": "Northern EMEA Enterprise Accounts Segment 45 — Renewals",
+          "revenue": 15
+        },
+        {
+          "region": "Northern EMEA Enterprise Accounts Segment 46 — Renewals",
+          "revenue": 22
+        },
+        {
+          "region": "Northern EMEA Enterprise Accounts Segment 47 — Renewals",
+          "revenue": 29
+        },
+        {
+          "region": "Northern EMEA Enterprise Accounts Segment 48 — Renewals",
+          "revenue": 36
+        },
+        {
+          "region": "Northern EMEA Enterprise Accounts Segment 49 — Renewals",
+          "revenue": 43
+        },
+        {
+          "region": "Northern EMEA Enterprise Accounts Segment 50 — Renewals",
+          "revenue": 50
+        },
+        {
+          "region": "Northern EMEA Enterprise Accounts Segment 51 — Renewals",
+          "revenue": 57
+        },
+        {
+          "region": "Northern EMEA Enterprise Accounts Segment 52 — Renewals",
+          "revenue": 64
+        },
+        {
+          "region": "Northern EMEA Enterprise Accounts Segment 53 — Renewals",
+          "revenue": 71
+        },
+        {
+          "region": "Northern EMEA Enterprise Accounts Segment 54 — Renewals",
+          "revenue": 78
+        },
+        {
+          "region": "Northern EMEA Enterprise Accounts Segment 55 — Renewals",
+          "revenue": 85
+        },
+        {
+          "region": "Northern EMEA Enterprise Accounts Segment 56 — Renewals",
+          "revenue": 92
+        },
+        {
+          "region": "Northern EMEA Enterprise Accounts Segment 57 — Renewals",
+          "revenue": 99
+        },
+        {
+          "region": "Northern EMEA Enterprise Accounts Segment 58 — Renewals",
+          "revenue": 6
+        },
+        {
+          "region": "Northern EMEA Enterprise Accounts Segment 59 — Renewals",
+          "revenue": 13
+        },
+        {
+          "region": "Northern EMEA Enterprise Accounts Segment 60 — Renewals",
+          "revenue": 20
+        },
+        {
+          "region": "Northern EMEA Enterprise Accounts Segment 61 — Renewals",
+          "revenue": 27
+        }
+      ],
+      "encoding": {
+        "x": "region",
+        "y": "revenue"
+      }
+    },
+    {
+      "type": "chart",
+      "kind": "heatmap",
+      "title": "Load by hour and service",
+      "data": [
+        {
+          "hour": "h0",
+          "service": "svc0",
+          "load": 0
+        },
+        {
+          "hour": "h1",
+          "service": "svc1",
+          "load": 1
+        },
+        {
+          "hour": "h2",
+          "service": "svc2",
+          "load": 2
+        },
+        {
+          "hour": "h3",
+          "service": "svc3",
+          "load": 3
+        },
+        {
+          "hour": "h4",
+          "service": "svc4",
+          "load": 4
+        },
+        {
+          "hour": "h5",
+          "service": "svc5",
+          "load": 5
+        },
+        {
+          "hour": "h6",
+          "service": "svc6",
+          "load": 6
+        },
+        {
+          "hour": "h7",
+          "service": "svc7",
+          "load": 7
+        },
+        {
+          "hour": "h8",
+          "service": "svc8",
+          "load": 8
+        },
+        {
+          "hour": "h9",
+          "service": "svc9",
+          "load": 9
+        },
+        {
+          "hour": "h10",
+          "service": "svc10",
+          "load": 10
+        },
+        {
+          "hour": "h11",
+          "service": "svc11",
+          "load": 11
+        },
+        {
+          "hour": "h12",
+          "service": "svc12",
+          "load": 12
+        },
+        {
+          "hour": "h13",
+          "service": "svc13",
+          "load": 13
+        },
+        {
+          "hour": "h14",
+          "service": "svc14",
+          "load": 14
+        },
+        {
+          "hour": "h15",
+          "service": "svc15",
+          "load": 15
+        },
+        {
+          "hour": "h16",
+          "service": "svc16",
+          "load": 16
+        },
+        {
+          "hour": "h17",
+          "service": "svc17",
+          "load": 17
+        },
+        {
+          "hour": "h18",
+          "service": "svc18",
+          "load": 18
+        },
+        {
+          "hour": "h19",
+          "service": "svc19",
+          "load": 19
+        },
+        {
+          "hour": "h20",
+          "service": "svc20",
+          "load": 20
+        },
+        {
+          "hour": "h21",
+          "service": "svc21",
+          "load": 21
+        },
+        {
+          "hour": "h22",
+          "service": "svc22",
+          "load": 22
+        },
+        {
+          "hour": "h23",
+          "service": "svc23",
+          "load": 23
+        },
+        {
+          "hour": "h24",
+          "service": "svc24",
+          "load": 24
+        },
+        {
+          "hour": "h25",
+          "service": "svc25",
+          "load": 25
+        },
+        {
+          "hour": "h26",
+          "service": "svc26",
+          "load": 26
+        },
+        {
+          "hour": "h27",
+          "service": "svc27",
+          "load": 27
+        },
+        {
+          "hour": "h28",
+          "service": "svc28",
+          "load": 28
+        },
+        {
+          "hour": "h29",
+          "service": "svc29",
+          "load": 29
+        },
+        {
+          "hour": "h30",
+          "service": "svc30",
+          "load": 30
+        },
+        {
+          "hour": "h31",
+          "service": "svc31",
+          "load": 31
+        },
+        {
+          "hour": "h32",
+          "service": "svc32",
+          "load": 32
+        },
+        {
+          "hour": "h33",
+          "service": "svc33",
+          "load": 33
+        },
+        {
+          "hour": "h34",
+          "service": "svc34",
+          "load": 34
+        },
+        {
+          "hour": "h35",
+          "service": "svc35",
+          "load": 35
+        },
+        {
+          "hour": "h36",
+          "service": "svc36",
+          "load": 36
+        },
+        {
+          "hour": "h37",
+          "service": "svc37",
+          "load": 37
+        },
+        {
+          "hour": "h38",
+          "service": "svc38",
+          "load": 38
+        },
+        {
+          "hour": "h39",
+          "service": "svc39",
+          "load": 39
+        },
+        {
+          "hour": "h40",
+          "service": "svc40",
+          "load": 40
+        },
+        {
+          "hour": "h41",
+          "service": "svc41",
+          "load": 41
+        },
+        {
+          "hour": "h42",
+          "service": "svc42",
+          "load": 42
+        },
+        {
+          "hour": "h43",
+          "service": "svc43",
+          "load": 43
+        },
+        {
+          "hour": "h44",
+          "service": "svc44",
+          "load": 44
+        },
+        {
+          "hour": "h45",
+          "service": "svc45",
+          "load": 45
+        },
+        {
+          "hour": "h46",
+          "service": "svc46",
+          "load": 46
+        },
+        {
+          "hour": "h47",
+          "service": "svc47",
+          "load": 47
+        },
+        {
+          "hour": "h48",
+          "service": "svc48",
+          "load": 48
+        },
+        {
+          "hour": "h49",
+          "service": "svc49",
+          "load": 49
+        },
+        {
+          "hour": "h50",
+          "service": "svc0",
+          "load": 50
+        },
+        {
+          "hour": "h51",
+          "service": "svc1",
+          "load": 51
+        },
+        {
+          "hour": "h52",
+          "service": "svc2",
+          "load": 52
+        },
+        {
+          "hour": "h53",
+          "service": "svc3",
+          "load": 53
+        },
+        {
+          "hour": "h54",
+          "service": "svc4",
+          "load": 54
+        },
+        {
+          "hour": "h55",
+          "service": "svc5",
+          "load": 55
+        },
+        {
+          "hour": "h56",
+          "service": "svc6",
+          "load": 56
+        },
+        {
+          "hour": "h57",
+          "service": "svc7",
+          "load": 57
+        },
+        {
+          "hour": "h58",
+          "service": "svc8",
+          "load": 58
+        },
+        {
+          "hour": "h59",
+          "service": "svc9",
+          "load": 59
+        },
+        {
+          "hour": "h60",
+          "service": "svc10",
+          "load": 60
+        },
+        {
+          "hour": "h61",
+          "service": "svc11",
+          "load": 61
+        },
+        {
+          "hour": "h62",
+          "service": "svc12",
+          "load": 62
+        },
+        {
+          "hour": "h63",
+          "service": "svc13",
+          "load": 63
+        },
+        {
+          "hour": "h64",
+          "service": "svc14",
+          "load": 64
+        },
+        {
+          "hour": "h65",
+          "service": "svc15",
+          "load": 65
+        },
+        {
+          "hour": "h66",
+          "service": "svc16",
+          "load": 66
+        },
+        {
+          "hour": "h67",
+          "service": "svc17",
+          "load": 67
+        },
+        {
+          "hour": "h68",
+          "service": "svc18",
+          "load": 68
+        },
+        {
+          "hour": "h69",
+          "service": "svc19",
+          "load": 69
+        },
+        {
+          "hour": "h70",
+          "service": "svc20",
+          "load": 70
+        },
+        {
+          "hour": "h71",
+          "service": "svc21",
+          "load": 71
+        },
+        {
+          "hour": "h72",
+          "service": "svc22",
+          "load": 72
+        },
+        {
+          "hour": "h73",
+          "service": "svc23",
+          "load": 73
+        },
+        {
+          "hour": "h74",
+          "service": "svc24",
+          "load": 74
+        },
+        {
+          "hour": "h75",
+          "service": "svc25",
+          "load": 75
+        },
+        {
+          "hour": "h76",
+          "service": "svc26",
+          "load": 76
+        },
+        {
+          "hour": "h77",
+          "service": "svc27",
+          "load": 77
+        },
+        {
+          "hour": "h78",
+          "service": "svc28",
+          "load": 78
+        },
+        {
+          "hour": "h79",
+          "service": "svc29",
+          "load": 79
+        }
+      ],
+      "encoding": {
+        "x": "hour",
+        "y": "service",
+        "value": "load"
+      }
+    },
+    {
+      "type": "chart",
+      "kind": "pie",
+      "title": "Headcount by team",
+      "data": [
+        {
+          "team": "Team 0",
+          "headcount": 1
+        },
+        {
+          "team": "Team 1",
+          "headcount": 2
+        },
+        {
+          "team": "Team 2",
+          "headcount": 3
+        },
+        {
+          "team": "Team 3",
+          "headcount": 4
+        },
+        {
+          "team": "Team 4",
+          "headcount": 5
+        },
+        {
+          "team": "Team 5",
+          "headcount": 6
+        },
+        {
+          "team": "Team 6",
+          "headcount": 7
+        },
+        {
+          "team": "Team 7",
+          "headcount": 8
+        },
+        {
+          "team": "Team 8",
+          "headcount": 9
+        },
+        {
+          "team": "Team 9",
+          "headcount": 10
+        },
+        {
+          "team": "Team 10",
+          "headcount": 11
+        },
+        {
+          "team": "Team 11",
+          "headcount": 12
+        },
+        {
+          "team": "Team 12",
+          "headcount": 13
+        },
+        {
+          "team": "Team 13",
+          "headcount": 14
+        },
+        {
+          "team": "Team 14",
+          "headcount": 15
+        }
+      ],
+      "encoding": {
+        "category": "team",
+        "value": "headcount"
+      }
+    },
+    {
+      "type": "chart",
+      "kind": "line",
+      "title": "Twenty metrics over time",
+      "data": [
+        {
+          "month": "Jan",
+          "s0": 1,
+          "s1": 2,
+          "s2": 3,
+          "s3": 4,
+          "s4": 5,
+          "s5": 6,
+          "s6": 7,
+          "s7": 8,
+          "s8": 9,
+          "s9": 10,
+          "s10": 11,
+          "s11": 12,
+          "s12": 13,
+          "s13": 14,
+          "s14": 15,
+          "s15": 16,
+          "s16": 17,
+          "s17": 18,
+          "s18": 19,
+          "s19": 20
+        },
+        {
+          "month": "Feb",
+          "s0": 2,
+          "s1": 4,
+          "s2": 6,
+          "s3": 8,
+          "s4": 10,
+          "s5": 12,
+          "s6": 14,
+          "s7": 16,
+          "s8": 18,
+          "s9": 20,
+          "s10": 22,
+          "s11": 24,
+          "s12": 26,
+          "s13": 28,
+          "s14": 30,
+          "s15": 32,
+          "s16": 34,
+          "s17": 36,
+          "s18": 38,
+          "s19": 40
+        },
+        {
+          "month": "Mar",
+          "s0": 2,
+          "s1": 4,
+          "s2": 6,
+          "s3": 8,
+          "s4": 10,
+          "s5": 12,
+          "s6": 14,
+          "s7": 16,
+          "s8": 18,
+          "s9": 20,
+          "s10": 22,
+          "s11": 24,
+          "s12": 26,
+          "s13": 28,
+          "s14": 30,
+          "s15": 32,
+          "s16": 34,
+          "s17": 36,
+          "s18": 38,
+          "s19": 40
+        }
+      ],
+      "encoding": {
+        "x": "month",
+        "y": [
+          "s0",
+          "s1",
+          "s2",
+          "s3",
+          "s4",
+          "s5",
+          "s6",
+          "s7",
+          "s8",
+          "s9",
+          "s10",
+          "s11",
+          "s12",
+          "s13",
+          "s14",
+          "s15",
+          "s16",
+          "s17",
+          "s18",
+          "s19"
+        ]
+      }
+    }
+  ]
+}

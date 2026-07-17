@@ -8,6 +8,7 @@ const { insideRoot } = require('./paths')
 const { MARKDOWN_EXTENSIONS, IMAGE_MIME, NOT_A_FILE_RE, MAX_COVER_IMAGE_BYTES, hasMarkdownExtension, stripFrontmatter, readMarkdownText, scanMarkdownSource } = require('./markdownsrc')
 const { TOKEN_KEYS: THEME_TOKEN_KEYS, MIN_PALETTE, MAX_PALETTE } = require('./theme')
 const { companionIndex } = require('./companion')
+const { figureMap } = require('./figures')
 
 // ---------------------------------------------------------------- helpers
 
@@ -476,6 +477,150 @@ function checkSweep(block, base, ctx) {
 	return typeOf(first) === 'object' && Array.isArray(first.data) ? first.data : null
 }
 
+// ---------------------------------------------------------------- density warnings
+//
+// Readability is a function of DATA DENSITY × GEOMETRY, which neither the agent nor
+// the runtime validator could see — so an agent picks the right chart and still ships
+// crammed axes, unresolvable heatmap cells, legend soup. These deterministic warnings
+// close that gap from the JSON alone, computed against PAPER geometry (the constrained
+// case: readable on A4 ⇒ readable in the wider continuous view). They are WARNINGS,
+// never errors — a dense heatmap-as-texture is sometimes intentional, and a warning
+// never renders in the reader's browser. Each teaches the fix, and carries the block's
+// derived `figure` number so an agent can connect it to the caption a human cites.
+//
+// Constants are named beside the checks, derived from the same page-geometry defaults
+// schema.js documents. They clear the shipped corpus by an order of magnitude (measured
+// 2026-07-16: heatmaps ≤ 30 cells, pies ≤ 4 slices, longest label 11 chars) while still
+// tripping a genuinely dense chart.
+
+const MM_PER_IN = 25.4
+const CSS_DPI = 96                    // paper geometry → CSS px at 96 dpi
+const PAGE_MM = { A4: [210, 297], letter: [216, 279] }
+const DEFAULT_MARGIN_MM = 15          // the A4/15mm default when no document.page is declared
+const MIN_LABEL_PX = 12               // below this a categorical label / heatmap cell cannot be read
+const CHART_BOX_PX = 320              // the default chart-box height (styles.css .chart-box)
+const DENSITY_TICK_MAX_CHARS = 30     // a tick elides past this (app.js catTicks); hover keeps the whole string
+const LABELS_ELIDE_MIN = 5            // ≥ this many long labels…
+const LABELS_ELIDE_FRACTION = 0.30    // …or ≥ this fraction of them, and the axis will elide
+const MAX_SERIES = 12                 // a legend past this is soup
+const MAX_SLICES = 10                 // a pie past this reads as a ring of slivers
+const DENSITY_ROW_CAP = 5000          // scan is bounded so `validate` stays fast
+
+// The categorical axis channel per kind — the kinds that put ONE labeled mark per
+// category, where cramming actually bites. line/area are deliberately absent: they draw
+// a continuous curve and Plotly auto-elides the x ticks, so many ordered points (a time
+// series, an angle sweep) is the normal, readable case — the shipped `waves` demo carries
+// 73 angle points on a line and reads perfectly. Continuous kinds (scatter, …) are absent
+// for the same reason (D2). Only discrete-mark kinds are here.
+const AXIS_CATEGORY_CHANNEL = { bar: 'x', boxplot: 'x', funnel: 'category' }
+
+/** Paper content width in CSS px: the declared page (size, orientation, margin) else A4/15mm. */
+function contentWidthPx(doc) {
+	const page = doc && typeOf(doc.page) === 'object' ? doc.page : {}
+	const size = PAGE_MM[page.size] ? page.size : 'A4'
+	const [wmm, hmm] = PAGE_MM[size]
+	const pageW = page.orientation === 'landscape' ? hmm : wmm
+	const m = /^(\d+(?:\.\d+)?)mm$/.exec(typeof page.margin === 'string' ? page.margin : '')
+	const marginMm = m ? Number(m[1]) : DEFAULT_MARGIN_MM
+	return ((pageW - 2 * marginMm) / MM_PER_IN) * CSS_DPI
+}
+
+/** A string value that parses as NEITHER a number nor a date — the discrete axis case.
+ *  Date detection is a STRICT ISO-ish pattern, not `Date.parse`: `Date.parse` is wildly
+ *  lenient ("Cat 0", "Team 3", "May 5" all parse to real dates), which would silently
+ *  drop genuine text categories and miss a crammed axis. A real time axis (`2026-07`,
+ *  `2026-07-15`, an ISO datetime) is continuous and excluded; an exotic label like
+ *  "Q3-2026" reads as a category, which is the safe direction (a bar of quarters is
+ *  categorical anyway). Pure years are caught by the numeric test above. */
+const ISO_DATE_RE = /^\d{4}[-/](0?[1-9]|1[0-2])([-/](0?[1-9]|[12]\d|3[01]))?([T ]\d{1,2}:\d{2}(:\d{2})?)?(Z|[+-]\d{2}:?\d{2})?$/
+function isNumericLike(v) {
+	return typeof v === 'number' || (typeof v === 'string' && v.trim() !== '' && Number.isFinite(Number(v)))
+}
+function isCategorical(v) {
+	if (typeof v !== 'string' || v.trim() === '') return false
+	if (isNumericLike(v)) return false
+	return !ISO_DATE_RE.test(v.trim())
+}
+
+/** Distinct values of `key` in the WORST frame — for a sweep, the frame with the most
+ *  distinct values (max per metric, D4); otherwise `block.data`. Scan is row-capped. */
+function worstFrameDistinct(block, key) {
+	const framesData = block.sweep && Array.isArray(block.sweep.frames)
+		? block.sweep.frames.map((f) => (f && Array.isArray(f.data) ? f.data : []))
+		: [Array.isArray(block.data) ? block.data : []]
+	let best = []
+	for (const rows of framesData) {
+		const set = new Set()
+		for (let i = 0; i < rows.length && i < DENSITY_ROW_CAP; i++) {
+			const r = rows[i]
+			if (r && typeof r === 'object' && key in r) set.add(r[key])
+		}
+		if (set.size > best.length) best = [...set]
+	}
+	return best
+}
+
+/**
+ * Static density warnings (§D). Warnings ONLY — never errors. Fires against categorical
+ * channels only; continuous kinds are exempt by omission from AXIS_CATEGORY_CHANNEL.
+ */
+function checkDensity(block, base, ctx) {
+	const kind = block.kind
+	const enc = typeOf(block.encoding) === 'object' ? block.encoding : {}
+	const width = ctx.contentWidthPx || contentWidthPx(null)
+	const figure = ctx.figures ? ctx.figures.get(base) : undefined
+	const warn = (code, p, message, hint) => ctx.warn(code, p, message, { hint, ...(figure !== undefined ? { figure } : {}) })
+	const px = Math.round(width)
+
+	// AXIS_TOO_DENSE + LABELS_WILL_ELIDE — the categorical axis of a bar/line/area/boxplot/funnel.
+	const channel = AXIS_CATEGORY_CHANNEL[kind]
+	if (channel && typeof enc[channel] === 'string') {
+		const distinct = worstFrameDistinct(block, enc[channel])
+		const cats = distinct.filter(isCategorical) // only clearly-discrete values count
+		if (cats.length && cats.length * MIN_LABEL_PX > width)
+			warn('AXIS_TOO_DENSE', `${base}.encoding.${channel}`,
+				`${cats.length} categories across ~${px}px of paper ⇒ ~${Math.round(width / cats.length)}px per label, below the ~${MIN_LABEL_PX}px a label needs.`,
+				'Aggregate to a top-N plus an "other" bucket, split into small multiples, or swap axes (a horizontal bar gives every label its own row).')
+		const long = cats.filter((v) => String(v).length > DENSITY_TICK_MAX_CHARS)
+		if (long.length >= LABELS_ELIDE_MIN || (cats.length && long.length / cats.length >= LABELS_ELIDE_FRACTION))
+			warn('LABELS_WILL_ELIDE', `${base}.encoding.${channel}`,
+				`${long.length} of ${cats.length} category labels exceed ${DENSITY_TICK_MAX_CHARS} characters and will elide on the axis.`,
+				`Ticks elide at ${DENSITY_TICK_MAX_CHARS} characters (hover keeps the full string). Shorten the display names in the data, or use a horizontal bar where a long label gets a full row.`)
+	}
+
+	// HEATMAP_TOO_DENSE — cells too small to read on either axis.
+	if (kind === 'heatmap' && typeof enc.x === 'string' && typeof enc.y === 'string') {
+		const nx = worstFrameDistinct(block, enc.x).length
+		const ny = worstFrameDistinct(block, enc.y).length
+		if (nx && width / nx < MIN_LABEL_PX)
+			warn('HEATMAP_TOO_DENSE', `${base}.encoding.x`,
+				`${nx} columns across ~${px}px ⇒ ~${(width / nx).toFixed(1)}px per cell, below the ~${MIN_LABEL_PX}px a cell needs to be read.`,
+				'Bin or aggregate the x axis; a cell below ~12px cannot be read and its label cannot render.')
+		if (ny && CHART_BOX_PX / ny < MIN_LABEL_PX)
+			warn('HEATMAP_TOO_DENSE', `${base}.encoding.y`,
+				`${ny} rows across ${CHART_BOX_PX}px ⇒ ~${(CHART_BOX_PX / ny).toFixed(1)}px per cell, below the ~${MIN_LABEL_PX}px a cell needs to be read.`,
+				'Bin or aggregate the y axis; a cell below ~12px cannot be read and its label cannot render.')
+	}
+
+	// TOO_MANY_SLICES — a pie reads at a glance or not at all.
+	if (kind === 'pie' && typeof enc.category === 'string') {
+		const slices = worstFrameDistinct(block, enc.category).length
+		if (slices > MAX_SLICES)
+			warn('TOO_MANY_SLICES', base,
+				`${slices} pie slices — past ~${MAX_SLICES} a pie reads as a ring of slivers.`,
+				'Aggregate to a top-N plus an "other" slice; a pie reads at a glance or not at all.')
+	}
+
+	// TOO_MANY_SERIES — legend soup: a wide y-list or too many distinct series groups.
+	let series = 0
+	if (Array.isArray(enc.y)) series = Math.max(series, enc.y.length)
+	if (typeof enc.series === 'string') series = Math.max(series, worstFrameDistinct(block, enc.series).length)
+	if (series > MAX_SERIES)
+		warn('TOO_MANY_SERIES', base,
+			`${series} series is legend soup — past ~${MAX_SERIES} entries a legend cannot be read at a glance.`,
+			'Split into small multiples (one chart per series) or aggregate the minor series into an "other".')
+}
+
 function checkChart(block, base, ctx) {
 	const def = CHART_KINDS[block.kind]
 	if (!def) {
@@ -568,6 +713,9 @@ function checkChart(block, base, ctx) {
 
 	if (block.donut && block.kind !== 'pie')
 		ctx.warn('UNKNOWN_PROPERTY', `${base}.donut`, '"donut" only applies to pie charts.', {})
+
+	// Static readability warnings, computed from the JSON against paper geometry (§D).
+	checkDensity(block, base, ctx)
 }
 
 function checkTable(block, base, ctx) {
@@ -1268,6 +1416,12 @@ function validate(source, opts = {}) {
 	// needs to know that while it is walking.
 	if (typeof canvas.enhances === 'string')
 		ctx.enhances = canvas.enhances.trim()
+
+	// Derived state the block walk reads: each chart block's figure number (so a density
+	// warning names the caption a human cites) and the paper content width the density
+	// checks measure against — the declared page geometry, else the A4/15mm default.
+	ctx.figures = new Map(figureMap(canvas).map((f) => [f.path, f.figure]))
+	ctx.contentWidthPx = contentWidthPx(typeOf(canvas.document) === 'object' ? canvas.document : null)
 
 	checkObject(canvas, ENVELOPE.properties, '', ctx, { skip: ['blocks', 'pages', 'slides', 'createdWith'] })
 
