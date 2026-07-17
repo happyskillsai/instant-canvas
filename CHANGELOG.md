@@ -6,10 +6,13 @@
 - **Universal navigation — one paradigm across canvases, documents and images.** The sidebar,
   the main pane and everything the reader opens now share a single model instead of two.
   - **Folders-only sidebar tree** — a lazy folder tree of the workspace (no file leaves), fed
-    per expanded level by `GET /api/dir?…&dirs=1`. Hidden dot-folders show **muted**;
-    `.git`/`node_modules` never appear. Expansion and the active highlight are **incremental**
-    (an inserted subtree and a class toggle), never a rebuild.
-  - **Browse view (`#/f/<rel>`)** — the main pane per folder: a grid/list of that folder's
+    per expanded level by `GET /api/dir?…&dirs=1`. Dot-folders render like any other folder
+    (`.git`/`node_modules` never appear, so a shown dot-folder is a real one). Expansion and the
+    active highlight are **incremental** (an inserted subtree and a class toggle), never a rebuild.
+    The sidebar **collapses/expands** from the topbar hamburger at ≥900 px — a smooth width
+    transition, the main pane filling the freed space in the same motion.
+  - **Browse view (`#/f/<rel>`)** — the main pane per folder: a **folder breadcrumb** at the top
+    (a house to the root, then a clickable segment per folder), then a grid/list of that folder's
     renderable items (child folders, canvases, documents, images), grouped folders → canvases →
     documents → images and sortable within each group, with the gallery affordances (thumbnails,
     sort, grid/list, images-only select + permanent delete). The app **lands on the workspace

@@ -424,14 +424,25 @@ $('themeBtn').addEventListener('click', () => {
 	rethemeCharts()
 })
 
-// Responsive sidebar drawer. Below the CSS breakpoint the sidebar is off-canvas; the
-// hamburger toggles it, and it closes on scrim tap, on navigation (hashchange), and on
-// Escape. Above the breakpoint the sidebar is static, so `nav-open` is simply inert.
+// The sidebar toggle (the topbar hamburger) does two jobs, by breakpoint. BELOW 900px the
+// sidebar is an off-canvas DRAWER and the button opens/closes it (closing on scrim tap,
+// navigation, or Escape). AT ≥900px the sidebar is static and the button COLLAPSES it —
+// a width transition on the sidebar; the main pane (flex:1) smoothly expands to fill.
+const isMobileNav = () => window.matchMedia('(max-width:900px)').matches
 function setNav(open) {
 	document.body.classList.toggle('nav-open', open)
-	$('menuBtn').setAttribute('aria-expanded', open ? 'true' : 'false')
+	if (isMobileNav())
+		$('menuBtn').setAttribute('aria-expanded', open ? 'true' : 'false')
 }
-$('menuBtn').addEventListener('click', () => setNav(!document.body.classList.contains('nav-open')))
+function toggleSidebar() {
+	if (isMobileNav()) {
+		setNav(!document.body.classList.contains('nav-open'))
+	} else {
+		const collapsed = document.body.classList.toggle('sidebar-collapsed')
+		$('menuBtn').setAttribute('aria-expanded', collapsed ? 'false' : 'true')
+	}
+}
+$('menuBtn').addEventListener('click', toggleSidebar)
 $('navScrim').addEventListener('click', () => setNav(false))
 window.addEventListener('hashchange', () => setNav(false))
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') setNav(false) })
@@ -5220,12 +5231,41 @@ async function renderBrowse(main, rel) {
 	const root = document.createElement('div')
 	root.className = 'gallery browse'
 	root.classList.toggle('g-list', bs.layout === 'list')
+	// A breadcrumb of the folder path — the pane's primary way up, since (unlike the modal)
+	// it has no × to close. A house to the workspace root, then one button per segment, each
+	// navigating to that folder's #/f/; the current folder is the last, non-navigating crumb.
+	const crumb = document.createElement('nav'); crumb.className = 'browse-crumb'; crumb.setAttribute('aria-label', 'Breadcrumb')
 	const toolbar = document.createElement('div'); toolbar.className = 'g-toolbar'
 	const tilesWrap = document.createElement('div'); tilesWrap.className = 'g-tiles'
 	const empty = document.createElement('div'); empty.className = 'g-empty'; empty.hidden = true
 	empty.textContent = 'Nothing to show in this folder yet — drop a canvas, a markdown file, or an image in and it appears.'
-	root.append(toolbar, tilesWrap, empty)
+	root.append(crumb, toolbar, tilesWrap, empty)
 	main.append(root)
+
+	function buildBrowseCrumb() {
+		crumb.textContent = ''
+		const seg = (label, hash, { here, icon: ic } = {}) => {
+			const b = document.createElement('button')
+			b.type = 'button'
+			b.className = 'oc-seg' + (here ? ' oc-here' : '')
+			if (ic) b.innerHTML = icon(ic)
+			if (label) { const s = document.createElement('span'); s.textContent = label; b.append(s) }
+			b.title = label || 'Workspace root'
+			if (!here) b.addEventListener('click', () => { location.hash = hash })
+			crumb.append(b)
+		}
+		const slash = () => { const s = document.createElement('span'); s.className = 'oc-slash'; s.textContent = '/'; crumb.append(s) }
+		const parts = rel ? rel.split('/') : []
+		const rootName = state.tree ? baseName(state.tree.root) : ''
+		seg(rootName, '#/f/', { icon: 'house', here: parts.length === 0 })
+		let acc = ''
+		parts.forEach((p, idx) => {
+			acc = acc ? acc + '/' + p : p
+			slash()
+			seg(p, '#/f/' + encodeURIComponent(acc), { here: idx === parts.length - 1 })
+		})
+	}
+	buildBrowseCrumb()
 
 	// ---------- data ----------
 

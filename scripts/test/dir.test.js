@@ -41,7 +41,7 @@ function fixture() {
 	fs.writeFileSync(path.join(root, 'data.csv'), 'a,b\n') // not renderable
 	// child dirs
 	fs.mkdirSync(path.join(root, 'sub'))
-	fs.mkdirSync(path.join(root, '.claude')) // hidden, kept (muted)
+	fs.mkdirSync(path.join(root, '.claude')) // hidden, kept — carries hidden:true (the client renders it like any folder)
 	fs.mkdirSync(path.join(root, '.git')) // excluded everywhere
 	fs.mkdirSync(path.join(root, 'node_modules')) // excluded everywhere
 	return root
@@ -79,7 +79,7 @@ test('browse: a .json without the marker, a dot-file, and a non-renderable file 
 	assert.equal(rels.includes('data.csv'), false, 'a non-renderable file is never an item')
 })
 
-test('browse: dirs are immediate children A→Z; dot-dirs muted, .git/node_modules omitted', () => {
+test('browse: dirs are immediate children A→Z; dot-dirs flagged hidden, .git/node_modules omitted', () => {
 	const root = fixture()
 	const { dirs } = listDir(root, '')
 	assert.deepEqual(dirs.map((d) => d.name), ['.claude', 'sub'])

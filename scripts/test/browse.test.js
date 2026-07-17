@@ -84,12 +84,18 @@ test.before(async () => {
 		// Child folders appear FIRST and carry the distinct folder tile.
 		out.landingKinds = await evaluate(kindsExpr)
 		out.folderTileDistinct = await evaluate('!!document.querySelector(\'.browse .bt-folder .bt-glyph svg\')')
+		// The pane breadcrumb: at the root, just the house (current), no folder segments.
+		out.rootCrumbSegs = await evaluate('document.querySelectorAll(".browse-crumb .oc-seg").length')
+		out.rootCrumbHouse = await evaluate('!!document.querySelector(".browse-crumb .oc-seg .lucide")')
 
 		// ---- CLICK the mix folder tile → it navigates INTO the folder (#/f/mix) ----
 		await click('.browse .gt[data-rel="mix"]')
 		out.steps.folderClickNav = await until(evaluate, 'location.hash === "#/f/mix"', 4000)
 		out.steps.mixShown = await until(evaluate, 'location.hash === "#/f/mix" && ' + q('.browse .gt') + ' === 4', 6000)
 		await sleep(150)
+		// In mix the breadcrumb gains the folder segment (house + mix, mix current).
+		out.mixCrumbLast = await evaluate('(function(){ var s = document.querySelectorAll(".browse-crumb .oc-seg"); var l = s[s.length-1]; return l ? l.innerText.trim() : "" })()')
+		out.mixCrumbLastHere = await evaluate('(function(){ var s = document.querySelectorAll(".browse-crumb .oc-seg"); var l = s[s.length-1]; return !!(l && l.classList.contains("oc-here")) })()')
 		out.mixKinds = await evaluate(kindsExpr)
 		out.mixRels = await evaluate(relsExpr)
 		out.mixInlineStyles = await evaluate(q('.browse [style]'))
@@ -148,6 +154,12 @@ test.before(async () => {
 			out.longPressStaysSelected = await evaluate(q('.browse .gt[data-rel="mix/a.png"].selected') + ' === 1')
 		}
 
+		// ---- the pane breadcrumb's house segment navigates to the workspace root ----
+		await evaluate('location.hash = "#/f/mix"')
+		await until(evaluate, 'location.hash === "#/f/mix" && ' + q('.browse-crumb .oc-seg') + ' >= 1', 6000)
+		await evaluate('document.querySelector(".browse-crumb .oc-seg").click()') // the house
+		out.steps.crumbHouseNav = await until(evaluate, 'location.hash === "#/f/" && ' + q('.browse .gt') + ' > 0', 4000)
+
 		} catch (e) {
 			out.driveError = String((e && e.message) || e)
 		}
@@ -160,6 +172,14 @@ test.after(() => {
 	if (root) {
 		try { execFileSync(process.execPath, [CLI, 'stop', '--workspace', root], { stdio: 'ignore' }) } catch { /* already gone */ }
 	}
+})
+
+test('browse: a folder breadcrumb leads the pane and navigates the path', { skip, timeout: 120_000 }, () => {
+	assert.equal(R.rootCrumbSegs, 1, 'the root browse shows one crumb (the house), no folder segments')
+	assert.equal(R.rootCrumbHouse, true, 'the root crumb carries a house glyph')
+	assert.equal(R.mixCrumbLast, 'mix', 'a subfolder adds its own segment as the current crumb')
+	assert.equal(R.mixCrumbLastHere, true, 'the current folder is the last (here) crumb')
+	assert.equal(R.steps.crumbHouseNav, true, 'clicking the house crumb navigates to the workspace root')
 })
 
 test('browse: the app lands on the workspace root browse view, badging companions and decks', { skip, timeout: 120_000 }, () => {

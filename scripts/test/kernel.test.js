@@ -609,16 +609,16 @@ test('kernel: GET /api/gallery lists images under a folder, recursively', async 
 	assert.equal(r.json.items.find((i) => i.path === 'photos/fake.heic').renderable, false)
 })
 
-test('kernel: GET /api/dir lists a folder — dirs (excluded omitted, dot muted) + grouped items', async () => {
+test('kernel: GET /api/dir lists a folder — dirs (excluded omitted, dot flagged hidden) + grouped items', async () => {
 	const r = await httpReq({ port: K.port, path: '/api/dir?path=', headers: K.auth })
 	assert.equal(r.status, 200)
 	assert.equal(r.json.ok, true)
 	assert.equal(r.json.dir, '')
 	assert.equal(typeof r.json.truncated, 'boolean', 'the truncation flag is always present')
 
-	// dirs: the workspace's real folders, .hidden muted, node_modules never present.
+	// dirs: the workspace real folders, .hidden flagged, node_modules never present.
 	assert.ok(r.json.dirs.some((d) => d.name === 'photos' && d.hidden === false))
-	assert.ok(r.json.dirs.some((d) => d.name === '.hidden' && d.hidden === true), 'a dot-dir is listed muted')
+	assert.ok(r.json.dirs.some((d) => d.name === '.hidden' && d.hidden === true), 'a dot-dir is listed with hidden:true')
 	assert.equal(r.json.dirs.find((d) => d.name === 'node_modules'), undefined, 'node_modules is omitted')
 
 	// items: the root canvas and the markdown document, grouped canvases → documents.

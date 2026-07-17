@@ -76,7 +76,7 @@ test.before(async () => {
 		out.rootHasGlyph = await evaluate('!!document.querySelector("#tree .trow-root .tfico .lucide")')
 		out.treeInlineStyles = await evaluate(q('#tree [style]'))
 
-		// ---- a dot-folder shows, MUTED — assert the COMPUTED opacity, not the CSS ----
+		// ---- a dot-folder shows UN-MUTED (like any folder) — assert the COMPUTED opacity ----
 		out.claudeOpacity = await evaluate('(function(){ var n = document.querySelector(\'#tree .trow[data-rel=".claude"] .tname\'); return n ? getComputedStyle(n).opacity : "" })()')
 		out.demosOpacity = await evaluate('(function(){ var n = document.querySelector(\'#tree .trow[data-rel="demos"] .tname\'); return n ? getComputedStyle(n).opacity : "" })()')
 
@@ -125,15 +125,17 @@ test('tree: the sidebar is folders only — zero canvas/document leaf rows', { s
 	assert.equal(R.treeInlineStyles, 0, 'no inline style attribute anywhere in the tree (CSP discipline)')
 })
 
-test('tree: .git and node_modules never appear; a dot-folder appears MUTED', { skip, timeout: 120_000 }, () => {
+test('tree: .git and node_modules never appear; a dot-folder shows, un-muted', { skip, timeout: 120_000 }, () => {
 	const rels = R.rows.map((r) => r.rel)
 	assert.equal(rels.includes('.git'), false, '.git is excluded from the tree')
 	assert.equal(rels.includes('node_modules'), false, 'node_modules is excluded from the tree')
 	const claude = R.rows.find((r) => r.rel === '.claude')
 	assert.ok(claude, 'a dot-folder is present in the tree')
-	assert.equal(claude.hidden, true, 'and carries the muted class')
-	assert.ok(Number(R.claudeOpacity) < 1, `the dot-folder name is visibly muted (opacity ${R.claudeOpacity})`)
-	assert.equal(Number(R.demosOpacity), 1, 'a normal folder is not muted')
+	assert.equal(claude.hidden, true, 'and still carries the trow-hidden class (the hidden bit — just no longer styled)')
+	// Un-muted: the genuinely noisy dot-folders (.git, node_modules) are already excluded, so a
+	// shown dot-folder is a real one and renders exactly like a normal folder.
+	assert.equal(Number(R.claudeOpacity), 1, `the dot-folder name is NOT muted (opacity ${R.claudeOpacity})`)
+	assert.equal(Number(R.demosOpacity), 1, 'a normal folder is not muted either — they match')
 })
 
 test('tree: a chevron expands its subtree WITHOUT rebuilding sibling rows', { skip, timeout: 120_000 }, () => {

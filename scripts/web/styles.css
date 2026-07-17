@@ -127,9 +127,10 @@ button{font:inherit;cursor:pointer}
 .brand-link{display:inline-flex;align-items:center;color:var(--island-fg);text-decoration:none;border-radius:6px}
 .brand-link:hover{opacity:.82}
 .brand-link:focus-visible{outline:none;box-shadow:0 0 0 2px var(--island),0 0 0 4px rgba(255,255,255,.5)}
-/* The hamburger toggles the sidebar drawer; it exists only in the responsive layouts.
-   `.topbar .menu-btn` outranks `.tbtn{display:inline-flex}`, which is defined later. */
-.topbar .menu-btn{display:none}
+/* The hamburger is the sidebar toggle, shown at every width: below 900px it opens the
+   off-canvas drawer, at ≥900px it collapses/expands the static sidebar (see the collapse
+   rules at the end of the file). `.topbar .menu-btn` outranks `.tbtn{display:inline-flex}`. */
+.topbar .menu-btn{display:inline-flex}
 /* All right-side island controls in one group, so they stay right-aligned even when the
    workspace path is hidden on a narrow screen. */
 .topbar-actions{display:flex;align-items:center;gap:6px;flex:0 0 auto;margin-left:auto}
@@ -183,9 +184,13 @@ button{font:inherit;cursor:pointer}
 /* The body sits on the lavender shell; the sidebar and the main pane float on it as
    rounded surfaces with a gap between, HappySkills-style — no hard border seams. */
 .body{display:flex;flex:1;min-height:0;gap:12px;padding:12px;background:var(--shell)}
-/* sidebar — a white card on the lavender shell (was a full-height panel with a border seam) */
+/* sidebar — a white card on the lavender shell (was a full-height panel with a border seam).
+   The width/flex-basis transition drives the collapse animation (at ≥900px); the main pane
+   is flex:1 so it expands into the freed space in the same motion. On mobile the responsive
+   block below overrides this with a transform transition for the drawer. */
 .sidebar{width:260px;flex:0 0 260px;background:var(--panel);border:1px solid var(--border);
-	border-radius:16px;display:flex;flex-direction:column;overflow:hidden}
+	border-radius:16px;display:flex;flex-direction:column;overflow:hidden;
+	transition:width .28s cubic-bezier(.4,0,.2,1),flex-basis .28s cubic-bezier(.4,0,.2,1),margin-right .28s cubic-bezier(.4,0,.2,1),opacity .2s ease}
 .side-head{padding:14px 12px 8px 16px;font-size:11px;font-weight:600;letter-spacing:.14em;color:var(--muted);
 	display:flex;align-items:center;justify-content:space-between}
 .side-actions{display:flex;align-items:center;gap:6px}
@@ -217,9 +222,10 @@ button{font:inherit;cursor:pointer}
 .tcaret .lucide{width:12px;height:12px;display:block}
 .trow:not(.expanded) .tcaret{transform:rotate(-90deg)}
 .trow.tleaf .tcaret{visibility:hidden}
-/* A dot-folder is muted — present in the tree, but visibly not part of everyday work. */
-.trow-hidden .tname,.trow-hidden .tfico{opacity:.5}
-.trow-hidden:hover .tname,.trow-hidden.active .tname{opacity:.85}
+/* Dot-folders render like any other folder: the genuinely-noisy ones (.git, node_modules)
+   are already excluded from the listing, so the ones that appear (.claude, .agents, …) are
+   real project folders and graying them only misleads. The `.trow-hidden` class is still
+   applied (carrying the `hidden` bit) but styles nothing. */
 .trow-root .tfico{opacity:.85}
 .tkids{padding-left:14px}
 .tkids[hidden]{display:none}
@@ -1455,7 +1461,9 @@ body.image-overlay .doc-modal-view{display:flex;overflow:hidden}
    NEW: the canvas/document CARD tile (glyph + title, never a thumbnail), the count
    line, and the list-mode card row. Image tiles reuse .gt/.gt-img untouched. */
 .browse{margin:0}
-.browse .g-toolbar{margin:20px 0 14px}
+/* The folder breadcrumb at the top of the pane (reuses the modal's .oc-seg/.oc-slash). */
+.browse-crumb{display:flex;align-items:center;flex-wrap:wrap;gap:2px;padding-top:6px;min-height:26px}
+.browse .g-toolbar{margin:14px 0}
 /* Slightly larger tiles than the gallery block's 150px: the editorial card needs the
    room for its icon + kicker + 2-line title + file name without clipping. */
 .browse .g-tiles{grid-template-columns:repeat(auto-fill,minmax(172px,1fr))}
@@ -1485,14 +1493,12 @@ body.image-overlay .doc-modal-view{display:flex;overflow:hidden}
 	display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;
 	font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
 .bt-enh{flex:0 0 6px;width:6px;height:6px}
-/* A subfolder tile: the folder glyph in a WARM accent chip by default (folders are
-   navigation — the one warm element in the grid), and no file name. Hidden dot-
-   folders are muted, like the sidebar. */
+/* A subfolder tile: the folder glyph in a WARM accent chip (folders are navigation — the
+   one warm element in the grid), and no file name. Hidden dot-folders look the same. */
 .bt-folder .bt-glyph{background:color-mix(in srgb, var(--accent) 13%, transparent);color:var(--accent)}
 .bt-folder:hover .bt-glyph{background:color-mix(in srgb, var(--accent) 20%, transparent)}
 .bt-folder .bt-title{min-height:0}
-.bt-folder.bt-hidden{opacity:.62}
-.bt-folder.bt-hidden .bt-glyph{background:color-mix(in srgb, var(--text) 7%, transparent);color:var(--muted)}
+/* A hidden dot-folder is NOT muted — it renders like any other folder (see the tree). */
 /* Cards are never selectable — in select mode they dim to say so. */
 .browse.g-selecting .bt-card{opacity:.45;pointer-events:none}
 /* List mode: a compact row — chip · (title / file) · kind. The file name sits UNDER
@@ -1579,6 +1585,15 @@ body.image-overlay .doc-modal-view{display:flex;overflow:hidden}
 	.nav-scrim{display:block;position:absolute;inset:0;z-index:35;background:var(--scrim);
 		opacity:0;pointer-events:none;transition:opacity .2s}
 	body.nav-open .nav-scrim{opacity:1;pointer-events:auto}
+}
+/* Sidebar collapse — desktop only (below 900px the drawer above owns the hamburger). The
+   width + flex-basis animate to 0 via the .sidebar transition, so the main pane (flex:1)
+   fills the freed space in the SAME motion; margin-right:-12px absorbs the flex gap so main
+   slides fully left, and min-width:0 lets the flex item actually reach 0. Content clips
+   (the sidebar is overflow:hidden) rather than reflowing mid-animation. */
+@media (min-width:901px){
+	body.sidebar-collapsed .sidebar{width:0;flex-basis:0;min-width:0;margin-right:-12px;
+		opacity:0;border-width:0;pointer-events:none}
 }
 @media (max-width:600px){
 	.topbar{margin:8px 8px 0;padding:6px 6px 6px 10px;gap:6px}
