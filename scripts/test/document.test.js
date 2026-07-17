@@ -691,7 +691,7 @@ async function driveUniversalToggle() {
 		let deadline = Date.now() + 30_000
 		for (;;) {
 			const ready = await evaluate(`(() => !!(window.ic && window.ic.state.tree
-				&& document.querySelector('#main .canvas')
+				&& document.querySelector('#docModalView .canvas')
 				&& document.querySelectorAll('.js-plotly-plot .main-svg').length >= 1))()`).catch(() => false)
 			if (ready || Date.now() > deadline)
 				break
@@ -791,7 +791,7 @@ async function driveUniversalToggle() {
 		deadline = Date.now() + 15_000
 		for (;;) {
 			const ready = await evaluate(`(() => window.ic.state.activeId === 'formy.canvas.json'
-				&& !!document.querySelector('#main .canvas'))()`).catch(() => false)
+				&& !!document.querySelector('#docModalView .canvas'))()`).catch(() => false)
 			if (ready || Date.now() > deadline)
 				break
 			await cdpSleep(200)

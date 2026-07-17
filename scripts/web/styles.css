@@ -244,14 +244,37 @@ button{font:inherit;cursor:pointer}
 .main{flex:1;overflow:auto;min-width:0}
 .main-view{min-width:0}
 
-/* Overlay renderer chrome (§4.6). A light toolbar PINNED to the top of the pane
-   (sticky, so it stays reachable down a long document) while a canvas/document/image
-   is open — the reader clicked out of a light browse grid, so the bar is light too.
-   It carries the breadcrumb back to the owning folder, sibling prev/next, and the
-   document action cluster relocated from the topbar island. The cluster's buttons are
-   .tbtn / .view-toggle, styled for the BLACK island (white ink); here they are re-skinned
-   dark-ink for the pane. It NEVER prints (see @media print) — a route's chrome, not paper. */
-.overlay-chrome{position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:10px;
+/* The item overlay: a large frosted-glass modal OVER the folder's browse view (which
+   stays rendered behind, softly blurred — the frosted background is the real folder).
+   Search-style backdrop, but it is a ROUTE, not a dismissible popup: the scrim is
+   DECORATIVE (no click-to-close, so a credentials form is safe) and Esc/× navigate. The
+   card holds the chrome bar + a scrolling content view + the print FAB. z-index 46 sits
+   below the form-success overlay (50), palette (55), search (60), the gallery-block modal
+   (70) and the presenting stage (200), so all of those stack above it. Fully reset in
+   @media print so the deck prints at true page geometry. Full-bleed on mobile. */
+.doc-modal{position:fixed;inset:0;z-index:46;display:flex;align-items:center;justify-content:center;padding:0}
+.doc-modal[hidden]{display:none}
+.doc-modal-scrim{position:absolute;inset:0;background:var(--scrim);
+	backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);animation:docmodal-fade .14s ease-out}
+.doc-modal-card{position:relative;z-index:1;display:flex;flex-direction:column;
+	width:min(1440px,94vw);height:94vh;background:var(--bg);border:1px solid var(--border);
+	border-radius:18px;overflow:hidden;box-shadow:0 24px 60px rgba(10,14,25,.42),0 6px 16px rgba(10,14,25,.28);
+	animation:docmodal-pop .16s ease-out}
+.doc-modal-view{flex:1 1 auto;min-height:0;overflow:auto}
+@keyframes docmodal-fade{from{opacity:0}to{opacity:1}}
+@keyframes docmodal-pop{from{opacity:0;transform:translateY(10px) scale(.985)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){.doc-modal-scrim,.doc-modal-card{animation:none}}
+/* Lock the pane behind while the modal is open — the modal view is the only scroller. A
+   gallery-block modal opening INSIDE a canvas is full-screen above everything, so lock the
+   modal view under it too. */
+body.doc-modal-open .main{overflow:hidden}
+body.modal-open .doc-modal-view{overflow:hidden}
+
+/* Overlay renderer chrome (§4.6): a light toolbar at the TOP of the modal card — the
+   breadcrumb back to the owning folder, sibling prev/next, and the document action cluster
+   relocated from the topbar island (its .tbtn/.view-toggle buttons, styled for the BLACK
+   island, re-skinned dark-ink here). It NEVER prints (see @media print). */
+.overlay-chrome{flex:0 0 auto;display:flex;align-items:center;gap:10px;
 	padding:8px 14px;background:var(--bg);border-bottom:1px solid var(--border)}
 .overlay-chrome[hidden]{display:none}
 .oc-left{display:flex;align-items:center;gap:6px;flex:1 1 auto;min-width:0}
@@ -1366,14 +1389,14 @@ body.presenting.cursor-hidden .stage{cursor:none}
 	backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px)}
 /* The extracted image stage (§4.7): the stage + zoom bar + metadata panel as ONE
    positioned flex row, shared by the gallery-block modal (which wraps it in its own
-   close/prev/next chrome) and the overlay renderer (which mounts it in #mainView and
-   uses the overlay chrome instead). The zoom bar positions against THIS box. */
+   close/prev/next chrome) and the overlay renderer (which mounts it in the modal view
+   and uses the overlay chrome instead). The zoom bar positions against THIS box. */
 .img-stage{flex:1 1 auto;display:flex;min-width:0;min-height:0;position:relative}
-/* In the overlay an image fills the pane: the main column stacks the sticky chrome over
-   a flex:1 view, and the stage fills that view. Scoped by body.image-overlay so the deck
-   and continuous document layouts are untouched. */
-body.image-overlay .main{display:flex;flex-direction:column}
-body.image-overlay .main-view{flex:1 1 auto;min-height:0;display:flex}
+/* In the overlay an image FILLS the modal view (the card is already a flex column: chrome
+   over a flex:1 view). The view becomes a flex box so the stage fills it, and its own
+   scroll is off (the stage handles zoom overflow). Scoped by body.image-overlay so the
+   document deck/continuous layouts are untouched. */
+body.image-overlay .doc-modal-view{display:flex;overflow:hidden}
 .g-stage{flex:1 1 auto;display:flex;align-items:center;justify-content:center;overflow:hidden;
 	background:var(--panel-2);position:relative}
 .g-stage.zoomed{cursor:grab}
@@ -1494,11 +1517,19 @@ body.image-overlay .main-view{flex:1 1 auto;min-height:0;display:flex}
 	   (mountCodeCopy's `{button: false}`), so there is nothing to hide. Hiding a
 	   button that should not exist is a fact that rots — this way a test can
 	   assert paper holds zero of them. */
-	body:has(.deck) .topbar, body:has(.pres-mode) .topbar,
-	body:has(.deck) .sidebar, body:has(.pres-mode) .sidebar{display:none !important}
-	body:has(.deck) .app, body:has(.pres-mode) .app{display:block;height:auto}
-	body:has(.deck) .body, body:has(.pres-mode) .body{display:block}
-	body:has(.deck) .main, body:has(.pres-mode) .main{overflow:visible;padding:0;margin:0}
+	/* The deck / slides now live INSIDE the frosted modal (.doc-modal), a SIBLING of .app.
+	   So print HIDES the whole app (topbar, sidebar, and the browse pane behind) and RESETS
+	   the modal to a static, full-page, chrome-free container — no scrim, no card frame, no
+	   transform. Every one of these must be stripped or the deck paginates at the wrong
+	   geometry and prints silent sliver pages (docs/gotchas/frontend.md). Verified by
+	   reading a printed PDF's /Count, never by trusting this CSS. */
+	body:has(.deck) .app, body:has(.pres-mode) .app{display:none !important}
+	.doc-modal{position:static !important;display:block !important;inset:auto !important;padding:0 !important}
+	.doc-modal-scrim{display:none !important}
+	.doc-modal-card{position:static !important;width:auto !important;height:auto !important;max-width:none !important;
+		border:none !important;border-radius:0 !important;box-shadow:none !important;overflow:visible !important;
+		background:#fff !important;animation:none !important}
+	.doc-modal-view{display:block !important;overflow:visible !important;height:auto !important;min-height:0 !important}
 	body:has(.deck) .canvas, body:has(.pres-mode) .canvas{padding:0;margin:0}
 	body:has(.deck), body:has(.pres-mode){background:#fff}
 	/* the deck prints no matter which view is on screen */
@@ -1556,6 +1587,8 @@ body.image-overlay .main-view{flex:1 1 auto;min-height:0;display:flex}
 	.topbar-actions{gap:2px}
 	.body{padding:8px;gap:8px}
 	.sidebar{top:8px;left:8px;bottom:8px}
+	/* The item modal goes FULL-BLEED on a phone — 100% of the real estate, no frame. */
+	.doc-modal-card{width:100vw;height:100vh;height:100dvh;max-width:none;border:none;border-radius:0}
 	/* Multi-column fieldsets stack — three inputs across is unreadable on a phone. */
 	.fset-grid.cols-2,.fset-grid.cols-3{grid-template-columns:minmax(0,1fr)}
 	.fset-grid .field.span-2,.fset-grid .field.span-3{grid-column:auto}

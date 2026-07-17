@@ -67,7 +67,7 @@ test.before(async () => {
 		const q = (sel) => 'document.querySelectorAll(' + JSON.stringify(sel) + ').length'
 		const openC = async (rel) => {
 			await evaluate('location.hash = "#/c/" + encodeURIComponent(' + JSON.stringify(rel) + ')')
-			return until(evaluate, 'window.ic.state.activeId === ' + JSON.stringify(rel) + ' && !document.getElementById("overlayChrome").hidden', 8000)
+			return until(evaluate, 'window.ic.state.activeId === ' + JSON.stringify(rel) + ' && !document.getElementById("docModal").hidden', 8000)
 		}
 
 		try {
@@ -78,15 +78,26 @@ test.before(async () => {
 
 			// The chrome is up, the action cluster is relocated INTO it, and the topbar
 			// island keeps only theme + stop.
-			out.chromeVisible = await evaluate('!document.getElementById("overlayChrome").hidden')
+			out.chromeVisible = await evaluate('!document.getElementById("docModal").hidden')
 			out.clusterInChrome = await evaluate('["viewToggle","presentBtn","tocBtn","stripsBtn","paletteBtn"].every(function(id){ return document.getElementById(id).closest("#ocCluster") })')
 			out.topbarActionIds = await evaluate('Array.from(document.querySelectorAll(".topbar-actions [id]")).map(function(e){ return e.id })')
-			out.docRendered = await evaluate('!!document.querySelector("#mainView .doc-html, #mainView .canvas .md")')
+			out.docRendered = await evaluate('!!document.querySelector("#docModalView .doc-html, #docModalView .canvas .md")')
 			// §3: no inline style attributes under the chrome.
 			out.chromeInlineStyles = await evaluate(q('.overlay-chrome [style]'))
 			// guide.md is index 2 of 5 → both neighbours exist.
 			out.midPrevDisabled = await evaluate('document.getElementById("ocPrev").disabled')
 			out.midNextDisabled = await evaluate('document.getElementById("ocNext").disabled')
+
+			// ---- the frosted modal: content inside, the folder's browse behind, and the
+			// backdrop is DECORATIVE — a stray click must never dismiss it (a form is safe) ----
+			out.contentInModal = await evaluate('!!document.querySelector("#docModalView .canvas .md")')
+			out.browseBehind = await evaluate(q('#mainView .browse .gt') + ' >= 1')
+			out.printFabInModal = await evaluate('!!document.querySelector("#docModalCard #printBtn")')
+			out.chromeInModal = await evaluate('!!document.querySelector("#docModalCard .overlay-chrome #ocClose")')
+			out.bodyModalClass = await evaluate('document.body.classList.contains("doc-modal-open")')
+			await evaluate('document.getElementById("docModalScrim").click()')
+			await sleep(200)
+			out.backdropNonDismiss = await evaluate('!document.getElementById("docModal").hidden && window.ic.state.activeId === "guide.md"')
 
 			// ---- Next reaches the ADJACENT sibling (a document here) ----
 			await evaluate('document.getElementById("ocNext").click()')
@@ -116,7 +127,7 @@ test.before(async () => {
 			await sleep(150)
 			await evaluate('document.body.focus(); document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))')
 			out.steps.escToFolder = await until(evaluate, 'location.hash === "#/f/" && ' + q('#mainView .browse') + ' === 1', 4000)
-			out.escChromeHidden = await evaluate('document.getElementById("overlayChrome").hidden')
+			out.escChromeHidden = await evaluate('document.getElementById("docModal").hidden')
 
 			// ---- the palette panel opens and closes from its NEW home ----
 			await openC('guide.md')
@@ -130,7 +141,7 @@ test.before(async () => {
 			// panel carries dimensions, and the document cluster disables with a reason ----
 			out.imageExtsInClient = await evaluate('(document.body.dataset.imageExts || "")')
 			await openC('pic.png')
-			out.steps.imageStage = await until(evaluate, '!!document.querySelector("#mainView .img-stage .g-full")', 6000)
+			out.steps.imageStage = await until(evaluate, '!!document.querySelector("#docModalView .img-stage .g-full")', 6000)
 			await sleep(400)
 			out.imageImgVisible = await evaluate('(function(){ var i=document.querySelector(".img-stage .g-full"); return !!(i && !i.hidden && i.getAttribute("src")) })()')
 			out.imageDims = await evaluate('(function(){ var rows=[].slice.call(document.querySelectorAll(".img-stage .g-meta .g-mrow")); var r=rows.filter(function(x){return /Dimensions/.test(x.textContent)})[0]; return r?r.textContent.replace(/\\s+/g," ").trim():"" })()')
@@ -141,7 +152,7 @@ test.before(async () => {
 
 			// ---- a metadata-only image (HEIC) shows the placeholder card, not a broken img ----
 			await openC('photo.heic')
-			out.steps.heicShown = await until(evaluate, '!!document.querySelector("#mainView .img-stage")', 6000)
+			out.steps.heicShown = await until(evaluate, '!!document.querySelector("#docModalView .img-stage")', 6000)
 			await sleep(400)
 			out.heicPlaceholder = await evaluate('(function(){ var i=document.querySelector(".img-stage .g-full"); var p=document.querySelector(".img-stage .g-full-ph"); return !!(i && i.hidden && p && !p.hidden) })()')
 			out.heicNote = await evaluate('!!document.querySelector(".img-stage .g-meta .g-mnote")')
@@ -157,10 +168,10 @@ test.before(async () => {
 			// ---- an interactive canvas: Esc with focus in a form field must NOT navigate
 			// (never auto-cancel a session; the reader leaves via the × instead) ----
 			await openC('form.canvas.json')
-			out.steps.formRendered = await until(evaluate, '!!document.querySelector("#mainView form [data-field=\\"x\\"]")', 6000)
-			await evaluate('var i = document.querySelector("#mainView form [data-field=\\"x\\"]"); i && i.focus(); document.activeElement && document.activeElement.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))')
+			out.steps.formRendered = await until(evaluate, '!!document.querySelector("#docModalView form [data-field=\\"x\\"]")', 6000)
+			await evaluate('var i = document.querySelector("#docModalView form [data-field=\\"x\\"]"); i && i.focus(); document.activeElement && document.activeElement.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))')
 			await sleep(300)
-			out.formEscInert = await evaluate('window.ic.state.activeId === "form.canvas.json" && !document.getElementById("overlayChrome").hidden')
+			out.formEscInert = await evaluate('window.ic.state.activeId === "form.canvas.json" && !document.getElementById("docModal").hidden')
 		} catch (e) {
 			out.error = String(e && e.message || e)
 		}
@@ -180,6 +191,15 @@ test('overlay: the chrome shows with the relocated action cluster; the topbar ke
 	assert.equal(R.clusterInChrome, true, 'the view/present/TOC/strips/colors cluster lives in the overlay chrome')
 	assert.deepEqual(R.topbarActionIds, ['themeBtn', 'stopBtn'], 'the topbar island keeps only theme + stop')
 	assert.equal(R.docRendered, true, 'the document rendered inside the overlay')
+})
+
+test('overlay: the item opens in a frosted modal over the folder; the backdrop never dismisses it', { skip }, () => {
+	assert.equal(R.contentInModal, true, 'the document renders inside the modal view (#docModalView)')
+	assert.equal(R.browseBehind, true, "the owning folder's browse view stays rendered behind the modal")
+	assert.equal(R.printFabInModal, true, 'the floating print button lives inside the modal card')
+	assert.equal(R.chromeInModal, true, 'the chrome bar (× + breadcrumb) is inside the modal card')
+	assert.equal(R.bodyModalClass, true, 'doc-modal-open locks the pane behind while the modal is open')
+	assert.equal(R.backdropNonDismiss, true, 'clicking the frosted backdrop does NOT dismiss the modal')
 })
 
 test('overlay: no inline style attributes under the chrome (CSP discipline)', { skip }, () => {

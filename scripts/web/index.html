@@ -47,33 +47,39 @@
 				<div class="ver" title="InstantCanvas skill version">InstantCanvas v__IC_VERSION__</div>
 			</div>
 		</aside>
-		<main class="main" id="main">
-			<!-- Overlay renderer chrome (§4.6): pinned to the top of the pane while a canvas,
-			     document or image is open. It is a ROUTE's chrome, not a dismissible popup —
-			     Esc and the × navigate to the owning folder's #/f/. The action cluster
-			     (view toggle, present, TOC, strips, colors) is MOVED here from the topbar
-			     island at boot (app.js) so its element-scoped handlers keep working. -->
-			<div class="overlay-chrome" id="overlayChrome" hidden>
-				<div class="oc-left">
-					<button class="oc-x" id="ocClose" type="button" title="Back to this folder (Esc)" aria-label="Back to folder"><svg class="lucide" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
-					<nav class="oc-crumb" id="ocCrumb" aria-label="Breadcrumb"></nav>
-				</div>
-				<div class="oc-actions">
-					<button class="oc-nav" id="ocPrev" type="button" title="Previous item (←)" aria-label="Previous item"><svg class="lucide" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg></button>
-					<button class="oc-nav" id="ocNext" type="button" title="Next item (→)" aria-label="Next item"><svg class="lucide" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg></button>
-					<span class="oc-sep" aria-hidden="true"></span>
-					<span class="oc-cluster" id="ocCluster"></span>
-				</div>
-			</div>
-			<div class="main-view" id="mainView"></div>
-		</main><div class="nav-scrim" id="navScrim" aria-hidden="true"></div>
+			<main class="main" id="main"><div class="main-view" id="mainView"></div></main><div class="nav-scrim" id="navScrim" aria-hidden="true"></div>
 	</div>
 </div>
 
-<!-- Floating print action for document canvases: the document's main deliverable
-     is the PDF, so its trigger floats bottom-right, unmissable, only in document
-     mode. Opens the native print dialog (where "Save as PDF" lives). -->
-<button class="print-fab" id="printBtn" hidden title="Print or save as PDF (⌘P) — the sheets are the pages" aria-label="Print or save as PDF"><svg class="lucide" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><path d="M6 9V3a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v6"/><rect x="6" y="14" width="12" height="8" rx="1"/></svg></button>
+<!-- The item overlay. Opening a canvas, document, image or presentation presents it in a
+     large frosted-glass modal OVER the folder's browse view (which stays rendered behind,
+     softly blurred — the frosted background is the real folder). It is a ROUTE, not a
+     dismissible popup: Esc and the × navigate to the owning folder's #/f/, and the backdrop
+     is DECORATIVE — a stray click never dismisses it, so a credentials form is safe. The bar
+     at the top (breadcrumb, prev/next, ×, the relocated action cluster) and the floating
+     print button live INSIDE the modal. Full-bleed on mobile; the deck reset for print sits
+     in @media print. The chrome is moved out of the topbar island at boot (app.js). -->
+<div class="doc-modal" id="docModal" hidden>
+	<div class="doc-modal-scrim" id="docModalScrim" aria-hidden="true"></div>
+	<div class="doc-modal-card" id="docModalCard" role="dialog" aria-modal="true" aria-label="Item view">
+		<div class="overlay-chrome" id="overlayChrome">
+			<div class="oc-left">
+				<button class="oc-x" id="ocClose" type="button" title="Back to this folder (Esc)" aria-label="Back to folder"><svg class="lucide" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
+				<nav class="oc-crumb" id="ocCrumb" aria-label="Breadcrumb"></nav>
+			</div>
+			<div class="oc-actions">
+				<button class="oc-nav" id="ocPrev" type="button" title="Previous item (←)" aria-label="Previous item"><svg class="lucide" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg></button>
+				<button class="oc-nav" id="ocNext" type="button" title="Next item (→)" aria-label="Next item"><svg class="lucide" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg></button>
+				<span class="oc-sep" aria-hidden="true"></span>
+				<span class="oc-cluster" id="ocCluster"></span>
+			</div>
+		</div>
+		<div class="doc-modal-view" id="docModalView"></div>
+		<!-- Floating print action: the document's main deliverable is the PDF, so its trigger
+		     floats bottom-right of the modal, only in document mode. Opens the native dialog. -->
+		<button class="print-fab" id="printBtn" hidden title="Print or save as PDF (⌘P) — the sheets are the pages" aria-label="Print or save as PDF"><svg class="lucide" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><path d="M6 9V3a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v6"/><rect x="6" y="14" width="12" height="8" rx="1"/></svg></button>
+	</div>
+</div>
 
 <!-- Presenting stage: one slide filling the screen (fullscreen, or in-viewport when the
      browser refuses fullscreen). Persistent so it can be the requestFullscreen target;

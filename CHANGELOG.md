@@ -18,13 +18,17 @@
     child directories, reusing the scan's builders (titles, deck flag, companion collapse) and
     the gallery's stat; `insideRoot` + `lstat` confinement, decide-from-extension, and a
     byte-clean 404 for `.env`, a non-directory, or traversal.
-  - **Routed overlay renderer (`#/c/`)** — every item opens in an overlay that *presents* like a
-    modal but **is a route**: a breadcrumb back to the owning folder, **prev/next across all kinds**
-    in displayed order, **Esc / ×** to return to the folder, and the document action cluster
-    (view toggle, Present, TOC, running strips, colors) **relocated from the topbar** into the
-    overlay bar. Documents render as before; **images now render in the overlay too** — a
-    zoom/pan detail stage (shared with the gallery block's modal) with a metadata panel, and a
-    metadata card for a non-renderable HEIC/TIFF. The overlay chrome never prints.
+  - **Item modal (`#/c/`)** — every item opens in a large **frosted-glass modal** (full-bleed on
+    mobile) OVER the folder's browse view, which stays rendered behind it. It *presents* like a
+    modal but **is a route**, not a dismissible popup: the frosted backdrop is decorative (no
+    click-to-close, so a credentials form is safe), and **Esc / ×** navigate back to the folder.
+    The bar carries a breadcrumb, **prev/next across all kinds** in displayed order, and the
+    document action cluster (view toggle, Present, TOC, running strips, colors) **relocated from
+    the topbar**; the floating print button lives inside the modal. Documents render as before;
+    **images now render in it too** — a zoom/pan stage (shared with the gallery block's modal)
+    with a metadata panel, and a metadata card for a non-renderable HEIC/TIFF. A presentation's
+    Present mode stacks above the modal. Nothing of the modal prints — the deck resets to true
+    page geometry.
   - **Workspace nudge** — `open` from a subfolder of a git project (with no `--workspace`) prints
     a one-line **stderr** note naming the project root; a nudge only, behaviour never changes.
     SKILL.md gains a "Choosing the workspace" resolution procedure for agents.

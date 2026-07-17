@@ -1186,12 +1186,14 @@ const treeKidsEl = (rel) => [...treeRoot().querySelectorAll('.tkids')].find((k) 
 /** The folder a route points at: the folder for #/f/, the owning folder for a
  *  #/c/ canvas or image, '' for the workspace root. null when nothing is routed. */
 function activeFolderRel() {
+	// With the modal open (an item routed), "where you are" is the item's OWNING folder —
+	// so the tree highlights it in step with the breadcrumb, whatever the pane shows behind.
+	const id = state.activeId
+	if (typeof id === 'string')
+		return id.includes('/') ? id.slice(0, id.lastIndexOf('/')) : ''
 	if (typeof state.browseId === 'string')
 		return state.browseId
-	const id = state.activeId
-	if (typeof id !== 'string')
-		return null
-	return id.includes('/') ? id.slice(0, id.lastIndexOf('/')) : ''
+	return null
 }
 
 /** A folder is open iff the reader chose so; absent a choice, the root and every
@@ -3950,7 +3952,7 @@ function fitStage() {
 /** Move the live filmstrip chart nodes into the freshly-built stage slide, remembering where
  *  each came from so it can be returned. */
 function stageMoveChartsIn(stageSlide) {
-	const strip = $('main').querySelector('.strip-scale')
+	const strip = $('docModalView').querySelector('.strip-scale')
 	if (!strip)
 		return
 	for (const placeholder of stageSlide.querySelectorAll('.chart-box[data-chart]')) {
@@ -4002,7 +4004,7 @@ function stageShow(index) {
 }
 
 function mostVisibleSlide() {
-	const items = [...$('main').querySelectorAll('.slide-item')]
+	const items = [...$('docModalView').querySelectorAll('.slide-item')]
 	if (!items.length)
 		return 0
 	const mid = window.innerHeight / 2
@@ -4048,7 +4050,7 @@ function stageHide() {
 	if (document.fullscreenElement)
 		document.exitFullscreen().catch(() => {})
 	// Return to the filmstrip AT the current slide.
-	const item = $('main').querySelectorAll('.slide-item')[state.presIndex]
+	const item = $('docModalView').querySelectorAll('.slide-item')[state.presIndex]
 	if (item)
 		item.scrollIntoView({ block: 'center' })
 }
@@ -4131,13 +4133,6 @@ function renderErrors(id, errors) {
 		<div class="errhead">✗ ${esc(id)} failed validation</div>
 		<div class="errbody">${lines}</div>
 	</div>`
-}
-
-function renderEmpty() {
-	const root = state.tree ? state.tree.root : ''
-	return `<div class="empty"><div class="big"></div><b>Nothing selected</b>
-		<div>Pick a canvas from the sidebar, or drop a <code>.json</code> canvas or a <code>.md</code> file into this folder — it appears automatically.</div>
-		<div class="empty-note">Watching <code>${esc(root)}</code></div></div>`
 }
 
 // ---------------------------------------------------------------- overlay chrome (§4.6)
@@ -4226,12 +4221,10 @@ function buildCrumb(folder) {
 	})
 }
 
-/** Show + populate the overlay chrome for a canvas/image route; hide it when browsing a
- *  folder or on the empty pane. */
+/** Populate the modal's chrome (breadcrumb + prev/next) for the routed item. The modal's
+ *  own `hidden` controls whether the chrome is on screen, so this only fills it in. */
 function syncOverlayChrome() {
-	const open = typeof state.activeId === 'string' && typeof state.browseId !== 'string'
-	$('overlayChrome').hidden = !open
-	if (!open)
+	if (typeof state.activeId !== 'string')
 		return
 	const folder = ocDirname(state.activeId)
 	buildCrumb(folder)
@@ -4402,6 +4395,25 @@ function createImageStage() {
 	}
 }
 
+/** The pane behind the modal (#mainView): the browse view of `state.browseId`, or empty.
+ *  It re-renders ONLY when the folder changes, so opening/closing the modal or flipping
+ *  prev/next never refetches the folder underneath. */
+let paneFolder = undefined
+function renderPane() {
+	const view = $('mainView')
+	if (typeof state.browseId === 'string') {
+		if (paneFolder === state.browseId && browseInstance)
+			return // already showing this folder — do not refetch it under the modal
+		paneFolder = state.browseId
+		disposeBrowse()
+		renderBrowse(view, state.browseId)
+	} else {
+		paneFolder = undefined
+		disposeBrowse()
+		view.innerHTML = '' // a cold deep link has no folder behind → a plain frosted backdrop
+	}
+}
+
 async function renderCanvas() {
 	disposeCharts()
 	disposeGalleries()
@@ -4409,34 +4421,28 @@ async function renderCanvas() {
 	// reload keeps it (renderPresentationView re-shows it at the held slide).
 	if (state.presenting && state.activeId !== pres.canvasId)
 		stageHide()
-	// Content renders into #mainView; the overlay chrome (§4.6) is a persistent sibling
-	// inside #main that holds the relocated action cluster, so it survives these rewrites.
-	const main = $('mainView')
-	syncOverlayChrome()
-	// §4.7 image-overlay layout + flags reset every render; the image branch re-sets them.
+	// The item renders INSIDE the frosted modal (#docModalView); the browse view behind it
+	// is the pane, rendered by renderPane(). The modal's own `hidden` controls visibility.
+	const modal = $('docModal')
+	const main = $('docModalView')
 	document.body.classList.remove('image-overlay')
 	state.imageLand = false
 	overlayStage = null
-	// A folder route (#/f/) renders the browse view — a mixed-type grid of the
-	// folder's renderable items — instead of a canvas.
-	if (typeof state.browseId === 'string') {
+	// No item routed → close the modal; the pane behind is the whole view.
+	if (typeof state.activeId !== 'string') {
 		state.canvasDoc = null
 		state.docLand = false
 		state.presLand = false
-		disposeBrowse()
-		await renderBrowse(main, state.browseId)
+		main.innerHTML = ''
+		modal.hidden = true
+		document.body.classList.remove('doc-modal-open')
 		syncViewToggle()
 		return
 	}
-	disposeBrowse() // leaving the browse view
-	if (!state.activeId) {
-		state.canvasDoc = null
-		state.docLand = false
-		state.presLand = false
-		main.innerHTML = renderEmpty()
-		syncViewToggle()
-		return
-	}
+	// An item is routed → open the modal and populate its chrome.
+	modal.hidden = false
+	document.body.classList.add('doc-modal-open')
+	syncOverlayChrome()
 	// §4.7: an image path renders the zoom/pan stage instead of a canvas — /api/canvas is
 	// NEVER called for it. Classification is by extension against the server's own image
 	// union set, templated into the page (isImagePath → IMAGE_EXTS), never a copied list.
@@ -5605,7 +5611,8 @@ async function renderBrowse(main, rel) {
 	renderToolbar()
 }
 
-$('main').addEventListener('click', async (e) => {
+// The canvas content lives in the modal view now, so its delegated clicks bind there.
+$('docModalView').addEventListener('click', async (e) => {
 	const btn = e.target.closest('.code-copy')
 	if (!btn)
 		return
@@ -5614,7 +5621,7 @@ $('main').addEventListener('click', async (e) => {
 	flashCopied(btn, await copyText(source))
 })
 
-$('main').addEventListener('click', (e) => {
+$('docModalView').addEventListener('click', (e) => {
 	const tab = e.target.closest('[data-page]')
 	if (tab) {
 		state.activePage = Number(tab.dataset.page)
@@ -6447,19 +6454,24 @@ function onSessionMessage(msg) {
 // ---------------------------------------------------------------- routing
 
 function route() {
-	// Two routes: #/c/<rel> opens a canvas or image; #/f/<rel> opens a folder's
-	// browse view ('' = the workspace root). The browse view is rendered from §4.5;
-	// until then, a folder route highlights the tree and leaves the pane empty.
+	// Two layers, two routes. #/f/<rel> is the folder BROWSE VIEW in the pane (`#mainView`);
+	// #/c/<rel> opens an item in the frosted MODAL over it. On a #/c/ route the pane folder
+	// (`browseId`) is left AS-IS, so the browse view the reader came from stays rendered
+	// behind the modal — a cold deep link (no prior #/f/) leaves it null → a plain frosted
+	// backdrop. Only a #/f/ route changes what the pane shows.
 	const cm = /^#\/c\/(.+)$/.exec(location.hash)
 	const fm = /^#\/f\/(.*)$/.exec(location.hash)
 	const id = cm ? decodeURIComponent(cm[1]) : null
-	const browse = fm ? decodeURIComponent(fm[1]) : null
 	if (id !== state.activeId)
 		state.activePage = 0
 	state.activeId = id
-	state.browseId = browse
+	if (fm)
+		state.browseId = decodeURIComponent(fm[1])
+	else if (!cm)
+		state.browseId = null // neither route (a bare '#') — nothing behind, nothing above
 	syncTreeActive() // class toggle + incremental reveal, never a rebuild
-	renderCanvas()
+	renderPane()     // the browse view behind — re-renders only when the folder changes
+	renderCanvas()   // the item in the modal (or closes it)
 }
 window.addEventListener('hashchange', route)
 
@@ -6479,7 +6491,7 @@ $('ocNext').addEventListener('click', () => ocStep(1))
 // swallows every key and stops propagation), ⌘K search, the palette panel, a gallery-block
 // modal, or focus inside a form (so Esc closes a popover first and never cancels a session).
 document.addEventListener('keydown', (e) => {
-	if ($('overlayChrome').hidden || state.presenting || document.body.classList.contains('nav-open'))
+	if ($('docModal').hidden || state.presenting || document.body.classList.contains('nav-open'))
 		return
 	// Yield to any sub-surface that owns the keyboard: ⌘K search, the palette panel, a
 	// gallery-block detail/delete modal (.g-modal), or a gallery block IN selection mode
