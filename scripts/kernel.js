@@ -16,7 +16,7 @@ const { scan, dirsUnder, readCanvasFile, MAX_CANVAS_BYTES, isExcludedDir } = req
 const { validate, collectBlocks, isInteractiveBlock, flattenFields } = require('./lib/validate')
 const { readMarkdownSrc, inlineLocalImages, inlineImageFile, hasMarkdownExtension, renderableMarkdown, MAX_COVER_IMAGE_BYTES } = require('./lib/markdownsrc')
 const { virtualCanvasFor } = require('./lib/mdcanvas')
-const { listImages, mediaStat, isStreamableFile, isGalleryImage, galleryMime, parseByteRange, normalizeRelDir, GALLERY_IMAGE_EXTS } = require('./lib/gallery')
+const { listImages, mediaStat, isStreamableFile, mediaKind, galleryMime, parseByteRange, normalizeRelDir, GALLERY_IMAGE_EXTS } = require('./lib/gallery')
 const { listDir } = require('./lib/browse')
 const { dimensions } = require('./lib/imagemeta')
 const { companionFor, enhancesOf } = require('./lib/companion')
@@ -723,16 +723,19 @@ async function route(req, res, url) {
 		return sendJson(res, 200, { ok: true, dir: relDir ? relDir.split(path.sep).join('/') : '.', items: result.items, truncated: result.truncated })
 	}
 
-	// One image's full metadata: the stat fields PLUS its pixel dimensions. The
-	// extension gate and confinement run BEFORE any open (mediaStat), so a
-	// non-image path — `.env` — is a 404 whose body carries none of the file.
+	// One media file's full metadata: the stat fields (incl. `kind`) PLUS, for an
+	// image, its pixel dimensions. The extension gate and confinement run BEFORE
+	// any open (mediaStat), so a non-media path — `.env` — is a 404 whose body
+	// carries none of the file.
 	if (method === 'GET' && p === '/api/gallery/meta') {
 		const meta = mediaStat(ROOT, url.searchParams.get('path') || '')
 		if (!meta)
-			return sendJson(res, 404, { ok: false, message: 'Not an image in this workspace.' })
-		// dimensions() reads a bounded header of a file we have already proven is an
-		// allowed image; HEIC/TIFF answer here (as metadata-only cards) with null dims.
-		const d = dimensions(meta.abspath)
+			return sendJson(res, 404, { ok: false, message: 'Not a media file in this workspace.' })
+		// dimensions() (imagemeta) parses IMAGE headers only — HEIC/TIFF answer here
+		// as metadata-only cards with null dims. Video/audio never touch it: their
+		// pixel size and duration come from the media element in the browser, so
+		// there is deliberately NO server-side media parsing.
+		const d = meta.kind === 'image' ? dimensions(meta.abspath) : null
 		return sendJson(res, 200, { ok: true, ...meta, width: d ? d.width : null, height: d ? d.height : null })
 	}
 
@@ -977,16 +980,17 @@ function serveGalleryFile(res, rel, rangeHeader) {
 }
 
 /**
- * Permanently delete a set of gallery images. This is a new risk class for the
- * runtime — every other delete only ever removed a marker-verified canvas it
- * authored; these are the USER's photos — so every guard exists deliberately:
+ * Permanently delete a set of gallery images and media files. This is a new risk
+ * class for the runtime — every other delete only ever removed a marker-verified
+ * canvas it authored; these are the USER's photos, videos and audio — so every
+ * guard exists deliberately:
  *
  *  - EVERY path is validated BEFORE ANY file is unlinked, and one bad path fails
  *    the whole request with NOTHING deleted, naming the offender. The browser can
  *    only send what the listing gave it, but the browser is not trusted.
- *  - A path must confine to the root, its extension must be in the image union
- *    set (never a .json, a .env, a dir name), and `lstat` must show a regular
- *    file — no directories, no symlinks.
+ *  - A path must confine to the root, its extension must be in the media union
+ *    (image / video / audio — never a .json, a .env, a dir name), and `lstat`
+ *    must show a regular file — no directories, no symlinks.
  *  - A directory is NEVER removed, not even one left empty. This is deliberately
  *    UNLIKE the old collection delete, which removed its own emptied folder:
  *    these folders are the user's, not ours.
@@ -997,9 +1001,9 @@ function serveGalleryFile(res, rel, rangeHeader) {
 function handleGalleryDelete(res, body) {
 	const paths = body && Array.isArray(body.paths) ? body.paths : null
 	if (!paths)
-		return sendJson(res, 400, { ok: false, error: { code: 'INVALID_SPEC', message: '"paths" must be an array of workspace-relative image paths.' } })
+		return sendJson(res, 400, { ok: false, error: { code: 'INVALID_SPEC', message: '"paths" must be an array of workspace-relative media-file paths.' } })
 	if (paths.length > 500)
-		return sendJson(res, 400, { ok: false, error: { code: 'TOO_MANY_PATHS', message: `At most 500 images can be deleted per request (got ${paths.length}).` } })
+		return sendJson(res, 400, { ok: false, error: { code: 'TOO_MANY_PATHS', message: `At most 500 files can be deleted per request (got ${paths.length}).` } })
 
 	// Validate the WHOLE batch first; any failure returns before a single unlink.
 	const targets = []
@@ -1010,8 +1014,8 @@ function handleGalleryDelete(res, body) {
 		const abs = path.resolve(ROOT, rel)
 		if (!insideRoot(ROOT, abs))
 			return bad('PATH_OUTSIDE_WORKSPACE', `"${rel}" is outside the workspace root — nothing was deleted.`)
-		if (!isGalleryImage(rel))
-			return bad('NOT_AN_IMAGE', `"${rel}" is not an image — the whole request is refused and nothing was deleted.`)
+		if (mediaKind(rel) === null)
+			return bad('NOT_A_MEDIA_FILE', `"${rel}" is not an image, video or audio file — the whole request is refused and nothing was deleted.`)
 		let st = null
 		try { st = fs.lstatSync(abs) } catch { /* missing — reported below */ }
 		if (!st || !st.isFile()) // refuses directories AND symlinks
