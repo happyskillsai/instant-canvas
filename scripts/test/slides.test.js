@@ -161,7 +161,10 @@ test.before(async () => {
 	K.child = spawn(process.execPath, [KERNEL, root], { env: { ...process.env, INSTANTCANVAS_STATE_DIR: STATE_DIR }, stdio: 'ignore' })
 	// Poll registry.read (raw, no side effect) + our own healthz — never readAlive in a
 	// before hook, which deletes the healthy kernel it fails to ping under load.
-	const deadline = Date.now() + 15_000
+	// 30s (was 15s): under the grown single-process suite, ~14 kernels race their spawns
+	// and the last land past the old 15s edge — one throw here fails the whole suite.
+	// Same bump kernel.test.js and document.test.js already carry.
+	const deadline = Date.now() + 30_000
 	while (Date.now() < deadline) {
 		const entry = registry.read(root)
 		if (entry && entry.port && await healthzOk(entry.port)) {

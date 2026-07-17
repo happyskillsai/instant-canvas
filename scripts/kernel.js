@@ -20,6 +20,7 @@ const { listImages, imageStat, isRenderableImage, isGalleryImage, galleryMime, n
 const { listDir } = require('./lib/browse')
 const { dimensions } = require('./lib/imagemeta')
 const { companionFor, enhancesOf } = require('./lib/companion')
+const { figureMap } = require('./lib/figures')
 const { Sessions } = require('./lib/session')
 const envfile = require('./lib/envfile')
 const jsonfile = require('./lib/jsonfile')
@@ -163,7 +164,7 @@ function loadCanvas(rel) {
 		if (!canvas)
 			return { status: 404, body: { ok: false, message: `Document not found: ${rel}` } }
 		resolveMarkdownSrc(canvas, { native: true })
-		return { status: 200, body: { ok: true, path: rel, canvas, warnings: [], ...themeFor(rel, null) }, canvas }
+		return { status: 200, body: { ok: true, path: rel, canvas, warnings: [], figures: figureMap(canvas), ...themeFor(rel, null) }, canvas }
 	}
 
 	// A directory is NOT a canvas. GET /api/canvas answers only for canvas files and
@@ -226,6 +227,7 @@ function loadCanvasFile(rel, { as = null } = {}) {
 		status: 200,
 		body: {
 			ok: true, path: asPath, canvas, warnings: result.warnings,
+			figures: figureMap(canvas),
 			...(as ? { companion: rel } : {}),
 			...themeFor(asPath, declared),
 		},

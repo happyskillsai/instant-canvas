@@ -33,6 +33,10 @@ const pdfPageCount = (buf) => Math.max(...[...buf.toString('latin1').matchAll(/\
 const pdfPageSizes = (buf) => [...new Set([...buf.toString('latin1')
 	.matchAll(/\/MediaBox\s*\[\s*[\d.]+\s+[\d.]+\s+([\d.]+)\s+([\d.]+)\s*\]/g)]
 	.map((m) => `${Math.round(+m[1])}x${Math.round(+m[2])}`))]
+// The Info dictionary's /Title — Chrome writes it from document.title, as an uncompressed
+// literal string. This is the PDF's own name (what a viewer's title bar and Cmd+P's suggested
+// filename show), which the browser now derives from the document's title (app.js pdfDocTitle).
+const pdfTitle = (buf) => { const m = /\/Title\s*\(([^)]*)\)/.exec(buf.toString('latin1')); return m ? m[1] : null }
 
 // PDF TEXT assertions need poppler (byte-greps are unreliable — a rendered string may be
 // FlateDecode-compressed out of the raw bytes), so they skip with a message without it.
@@ -64,6 +68,8 @@ let printedCover = null
 let coverPdf = null
 let presDeck = null
 let presPdf = null
+let printedNoTitle = null
+let noTitlePdf = null
 
 test.before(async () => {
 	root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'ic-print-ws-')))
@@ -119,6 +125,13 @@ test.before(async () => {
 	presDeck = runCli(['print', path.join(root, 'deck.canvas.json'), '--out', path.join(root, 'out', 'deck.pdf'), '--workspace', root])
 	if (presDeck.code === 0)
 		presPdf = fs.readFileSync(path.join(root, 'out', 'deck.pdf'))
+
+	// A markdown file with NO usable title: the filename slugs to empty (all punctuation) and
+	// there is no H1 to fall back to, so pdfDocTitle takes the timestamped generic branch.
+	fs.writeFileSync(path.join(root, '@@@.md'), 'Prose with no heading at all.\n')
+	printedNoTitle = runCli(['print', path.join(root, '@@@.md'), '--out', path.join(root, 'out', 'untitled.pdf'), '--workspace', root])
+	if (printedNoTitle.code === 0)
+		noTitlePdf = fs.readFileSync(path.join(root, 'out', 'untitled.pdf'))
 })
 
 test.after(() => {
@@ -145,6 +158,28 @@ test('print emits one result JSON and writes a real PDF', { skip, timeout: 120_0
 
 test('the PDF page count equals the deck sheet count the command reported', { skip, timeout: 120_000 }, () => {
 	assert.equal(pdfPageCount(pdf), printed.json.pages, 'sheets ARE the pages — by construction')
+})
+
+test('the PDF is named after the document, not "InstantCanvas" — slugified from the title', { skip, timeout: 120_000 }, () => {
+	// The static <title>InstantCanvas</title> in the shell used to name every PDF; the browser
+	// now sets document.title from the document's own title (cover.title || envelope title),
+	// lowercased with whitespace → dashes and punctuation stripped. The fixture's cover title is
+	// "Aurora Quarterly Review".
+	assert.equal(pdfTitle(pdf), 'aurora-quarterly-review', 'the /Title is the slugified document title')
+})
+
+test('a markdown PDF is named after its H1 heading', { skip, timeout: 120_000 }, () => {
+	// handbook.md opens with "# The InstantCanvas Handbook"; the virtual canvas's title is that
+	// H1, and the PDF inherits it slugified — no "document" object involved.
+	assert.equal(pdfTitle(mdPdf), 'the-instantcanvas-handbook', 'the /Title is the slugified H1')
+})
+
+test('a document with no usable title falls back to a full-timestamp generic name', { skip, timeout: 120_000 }, () => {
+	assert.equal(printedNoTitle.code, 0, JSON.stringify(printedNoTitle.json))
+	// year-month-day-hoursminutes, then the generic base — a complete timestamp so successive
+	// fallbacks sort and do not collide within the minute.
+	assert.match(pdfTitle(noTitlePdf), /^\d{4}-\d{2}-\d{2}-\d{4}-instant-canvas$/,
+		'the /Title is a timestamped generic name, not "InstantCanvas"')
 })
 
 test('leak regression: neither the kernel token nor 127.0.0.1 appears in the PDF bytes', { skip, timeout: 120_000 }, () => {

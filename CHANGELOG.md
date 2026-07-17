@@ -2,6 +2,19 @@
 
 ## [Unreleased]
 
+### Fixed
+- **A printed PDF is now named after the document, not always "InstantCanvas".** The browser
+  served a static `<title>`, so every `instant-canvas print` PDF — and every reader's Cmd+P
+  "Save as PDF" — carried the same `/Title` metadata and the same suggested filename. The tab
+  title is now derived per canvas from the document's own title (the cover title, else the
+  envelope `title`, else a markdown file's first `# heading`), **slugified**: lowercased, each
+  whitespace run turned to a single dash, and every non-alphanumeric character stripped
+  (`Aurora Quarterly Review` → `aurora-quarterly-review`). A canvas with no usable title (empty,
+  or all punctuation) falls back to a generic name prefixed with a full local timestamp —
+  year-month-day-hoursminutes, e.g. `2026-07-17-1430-instant-canvas`. Set in the browser so it
+  reaches both surfaces that name a PDF: the `print` command (a fresh headless page load) and a
+  reader's own Cmd+P.
+
 ## [0.11.0] - 2026-07-17
 
 ### Added

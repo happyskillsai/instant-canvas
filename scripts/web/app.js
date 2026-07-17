@@ -90,6 +90,7 @@ const state = {
 	// it is written back to a file, so the browser holds no private copy of the
 	// rules, only the answer.
 	canvasTheme: null, // resolved tokens + colorway currently painted
+	figByBlock: new Map(), // chart block -> runtime-derived figure number (from the payload)
 	themeDeclared: null, // what the canvas/config actually SAYS (preset + overrides), for the picker
 	themeSource: 'default', // 'canvas' | 'workspace' | 'default' — where the above came from
 	themeDirty: false, // previewing an unsaved theme
@@ -2563,8 +2564,42 @@ function attachSweep(entry) {
 // Rotating a 3D scene or reading a k×k matrix needs more than the 320 px default.
 const TALL_KINDS = new Set(['scatter3d', 'surface', 'splom'])
 
-function renderChartShell(block, idx) {
-	const title = block.title ? `<div class="chart-title">${esc(block.title)}</div>` : ''
+/** True when the canvas declares an envelope `document` object — the condition
+ *  under which the CONTINUOUS view wears figure numbers (a report does; a scratch
+ *  dashboard does not). The deck always wears them. */
+const canvasDeclaresDoc = (c) => !!(c && c.document && typeof c.document === 'object')
+
+/** Pair each chart block with its runtime-derived figure number. The kernel ships
+ *  `figures` (a pure function of the file) keyed by the FLAT block index; this maps
+ *  that index back to the block object so a caption can look itself up. The flatten
+ *  here matches lib/figures.js: pages concatenated in order, else blocks[]. */
+function indexFigures(canvas, figures) {
+	const flat = canvas && Array.isArray(canvas.pages)
+		? canvas.pages.flatMap((p) => (p && Array.isArray(p.blocks) ? p.blocks : []))
+		: (canvas && Array.isArray(canvas.blocks) ? canvas.blocks : [])
+	const map = new Map()
+	for (const f of (figures || [])) {
+		const b = flat[f.blockIndex]
+		if (b) map.set(b, f.figure)
+	}
+	return map
+}
+
+/** The `.chart-title` caption. On paper (and in a declared-document's continuous
+ *  view) a chart wears its derived `Figure N — <title>` prefix — and an UNTITLED
+ *  chart, which renders no caption today, gains a bare `Figure N`. Everywhere the
+ *  number does not apply, the caption is the plain title exactly as before. The
+ *  number is never authored — it is looked up from the runtime's map. */
+function figureCaption(block, numbered) {
+	const n = numbered && state.figByBlock ? state.figByBlock.get(block) : undefined
+	if (n == null)
+		return block.title ? `<div class="chart-title">${esc(block.title)}</div>` : ''
+	const label = block.title ? `Figure ${n} — ${esc(block.title)}` : `Figure ${n}`
+	return `<div class="chart-title">${label}</div>`
+}
+
+function renderChartShell(block, idx, numbered) {
+	const title = figureCaption(block, numbered)
 	const desc = block.description ? `<div class="chart-desc">${esc(block.description)}</div>` : ''
 	const cls = (TALL_KINDS.has(block.kind) ? ' tall' : '') + (isSwept(block) ? ' swept' : '')
 	return `<div class="block card">${title}${desc}<div class="chart-box${cls}" data-chart="${idx}"></div></div>`
@@ -2906,7 +2941,10 @@ function docFragments(canvas, doc) {
 				fragments.push(...mdFragments(b, entries, depth))
 			} else if (b.type === 'chart') {
 				// A slot per view; the ONE chart box moves between slots on toggle.
-				const el = htmlFragment(chartSlotShell(b, 0), b.title, captions)
+				// The DECK always numbers its captions. `b.title` (not the prefixed
+				// caption) is what feeds the TOC-caption fallback, so figures never
+				// enter the TOC.
+				const el = htmlFragment(chartSlotShell(b, 0, true), b.title, captions)
 				const box = document.createElement('div')
 				box.className = 'chart-box' + (TALL_KINDS.has(b.kind) ? ' tall' : '')
 				el.querySelector('.chart-slot').appendChild(box)
@@ -2931,8 +2969,8 @@ function docFragments(canvas, doc) {
 
 /** Chart card with an empty slot — used by both document views. The live plot
  *  node is appended into whichever view's slot is active. */
-function chartSlotShell(block, idx) {
-	const title = block.title ? `<div class="chart-title">${esc(block.title)}</div>` : ''
+function chartSlotShell(block, idx, numbered) {
+	const title = figureCaption(block, numbered)
 	const desc = block.description ? `<div class="chart-desc">${esc(block.description)}</div>` : ''
 	return `<div class="block card">${title}${desc}<div class="chart-slot" data-slot="${idx}"></div></div>`
 }
@@ -3387,12 +3425,16 @@ function docHtmlView(canvas, flatBlocks) {
 	const page = pages[state.activePage]
 	const tabs = pages.length > 1 ? `<div class="tabs">${pages.map((p, i) =>
 		`<button class="tab ${i === state.activePage ? 'active' : ''}" data-page="${i}">${esc(p.name)}</button>`).join('')}</div>` : ''
+	// The continuous twin numbers its captions only when the canvas declares a
+	// `document` (D6): a report wears numbers on screen, a scratch dashboard viewed
+	// as paper does not carry them back into its continuous view.
+	const numbered = canvasDeclaresDoc(canvas)
 	const inner = (page.blocks || []).map((b) => {
 		if (!b || typeof b !== 'object') return ''
 		if (b.type === 'markdown') return renderMarkdown(b)
 		if (b.type === 'kpi') return renderKpi(b)
 		if (b.type === 'table') return renderTable(b)
-		if (b.type === 'chart') return chartSlotShell(b, flatBlocks.indexOf(b))
+		if (b.type === 'chart') return chartSlotShell(b, flatBlocks.indexOf(b), numbered)
 		return ''
 	}).join('')
 	return `<div class="doc-html"><div class="canvas">
@@ -4427,9 +4469,37 @@ function renderPane() {
 	}
 }
 
+// The printed PDF's /Title metadata — and the filename Cmd+P proposes — is taken from
+// document.title, which is a static "InstantCanvas" in the shell, so every PDF came out named
+// that. Derive it from the document's OWN title instead, slugified: lowercase, whitespace runs
+// to a single dash, every non-alphanumeric character dropped. A canvas with no usable title
+// (empty, or all punctuation) falls back to a generic name prefixed with a full local
+// timestamp (year-month-day-hoursminutes), so successive fallbacks sort and do not collide
+// within the minute. Set in renderCanvas() so it reaches BOTH surfaces that name a PDF: the
+// `instant-canvas print` command (a fresh page load whose readiness gate waits for the very
+// deck this runs before), and a reader's own Cmd+P.
+function pdfDocTitle(canvas) {
+	const doc = canvas && canvas.document
+	// cover.title first, mirroring the deck's own <h1> precedence — it is the name a reader
+	// actually sees on the cover sheet — then the required envelope title.
+	const raw = (doc && doc.cover && doc.cover.title) || (canvas && canvas.title) || ''
+	const slug = String(raw).toLowerCase()
+		.replace(/\s+/g, '-')        // spaces (any whitespace run) → one dash
+		.replace(/[^a-z0-9-]/g, '')  // strip everything that is not a-z, 0-9 or dash
+		.replace(/-+/g, '-')         // collapse dash runs left where punctuation was stripped
+		.replace(/^-+|-+$/g, '')     // trim the ends
+	if (slug)
+		return slug
+	const d = new Date()
+	const p = (n) => String(n).padStart(2, '0')
+	const ts = `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}`
+	return `${ts}-instant-canvas`
+}
+
 async function renderCanvas() {
 	disposeCharts()
 	disposeGalleries()
+	state.figByBlock = new Map() // rebound from the payload on a successful load below
 	// Navigating to a DIFFERENT canvas while presenting leaves the stage; a same-canvas hot
 	// reload keeps it (renderPresentationView re-shows it at the held slide).
 	if (state.presenting && state.activeId !== pres.canvasId)
@@ -4446,6 +4516,7 @@ async function renderCanvas() {
 		state.canvasDoc = null
 		state.docLand = false
 		state.presLand = false
+		document.title = 'InstantCanvas' // no document open → back to the app name
 		main.innerHTML = ''
 		modal.hidden = true
 		document.body.classList.remove('doc-modal-open')
@@ -4455,6 +4526,7 @@ async function renderCanvas() {
 	// An item is routed → open the modal and populate its chrome.
 	modal.hidden = false
 	document.body.classList.add('doc-modal-open')
+	document.title = 'InstantCanvas' // default; the canvas branch below names it from the title
 	syncOverlayChrome()
 	// §4.7: an image path renders the zoom/pan stage instead of a canvas — /api/canvas is
 	// NEVER called for it. Classification is by extension against the server's own image
@@ -4487,6 +4559,13 @@ async function renderCanvas() {
 	}
 	const canvas = json.canvas
 	state.canvasDoc = canvas
+	// Figure numbers are the runtime's, not the browser's: the kernel ships a map keyed
+	// by the flat block index and the page only binds it to block objects. It never
+	// re-derives which chart is Figure N.
+	state.figByBlock = indexFigures(canvas, json.figures)
+	// Name the tab (and therefore the printed PDF / Cmd+P filename) after the document itself.
+	// Set before the slides / deck / continuous branches below so every printable kind is named.
+	document.title = pdfDocTitle(canvas)
 	state.session = json.session || null
 	// The theme lands BEFORE anything paints: palette() feeds every chart template,
 	// so a theme applied afterwards would mean a repaint the reader can see. The
@@ -4536,13 +4615,16 @@ async function renderCanvas() {
 	const tabs = pages.length > 1 ? `<div class="tabs">${pages.map((p, i) =>
 		`<button class="tab ${i === state.activePage ? 'active' : ''}" data-page="${i}">${esc(p.name)}</button>`).join('')}</div>` : ''
 
+	// A declared-document canvas viewed continuously still wears figure numbers (D6);
+	// a plain display canvas does not.
+	const numbered = canvasDeclaresDoc(canvas)
 	const inner = blocks.map((b, i) => {
 		if (!b || typeof b !== 'object') return ''
 		if (b.type === 'markdown') return renderMarkdown(b)
 		if (b.type === 'kpi') return renderKpi(b)
 		if (b.type === 'table') return renderTable(b)
 		if (b.type === 'gallery') return renderGalleryShell(i)
-		if (b.type === 'chart') return renderChartShell(b, i)
+		if (b.type === 'chart') return renderChartShell(b, i, numbered)
 		if (b.type === 'form') return renderForm(b)
 		if (b.type === 'confirm') return renderConfirm(b)
 		return ''

@@ -169,7 +169,12 @@ test.before(async () => {
 	// before hook in a single-process suite, so that one throw failed ALL 243 tests
 	// with an error naming the wrong file. Poll for the entry, then confirm liveness
 	// ourselves with a timeout that load cannot beat.
-	const deadline = Date.now() + 15_000
+	//
+	// 30s (was 15s): the suite kept growing more kernel-spawning before hooks, and on a
+	// busy machine ~14 kernels race their spawns in one process — the last few land at
+	// ~17s, right past the old 15s edge, and one throw here fails the entire suite. This
+	// is the same bump document.test.js already made for the identical reason.
+	const deadline = Date.now() + 30_000
 	while (Date.now() < deadline) {
 		const entry = registry.read(K.root)
 		if (entry && entry.port && await pingHealthz(entry.port)) {
