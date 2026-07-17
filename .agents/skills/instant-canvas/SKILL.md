@@ -1,6 +1,6 @@
 ---
 name: instant-canvas
-description: InstantCanvas — Render data and markdown as local canvases, keeping secrets out of the chat. Use when visualizing data, showing or printing a markdown file to PDF, collecting credentials or env vars, or confirming a destructive action.
+description: InstantCanvas — render data and markdown as local canvases or PDFs, keeping secrets out of the chat. Use when visualizing or printing data or markdown, checking a chart is readable, collecting credentials, or confirming a destructive action.
 allowed-tools: Bash, Read, Write, Edit
 ---
 
