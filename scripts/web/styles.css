@@ -1449,6 +1449,42 @@ body.image-overlay .doc-modal-view{display:flex;overflow:hidden}
 .g-zbtn:hover{background:var(--tint)}
 .g-zbtn .lucide{width:16px;height:16px}
 
+/* ------------------------------------------------------------- media player (§4.10)
+   Reuses .img-stage (the flex row: stage column + .g-meta panel) and .g-stage (the
+   centered stage). The transport bar sits UNDER the stage in a flex column, and the
+   whole column can go fullscreen (video only) — the meta panel is outside it, so it
+   never shows over the video. All layout is class-based; only the two range inputs
+   carry a CSSOM `--fill` (the sanctioned progress paint, like every other range). */
+.m-col{flex:1 1 auto;display:flex;flex-direction:column;min-width:0;min-height:0}
+.m-stage{position:relative;background:var(--panel-2)}
+.m-el{max-width:100%;max-height:100%;object-fit:contain;display:block}
+video.m-el{cursor:pointer}
+audio.m-el{display:none} /* the audio element is never shown — the art card stands in */
+.m-disc{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;
+	color:var(--muted);padding:24px;text-align:center}
+.m-disc[hidden]{display:none}
+.m-disc .lucide{width:72px;height:72px}
+.m-disc-name{font-size:14px;color:var(--text);word-break:break-word;max-width:80%}
+.m-err{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;
+	color:var(--muted);padding:24px;text-align:center}
+.m-err[hidden]{display:none}
+.m-err .lucide{width:56px;height:56px}
+.m-err-msg{font-size:13px;max-width:70%}
+.m-bar{flex:0 0 auto;display:flex;align-items:center;gap:10px;padding:10px 14px;
+	background:var(--panel);border-top:1px solid var(--border)}
+.m-btn{border:none;background:transparent;color:var(--text);cursor:pointer;padding:6px;border-radius:7px;
+	display:inline-flex;align-items:center}
+.m-btn:hover{background:var(--tint)}
+.m-btn .lucide{width:18px;height:18px}
+.m-time{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap;flex:0 0 auto}
+.m-seek{flex:1 1 auto;min-width:60px}
+.m-vol{flex:0 0 72px}
+.m-rate{position:relative;font-size:12.5px;font-weight:600;color:var(--text);min-width:40px;justify-content:center}
+.m-rate-label{pointer-events:none}
+.m-rate-menu{left:auto;right:0;min-width:86px}
+.m-col:fullscreen{background:#000}
+.m-col:fullscreen .m-stage{background:#000}
+
 /* permanent-delete confirmation */
 .g-confirm{align-items:center;justify-content:center;padding:16px}
 .g-cbox{background:var(--panel);border:1px solid var(--border);border-radius:14px;box-shadow:var(--shadow);

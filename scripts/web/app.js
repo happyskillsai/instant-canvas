@@ -4356,6 +4356,67 @@ function syncOverlayChrome() {
 // document-level keys and NO prev/next — the mount (the modal's chrome, or the overlay
 // chrome) provides those and calls load() to change the image. A non-renderable image
 // (HEIC/TIFF) shows the metadata card, never a broken <img>.
+// ---- shared media/image metadata panel (used by createImageStage, the gallery block's
+// detail modal, and createMediaStage). Lifting metaRow/renderMeta out of the image stage
+// is what lets the per-row copy (§4.12) land in one place for every surface. ----
+
+function metaRow(label, valueNode) {
+	const row = document.createElement('div'); row.className = 'g-mrow'
+	const l = document.createElement('div'); l.className = 'g-mlabel'; l.textContent = label
+	const v = document.createElement('div'); v.className = 'g-mval'
+	if (typeof valueNode === 'string') v.textContent = valueNode
+	else if (valueNode) v.append(valueNode)
+	row.append(l, v)
+	return row
+}
+
+/**
+ * Render one media file's metadata into `panel`. Image / video / audio share the
+ * common rows; a video or audio file adds Duration (value-synced from the media
+ * element after loadedmetadata, since the server ships null dims — no server-side
+ * media parsing), and a video adds Dimensions the same way. Those two rows carry a
+ * `data-mrow` key so the stage can sync them without rebuilding the panel.
+ */
+function renderMeta(panel, m, p) {
+	panel.textContent = ''
+	if (!m) { panel.append(metaRow('File', p)); return }
+	const title = document.createElement('div'); title.className = 'g-mtitle'; title.textContent = m.name
+	panel.append(title)
+	panel.append(metaRow('Folder', m.dir || '(top level)'))
+	const pathVal = document.createElement('div'); pathVal.className = 'g-path'
+	const pathText = document.createElement('span'); pathText.textContent = m.abspath || m.path
+	const copyBtn = document.createElement('button')
+	copyBtn.type = 'button'; copyBtn.className = 'g-copy'; copyBtn.innerHTML = icon('copy'); copyBtn.title = 'Copy path'
+	copyBtn.addEventListener('click', () => { copyText(m.abspath || m.path); toast('Path copied') })
+	pathVal.append(pathText, copyBtn)
+	panel.append(metaRow('Path', pathVal))
+	panel.append(metaRow('Size', galleryHumanBytes(m.size) + ' (' + (m.size || 0).toLocaleString() + ' bytes)'))
+	panel.append(metaRow('Format', (m.format || '').toUpperCase()))
+	const kind = m.kind || 'image'
+	if (kind === 'video' || kind === 'audio') {
+		const durRow = metaRow('Duration', '—'); durRow.dataset.mrow = 'duration'; panel.append(durRow)
+	}
+	if (kind === 'image') {
+		panel.append(metaRow('Dimensions', m.width && m.height ? m.width + ' × ' + m.height : '—'))
+	} else if (kind === 'video') {
+		const dimRow = metaRow('Dimensions', '—'); dimRow.dataset.mrow = 'dimensions'; panel.append(dimRow)
+	}
+	panel.append(metaRow('Created', galleryDate(m.created)))
+	panel.append(metaRow('Modified', galleryDate(m.modified)))
+	if (!m.renderable && kind === 'image') {
+		const note = document.createElement('div'); note.className = 'g-mnote'; note.textContent = 'Preview not supported by browsers'
+		panel.append(note)
+	}
+}
+
+/** Value-sync one keyed row's text (Duration / Dimensions), never a panel rebuild. */
+function syncMetaRow(panel, key, text) {
+	const row = panel.querySelector('[data-mrow="' + key + '"]')
+	if (!row) return
+	const v = row.querySelector('.g-mval')
+	if (v) v.textContent = text
+}
+
 function createImageStage() {
 	const wrap = document.createElement('div')
 	wrap.className = 'img-stage'
@@ -4438,39 +4499,6 @@ function createImageStage() {
 	stage.addEventListener('pointerup', endDrag)
 	stage.addEventListener('pointercancel', endDrag)
 
-	function metaRow(label, valueNode) {
-		const row = document.createElement('div'); row.className = 'g-mrow'
-		const l = document.createElement('div'); l.className = 'g-mlabel'; l.textContent = label
-		const v = document.createElement('div'); v.className = 'g-mval'
-		if (typeof valueNode === 'string') v.textContent = valueNode
-		else if (valueNode) v.append(valueNode)
-		row.append(l, v)
-		return row
-	}
-	function renderMeta(m, p) {
-		panel.textContent = ''
-		if (!m) { panel.append(metaRow('File', p)); return }
-		const title = document.createElement('div'); title.className = 'g-mtitle'; title.textContent = m.name
-		panel.append(title)
-		panel.append(metaRow('Folder', m.dir || '(top level)'))
-		const pathVal = document.createElement('div'); pathVal.className = 'g-path'
-		const pathText = document.createElement('span'); pathText.textContent = m.abspath || m.path
-		const copyBtn = document.createElement('button')
-		copyBtn.type = 'button'; copyBtn.className = 'g-copy'; copyBtn.innerHTML = icon('copy'); copyBtn.title = 'Copy path'
-		copyBtn.addEventListener('click', () => { copyText(m.abspath || m.path); toast('Path copied') })
-		pathVal.append(pathText, copyBtn)
-		panel.append(metaRow('Path', pathVal))
-		panel.append(metaRow('Size', galleryHumanBytes(m.size) + ' (' + (m.size || 0).toLocaleString() + ' bytes)'))
-		panel.append(metaRow('Format', (m.format || '').toUpperCase()))
-		panel.append(metaRow('Dimensions', m.width && m.height ? m.width + ' × ' + m.height : '—'))
-		panel.append(metaRow('Created', galleryDate(m.created)))
-		panel.append(metaRow('Modified', galleryDate(m.modified)))
-		if (!m.renderable) {
-			const note = document.createElement('div'); note.className = 'g-mnote'; note.textContent = 'Preview not supported by browsers'
-			panel.append(note)
-		}
-	}
-
 	// hint = {renderable, mtime} when the caller already knows (the block modal has the
 	// item); a cold overlay deep-link passes nothing and derives both from meta.
 	async function load(p, hint) {
@@ -4488,7 +4516,7 @@ function createImageStage() {
 			if (m && m.renderable) { img.hidden = false; ph.hidden = true; img.setAttribute('src', galleryFileUrl(p, m.modified)) }
 			else { img.hidden = true; ph.hidden = false }
 		}
-		renderMeta(m, p)
+		renderMeta(panel, m, p)
 	}
 
 	return {
@@ -4498,7 +4526,181 @@ function createImageStage() {
 		zoomIn: () => zoomBy(1.25),
 		zoomOut: () => zoomBy(1 / 1.25),
 		zoomAbout,
+		dispose() {}, // an <img> holds no playback; a no-op keeps renderCanvas's dispose call uniform
 	}
+}
+
+/**
+ * A fully bespoke video/audio player (D3 — never the browser's `controls`). Mirrors
+ * createImageStage's shape: a factory returning { el, load, dispose, toggle, seekBy,
+ * setRate, mute, fullscreen, escape }. The transport bar (play/pause, time, scrubber,
+ * mute + volume, speed, and fullscreen for video) sits under the stage; the metadata
+ * panel is the shared renderMeta. `state.mediaRate` is re-applied on every mount, so the
+ * chosen speed is sticky across items and across video ↔ audio.
+ *
+ * dispose() is load-bearing: a detached <video>/<audio> keeps PLAYING in Chrome until GC,
+ * so closing the overlay (or stepping prev/next) without it leaves sound running with no
+ * UI to stop it. renderCanvas disposes the outgoing stage before mounting the next.
+ */
+function createMediaStage(kind) {
+	const wrap = document.createElement('div')
+	wrap.className = 'img-stage media-stage'
+	const col = document.createElement('div'); col.className = 'm-col'
+	const stage = document.createElement('div'); stage.className = 'g-stage m-stage'
+	const panel = document.createElement('div'); panel.className = 'g-meta'
+
+	// The media element: a <video> shown on the stage, or a bare <audio> that is never
+	// displayed (an audio file shows an art card instead). No `controls`, ever.
+	const el = document.createElement(kind === 'audio' ? 'audio' : 'video')
+	el.className = 'm-el'; el.setAttribute('playsinline', ''); el.preload = 'metadata'
+
+	const disc = document.createElement('div'); disc.className = 'm-disc'; disc.innerHTML = icon('music')
+	const discName = document.createElement('div'); discName.className = 'm-disc-name'; disc.append(discName)
+
+	// The error / metadata-only card — an element that cannot play never mounts a src.
+	const errCard = document.createElement('div'); errCard.className = 'm-err'; errCard.hidden = true
+	errCard.innerHTML = icon(kind === 'audio' ? 'music' : 'film')
+	const errMsg = document.createElement('div'); errMsg.className = 'm-err-msg'; errCard.append(errMsg)
+
+	stage.append(el, disc, errCard)
+
+	// ---- transport bar ----
+	const bar = document.createElement('div'); bar.className = 'm-bar'
+	const mbtn = (glyph, onClick, title) => {
+		const b = document.createElement('button'); b.type = 'button'; b.className = 'm-btn'
+		b.innerHTML = icon(glyph); b.title = title; b.setAttribute('aria-label', title)
+		b.addEventListener('click', onClick)
+		return b
+	}
+	const playBtn = mbtn('play', () => toggle(), 'Play / pause')
+	const timeEl = document.createElement('div'); timeEl.className = 'm-time'; timeEl.textContent = '0:00 / 0:00'
+	const seek = document.createElement('input'); seek.type = 'range'; seek.className = 'm-seek'
+	seek.min = '0'; seek.max = '0'; seek.step = '0.05'; seek.value = '0'; seek.setAttribute('aria-label', 'Seek')
+	const muteBtn = mbtn('volume-2', () => mute(), 'Mute')
+	const vol = document.createElement('input'); vol.type = 'range'; vol.className = 'm-vol'
+	vol.min = '0'; vol.max = '1'; vol.step = '0.02'; vol.value = '1'; vol.setAttribute('aria-label', 'Volume')
+	const rateBtn = document.createElement('button'); rateBtn.type = 'button'; rateBtn.className = 'm-btn m-rate'
+	rateBtn.title = 'Playback speed'; rateBtn.setAttribute('aria-label', 'Playback speed')
+	const rateLabel = document.createElement('span'); rateLabel.className = 'm-rate-label'; rateLabel.textContent = '1×'
+	rateBtn.append(rateLabel)
+	rateBtn.addEventListener('click', () => toggleRateMenu())
+	bar.append(playBtn, timeEl, seek, muteBtn, vol, rateBtn)
+	if (kind === 'video') bar.append(mbtn('maximize', () => fullscreen(), 'Fullscreen'))
+
+	col.append(stage, bar)
+	wrap.append(col, panel)
+
+	const stt = { path: null }
+	let scrubbing = false
+
+	// ---- speed popover (the select-menu pattern: 0.5×–3×, a check on the current) ----
+	const RATES = [0.5, 1, 1.5, 2, 2.5, 3]
+	let rateMenu = null
+	function outsideRate(e) { if (!e.target.closest('.m-rate')) closeRateMenu() }
+	function closeRateMenu() {
+		if (!rateMenu) return false
+		rateMenu.remove(); rateMenu = null
+		document.removeEventListener('click', outsideRate)
+		return true
+	}
+	function toggleRateMenu() {
+		if (closeRateMenu()) return
+		rateMenu = document.createElement('div'); rateMenu.className = 'menu m-rate-menu'
+		rateMenu.innerHTML = RATES.map((r) =>
+			'<button type="button" class="menu-item ' + (r === state.mediaRate ? 'on' : '') + '" data-rate="' + r + '">' +
+			'<span>' + r + '×</span>' + (r === state.mediaRate ? icon('check') : '') + '</button>').join('')
+		rateMenu.addEventListener('mousedown', (e) => e.preventDefault())
+		rateMenu.addEventListener('click', (e) => {
+			const it = e.target.closest('[data-rate]')
+			if (!it) return
+			setRate(Number(it.dataset.rate)); closeRateMenu()
+		})
+		rateBtn.append(rateMenu)
+		requestAnimationFrame(() => rateMenu && rateMenu.classList.add('menu-open'))
+		// Defer the outside-click listener past the opening click so it does not self-close.
+		setTimeout(() => { if (rateMenu) document.addEventListener('click', outsideRate) }, 0)
+	}
+	function setRate(r) { state.mediaRate = r; el.playbackRate = r; rateLabel.textContent = r + '×' }
+
+	// ---- helpers ----
+	const clock = (sec) => { const s = Math.max(0, Math.floor(sec || 0)); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0') }
+	function syncMuteIcon() {
+		const off = el.muted || el.volume === 0
+		muteBtn.innerHTML = icon(off ? 'volume-x' : 'volume-2')
+		muteBtn.title = off ? 'Unmute' : 'Mute'; muteBtn.setAttribute('aria-label', muteBtn.title)
+	}
+	function showError(msg) {
+		el.hidden = true; disc.hidden = true; errCard.hidden = false
+		errMsg.textContent = typeof msg === 'string' ? msg : 'This file can’t be played by this browser.'
+	}
+
+	// ---- element wiring ----
+	el.addEventListener('loadedmetadata', () => {
+		const d = isFinite(el.duration) ? el.duration : 0
+		seek.max = String(d || 0)
+		timeEl.textContent = clock(el.currentTime) + ' / ' + clock(d)
+		syncMetaRow(panel, 'duration', mediaDuration(d))
+		if (kind === 'video' && el.videoWidth && el.videoHeight)
+			syncMetaRow(panel, 'dimensions', el.videoWidth + ' × ' + el.videoHeight)
+		setRangeFill(seek)
+	})
+	el.addEventListener('timeupdate', () => {
+		const d = isFinite(el.duration) ? el.duration : 0
+		// The input the reader is scrubbing must never be written under them (the palette
+		// panel's fourth lesson): skip the seek sync while a pointer is down on it.
+		if (!scrubbing) { seek.value = String(el.currentTime); setRangeFill(seek) }
+		timeEl.textContent = clock(el.currentTime) + ' / ' + clock(d)
+	})
+	el.addEventListener('play', () => { playBtn.innerHTML = icon('pause') })
+	el.addEventListener('pause', () => { playBtn.innerHTML = icon('play') })
+	el.addEventListener('volumechange', syncMuteIcon)
+	el.addEventListener('error', () => showError())
+	if (kind === 'video') el.addEventListener('click', () => toggle())
+
+	seek.addEventListener('pointerdown', () => { scrubbing = true })
+	const endScrub = () => { scrubbing = false }
+	seek.addEventListener('pointerup', endScrub)
+	seek.addEventListener('pointercancel', endScrub)
+	seek.addEventListener('input', () => { if (isFinite(el.duration)) el.currentTime = Number(seek.value); setRangeFill(seek) })
+	vol.addEventListener('input', () => { el.volume = Number(vol.value); el.muted = Number(vol.value) === 0; syncMuteIcon(); setRangeFill(vol) })
+
+	// ---- public surface ----
+	function toggle() { if (el.paused) el.play().catch(() => { /* NotAllowedError without a gesture */ }); else el.pause() }
+	function seekBy(delta) { if (!isFinite(el.duration)) return; el.currentTime = Math.min(el.duration, Math.max(0, el.currentTime + delta)) }
+	function mute() { el.muted = !el.muted; syncMuteIcon() }
+	function fullscreen() {
+		if (kind !== 'video') return
+		if (document.fullscreenElement) { document.exitFullscreen().catch(() => {}); return }
+		const p = col.requestFullscreen ? col.requestFullscreen() : Promise.reject(new Error('no fullscreen'))
+		Promise.resolve(p).catch(() => toast('Fullscreen was refused — the player stays in the viewport.'))
+	}
+	function escape() { return closeRateMenu() } // the speed popover eats Esc; true iff it closed one
+	function dispose() {
+		closeRateMenu()
+		try { el.pause() } catch { /* not ready */ }
+		el.removeAttribute('src'); el.load() // stop a detached element from playing on until GC
+	}
+
+	async function load(p) {
+		stt.path = p
+		errCard.hidden = true
+		el.hidden = kind === 'audio'; disc.hidden = kind !== 'audio'
+		playBtn.innerHTML = icon('play')
+		const { json } = await api('/api/gallery/meta?path=' + encodeURIComponent(p))
+		if (stt.path !== p) return // navigated away mid-fetch
+		const m = json && json.ok ? json : null
+		renderMeta(panel, m, p)
+		discName.textContent = m ? m.name : (p.split('/').pop() || p)
+		// A metadata-only kind (a .mov) or an unreadable file never mounts an element — the
+		// placeholder card + the meta panel, the HEIC pattern.
+		if (!m || !m.renderable) { showError('This file can’t be played by this browser.'); return }
+		el.playbackRate = state.mediaRate; rateLabel.textContent = state.mediaRate + '×'
+		vol.value = String(el.muted ? 0 : el.volume); setRangeFill(vol); syncMuteIcon()
+		el.src = galleryFileUrl(p, m.modified)
+		el.load()
+	}
+
+	return { el: wrap, load, dispose, toggle, seekBy, setRate, mute, fullscreen, escape }
 }
 
 /** The pane behind the modal (#mainView): the browse view of `state.browseId`, or empty.
