@@ -1426,8 +1426,11 @@ body.media-overlay .doc-modal-view{display:flex;overflow:hidden}
 .g-mrow{display:flex;flex-direction:column;gap:2px;margin-bottom:11px}
 .g-mlabel{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
 .g-mval{font-size:13px;color:var(--text);word-break:break-word}
-.g-path{display:flex;align-items:flex-start;gap:6px}
-.g-path span{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;word-break:break-all}
+/* Every metadata value shares one shape: the text, and an always-visible copy button
+   at the end of the line (D6 — never hover-gated, which a touch screen cannot reach). */
+.g-vline{display:flex;align-items:flex-start;gap:6px;justify-content:space-between}
+.g-vtext{flex:1;min-width:0;word-break:break-word}
+.g-vline.g-mono .g-vtext{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;word-break:break-all}
 .g-copy{flex:none;border:none;background:transparent;color:var(--muted);cursor:pointer;padding:2px}
 .g-copy:hover{color:var(--accent)}
 .g-copy .lucide{width:14px;height:14px}

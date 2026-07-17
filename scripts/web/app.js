@@ -4375,61 +4375,90 @@ function syncOverlayChrome() {
 // detail modal, and createMediaStage). Lifting metaRow/renderMeta out of the image stage
 // is what lets the per-row copy (§4.12) land in one place for every surface. ----
 
-function metaRow(label, valueNode) {
+/** A per-row copy button (D6). Painted at rest, never hover-gated — a hover-revealed
+ *  control does not exist on a touch screen. Flashes a tick and toasts on click. */
+function metaCopyBtn(label, copyValue) {
+	const b = document.createElement('button')
+	b.type = 'button'; b.className = 'g-copy'; b.innerHTML = icon('copy')
+	b.title = 'Copy ' + label; b.setAttribute('aria-label', 'Copy ' + label)
+	b.addEventListener('click', async () => { flashCopied(b, await copyText(copyValue)); toast(label + ' copied') })
+	return b
+}
+
+/** The value text and its always-visible copy button in one flex line. */
+function metaVline(value, copyValue, label, mono) {
+	const line = document.createElement('div'); line.className = 'g-vline' + (mono ? ' g-mono' : '')
+	const text = document.createElement('span'); text.className = 'g-vtext'
+	if (typeof value === 'string') text.textContent = value
+	else if (value) text.append(value)
+	line.append(text, metaCopyBtn(label, copyValue))
+	return line
+}
+
+/**
+ * One metadata row. When `copyValue` is a non-empty string the value gets an
+ * always-visible copy button (D6); otherwise it is a plain value (a placeholder
+ * awaiting a value-sync). `mono` renders the value in monospace (the Path row).
+ */
+function metaRow(label, value, copyValue, mono) {
 	const row = document.createElement('div'); row.className = 'g-mrow'
 	const l = document.createElement('div'); l.className = 'g-mlabel'; l.textContent = label
 	const v = document.createElement('div'); v.className = 'g-mval'
-	if (typeof valueNode === 'string') v.textContent = valueNode
-	else if (valueNode) v.append(valueNode)
+	if (copyValue && typeof copyValue === 'string') v.append(metaVline(value, copyValue, label, mono))
+	else if (typeof value === 'string') v.textContent = value
+	else if (value) v.append(value)
 	row.append(l, v)
 	return row
 }
 
 /**
- * Render one media file's metadata into `panel`. Image / video / audio share the
- * common rows; a video or audio file adds Duration (value-synced from the media
- * element after loadedmetadata, since the server ships null dims — no server-side
- * media parsing), and a video adds Dimensions the same way. Those two rows carry a
- * `data-mrow` key so the stage can sync them without rebuilding the panel.
+ * Render one media file's metadata into `panel`, EVERY row click-to-copy (images
+ * included — D6). Image / video / audio share the common rows; a video or audio adds
+ * Duration (value-synced from the media element after loadedmetadata, since the server
+ * ships null dims — no server-side media parsing), and a video adds Dimensions the same
+ * way. Those two rows carry a `data-mrow` key so the stage syncs them without a rebuild.
  */
 function renderMeta(panel, m, p) {
 	panel.textContent = ''
-	if (!m) { panel.append(metaRow('File', p)); return }
-	const title = document.createElement('div'); title.className = 'g-mtitle'; title.textContent = m.name
+	if (!m) { panel.append(metaRow('File', p, p)); return }
+	const title = document.createElement('div'); title.className = 'g-mtitle'
+	title.append(metaVline(m.name, m.name, 'Name'))
 	panel.append(title)
-	panel.append(metaRow('Folder', m.dir || '(top level)'))
-	const pathVal = document.createElement('div'); pathVal.className = 'g-path'
-	const pathText = document.createElement('span'); pathText.textContent = m.abspath || m.path
-	const copyBtn = document.createElement('button')
-	copyBtn.type = 'button'; copyBtn.className = 'g-copy'; copyBtn.innerHTML = icon('copy'); copyBtn.title = 'Copy path'
-	copyBtn.addEventListener('click', () => { copyText(m.abspath || m.path); toast('Path copied') })
-	pathVal.append(pathText, copyBtn)
-	panel.append(metaRow('Path', pathVal))
-	panel.append(metaRow('Size', galleryHumanBytes(m.size) + ' (' + (m.size || 0).toLocaleString() + ' bytes)'))
-	panel.append(metaRow('Format', (m.format || '').toUpperCase()))
+	panel.append(metaRow('Folder', m.dir || '(top level)', m.dir || '(top level)'))
+	const pathStr = m.abspath || m.path // Path keeps the absolute path, displayed and copied
+	panel.append(metaRow('Path', pathStr, pathStr, true))
+	const sizeStr = galleryHumanBytes(m.size) + ' (' + (m.size || 0).toLocaleString() + ' bytes)'
+	panel.append(metaRow('Size', sizeStr, sizeStr))
+	const fmtStr = (m.format || '').toUpperCase()
+	panel.append(metaRow('Format', fmtStr, fmtStr))
 	const kind = m.kind || 'image'
 	if (kind === 'video' || kind === 'audio') {
 		const durRow = metaRow('Duration', '—'); durRow.dataset.mrow = 'duration'; panel.append(durRow)
 	}
 	if (kind === 'image') {
-		panel.append(metaRow('Dimensions', m.width && m.height ? m.width + ' × ' + m.height : '—'))
+		const dimStr = m.width && m.height ? m.width + ' × ' + m.height : '—'
+		panel.append(metaRow('Dimensions', dimStr, m.width && m.height ? dimStr : null))
 	} else if (kind === 'video') {
 		const dimRow = metaRow('Dimensions', '—'); dimRow.dataset.mrow = 'dimensions'; panel.append(dimRow)
 	}
-	panel.append(metaRow('Created', galleryDate(m.created)))
-	panel.append(metaRow('Modified', galleryDate(m.modified)))
+	const createdStr = galleryDate(m.created), modifiedStr = galleryDate(m.modified)
+	panel.append(metaRow('Created', createdStr, createdStr))
+	panel.append(metaRow('Modified', modifiedStr, modifiedStr))
 	if (!m.renderable && kind === 'image') {
 		const note = document.createElement('div'); note.className = 'g-mnote'; note.textContent = 'Preview not supported by browsers'
 		panel.append(note)
 	}
 }
 
-/** Value-sync one keyed row's text (Duration / Dimensions), never a panel rebuild. */
+/** Value-sync one keyed row (Duration / Dimensions) to `text`, adding its copy button. */
 function syncMetaRow(panel, key, text) {
 	const row = panel.querySelector('[data-mrow="' + key + '"]')
 	if (!row) return
 	const v = row.querySelector('.g-mval')
-	if (v) v.textContent = text
+	if (!v) return
+	const label = (row.querySelector('.g-mlabel') || {}).textContent || key
+	v.textContent = ''
+	v.append(metaVline(text, text, label))
 }
 
 function createImageStage() {
