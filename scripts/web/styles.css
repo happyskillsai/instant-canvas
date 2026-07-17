@@ -1364,6 +1364,16 @@ body.presenting.cursor-hidden .stage{cursor:none}
 /* detail modal */
 .g-modal{position:fixed;inset:0;z-index:70;display:flex;background:var(--scrim);
 	backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px)}
+/* The extracted image stage (§4.7): the stage + zoom bar + metadata panel as ONE
+   positioned flex row, shared by the gallery-block modal (which wraps it in its own
+   close/prev/next chrome) and the overlay renderer (which mounts it in #mainView and
+   uses the overlay chrome instead). The zoom bar positions against THIS box. */
+.img-stage{flex:1 1 auto;display:flex;min-width:0;min-height:0;position:relative}
+/* In the overlay an image fills the pane: the main column stacks the sticky chrome over
+   a flex:1 view, and the stage fills that view. Scoped by body.image-overlay so the deck
+   and continuous document layouts are untouched. */
+body.image-overlay .main{display:flex;flex-direction:column}
+body.image-overlay .main-view{flex:1 1 auto;min-height:0;display:flex}
 .g-stage{flex:1 1 auto;display:flex;align-items:center;justify-content:center;overflow:hidden;
 	background:var(--panel-2);position:relative}
 .g-stage.zoomed{cursor:grab}
@@ -1555,7 +1565,7 @@ body.presenting.cursor-hidden .stage{cursor:none}
    and the next-arrow returns to the right edge. Kept LAST so these same-
    specificity rules win the cascade over the base .g-* rules above. */
 @media (max-width:700px){
-	.g-modal{flex-direction:column}
+	.img-stage{flex-direction:column}
 	.g-meta{flex:0 0 auto;max-width:none;max-height:42vh;border-left:none;border-top:1px solid var(--border)}
 	.g-next{right:14px}
 	.g-zoombar{left:50%}

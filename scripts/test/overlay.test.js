@@ -52,7 +52,9 @@ test.before(async () => {
 	fs.writeFileSync(path.join(root, 'form.canvas.json'), canvas('Form', { blocks: [{ type: 'form', submitLabel: 'Go', destination: { kind: 'none' }, fields: [{ name: 'x', label: 'X', type: 'text' }] }] }))
 	fs.writeFileSync(path.join(root, 'guide.md'), '# Guide\n\nA plain document.\n')
 	fs.writeFileSync(path.join(root, 'notes.md'), '# Notes\n\nAnother document.\n')
+	// Images: a renderable PNG and a metadata-only HEIC (never a broken <img>).
 	fs.writeFileSync(path.join(root, 'pic.png'), PNG)
+	fs.writeFileSync(path.join(root, 'photo.heic'), Buffer.alloc(64, 9))
 	// A subfolder for the breadcrumb.
 	fs.mkdirSync(path.join(root, 'sub'))
 	fs.writeFileSync(path.join(root, 'sub', 'inner.md'), '# Inner\n\nInside sub.\n')
@@ -124,6 +126,34 @@ test.before(async () => {
 			await evaluate('document.getElementById("paletteBtn").click()')
 			out.steps.paletteClosed = await until(evaluate, 'document.getElementById("palettePanel").hidden', 4000)
 
+			// ---- §4.7: an image renders the zoom/pan stage, not a canvas; the metadata
+			// panel carries dimensions, and the document cluster disables with a reason ----
+			out.imageExtsInClient = await evaluate('(document.body.dataset.imageExts || "")')
+			await openC('pic.png')
+			out.steps.imageStage = await until(evaluate, '!!document.querySelector("#mainView .img-stage .g-full")', 6000)
+			await sleep(400)
+			out.imageImgVisible = await evaluate('(function(){ var i=document.querySelector(".img-stage .g-full"); return !!(i && !i.hidden && i.getAttribute("src")) })()')
+			out.imageDims = await evaluate('(function(){ var rows=[].slice.call(document.querySelectorAll(".img-stage .g-meta .g-mrow")); var r=rows.filter(function(x){return /Dimensions/.test(x.textContent)})[0]; return r?r.textContent.replace(/\\s+/g," ").trim():"" })()')
+			out.imageLand = await evaluate('window.ic.state.imageLand === true')
+			out.imageViewToggleHidden = await evaluate('document.getElementById("viewToggle").hidden')
+			out.imagePaletteDisabled = await evaluate('document.getElementById("paletteBtn").disabled')
+			out.imageTocDisabled = await evaluate('document.getElementById("tocBtn").disabled')
+
+			// ---- a metadata-only image (HEIC) shows the placeholder card, not a broken img ----
+			await openC('photo.heic')
+			out.steps.heicShown = await until(evaluate, '!!document.querySelector("#mainView .img-stage")', 6000)
+			await sleep(400)
+			out.heicPlaceholder = await evaluate('(function(){ var i=document.querySelector(".img-stage .g-full"); var p=document.querySelector(".img-stage .g-full-ph"); return !!(i && i.hidden && p && !p.hidden) })()')
+			out.heicNote = await evaluate('!!document.querySelector(".img-stage .g-meta .g-mnote")')
+
+			// ---- cross-kind prev/next: a document steps to the neighbouring image and back ----
+			await openC('notes.md')
+			await sleep(200)
+			await evaluate('document.getElementById("ocNext").click()')
+			out.steps.docToImage = await until(evaluate, 'window.ic.state.activeId === "photo.heic" && window.ic.state.imageLand === true', 4000)
+			await evaluate('document.getElementById("ocPrev").click()')
+			out.steps.imageToDoc = await until(evaluate, 'window.ic.state.activeId === "notes.md" && window.ic.state.imageLand === false', 4000)
+
 			// ---- an interactive canvas: Esc with focus in a form field must NOT navigate
 			// (never auto-cancel a session; the reader leaves via the × instead) ----
 			await openC('form.canvas.json')
@@ -181,6 +211,28 @@ test('overlay: Esc leaves to the owning folder; the chrome hides on the browse v
 test('overlay: the palette panel opens and closes from its new home in the chrome', { skip }, () => {
 	assert.equal(R.steps.paletteOpened, true, 'clicking the relocated colors button opens the palette panel')
 	assert.equal(R.steps.paletteClosed, true, 'clicking it again closes the panel')
+})
+
+test('overlay: an image renders the zoom/pan stage with dimensions, and disables the doc cluster', { skip }, () => {
+	assert.match(R.imageExtsInClient, /\.png/, 'the image extension union reached the client (templated, not copied)')
+	assert.equal(R.steps.imageStage, true, 'an image path renders the shared image stage')
+	assert.equal(R.imageImgVisible, true, 'a renderable image shows an <img> with a src')
+	assert.match(R.imageDims, /Dimensions/, 'the metadata panel carries the pixel dimensions')
+	assert.equal(R.imageLand, true, 'the overlay is in image-land')
+	assert.equal(R.imageViewToggleHidden, true, 'the deck/continuous toggle hides for an image')
+	assert.equal(R.imagePaletteDisabled, true, 'colors disable for an image (it has no document theme)')
+	assert.equal(R.imageTocDisabled, true, 'the table of contents disables for an image')
+})
+
+test('overlay: a metadata-only image (HEIC) shows the placeholder card, never a broken <img>', { skip }, () => {
+	assert.equal(R.steps.heicShown, true, 'the HEIC opened into the image stage')
+	assert.equal(R.heicPlaceholder, true, 'the <img> is hidden and the placeholder card is shown')
+	assert.equal(R.heicNote, true, 'the metadata panel notes that a browser cannot preview it')
+})
+
+test('overlay: prev/next crosses between a document and a neighbouring image and back', { skip }, () => {
+	assert.equal(R.steps.docToImage, true, 'Next from a document reached the adjacent image')
+	assert.equal(R.steps.imageToDoc, true, 'Prev from the image returned to the document')
 })
 
 test('overlay: Esc is inert while focus is in a form field — a session is never cancelled', { skip }, () => {

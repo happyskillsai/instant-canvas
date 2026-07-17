@@ -29,6 +29,14 @@ const GALLERY_METADATA_ONLY = {
 const isSkippable = (name) => name.startsWith('.') || name === 'node_modules'
 const extOf = (name) => path.extname(String(name)).toLowerCase()
 
+/**
+ * The full image union — renderable + metadata-only — as a lowercase extension array
+ * (with the leading dot). Templated into the app shell so the browser can classify a
+ * routed path as an image WITHOUT a copied list (the overlay renderer, §4.7). Derived
+ * from the two sets above, so it cannot drift from what the gallery routes accept.
+ */
+const GALLERY_IMAGE_EXTS = [...GALLERY_RENDERABLE, ...Object.keys(GALLERY_METADATA_ONLY)]
+
 /** A file a browser can draw (`<img src>` works). */
 const isRenderableImage = (name) => GALLERY_RENDERABLE.has(extOf(name))
 
@@ -194,6 +202,7 @@ function imageStat(root, rel) {
 module.exports = {
 	GALLERY_RENDERABLE,
 	GALLERY_METADATA_ONLY,
+	GALLERY_IMAGE_EXTS,
 	isRenderableImage,
 	isGalleryImage,
 	galleryMime,

@@ -13,6 +13,16 @@ const TOKEN = new URLSearchParams(location.search).get('token') || ''
 // URL rather than reaching into the page to click the toggle for itself.
 const FORCE_DECK = new URLSearchParams(location.search).get('view') === 'deck'
 
+// The image extension union (renderable + metadata-only), single-sourced from
+// lib/gallery.js and templated into `<body data-image-exts>` by the kernel — so the
+// overlay can classify a routed path as an image WITHOUT a copied list (§4.7). An image
+// renders the zoom/pan stage; anything else falls through to /api/canvas.
+const IMAGE_EXTS = new Set((() => {
+	try { return JSON.parse(document.body.dataset.imageExts || '[]') } catch { return [] }
+})())
+const pathExt = (p) => { const m = /\.[^./\\]+$/.exec(String(p)); return m ? m[0].toLowerCase() : '' }
+const isImagePath = (p) => IMAGE_EXTS.has(pathExt(p))
+
 async function api(path, opts = {}) {
 	const res = await fetch(path, {
 		...opts,
@@ -60,6 +70,7 @@ const state = {
 	docViewChoice: null,
 	docLand: false, // true while the current canvas is rendered through the deck machinery
 	presLand: false, // true while the current canvas is a presentation (the filmstrip)
+	imageLand: false, // true while the overlay is rendering an image stage (§4.7)
 	presFit: null, // re-runs the filmstrip scale fit; set by each presentation render
 	presIndex: 0, // the slide the reader is on (drives where Present starts)
 	presenting: false, // true while the fullscreen/in-viewport stage is up
@@ -3462,6 +3473,19 @@ function paperControl(id, { loaded, enabled, reason, on, label }) {
 }
 
 function syncViewToggle() {
+	// §4.7: an image is not a document. The deck/continuous toggle and Present have no
+	// image analog, so they hide (as the presentation branch hides the toggle); the paper
+	// controls stay in place and disable WITH A REASON — a hidden control teaches nothing.
+	if (state.imageLand) {
+		$('viewToggle').hidden = true
+		$('presentBtn').hidden = true
+		$('printBtn').hidden = true
+		paperControl('tocBtn', { loaded: true, enabled: false, on: false, label: '', reason: 'This is an image — a table of contents is a document feature' })
+		paperControl('stripsBtn', { loaded: true, enabled: false, on: false, label: '', reason: 'This is an image — a running header is a document feature' })
+		paperControl('paletteBtn', { loaded: true, enabled: false, on: false, label: '', reason: 'This is an image — it carries no document theme' })
+		closePalette()
+		return
+	}
 	// A presentation owns the view-toggle slot with a Present control instead of the
 	// deck/continuous pair (D9): a deck has no continuous twin. The TOC and running-strip
 	// buttons stay in place but disable — a deck has neither — and the palette stays live.
@@ -4132,6 +4156,9 @@ const ocDirname = (rel) => { const i = rel.lastIndexOf('/'); return i >= 0 ? rel
 // (folders excluded, §4.5); a COLD deep link (no browse state for this folder) derives the
 // same order from /api/dir, through the SAME browseSorted() the grid uses so the two agree.
 let ocOrder = { folder: null, rels: [] }
+// The image stage currently mounted in the overlay (§4.7), or null. Held so the overlay
+// keyboard can drive its zoom; dropped on every render.
+let overlayStage = null
 async function browseOrderFor(folder) {
 	if (state.browseFolder === folder && state.browseOrder.length) {
 		ocOrder = { folder, rels: state.browseOrder }
@@ -4221,6 +4248,160 @@ function syncOverlayChrome() {
 	})
 }
 
+// ---------------------------------------------------------------- image stage (§4.7)
+//
+// The zoomable image stage, EXTRACTED from the gallery block's detail modal so the
+// overlay renderer and the block modal share ONE implementation: the image on a
+// --panel-2 stage, wheel/button/dbl-click zoom, drag-pan via one CSSOM transform, and a
+// metadata panel fed by /api/gallery/meta with the ?v=<mtime> cache-buster. It owns NO
+// document-level keys and NO prev/next — the mount (the modal's chrome, or the overlay
+// chrome) provides those and calls load() to change the image. A non-renderable image
+// (HEIC/TIFF) shows the metadata card, never a broken <img>.
+function createImageStage() {
+	const wrap = document.createElement('div')
+	wrap.className = 'img-stage'
+	const stage = document.createElement('div')
+	stage.className = 'g-stage'
+	const img = document.createElement('img')
+	img.className = 'g-full'
+	const ph = document.createElement('div')
+	ph.className = 'g-full-ph'
+	ph.hidden = true
+	ph.innerHTML = icon('image') + '<div class="g-noprev">Preview not supported by browsers</div>'
+	stage.append(img, ph)
+	const panel = document.createElement('div')
+	panel.className = 'g-meta'
+	const zoomBar = document.createElement('div')
+	zoomBar.className = 'g-zoombar'
+	const zbtn = (html, onClick, title) => {
+		const b = document.createElement('button')
+		b.type = 'button'
+		b.className = 'g-zbtn'
+		b.innerHTML = html
+		if (title) b.title = title
+		b.addEventListener('click', onClick)
+		return b
+	}
+	zoomBar.append(
+		zbtn(icon('zoom-out'), () => zoomBy(1 / 1.25), 'Zoom out'),
+		zbtn(icon('zoom-in'), () => zoomBy(1.25), 'Zoom in'),
+		zbtn('Fit', () => setFit(), 'Fit'),
+		zbtn('100%', () => setNatural(), 'Actual size'),
+	)
+	wrap.append(stage, zoomBar, panel)
+
+	// Zoom via one CSSOM transform. transform-origin is center (set in CSS).
+	const st = { path: null, z: 1, tx: 0, ty: 0 }
+	function apply() {
+		img.style.transform = 'translate(' + st.tx + 'px,' + st.ty + 'px) scale(' + st.z + ')'
+		stage.classList.toggle('zoomed', st.z > 1.001)
+	}
+	function setFit() { st.z = 1; st.tx = 0; st.ty = 0; apply() }
+	function setNatural() {
+		const rect = img.getBoundingClientRect()
+		if (rect.width > 0) {
+			const fitW = rect.width / st.z
+			st.z = Math.max(1, (img.naturalWidth || fitW) / fitW)
+		} else {
+			st.z = 2
+		}
+		st.tx = 0; st.ty = 0; apply()
+	}
+	function zoomAbout(factor, cx, cy) {
+		const z2 = Math.min(10, Math.max(1, st.z * factor))
+		const f = z2 / st.z
+		st.tx = cx - f * (cx - st.tx)
+		st.ty = cy - f * (cy - st.ty)
+		st.z = z2
+		if (st.z <= 1.001) { st.tx = 0; st.ty = 0 }
+		apply()
+	}
+	function zoomBy(factor) { zoomAbout(factor, 0, 0) }
+
+	stage.addEventListener('wheel', (e) => {
+		e.preventDefault()
+		const r = stage.getBoundingClientRect()
+		zoomAbout(e.deltaY < 0 ? 1.15 : 1 / 1.15, e.clientX - r.left - r.width / 2, e.clientY - r.top - r.height / 2)
+	}, { passive: false })
+	stage.addEventListener('dblclick', () => { if (st.z > 1.001) setFit(); else setNatural() })
+	let dragging = false, dragX = 0, dragY = 0
+	stage.addEventListener('pointerdown', (e) => {
+		if (st.z <= 1.001) return
+		dragging = true; dragX = e.clientX; dragY = e.clientY
+		stage.setPointerCapture(e.pointerId)
+	})
+	stage.addEventListener('pointermove', (e) => {
+		if (!dragging) return
+		st.tx += e.clientX - dragX; st.ty += e.clientY - dragY
+		dragX = e.clientX; dragY = e.clientY; apply()
+	})
+	const endDrag = () => { dragging = false }
+	stage.addEventListener('pointerup', endDrag)
+	stage.addEventListener('pointercancel', endDrag)
+
+	function metaRow(label, valueNode) {
+		const row = document.createElement('div'); row.className = 'g-mrow'
+		const l = document.createElement('div'); l.className = 'g-mlabel'; l.textContent = label
+		const v = document.createElement('div'); v.className = 'g-mval'
+		if (typeof valueNode === 'string') v.textContent = valueNode
+		else if (valueNode) v.append(valueNode)
+		row.append(l, v)
+		return row
+	}
+	function renderMeta(m, p) {
+		panel.textContent = ''
+		if (!m) { panel.append(metaRow('File', p)); return }
+		const title = document.createElement('div'); title.className = 'g-mtitle'; title.textContent = m.name
+		panel.append(title)
+		panel.append(metaRow('Folder', m.dir || '(top level)'))
+		const pathVal = document.createElement('div'); pathVal.className = 'g-path'
+		const pathText = document.createElement('span'); pathText.textContent = m.abspath || m.path
+		const copyBtn = document.createElement('button')
+		copyBtn.type = 'button'; copyBtn.className = 'g-copy'; copyBtn.innerHTML = icon('copy'); copyBtn.title = 'Copy path'
+		copyBtn.addEventListener('click', () => { copyText(m.abspath || m.path); toast('Path copied') })
+		pathVal.append(pathText, copyBtn)
+		panel.append(metaRow('Path', pathVal))
+		panel.append(metaRow('Size', galleryHumanBytes(m.size) + ' (' + (m.size || 0).toLocaleString() + ' bytes)'))
+		panel.append(metaRow('Format', (m.format || '').toUpperCase()))
+		panel.append(metaRow('Dimensions', m.width && m.height ? m.width + ' × ' + m.height : '—'))
+		panel.append(metaRow('Created', galleryDate(m.created)))
+		panel.append(metaRow('Modified', galleryDate(m.modified)))
+		if (!m.renderable) {
+			const note = document.createElement('div'); note.className = 'g-mnote'; note.textContent = 'Preview not supported by browsers'
+			panel.append(note)
+		}
+	}
+
+	// hint = {renderable, mtime} when the caller already knows (the block modal has the
+	// item); a cold overlay deep-link passes nothing and derives both from meta.
+	async function load(p, hint) {
+		st.path = p
+		st.z = 1; st.tx = 0; st.ty = 0
+		img.style.transform = ''
+		if (hint && hint.renderable !== undefined) {
+			if (hint.renderable) { img.hidden = false; ph.hidden = true; img.setAttribute('src', galleryFileUrl(p, hint.mtime)) }
+			else { img.hidden = true; ph.hidden = false }
+		}
+		const { json } = await api('/api/gallery/meta?path=' + encodeURIComponent(p))
+		if (st.path !== p) return // navigated away mid-fetch
+		const m = json && json.ok ? json : null
+		if (!hint || hint.renderable === undefined) {
+			if (m && m.renderable) { img.hidden = false; ph.hidden = true; img.setAttribute('src', galleryFileUrl(p, m.modified)) }
+			else { img.hidden = true; ph.hidden = false }
+		}
+		renderMeta(m, p)
+	}
+
+	return {
+		el: wrap,
+		load,
+		reset: setFit,
+		zoomIn: () => zoomBy(1.25),
+		zoomOut: () => zoomBy(1 / 1.25),
+		zoomAbout,
+	}
+}
+
 async function renderCanvas() {
 	disposeCharts()
 	disposeGalleries()
@@ -4232,6 +4413,10 @@ async function renderCanvas() {
 	// inside #main that holds the relocated action cluster, so it survives these rewrites.
 	const main = $('mainView')
 	syncOverlayChrome()
+	// §4.7 image-overlay layout + flags reset every render; the image branch re-sets them.
+	document.body.classList.remove('image-overlay')
+	state.imageLand = false
+	overlayStage = null
 	// A folder route (#/f/) renders the browse view — a mixed-type grid of the
 	// folder's renderable items — instead of a canvas.
 	if (typeof state.browseId === 'string') {
@@ -4249,6 +4434,22 @@ async function renderCanvas() {
 		state.docLand = false
 		state.presLand = false
 		main.innerHTML = renderEmpty()
+		syncViewToggle()
+		return
+	}
+	// §4.7: an image path renders the zoom/pan stage instead of a canvas — /api/canvas is
+	// NEVER called for it. Classification is by extension against the server's own image
+	// union set, templated into the page (isImagePath → IMAGE_EXTS), never a copied list.
+	if (isImagePath(state.activeId)) {
+		state.canvasDoc = null
+		state.docLand = false
+		state.presLand = false
+		state.imageLand = true
+		document.body.classList.add('image-overlay')
+		const stage = createImageStage()
+		overlayStage = stage
+		main.replaceChildren(stage.el)
+		stage.load(state.activeId, {}) // renderable/mtime unknown on a cold deep-link → derived from meta
 		syncViewToggle()
 		return
 	}
@@ -4778,100 +4979,20 @@ function createGallery(root, block) {
 	function openModal(p) {
 		if (gs.modal) closeModal()
 		gs.opener = gs.tiles.get(p) || null
-		gs.modal = { path: p, z: 1, tx: 0, ty: 0 }
+		gs.modal = { path: p }
 		document.body.classList.add('modal-open')
 
 		const overlay = document.createElement('div')
 		overlay.className = 'g-modal'
-		const stage = document.createElement('div')
-		stage.className = 'g-stage'
-		const img = document.createElement('img')
-		img.className = 'g-full'
-		const ph = document.createElement('div')
-		ph.className = 'g-full-ph'
-		ph.hidden = true
-		ph.innerHTML = icon('image') + '<div class="g-noprev">Preview not supported by browsers</div>'
-		stage.append(img, ph)
-
-		const panel = document.createElement('div')
-		panel.className = 'g-meta'
-
 		const closeBtn = makeBtn('g-x', icon('x'), () => closeModal(), 'Close')
 		const prevBtn = makeBtn('g-nav g-prev', icon('chevron-left'), () => step(-1), 'Previous')
 		const nextBtn = makeBtn('g-nav g-next', icon('chevron-right'), () => step(1), 'Next')
-
-		const zoomBar = document.createElement('div')
-		zoomBar.className = 'g-zoombar'
-		zoomBar.append(
-			makeBtn('g-zbtn', icon('zoom-out'), () => zoomBy(1 / 1.25), 'Zoom out'),
-			makeBtn('g-zbtn', icon('zoom-in'), () => zoomBy(1.25), 'Zoom in'),
-			makeBtn('g-zbtn', 'Fit', () => setFit(), 'Fit'),
-			makeBtn('g-zbtn', '100%', () => setNatural(), 'Actual size'),
-		)
-
-		overlay.append(closeBtn, prevBtn, stage, nextBtn, zoomBar, panel)
+		// The zoom/pan stage + metadata panel are the SHARED component (§4.7); the modal
+		// owns only its close and prev/next chrome (scoped to this block's images).
+		gs.stage = createImageStage()
+		overlay.append(closeBtn, prevBtn, nextBtn, gs.stage.el)
 		document.body.append(overlay)
-		gs.modalEls = { overlay, stage, img, ph, panel }
-
-		// Zoom via one CSSOM transform. transform-origin is center (set in CSS).
-		function apply() {
-			img.style.transform = 'translate(' + gs.modal.tx + 'px,' + gs.modal.ty + 'px) scale(' + gs.modal.z + ')'
-			stage.classList.toggle('zoomed', gs.modal.z > 1.001)
-		}
-		function setFit() { gs.modal.z = 1; gs.modal.tx = 0; gs.modal.ty = 0; apply() }
-		function setNatural() {
-			const it = itemFor(gs.modal.path)
-			const rect = img.getBoundingClientRect()
-			if (it && rect.width > 0) {
-				// rect is the fit-scaled size at z=1; natural / fit gives the 100% factor.
-				const fitW = rect.width / gs.modal.z
-				gs.modal.z = Math.max(1, (img.naturalWidth || fitW) / fitW)
-			} else {
-				gs.modal.z = 2
-			}
-			gs.modal.tx = 0; gs.modal.ty = 0
-			apply()
-		}
-		function zoomAbout(factor, cx, cy) {
-			const z2 = Math.min(10, Math.max(1, gs.modal.z * factor))
-			const f = z2 / gs.modal.z
-			gs.modal.tx = cx - f * (cx - gs.modal.tx)
-			gs.modal.ty = cy - f * (cy - gs.modal.ty)
-			gs.modal.z = z2
-			if (gs.modal.z <= 1.001) { gs.modal.tx = 0; gs.modal.ty = 0 }
-			apply()
-		}
-		function zoomBy(factor) { zoomAbout(factor, 0, 0) }
-		gs.modalApply = { setFit, setNatural, zoomAbout, apply }
-
-		stage.addEventListener('wheel', (e) => {
-			e.preventDefault()
-			const r = stage.getBoundingClientRect()
-			zoomAbout(e.deltaY < 0 ? 1.15 : 1 / 1.15, e.clientX - r.left - r.width / 2, e.clientY - r.top - r.height / 2)
-		}, { passive: false })
-
-		stage.addEventListener('dblclick', () => {
-			if (gs.modal.z > 1.001) setFit()
-			else setNatural()
-		})
-
-		// Drag to pan when zoomed past fit.
-		let dragging = false, dragX = 0, dragY = 0
-		stage.addEventListener('pointerdown', (e) => {
-			if (gs.modal.z <= 1.001) return
-			dragging = true; dragX = e.clientX; dragY = e.clientY
-			stage.setPointerCapture(e.pointerId)
-		})
-		stage.addEventListener('pointermove', (e) => {
-			if (!dragging) return
-			gs.modal.tx += e.clientX - dragX
-			gs.modal.ty += e.clientY - dragY
-			dragX = e.clientX; dragY = e.clientY
-			apply()
-		})
-		const endDrag = () => { dragging = false }
-		stage.addEventListener('pointerup', endDrag)
-		stage.addEventListener('pointercancel', endDrag)
+		gs.modalEls = { overlay }
 
 		// Decide inside/outside in the CAPTURE phase — the modal owns clicks on its
 		// own chrome, and a bare-backdrop click closes it.
@@ -4891,67 +5012,11 @@ function createGallery(root, block) {
 		loadModal(order[i])
 	}
 
-	async function loadModal(p) {
-		if (!gs.modal) return
+	function loadModal(p) {
+		if (!gs.modal || !gs.stage) return
 		gs.modal.path = p
-		gs.modal.z = 1; gs.modal.tx = 0; gs.modal.ty = 0
-		const { img, ph } = gs.modalEls
-		img.style.transform = ''
 		const it = itemFor(p)
-		if (it && it.renderable) {
-			img.hidden = false; ph.hidden = true
-			img.setAttribute('src', galleryFileUrl(p, it.modified))
-		} else {
-			img.hidden = true; ph.hidden = false
-		}
-		const { json } = await api('/api/gallery/meta?path=' + encodeURIComponent(p))
-		if (!gs.modal || gs.modal.path !== p) return // navigated away mid-fetch
-		renderMeta(json && json.ok ? json : null, p)
-	}
-
-	function metaRow(label, valueNode) {
-		const row = document.createElement('div')
-		row.className = 'g-mrow'
-		const l = document.createElement('div'); l.className = 'g-mlabel'; l.textContent = label
-		const v = document.createElement('div'); v.className = 'g-mval'
-		if (typeof valueNode === 'string') v.textContent = valueNode
-		else if (valueNode) v.append(valueNode)
-		row.append(l, v)
-		return row
-	}
-
-	function renderMeta(m, p) {
-		const panel = gs.modalEls.panel
-		panel.textContent = ''
-		if (!m) {
-			panel.append(metaRow('File', p))
-			return
-		}
-		const title = document.createElement('div')
-		title.className = 'g-mtitle'
-		title.textContent = m.name
-		panel.append(title)
-		panel.append(metaRow('Folder', m.dir || '(top level)'))
-
-		const pathVal = document.createElement('div')
-		pathVal.className = 'g-path'
-		const pathText = document.createElement('span')
-		pathText.textContent = m.abspath || m.path
-		const copyBtn = makeBtn('g-copy', icon('copy'), () => { copyText(m.abspath || m.path); toast('Path copied') }, 'Copy path')
-		pathVal.append(pathText, copyBtn)
-		panel.append(metaRow('Path', pathVal))
-
-		panel.append(metaRow('Size', galleryHumanBytes(m.size) + ' (' + (m.size || 0).toLocaleString() + ' bytes)'))
-		panel.append(metaRow('Format', (m.format || '').toUpperCase()))
-		panel.append(metaRow('Dimensions', m.width && m.height ? m.width + ' × ' + m.height : '—'))
-		panel.append(metaRow('Created', galleryDate(m.created)))
-		panel.append(metaRow('Modified', galleryDate(m.modified)))
-		if (!m.renderable) {
-			const note = document.createElement('div')
-			note.className = 'g-mnote'
-			note.textContent = 'Preview not supported by browsers'
-			panel.append(note)
-		}
+		gs.stage.load(p, it ? { renderable: it.renderable, mtime: it.modified } : {})
 	}
 
 	function closeModal() {
@@ -4959,6 +5024,7 @@ function createGallery(root, block) {
 		if (gs.modalEls && gs.modalEls.overlay) gs.modalEls.overlay.remove()
 		gs.modal = null
 		gs.modalEls = null
+		gs.stage = null
 		document.body.classList.remove('modal-open')
 		// Restore focus to the opening tile, or the toolbar if it is gone.
 		const target = gs.opener && gs.opener.isConnected && gs.opener !== document.body ? gs.opener : toolbar.querySelector('button')
@@ -5040,8 +5106,8 @@ function createGallery(root, block) {
 			if (e.key === 'Escape') { e.preventDefault(); closeModal() }
 			else if (e.key === 'ArrowLeft') { e.preventDefault(); step(-1) }
 			else if (e.key === 'ArrowRight') { e.preventDefault(); step(1) }
-			else if (e.key === '+' || e.key === '=') { e.preventDefault(); gs.modalApply.zoomAbout(1.25, 0, 0) }
-			else if (e.key === '-') { e.preventDefault(); gs.modalApply.zoomAbout(1 / 1.25, 0, 0) }
+			else if (e.key === '+' || e.key === '=') { e.preventDefault(); gs.stage && gs.stage.zoomAbout(1.25, 0, 0) }
+			else if (e.key === '-') { e.preventDefault(); gs.stage && gs.stage.zoomAbout(1 / 1.25, 0, 0) }
 			return
 		}
 		if (gs.selecting && e.key === 'Escape') { e.preventDefault(); exitSelect() }
@@ -6433,6 +6499,9 @@ document.addEventListener('keydown', (e) => {
 		return
 	if (e.key === 'ArrowLeft') { e.preventDefault(); ocStep(-1) }
 	else if (e.key === 'ArrowRight') { e.preventDefault(); ocStep(1) }
+	// An image stage in the overlay also takes +/- to zoom (wheel + the zoom bar aside).
+	else if (state.imageLand && overlayStage && (e.key === '+' || e.key === '=')) { e.preventDefault(); overlayStage.zoomIn() }
+	else if (state.imageLand && overlayStage && e.key === '-') { e.preventDefault(); overlayStage.zoomOut() }
 })
 
 // ---------------------------------------------------------------- hot reload (WebSocket)
