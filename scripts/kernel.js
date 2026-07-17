@@ -16,7 +16,7 @@ const { scan, dirsUnder, readCanvasFile, MAX_CANVAS_BYTES, isExcludedDir } = req
 const { validate, collectBlocks, isInteractiveBlock, flattenFields } = require('./lib/validate')
 const { readMarkdownSrc, inlineLocalImages, inlineImageFile, hasMarkdownExtension, renderableMarkdown, MAX_COVER_IMAGE_BYTES } = require('./lib/markdownsrc')
 const { virtualCanvasFor } = require('./lib/mdcanvas')
-const { listImages, mediaStat, isRenderableImage, isGalleryImage, galleryMime, normalizeRelDir, GALLERY_IMAGE_EXTS } = require('./lib/gallery')
+const { listImages, mediaStat, isStreamableFile, isGalleryImage, galleryMime, parseByteRange, normalizeRelDir, GALLERY_IMAGE_EXTS } = require('./lib/gallery')
 const { listDir } = require('./lib/browse')
 const { dimensions } = require('./lib/imagemeta')
 const { companionFor, enhancesOf } = require('./lib/companion')
@@ -736,12 +736,14 @@ async function route(req, res, url) {
 		return sendJson(res, 200, { ok: true, ...meta, width: d ? d.width : null, height: d ? d.height : null })
 	}
 
-	// The image bytes, streamed. Renderable extensions ONLY — a HEIC is a 404 here
-	// even though /meta answers for it — and the decision is from the extension, never
-	// by opening a file the gate would refuse (the `.env` rule). `?v=<mtimeMs>` makes
-	// the long immutable cache safe: a changed file is a changed URL.
+	// The image/media bytes, streamed. Streamable extensions ONLY — a HEIC or a
+	// `.mov` is a 404 here even though /meta answers for it — and the decision is
+	// from the extension, never by opening a file the gate would refuse (the `.env`
+	// rule). `?v=<mtimeMs>` makes the long immutable cache safe: a changed file is a
+	// changed URL. The browser seeks media with a `Range` header (Safari refuses to
+	// play without a 206), so the header rides in from here.
 	if (method === 'GET' && p === '/api/gallery/file')
-		return serveGalleryFile(res, url.searchParams.get('path') || '')
+		return serveGalleryFile(res, url.searchParams.get('path') || '', req.headers.range)
 
 	// The dangerous one. PERMANENT, per-file, reader-initiated. The agent is not
 	// involved at all: no session, no CLI door, no stdout event.
@@ -905,16 +907,25 @@ function serveAsset(res, rest) {
 }
 
 /**
- * Stream one gallery image. The whole security story is two lines before any
- * open: the extension must be RENDERABLE (never the metadata-only set, never a
- * non-image), and the path must confine to the root. `lstat` then refuses a
- * symlink or directory — the gate reads the link name, and a `photo.png`
- * symlinked at `.env` would otherwise leak the target. A refusal is a generic
- * JSON 404 that quotes none of the file, exactly as the `.env` rule requires.
+ * Stream one gallery image or media file, with HTTP Range support. The whole
+ * security story is two lines before any open: the extension must be STREAMABLE
+ * (a renderable image OR a renderable video/audio — never the metadata-only set,
+ * never a non-media file), and the path must confine to the root. `lstat` then
+ * refuses a symlink or directory — the gate reads the link name, and a
+ * `clip.mp4` symlinked at `.env` would otherwise leak the target. A refusal is a
+ * generic JSON 404 that quotes none of the file, exactly as the `.env` rule
+ * requires.
+ *
+ * `Accept-Ranges: bytes` is always advertised. A satisfiable `Range` yields a
+ * 206 with `Content-Range` and just the requested slice; an unsatisfiable one
+ * (past EOF) yields 416 whose body carries none of the file; anything absent or
+ * malformed serves the full 200 (RFC 7233 permits ignoring a bad Range). The
+ * immutable cache header rides both 200 and 206 — the `?v=<mtimeMs>` versioning
+ * makes it safe.
  */
-function serveGalleryFile(res, rel) {
-	if (typeof rel !== 'string' || !isRenderableImage(rel))
-		return sendJson(res, 404, { ok: false, message: 'Not a previewable image.' })
+function serveGalleryFile(res, rel, rangeHeader) {
+	if (typeof rel !== 'string' || !isStreamableFile(rel))
+		return sendJson(res, 404, { ok: false, message: 'Not a streamable file.' })
 	const abs = path.resolve(ROOT, rel)
 	if (!insideRoot(ROOT, abs))
 		return sendJson(res, 404, { ok: false, message: 'Not found.' })
@@ -926,13 +937,41 @@ function serveGalleryFile(res, rel) {
 	}
 	if (!st.isFile())
 		return sendJson(res, 404, { ok: false, message: 'Not found.' })
-	res.writeHead(200, {
+
+	const size = st.size
+	const range = parseByteRange(rangeHeader, size)
+
+	// A well-formed but unsatisfiable range: 416 + `bytes */size`, none of the file.
+	if (range === 'unsatisfiable') {
+		res.writeHead(416, {
+			'Content-Type': 'application/json; charset=utf-8',
+			'X-Content-Type-Options': 'nosniff',
+			'Accept-Ranges': 'bytes',
+			'Content-Range': `bytes */${size}`,
+		})
+		return res.end(JSON.stringify({ ok: false, message: 'Requested range not satisfiable.' }))
+	}
+
+	const headers = {
 		'Content-Type': galleryMime(rel),
 		'X-Content-Type-Options': 'nosniff',
 		'Cache-Control': 'max-age=31536000, immutable',
-		'Content-Length': st.size,
-	})
-	const stream = fs.createReadStream(abs)
+		'Accept-Ranges': 'bytes',
+	}
+
+	let streamOpts
+	if (range) {
+		const { start, end } = range
+		res.writeHead(206, {
+			...headers,
+			'Content-Range': `bytes ${start}-${end}/${size}`,
+			'Content-Length': end - start + 1,
+		})
+		streamOpts = { start, end }
+	} else {
+		res.writeHead(200, { ...headers, 'Content-Length': size })
+	}
+	const stream = fs.createReadStream(abs, streamOpts)
 	stream.on('error', () => { try { res.destroy() } catch { /* client gone */ } })
 	stream.pipe(res)
 }

@@ -105,6 +105,60 @@ const isRenderableMedia = (name) => {
 /** The file route's gate: an image OR a media file whose bytes we will stream. */
 const isStreamableFile = (name) => isRenderableImage(name) || isRenderableMedia(name)
 
+/**
+ * Parse an HTTP `Range` header against a known `size` (bytes). Pure and
+ * kernel-free so it is unit-testable in isolation. Returns:
+ *
+ *   null            — absent, malformed, an unsupported unit, or multi-range.
+ *                     RFC 7233 lets a server ignore an invalid Range and serve
+ *                     the full 200 body, so `null` means "serve 200 full".
+ *   { start, end }  — an inclusive, satisfiable byte range. Handles `bytes=a-b`,
+ *                     the open-ended `bytes=a-`, and the suffix `bytes=-n` (the
+ *                     last n bytes); `end` is clamped to `size-1`, and a suffix
+ *                     larger than the file yields the whole file.
+ *   'unsatisfiable' — a well-formed range that cannot be served: `start >= size`,
+ *                     or a suffix of 0. The caller answers 416.
+ */
+function parseByteRange(header, size) {
+	if (typeof header !== 'string')
+		return null
+	const m = /^\s*bytes=(.*)$/.exec(header)
+	if (!m)
+		return null
+	const spec = m[1].trim()
+	if (spec === '' || spec.includes(',')) // empty or multi-range → ignore
+		return null
+	const dash = spec.indexOf('-')
+	if (dash < 0)
+		return null
+	const startStr = spec.slice(0, dash).trim()
+	const endStr = spec.slice(dash + 1).trim()
+
+	if (startStr === '') {
+		// suffix form: bytes=-n → the last n bytes
+		if (!/^\d+$/.test(endStr))
+			return null
+		const n = parseInt(endStr, 10)
+		if (n === 0 || size === 0)
+			return 'unsatisfiable'
+		return { start: Math.max(0, size - n), end: size - 1 }
+	}
+
+	if (!/^\d+$/.test(startStr))
+		return null
+	const start = parseInt(startStr, 10)
+	if (start >= size)
+		return 'unsatisfiable'
+	if (endStr === '')
+		return { start, end: size - 1 } // bytes=a-
+	if (!/^\d+$/.test(endStr))
+		return null
+	const end = parseInt(endStr, 10)
+	if (end < start) // a>b is malformed → ignore, serve full
+		return null
+	return { start, end: Math.min(end, size - 1) }
+}
+
 // -------------------------------------------------------------- the listing
 
 const toPosix = (p) => String(p).split(path.sep).join('/')
@@ -275,6 +329,7 @@ module.exports = {
 	mediaKind,
 	isRenderableMedia,
 	isStreamableFile,
+	parseByteRange,
 	normalizeRelDir,
 	listImages,
 	mediaStat,
