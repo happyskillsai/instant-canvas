@@ -45,6 +45,10 @@ A single static shell (`index.html` + `styles.css` + `app.js`) served by the ker
 
 **Category tick labels elide at 30 characters** (`catTicks()` on `bar`/`line`/`area`); the x values, the hover and the file keep the whole string. This exists because nothing used to shorten a label, so agents hand-truncated their own data to make it fit — damaging the data to serve a layout they could not see. How much of a label survives on a crowded axis is rendering, and rendering is the runtime's.
 
+**Every chart on paper wears a derived `Figure N — <title>` caption** — a bare `Figure N` when the block is untitled, so a chart that renders no caption on screen gains one on paper. The number is never authored: the kernel ships a `figures` map in the payload (`state.figures`), the page binds it by block identity (`state.figByBlock`) and `chartSlotShell`/`renderChartShell` render the prefix into the `.chart-title` slot as text. The **deck always numbers**; the **continuous view numbers only when the canvas declares a `document`** (a report wears numbers, a scratch dashboard does not), so `renderChartShell`/`docHtmlView` take a `numbered` flag while the deck passes `true`. The caption feeds nothing into the TOC — `b.title`, not the prefixed string, is what the TOC-caption fallback receives.
+
+**`recordChartFacts()` is a bystander recorder** run after each chart mounts (and on resize): it reads the DOM the page already produced — the rendered tick labels, the plot-area size Plotly computed, the legend rect — into `state.chartFacts` keyed by the `data-chart` index (`{ticks, elided, axisPx, legendOverlap}`; elided ticks are counted from the ellipsis the runtime appends). It changes nothing — `catTicks` and `fitLegendBelow` are production-fitted and stay untouched — and it exists because the browser is the only party that ever sees rendered geometry. `print` and `snapshot` read `state.chartFacts` at final geometry to report per-figure facts for free (see [cli.md](cli.md)).
+
 Boxes are 320 px by default; `.tall` (460 px) for `scatter3d`/`surface`/`splom`, `.swept` (400 px) when a sweep adds a slider, and both combined (540 px).
 
 ## Sweeps

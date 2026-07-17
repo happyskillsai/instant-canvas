@@ -115,6 +115,7 @@ If `validate` or `open` reports `MISSING_CREATED_WITH`, just run `stamp` and car
 ```
 open <canvas.json | file.md | folder> [--workspace <dir>] [--no-open] [--timeout <s>] [--result <file>]
 print <canvas.json | file.md> --out <file.pdf> [--workspace <dir>]   # → PDF (needs a local Chrome)
+snapshot <canvas.json | file.md> [--figure <n[,n…]>] [--out-dir <dir>] [--list]   # → PNG(s) of a chart, on request only
 stamp <canvas.json> [--workspace <dir>] [--retrofit]                 # canvases only
 validate <canvas.json | skills-config.json> [--workspace <dir>]      # not markdown
 theme <canvas.json | file.md> [--set '<json>'] [--clear]             # see Colors below
@@ -372,6 +373,15 @@ Scientific/ML: `scatter3d surface contour density violin errorBars dendrogram si
 Pick from the one-line index (`$IC catalog` → `chartKinds`, with when-to-use guidance), then pull the winner's exact schema: `$IC catalog sankey` returns its encoding channels, expected data shape, and a complete example. Each kind validates deterministically — wrong or missing encoding keys come back as `ENCODING_KEY_NOT_IN_DATA` / `MISSING_REQUIRED_PROPERTY` with hints. Kinds that need external assets or JS callbacks (`map`, `custom`, …) are intentionally unsupported and listed with reasons under `unsupportedChartKinds`; the raw `options` escape hatch refines any supported kind.
 
 **Do not reach for `options` to fix a layout.** Long axis labels colliding with the legend is the classic case, and the runtime already solves it: it measures the axis after the browser has drawn it and reserves the room both need. Pinning `layout.margin.b` or `layout.legend` in `options` **turns that off** for the chart — your patch is the author's final word, so a hand-tuned margin inherits the very problem it was working around, and inherits it in every pane width you never saw. `options` is for refining a *figure* (a trace's text mode, a fixed height), not for fighting the layout engine.
+
+### Readability — a four-tier funnel, cheapest first
+
+You pick the right chart for the data and can still ship unreadable pixels, because readability is data density × geometry — which you cannot see. The runtime closes that loop, cheapest tool first:
+
+1. **`validate` warns statically.** A crammed axis, unresolvable heatmap cells, legend soup or an over-sliced pie come back as warnings — `AXIS_TOO_DENSE`, `HEATMAP_TOO_DENSE`, `LABELS_WILL_ELIDE`, `TOO_MANY_SERIES`, `TOO_MANY_SLICES` — computed against paper geometry, each with the fix (aggregate to top-N + "other", small multiples, a horizontal bar). They are *warnings*, so the canvas still opens; fix them in the **data**, never by pre-truncating labels.
+2. **Figure numbers.** Every chart on paper wears a derived `Figure N — <title>` caption. The numbers are the runtime's — never type or persist one — so when a human says "figure 3 looks wrong" you know exactly which block that is.
+3. **`print` reports facts.** Its result JSON carries `figures[]`: per-figure `page`, rendered facts (`ticks`, `elided`, `axisPx`, `legendOverlap`) and the density warnings restated — measured in the real browser the print already paid for, no images.
+4. **`snapshot` — the last resort, on request only.** `snapshot report.canvas.json --figure 3` captures one chart as a PNG at true A4 geometry, into a scratch folder outside the workspace, for you to read back with your own vision. `--list` prints the figure map without a browser. **This is the response to a user naming a figure or explicitly asking for a visual review — never a routine step.** Do not snapshot every canvas you render, the same way `print` is not step 7: it spends a browser and your context on pixels nobody asked to see. `UNKNOWN_FIGURE` lists the valid map; a form/confirm/sweep/gallery canvas is `SNAPSHOT_NEEDS_DECK`; no Chrome is `CHROME_REQUIRED`.
 
 16 field types: `text textarea secret email url tel number date datetime select radio checkbox checkboxGroup range hidden readonly`. Common shape: `{name, label, type, required?, placeholder?, help?, default?, options?, validation?, ui?, span?}` with `validation: {minLength, maxLength, pattern, patternMessage, min, max, step, protocols}`. Env destinations require names matching `^[A-Za-z_][A-Za-z0-9_]*$`.
 

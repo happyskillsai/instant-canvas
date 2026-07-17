@@ -60,6 +60,23 @@ A **slides canvas** prints the same way and needs no `document` object of its ow
 - Chrome launches `--headless=new --enable-gpu` — **never** the tests' swiftshader profile, which silently blanks 3D charts in printed output. 3D kinds need a working GPU for `print`; Cmd+P from the real browser always works. (Verified on macOS/Apple Silicon; a GPU-less CI box may still print blank 3D.)
 - `--out` resolves through `insideRoot`; outside the workspace → `PATH_OUTSIDE_WORKSPACE` (the CLI has no confirmation handshake — that flow is browser-only).
 
+**The result JSON now carries an additive `figures[]`.** Between the readiness gate and `Page.printToPDF` — the browser already at final geometry, having already waited — one `evaluate` reads the per-chart facts the page recorded (`state.chartFacts`, see [frontend.md](frontend.md)) and joins them with the figure map and each chart's containing sheet. Each entry is `{figure, path, title, kind, page, facts, warnings}`: `facts` are the rendered numbers (`ticks`, `elided`, `axisPx`, `legendOverlap`), and `warnings` are the static density breaches (below) restated per figure. It costs one `evaluate`, zero images, and no second deadline — the whole drive stays bounded by `INSTANTCANVAS_PRINT_WAIT_MS`. Every pre-existing result field is byte-compatible; `figures[]` is purely additive.
+
+### snapshot
+
+The narrow end of the readability funnel. An agent has no eyes, so a chart that reads as a crammed smear on paper is invisible to it — `snapshot` captures a named figure as a **PNG at true A4 deck geometry**, for the agent to read back with its own vision. It is the response to a user naming a figure ("figure 3 looks wrong") or explicitly asking for a visual review — **never a routine step**, the same "`print` is not step 7" rule restated for images.
+
+```
+snapshot <canvas.json | file.md> [--figure <n[,n…]>] [--out-dir <dir>] [--list] [--workspace <dir>]
+```
+
+The pipeline is `print`'s, reused by reference not by copy: `assertReadable` → validate (errors refuse, exit 1) → ensure kernel → drive Chrome with the **same `PRINT_CHROME_ARGS`** (never the tests' swiftshader profile, which blanks 3D) at `?view=deck` → the **same readiness gate** and `INSTANTCANVAS_PRINT_WAIT_MS`. The one new step is the capture: the deck lives inside the `.main` scroller, so `Page.captureScreenshot`'s `captureBeyondViewport` photographs the *page's* own overflow and misses a below-the-fold sheet (it comes back blank). The working path is to `scrollIntoView` each target and clip within the viewport, at **scale 1 / dpr 1** — a 1600 px viewport lets `fitDeck` fit an A4 sheet unscaled, so the PNG is the printed geometry 1:1 (~680 px content width); the `.deck-scale` transform is asserted empty or the capture refuses rather than ship blurred pixels.
+
+- **`--figure`** selects one or several figures by their derived number; omit it to capture all. `--list` prints the figure map and exits — **no kernel, no Chrome** — so an agent learns the map for free.
+- **Output lands OUTSIDE the workspace by default:** `stateDir()/snapshots/<workspaceKey>-<canvasBase>-fig<N>.png`, deterministic and silently overwritten (the kernel-log precedent — agent-loop scratch that cannot pollute the repo or churn `fs.watch`). An explicit `--out-dir` re-enters the workspace and must resolve `insideRoot`, else `PATH_OUTSIDE_WORKSPACE`.
+- **Refusals teach:** an unknown figure number → `UNKNOWN_FIGURE` (exit 1, listing the valid map); a canvas the deck cannot render — a form, confirm, sweep or gallery — → `SNAPSHOT_NEEDS_DECK` (exit 1, computed from the same `deckBlockers` the browser and `themestore` share); no Chrome → `CHROME_REQUIRED` (exit 2). A canvas with **zero charts succeeds** with `figures: []` and a stderr note, so it composes for scripts.
+- Never asserts gl3d pixel content: a 3D chart blanks on a GPU-less box while every structural check passes, so a snapshot test reads only a PNG's signature and dimensions.
+
 ### stamp
 
 The only writer of `createdWith` (see [canvas-schema.md](canvas-schema.md)). It parses the file, refuses anything whose top level lacks `"instantcanvas": 1` — a canvas marker, not arbitrary JSON — and confines the target to the workspace root, because unlike `validate` it *writes*. A markdown file is refused too, and for a reason worth stating: nothing on disk was authored for us, so there is no birth version to record. `validate` refuses it for the mirror reason — no envelope, no contract to check.
@@ -105,7 +122,9 @@ Exit 0 clean; exit 1 on `INVALID_THEME`, `INVALID_JSON` (the `--set` string itse
 | Case | JSON |
 |---|---|
 | display | `{"status":"opened","url","canvas","workspace","timestamp"}` |
-| print | `{"status":"printed","path","pages","bytes","timestamp"}` — `path` workspace-relative, `pages` == the deck's sheet count |
+| print | `{"status":"printed","path","pages","bytes","figures":[{figure,path,title,kind,page,facts,warnings}],"timestamp"}` — `path` workspace-relative, `pages` == the deck's sheet count; `figures[]` is additive |
+| snapshot | `{"status":"snapshotted","canvas","workspace","outDir","figures":[{figure,path,title,kind,page,image,width,height,facts,warnings}],"timestamp"}` — `image` is an absolute PNG path; `outDir` is `null` when there were no charts |
+| snapshot `--list` | `{"status":"figures","canvas","figures":[{figure,path,title,kind}],"timestamp"}` — the map only, no browser |
 | form → file | `{"status":"saved","destination":{"kind","path"},"fields":[names],"overwritten":[names],"redacted":true,"timestamp"}` |
 | form, no file destination | `{"status":"submitted","fields":[...],"values":{non-secret only}?,"timestamp"}` |
 | cancelled / expired | `{"status":"cancelled"\|"timeout",...}` — exit 0 |

@@ -2,6 +2,34 @@
 
 ## [Unreleased]
 
+### Added
+- **Chart readability feedback loop — a four-tier funnel that lets an agent catch and fix
+  unreadable charts without a human screenshotting anything.**
+  - **Static density warnings in `validate`.** `checkChart` now warns — deterministically,
+    from the JSON against paper geometry (the declared `document.page`, else the A4/15 mm
+    default) — when a chart's categorical density cannot survive the page: `AXIS_TOO_DENSE`
+    (too many categories on a `bar`/`boxplot`/`funnel` axis), `HEATMAP_TOO_DENSE` (cells
+    below ~12 px), `LABELS_WILL_ELIDE` (many labels past the 30-char tick limit),
+    `TOO_MANY_SERIES` (a legend past ~12), `TOO_MANY_SLICES` (a pie past ~10). Always
+    warnings, never errors; each teaches the fix and carries a `figure` number. Thresholds
+    are calibrated so every shipped canvas in `examples/` + `demos/` stays warning-free.
+  - **Derived `Figure N — <title>` captions.** Every chart on paper wears a caption prefix,
+    numbered 1..N by the runtime in document order (`lib/figures.js`). Numbers are derived,
+    never authored and never persisted — the deck always shows them, the continuous view
+    only when the canvas declares a `document`. The kernel ships the figure map in the
+    canvas payload so the browser, `print` and `snapshot` all agree.
+  - **Per-figure facts and warnings on `print`.** The result JSON gains an additive
+    `figures[]` — `{figure, path, title, kind, page, facts, warnings}` — where `facts` are
+    rendered numbers (`ticks`, `elided`, `axisPx`, `legendOverlap`) measured in the print's
+    own browser and `warnings` are the density breaches restated per figure. Existing result
+    fields are byte-compatible.
+  - **`snapshot` command.** `snapshot <canvas | file.md> [--figure n[,n…]] [--out-dir <dir>]
+    [--list]` captures named figures as PNGs at true A4 deck geometry, for an agent to read
+    back with its own vision. Output lands outside the workspace by default (a scratch folder
+    in the state dir); `--list` prints the figure map with no browser. It is the response to a
+    user naming a figure or asking for a visual review — never a routine step. Refusals:
+    `UNKNOWN_FIGURE`, `SNAPSHOT_NEEDS_DECK`, `CHROME_REQUIRED`, `PATH_OUTSIDE_WORKSPACE`.
+
 ### Fixed
 - **A printed PDF is now named after the document, not always "InstantCanvas".** The browser
   served a static `<title>`, so every `instant-canvas print` PDF — and every reader's Cmd+P
