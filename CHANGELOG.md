@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-07-17
+
 ### Added
 - **Universal navigation — one paradigm across canvases, documents and images.** The sidebar,
   the main pane and everything the reader opens now share a single model instead of two.
