@@ -20,8 +20,18 @@ const FORCE_DECK = new URLSearchParams(location.search).get('view') === 'deck'
 const IMAGE_EXTS = new Set((() => {
 	try { return JSON.parse(document.body.dataset.imageExts || '[]') } catch { return [] }
 })())
+// The video/audio extension unions, single-sourced the same way (`<body data-video-exts>`
+// / `data-audio-exts>`) so the browser classifies a routed path WITHOUT a copied list.
+const VIDEO_EXTS = new Set((() => {
+	try { return JSON.parse(document.body.dataset.videoExts || '[]') } catch { return [] }
+})())
+const AUDIO_EXTS = new Set((() => {
+	try { return JSON.parse(document.body.dataset.audioExts || '[]') } catch { return [] }
+})())
 const pathExt = (p) => { const m = /\.[^./\\]+$/.exec(String(p)); return m ? m[0].toLowerCase() : '' }
 const isImagePath = (p) => IMAGE_EXTS.has(pathExt(p))
+const isVideoPath = (p) => VIDEO_EXTS.has(pathExt(p))
+const isAudioPath = (p) => AUDIO_EXTS.has(pathExt(p))
 
 async function api(path, opts = {}) {
 	const res = await fetch(path, {
@@ -129,6 +139,11 @@ const LUCIDE = {
 	'plus': '<path d="M5 12h14"/><path d="M12 5v14"/>',
 	'presentation': '<path d="M2 3h20"/><path d="M21 3v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V3"/><path d="m7 21 5-5 5 5"/>',
 	'play': '<path d="M5 3 19 12 5 21z"/>',
+	'pause': '<rect x="14" y="4" width="4" height="16" rx="1"/><rect x="6" y="4" width="4" height="16" rx="1"/>',
+	'film': '<rect width="18" height="18" x="3" y="3" rx="2"/><path d="M7 3v18"/><path d="M3 7.5h4"/><path d="M3 12h18"/><path d="M3 16.5h4"/><path d="M17 3v18"/><path d="M21 7.5h-4"/><path d="M21 16.5h-4"/>',
+	'music': '<path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>',
+	'volume-2': '<polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/>',
+	'volume-x': '<polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="22" x2="16" y1="9" y2="15"/><line x1="16" x2="22" y1="9" y2="15"/>',
 	'lock': '<rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>',
 	'octagon-alert': '<path d="M12 16h.01"/><path d="M12 8v4"/><path d="M15.312 2a2 2 0 0 1 1.414.586l4.688 4.688A2 2 0 0 1 22 8.688v6.624a2 2 0 0 1-.586 1.414l-4.688 4.688a2 2 0 0 1-1.414.586H8.688a2 2 0 0 1-1.414-.586l-4.688-4.688A2 2 0 0 1 2 15.312V8.688a2 2 0 0 1 .586-1.414l4.688-4.688A2 2 0 0 1 8.688 2z"/>',
 	'triangle-alert': '<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/>',
@@ -5308,7 +5323,7 @@ function disposeBrowse() {
 	}
 }
 
-const GROUP_ORDER = { folder: 0, canvas: 1, document: 2, image: 3 }
+const GROUP_ORDER = { folder: 0, canvas: 1, document: 2, image: 3, video: 4, audio: 5 }
 const browseTitleOf = (it) => it.title || it.name || it.rel
 function browseSortVal(it, by) {
 	if (by === 'created') return it.mtimeMs || 0
@@ -5442,20 +5457,28 @@ async function renderBrowse(main, rel) {
 			return tile
 		}
 
-		if (isImage(it)) {
+		if (it.kind === 'image' || it.kind === 'video' || it.kind === 'audio') {
+			// Image, video and audio tiles share the media skeleton: a select check, the
+			// visual (a thumbnail or a typed placeholder), the name row, and the list
+			// columns. A renderable image shows its bytes; a video shows a film placeholder
+			// until a poster resolves (§4.8, a value-sync — never a rebuild); a metadata-only
+			// file and audio stay a card. All three are selectable (§4.9).
 			tile.dataset.mtime = String(Math.round(it.mtimeMs || 0))
 			const check = document.createElement('div'); check.className = 'gt-check'; check.innerHTML = icon('check'); tile.append(check)
-			if (it.renderable) {
+			const placeholder = (glyph) => {
+				const ph = document.createElement('div'); ph.className = 'gt-ph'; ph.innerHTML = icon(glyph)
+				const label = document.createElement('span'); label.className = 'gt-fmt'
+				label.textContent = (it.name.split('.').pop() || 'file').toUpperCase()
+				ph.append(label); return ph
+			}
+			if (it.kind === 'image' && it.renderable) {
 				const img = document.createElement('img')
 				img.className = 'gt-img'; img.loading = 'lazy'; img.decoding = 'async'
 				img.setAttribute('alt', it.name)
 				img.setAttribute('src', galleryFileUrl(it.rel, it.mtimeMs))
 				tile.append(img)
 			} else {
-				const ph = document.createElement('div'); ph.className = 'gt-ph'; ph.innerHTML = icon('image')
-				const label = document.createElement('span'); label.className = 'gt-fmt'
-				label.textContent = (it.name.split('.').pop() || 'file').toUpperCase()
-				ph.append(label); tile.append(ph)
+				tile.append(placeholder(it.kind === 'video' ? 'film' : it.kind === 'audio' ? 'music' : 'image'))
 			}
 			const name = document.createElement('div'); name.className = 'gt-name'; name.textContent = it.name; tile.append(name)
 			if (bs.layout === 'list') {
@@ -5598,12 +5621,16 @@ async function renderBrowse(main, rel) {
 		const nc = bs.items.filter((i) => i.kind === 'canvas').length
 		const nd = bs.items.filter((i) => i.kind === 'document').length
 		const ni = bs.items.filter((i) => i.kind === 'image').length
+		const nv = bs.items.filter((i) => i.kind === 'video').length
+		const na = bs.items.filter((i) => i.kind === 'audio').length
 		const count = document.createElement('div'); count.className = 'g-count'
 		count.textContent = [
 			...(nf ? [nf + (nf === 1 ? ' folder' : ' folders')] : []),
 			nc + (nc === 1 ? ' canvas' : ' canvases'),
 			nd + (nd === 1 ? ' doc' : ' docs'),
 			ni + (ni === 1 ? ' image' : ' images'),
+			...(nv ? [nv + (nv === 1 ? ' video' : ' videos')] : []),
+			...(na ? [na + (na === 1 ? ' audio file' : ' audio files')] : []),
 		].join(' · ')
 		info.append(count)
 		if (bs.truncated) {
