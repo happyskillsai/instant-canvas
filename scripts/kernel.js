@@ -16,7 +16,7 @@ const { scan, dirsUnder, readCanvasFile, MAX_CANVAS_BYTES, isExcludedDir } = req
 const { validate, collectBlocks, isInteractiveBlock, flattenFields } = require('./lib/validate')
 const { readMarkdownSrc, inlineLocalImages, inlineImageFile, hasMarkdownExtension, renderableMarkdown, MAX_COVER_IMAGE_BYTES } = require('./lib/markdownsrc')
 const { virtualCanvasFor } = require('./lib/mdcanvas')
-const { listImages, imageStat, isRenderableImage, isGalleryImage, galleryMime, normalizeRelDir, GALLERY_IMAGE_EXTS } = require('./lib/gallery')
+const { listImages, mediaStat, isRenderableImage, isGalleryImage, galleryMime, normalizeRelDir, GALLERY_IMAGE_EXTS } = require('./lib/gallery')
 const { listDir } = require('./lib/browse')
 const { dimensions } = require('./lib/imagemeta')
 const { companionFor, enhancesOf } = require('./lib/companion')
@@ -724,10 +724,10 @@ async function route(req, res, url) {
 	}
 
 	// One image's full metadata: the stat fields PLUS its pixel dimensions. The
-	// extension gate and confinement run BEFORE any open (imageStat), so a
+	// extension gate and confinement run BEFORE any open (mediaStat), so a
 	// non-image path — `.env` — is a 404 whose body carries none of the file.
 	if (method === 'GET' && p === '/api/gallery/meta') {
-		const meta = imageStat(ROOT, url.searchParams.get('path') || '')
+		const meta = mediaStat(ROOT, url.searchParams.get('path') || '')
 		if (!meta)
 			return sendJson(res, 404, { ok: false, message: 'Not an image in this workspace.' })
 		// dimensions() reads a bounded header of a file we have already proven is an

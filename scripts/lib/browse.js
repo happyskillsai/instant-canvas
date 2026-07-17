@@ -5,7 +5,7 @@ const path = require('node:path')
 const { insideRoot } = require('./paths')
 const { isExcludedDir, canvasEntry, documentEntry } = require('./scan')
 const { companionIndex } = require('./companion')
-const { normalizeRelDir, isGalleryImage, imageStat } = require('./gallery')
+const { normalizeRelDir, isGalleryImage, mediaStat } = require('./gallery')
 const { hasMarkdownExtension } = require('./markdownsrc')
 
 const toPosix = (p) => String(p).split(path.sep).join('/')
@@ -44,7 +44,7 @@ function withRel(entry) {
  * opened to decide what it is), and `lstat` so a symlink is refused — the
  * requested dir is `lstat`'d (a symlinked directory is not a directory), the
  * child dirs/files come from dirents whose isDirectory()/isFile() are already
- * false for a symlink, and each image goes through `imageStat` (lstat) again.
+ * false for a symlink, and each image goes through `mediaStat` (lstat) again.
  *
  * `dirsOnly` returns just `dirs` (for lazy tree expansion) and skips the item
  * work entirely — no companion index built, no files stat'd.
@@ -124,7 +124,7 @@ function listDir(root, dirRel, { cap = DEFAULT_CAP, dirsOnly = false } = {}) {
 		} else if (hasMarkdownExtension(name)) {
 			add(documents, withRel(documentEntry(root, rel, index)))
 		} else if (isGalleryImage(name)) {
-			const m = imageStat(root, rel)
+			const m = mediaStat(root, rel)
 			add(images, m ? { kind: 'image', rel: m.path, name: m.name, mtimeMs: m.modified, size: m.size, renderable: m.renderable } : null)
 		}
 		// anything else (a `.txt`, a source file) is not renderable → not an item

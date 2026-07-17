@@ -37,6 +37,30 @@ const extOf = (name) => path.extname(String(name)).toLowerCase()
  */
 const GALLERY_IMAGE_EXTS = [...GALLERY_RENDERABLE, ...Object.keys(GALLERY_METADATA_ONLY)]
 
+// --------------------------------------------------------- media extension sets
+
+/**
+ * Video/audio the browser can stream and play (D1). Kept OUT of IMAGE_MIME, like
+ * the metadata-only image set: these are decided from the extension, never opened.
+ * Renderable vs metadata-only mirrors the image split — a renderable file's bytes
+ * are streamed by the file route; a metadata-only one is listed as a card only.
+ */
+const VIDEO_RENDERABLE = { '.mp4': 'video/mp4', '.webm': 'video/webm' }
+const VIDEO_METADATA_ONLY = { '.mov': 'video/quicktime', '.mkv': 'video/x-matroska', '.avi': 'video/x-msvideo' }
+const AUDIO_RENDERABLE = { '.mp3': 'audio/mpeg', '.m4a': 'audio/mp4', '.wav': 'audio/wav', '.ogg': 'audio/ogg' }
+const AUDIO_METADATA_ONLY = { '.flac': 'audio/flac', '.aiff': 'audio/aiff', '.wma': 'audio/x-ms-wma' }
+
+/**
+ * The full video / audio extension unions (renderable + metadata-only), lowercase
+ * with the leading dot. Templated into the app shell (`__IC_VIDEO_EXTS__` /
+ * `__IC_AUDIO_EXTS__`) so the browser classifies a routed path WITHOUT a copied
+ * list — the same discipline as `GALLERY_IMAGE_EXTS`.
+ */
+const MEDIA_VIDEO_EXTS = [...Object.keys(VIDEO_RENDERABLE), ...Object.keys(VIDEO_METADATA_ONLY)]
+const MEDIA_AUDIO_EXTS = [...Object.keys(AUDIO_RENDERABLE), ...Object.keys(AUDIO_METADATA_ONLY)]
+
+const hasKey = (obj, ext) => Object.prototype.hasOwnProperty.call(obj, ext)
+
 /** A file a browser can draw (`<img src>` works). */
 const isRenderableImage = (name) => GALLERY_RENDERABLE.has(extOf(name))
 
@@ -46,11 +70,40 @@ const isGalleryImage = (name) => {
 	return GALLERY_RENDERABLE.has(ext) || Object.prototype.hasOwnProperty.call(GALLERY_METADATA_ONLY, ext)
 }
 
-/** The MIME type for a gallery image, from whichever set owns the extension. */
+/** The MIME type for a gallery file, from whichever of the six maps owns the extension. */
 const galleryMime = (name) => {
 	const ext = extOf(name)
-	return IMAGE_MIME[ext] || GALLERY_METADATA_ONLY[ext] || null
+	return (
+		IMAGE_MIME[ext] ||
+		GALLERY_METADATA_ONLY[ext] ||
+		VIDEO_RENDERABLE[ext] ||
+		VIDEO_METADATA_ONLY[ext] ||
+		AUDIO_RENDERABLE[ext] ||
+		AUDIO_METADATA_ONLY[ext] ||
+		null
+	)
 }
+
+/**
+ * What kind of media a name is, decided from the extension alone (never opened):
+ * `'image'` (the existing image union), `'video'`, `'audio'`, or `null`.
+ */
+const mediaKind = (name) => {
+	const ext = extOf(name)
+	if (isGalleryImage(name)) return 'image'
+	if (hasKey(VIDEO_RENDERABLE, ext) || hasKey(VIDEO_METADATA_ONLY, ext)) return 'video'
+	if (hasKey(AUDIO_RENDERABLE, ext) || hasKey(AUDIO_METADATA_ONLY, ext)) return 'audio'
+	return null
+}
+
+/** A video/audio file the browser can stream and play (renderable media sets only). */
+const isRenderableMedia = (name) => {
+	const ext = extOf(name)
+	return hasKey(VIDEO_RENDERABLE, ext) || hasKey(AUDIO_RENDERABLE, ext)
+}
+
+/** The file route's gate: an image OR a media file whose bytes we will stream. */
+const isStreamableFile = (name) => isRenderableImage(name) || isRenderableMedia(name)
 
 // -------------------------------------------------------------- the listing
 
@@ -160,17 +213,23 @@ function listImages(root, dirRel, { recursive = true, cap = 2000 } = {}) {
 }
 
 /**
- * One image's stat-only metadata for the detail view — the listing fields plus
- * the absolute path. Extension-gated to the UNION set and confined BEFORE any
- * stat, so a non-image or out-of-root path returns `null` (the route turns that
- * into a byte-clean 404). Uses `lstat`, so a symlink is refused outright: the
- * extension gate reads the LINK name, and a `photo.png` symlinked at `.env`
- * would otherwise leak the target. Dimensions are read separately (imagemeta),
- * only after this gate passes. `renderable` says whether the file route will
- * serve bytes for it (a HEIC answers here but 404s there).
+ * One media file's stat-only metadata for the detail view — the listing fields
+ * plus the absolute path and its `kind`. Extension-gated to ANY of the three
+ * unions (image / video / audio) and confined BEFORE any stat, so a non-media or
+ * out-of-root path returns `null` (the route turns that into a byte-clean 404).
+ * Uses `lstat`, so a symlink is refused outright: the extension gate reads the
+ * LINK name, and a `clip.mp4` symlinked at `.env` would otherwise leak the
+ * target. Image dimensions are read separately (imagemeta), only after this gate
+ * passes; video/audio dimensions and duration come from the media element in the
+ * browser (deliberately no server-side media parsing). `renderable` says whether
+ * the file route will serve bytes for it (a HEIC or a `.mov` answers here but
+ * 404s there).
  */
-function imageStat(root, rel) {
-	if (typeof rel !== 'string' || !isGalleryImage(rel))
+function mediaStat(root, rel) {
+	if (typeof rel !== 'string')
+		return null
+	const kind = mediaKind(rel)
+	if (!kind)
 		return null
 	const abs = path.resolve(root, rel)
 	if (!insideRoot(root, abs))
@@ -191,11 +250,12 @@ function imageStat(root, rel) {
 		name: path.basename(abs),
 		dir: slash >= 0 ? relPosix.slice(0, slash) : '',
 		abspath: abs,
+		kind,
 		size: st.size,
 		created: st.birthtimeMs || st.mtimeMs,
 		modified: st.mtimeMs,
 		format: ext.replace(/^\./, ''),
-		renderable: GALLERY_RENDERABLE.has(ext),
+		renderable: isStreamableFile(rel),
 	}
 }
 
@@ -203,10 +263,19 @@ module.exports = {
 	GALLERY_RENDERABLE,
 	GALLERY_METADATA_ONLY,
 	GALLERY_IMAGE_EXTS,
+	VIDEO_RENDERABLE,
+	VIDEO_METADATA_ONLY,
+	AUDIO_RENDERABLE,
+	AUDIO_METADATA_ONLY,
+	MEDIA_VIDEO_EXTS,
+	MEDIA_AUDIO_EXTS,
 	isRenderableImage,
 	isGalleryImage,
 	galleryMime,
+	mediaKind,
+	isRenderableMedia,
+	isStreamableFile,
 	normalizeRelDir,
 	listImages,
-	imageStat,
+	mediaStat,
 }
