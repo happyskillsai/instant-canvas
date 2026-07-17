@@ -2,6 +2,25 @@
 
 ## [Unreleased]
 
+### Added
+- **Video & audio in the browse view and a bespoke player.** The image pipeline now extends to
+  video (`.mp4`, `.webm`) and audio (`.mp3`, `.m4a`, `.wav`, `.ogg`), with `.mov`/`.mkv`/`.avi`
+  and `.flac`/`.aiff`/`.wma` listed as metadata-only cards. Browse-view tiles show video
+  **first-frame poster thumbnails** captured client-side (a queued 2-wide canvas capture) with a
+  duration badge, and typed placeholder cards for audio. A routed `#/c/<file>` opens a **fully
+  bespoke player** — play/pause, scrubber, time readout, mute + volume, fullscreen (video),
+  and a **0.5×–3× speed control** sticky across items — with native browser chrome never shown.
+  Keyboard: Space play/pause, ←/→ seek ±5s, m mute, f fullscreen. Media joins the browse view's
+  selection & permanent-delete flow.
+- **Click-to-copy on every item-metadata row** (images included) — an always-visible copy icon
+  per row that puts the row's displayed value on the clipboard.
+
+### Changed
+- **The gallery file route streams with HTTP Range/206** (browsers seek media with `Range`, and
+  Safari refuses to play without a 206). Meta and delete widen from images to the media union;
+  the whole-batch delete refusal renames `NOT_AN_IMAGE` → `NOT_A_MEDIA_FILE`. The CSP gains
+  `media-src 'self'` (under `default-src 'none'` a media element source was blocked outright).
+
 ## [0.12.0] - 2026-07-17
 
 ### Added

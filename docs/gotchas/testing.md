@@ -114,3 +114,23 @@ The corollary bit twice while fixing this: **the first version of three separate
 The mechanism is the single-process runner (`index.js` requires every file into ONE process, so the whole suite shares ONE event loop). `execFileSync` **blocks that loop synchronously for the entire subprocess** — and a `snapshot`/`print` capture spawns a kernel and a headless Chrome, so it holds the loop for tens of seconds. During that block, **every other file's in-flight CDP drive is frozen**: their WebSocket reads, their `setTimeout` polls, their readiness gates — none can run, because the one thread is parked in `execFileSync`. Enough concurrent Chrome-driving files, plus one more file adding sync captures in its before hook, and the frozen drives cascade into timeouts and the run wedges. (`print.test.js` got away with it only until `snapshot.test.js` pushed the concurrent Chrome load over the edge.)
 
 The fix is to make the subprocess call **asynchronous** — `promisify(execFile)`, `await`ed — so the event loop stays free while Chrome works and the other files' drives keep breathing. Two supports go with it: a hard `timeout` on the exec (a wedged capture fails *this* file, never the suite), and keeping the before hook's Chrome launches to the **minimum** (every headless Chrome competes with a dozen already up). The rule generalises past this feature: **never call a synchronous, long-running child process from a hook or test in the single-process suite — a blocking `*Sync` call is a global stall, not a local wait.** The tell is a hang with no output and a runner pegged at ~0 CPU: the loop is parked, not looping.
+
+## Audio never autoplays in headless Chrome without a flag, and `opts.args` REPLACES the defaults
+
+The media-player browser test (`mediaui.test.js`) drives a real `<audio>` element, and
+`el.play()` **rejects with `NotAllowedError`** in headless Chrome without a user gesture — a
+muted `<video>` autoplays under the default swiftshader profile, but audio does not. The fix is
+`--autoplay-policy=no-user-gesture-required`. The trap is *how* you pass it: `withChrome`'s
+`opts.args` **replaces** the default launch flags rather than appending, so passing only the
+autoplay flag drops the five swiftshader defaults the on-screen WebGL rendering needs, and the
+page comes up wrong. Pass **all five defaults PLUS the fix**:
+
+```js
+const ARGS = ['--headless=new', '--no-sandbox', '--disable-gpu', '--use-angle=swiftshader',
+              '--enable-unsafe-swiftshader', '--autoplay-policy=no-user-gesture-required']
+```
+
+And the audio-advance discipline: **wait for `canplaythrough` (`readyState >= 4`) before
+playing, and give it ~900 ms before asserting `currentTime > 0`.** Asserting right after
+`loadedmetadata` reads `0` — the element has its duration but has not started decoding audio
+yet — and the test fails for the wrong reason.

@@ -278,3 +278,36 @@ The overlay's keyboard (§4.6: Esc → leave to the folder, ←/→ → prev/nex
 The cause is the same one behind the body-scroll-lock gotcha above: **`.app` is `100vh` and `.main` is the only scroller.** So the *page* is exactly the viewport height, and a sheet at page-y 2900 lives in `.main`'s scroll overflow, **not** in the page's own beyond-viewport region. `captureBeyondViewport` extends the capture down the *page*, which has nothing down there to paint — the deck is off inside a nested scroll container the option never looks into. This is unassertable by "did we get a PNG": the capture succeeds, the file is a valid PNG of plausible dimensions, and only *looking* at it (a human, or the mean-gray-is-background tell) shows it is empty.
 
 The working path is the documented fallback: **`scrollIntoView({block:'center'})` the target inside `.main`, then clip within the viewport** (no `captureBeyondViewport`). Set the device metrics wide first (`Emulation.setDeviceMetricsOverride {width:1600,height:1200,deviceScaleFactor:1}`) so `fitDeck` fits an A4 sheet unscaled — assert `.deck-scale` carries no transform, or you capture blurred, wrong-geometry pixels — then read the box's *in-viewport* rect after the scroll and clip that. The general rule: **`captureBeyondViewport` captures beyond the layout viewport of the PAGE, and is blind to any content parked in a nested `overflow:auto` scroller.** Before trusting a clipped screenshot of anything below the fold, ask which element actually scrolls — and verify the pixels, never just the file.
+
+## A detached media element keeps playing
+
+The overlay's video/audio player is mounted, replaced on prev/next, and torn down on Esc — and
+a `<video>`/`<audio>` element **removed from the DOM keeps playing in Chrome until GC**. Closing
+the overlay without stopping it leaves sound running with no UI attached to stop it; stepping
+prev/next between two videos leaks the first one's audio under the second. `getElementById` or a
+CSS check will not catch this — the element is *detached*, so it is not in any query, and the
+only symptom is audio the reader cannot see a source for.
+
+`createMediaStage`'s `dispose()` is therefore load-bearing and does three things in order:
+`el.pause(); el.removeAttribute('src'); el.load()` — pausing stops playback, and removing the
+src plus `load()` releases the resource so a decoder is not held. `renderCanvas` calls
+`overlayStage?.dispose?.()` **before** it nulls the stage and mounts the next one (and
+`createImageStage` carries a no-op `dispose` so the call is uniform). `mediaui.test.js` pins it
+by holding a reference to the `<video>` across an Esc and asserting `paused === true` and no
+`src` attribute — the one place a leaked element is visible after it has left the tree.
+
+## Chrome plays from a 200-only server, so a playback test cannot prove Range works
+
+The gallery file route serves media with HTTP Range/206 because browsers seek with a `Range`
+header and **Safari refuses to play a media element without a 206**. The trap is that Chrome
+(the only browser the suite drives) **plays perfectly from a 200-only server** that ignores
+`Range` entirely — so a browser playback test is *green whether or not Range is implemented*. It
+cannot prove the feature that exists for Safari, which the suite never runs.
+
+So Range is asserted at the **HTTP level**, not through the player: `media.test.js` curls the
+file route with `Range: bytes=a-b` and checks the **206**, the `Content-Range`, the
+`Content-Length`, and **byte-for-byte slice equality** against the fixture on disk — plus the
+416 for an unsatisfiable range (carrying none of the file) and the 200 fall-through for a
+malformed one. The browser test proves the element *plays*; only the HTTP test proves it plays
+the way Safari needs. When a feature exists for a client your harness does not run, assert it at
+the layer that client depends on.
