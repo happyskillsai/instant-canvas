@@ -22,8 +22,9 @@ const { validate, renderHuman } = require('./lib/validate')
 const { catalog } = require('./lib/catalog')
 const { openUrl } = require('./lib/browser')
 const { writeAtomic } = require('./lib/fsatomic')
-const { insideRoot } = require('./lib/paths')
+const { insideRoot, stateDir, workspaceKey } = require('./lib/paths')
 const { withChrome, findChrome } = require('./lib/cdp')
+const { figureMap } = require('./lib/figures')
 const { PKG_VERSION, UNKNOWN_VERSION } = require('./lib/pkgmeta')
 const { hasMarkdownExtension } = require('./lib/markdownsrc')
 const themeLib = require('./lib/theme')
@@ -52,6 +53,13 @@ Commands:
       screen ARE the PDF pages. Requires Chrome (CHROME_PATH overrides
       discovery). A canvas needs an envelope-level "document" object; a
       markdown file derives its paper defaults and needs nothing.
+  snapshot <canvas.json | file.md> [--figure <n[,n…]>] [--out-dir <dir>]
+      [--list] [--workspace <dir>]
+      Capture named figures as PNGs at true A4 deck geometry, for an agent to
+      read back with its own vision — the response to a user naming a figure or
+      asking for visual review, never a routine step. --list prints the figure
+      map (no browser). Images land in a scratch folder OUTSIDE the workspace by
+      default; --out-dir must be inside it. Requires Chrome.
   validate <canvas.json |      Validate a canvas file, print JSON verdict. Also checks the
            skills-config.json>  colors inside skills-config.json (theme + palettes).
   theme <canvas.json|file.md>  Show the document's resolved colors and which file
@@ -124,6 +132,8 @@ function parseArgs(argv) {
 		else if (a === '--timeout') args.timeout = Number(argv[++i])
 		else if (a === '--result') args.result = argv[++i]
 		else if (a === '--out') args.out = argv[++i]
+		else if (a === '--out-dir') args.outDir = argv[++i]
+		else if (a === '--figure') args.figure = argv[++i]
 		else if (a.startsWith('--')) return { error: `Unknown flag "${a}".` }
 		else args._.push(a)
 	}
@@ -381,6 +391,41 @@ async function cmdOpen(args) {
 // lose every 3D chart while looking fine on screen.
 const PRINT_CHROME_ARGS = ['--headless=new', '--no-sandbox', '--enable-gpu']
 
+// The density warnings (Phase B) the validator computed, grouped by figure — so a
+// paper drive (print or snapshot) can restate each figure's threshold breaches beside
+// its rendered facts. Shared by both commands; a parallel copy would drift.
+const DENSITY_WARNING_CODES = new Set(['AXIS_TOO_DENSE', 'HEATMAP_TOO_DENSE', 'LABELS_WILL_ELIDE', 'TOO_MANY_SERIES', 'TOO_MANY_SLICES'])
+function densityWarningsByFigure(verdict) {
+	const m = new Map()
+	for (const w of verdict.warnings || []) {
+		if (!DENSITY_WARNING_CODES.has(w.code) || typeof w.figure !== 'number')
+			continue
+		if (!m.has(w.figure))
+			m.set(w.figure, [])
+		m.get(w.figure).push({ code: w.code, path: w.path, message: w.message, hint: w.hint })
+	}
+	return m
+}
+
+// The chart-facts join, run inside the browser at final geometry (charts drawn, the
+// readiness gate drained). Reads state.chartFacts + the figure map + each chart's
+// containing sheet — zero images, zero extra Chrome. Shared verbatim by print and
+// snapshot so the two cannot disagree about a figure's page or facts.
+const FIGURE_FACTS_JS = `(() => {
+	const facts = (window.ic && window.ic.state.chartFacts) || {};
+	const figs = (window.ic && window.ic.state.figures) || [];
+	const byIndex = new Map(figs.map((f) => [String(f.blockIndex), f]));
+	const sheets = [...document.querySelectorAll('.deck .sheet')];
+	const out = [];
+	for (const box of document.querySelectorAll('.deck .sheet .chart-box[data-chart]')) {
+		const f = byIndex.get(box.dataset.chart);
+		if (!f) continue;
+		const sheetIdx = sheets.indexOf(box.closest('.sheet'));
+		out.push({ figure: f.figure, path: f.path, title: f.title, kind: f.kind, page: sheetIdx >= 0 ? sheetIdx + 1 : null, facts: facts[box.dataset.chart] || null });
+	}
+	return out;
+})()`
+
 /**
  * Print a document canvas to PDF through the browser's native print engine
  * (Page.printToPDF is the same Skia backend as Cmd+P). The deck's sheets are
@@ -418,8 +463,7 @@ async function cmdPrint(args) {
 	// sees a cover on screen and no cover in the PDF has been lied to.
 	// Density warnings the validator already computed, grouped by figure so `print`'s
 	// result can restate each figure's threshold breaches beside its rendered facts.
-	const DENSITY_CODES = new Set(['AXIS_TOO_DENSE', 'HEATMAP_TOO_DENSE', 'LABELS_WILL_ELIDE', 'TOO_MANY_SERIES', 'TOO_MANY_SLICES'])
-	const warningsByFigure = new Map()
+	let warningsByFigure = new Map()
 
 	const isDoc = hasMarkdownExtension(rel)
 	if (!isDoc) {
@@ -432,13 +476,7 @@ async function cmdPrint(args) {
 				error: { code: 'INVALID_SPEC', message: `Canvas failed validation with ${verdict.errorCount} error(s).`, errors: verdict.errors },
 				timestamp: now(),
 			}, 1)
-		for (const w of verdict.warnings || []) {
-			if (!DENSITY_CODES.has(w.code) || typeof w.figure !== 'number')
-				continue
-			if (!warningsByFigure.has(w.figure))
-				warningsByFigure.set(w.figure, [])
-			warningsByFigure.get(w.figure).push({ code: w.code, path: w.path, message: w.message, hint: w.hint })
-		}
+		warningsByFigure = densityWarningsByFigure(verdict)
 		const parsed = JSON.parse(raw)
 		// A presentation prints too — one landscape page per slide. A slides canvas needs no
 		// "document" (they are mutually exclusive: DOCUMENT_ON_PRESENTATION).
@@ -501,20 +539,7 @@ async function cmdPrint(args) {
 		// recorded (state.chartFacts) and joins them with the figure map and each chart's
 		// containing sheet. Zero images, zero extra Chrome launches — the readiness gate is
 		// already drained, so this reads final geometry.
-		const figures = await evaluate(`(() => {
-			const facts = (window.ic && window.ic.state.chartFacts) || {};
-			const figs = (window.ic && window.ic.state.figures) || [];
-			const byIndex = new Map(figs.map((f) => [String(f.blockIndex), f]));
-			const sheets = [...document.querySelectorAll('.deck .sheet')];
-			const out = [];
-			for (const box of document.querySelectorAll('.deck .sheet .chart-box[data-chart]')) {
-				const f = byIndex.get(box.dataset.chart);
-				if (!f) continue;
-				const sheetIdx = sheets.indexOf(box.closest('.sheet'));
-				out.push({ figure: f.figure, path: f.path, title: f.title, kind: f.kind, page: sheetIdx >= 0 ? sheetIdx + 1 : null, facts: facts[box.dataset.chart] || null });
-			}
-			return out;
-		})()`).catch(() => [])
+		const figures = await evaluate(FIGURE_FACTS_JS).catch(() => [])
 		const pdf = await send('Page.printToPDF', {
 			printBackground: true,
 			preferCSSPageSize: true,
@@ -536,6 +561,229 @@ async function cmdPrint(args) {
 		warnings: warningsByFigure.get(f.figure) || [],
 	}))
 	out({ status: 'printed', path: outRel, pages: printed.pages, bytes: buf.length, figures, timestamp: now() }, 0)
+}
+
+/**
+ * Resolve a snapshot target's figure map WITHOUT a kernel — a canvas file is parsed
+ * directly; a markdown file inherits its COMPANION's figures (a bare .md has no charts).
+ * This is what lets `--list` answer with no browser at all.
+ */
+function snapshotFigures(root, rel, isDoc) {
+	if (!isDoc) {
+		let parsed
+		try {
+			parsed = JSON.parse(fs.readFileSync(path.resolve(root, rel), 'utf8'))
+		} catch {
+			specError('INVALID_JSON', `${rel} is not valid JSON.`)
+		}
+		return { canvas: parsed, figures: figureMap(parsed) }
+	}
+	const comp = companionFor(root, rel)
+	if (comp && comp.canvas) {
+		try {
+			const parsed = JSON.parse(fs.readFileSync(path.resolve(root, comp.canvas), 'utf8'))
+			return { canvas: parsed, figures: figureMap(parsed) }
+		} catch { /* a broken companion → no figures */ }
+	}
+	return { canvas: null, figures: [] }
+}
+
+/**
+ * Capture named figures as PNGs at true A4 deck geometry, for the agent to read back
+ * with its own vision. The response to a user naming a figure or asking for visual
+ * review — never a routine step (SKILL.md says so, the "print is not step 7" precedent).
+ *
+ * The pipeline is `print`'s, by reference not by copy: assertReadable → validate → the
+ * same PRINT_CHROME_ARGS (3D charts blank under the tests' swiftshader profile) → the
+ * same readiness gate and INSTANTCANVAS_PRINT_WAIT_MS knob. The one genuinely new step
+ * is the capture: the deck lives inside the `.main` scroller, so Page.captureScreenshot's
+ * `captureBeyondViewport` photographs the page's own overflow and misses a below-the-fold
+ * sheet entirely (verified — it comes back blank). The working path is to scrollIntoView
+ * each target and clip within the viewport (§6.1's documented fallback).
+ */
+async function cmdSnapshot(args) {
+	const canvasArg = args._[0]
+	if (!canvasArg)
+		specError('INVALID_SPEC', 'snapshot requires a canvas or markdown file argument.')
+	const root = resolveWorkspace(args)
+	const canvasAbs = path.resolve(canvasArg)
+	if (!fs.existsSync(canvasAbs))
+		specError('INVALID_SPEC', `File not found: ${canvasAbs}`)
+	const rel = path.relative(root, fs.realpathSync(canvasAbs)).split(path.sep).join('/')
+	if (rel.startsWith('..') || path.isAbsolute(rel))
+		specError('PATH_OUTSIDE_WORKSPACE', `${canvasAbs} is outside the workspace root ${root}. Pass --workspace <dir> pointing at the folder that contains the canvas.`)
+	assertReadable(canvasAbs, 'snapshot')
+
+	const isDoc = hasMarkdownExtension(rel)
+	const { canvas: canvasObj, figures: figMap } = snapshotFigures(root, rel, isDoc)
+
+	// --list completes the vocabulary: the figure map with no kernel and no Chrome.
+	if (args.list)
+		out({
+			status: 'figures', canvas: rel,
+			figures: figMap.map((f) => ({ figure: f.figure, path: f.path, title: f.title, kind: f.kind })),
+			timestamp: now(),
+		}, 0)
+
+	// A canvas file must validate (errors refuse, exit 1); markdown has no contract.
+	let warningsByFigure = new Map()
+	if (!isDoc) {
+		const verdict = validate(fs.readFileSync(canvasAbs, 'utf8'), { root, self: rel })
+		log(renderHuman(verdict, rel))
+		if (!verdict.ok)
+			out({
+				status: 'error',
+				error: { code: 'INVALID_SPEC', message: `Canvas failed validation with ${verdict.errorCount} error(s).`, errors: verdict.errors },
+				timestamp: now(),
+			}, 1)
+		warningsByFigure = densityWarningsByFigure(verdict)
+	}
+
+	// A form / confirm / sweep / gallery cannot render on paper, so the deck refuses it —
+	// computed from the SAME blocker source the browser and themestore share.
+	const blockers = canvasObj ? themestore.deckBlockers(canvasObj) : []
+	if (blockers.length)
+		out({
+			status: 'error',
+			error: {
+				code: 'SNAPSHOT_NEEDS_DECK',
+				message: `${rel} contains ${blockers.join(' and ')}, which cannot render on paper — snapshot captures the deck.`,
+				hint: 'Ship a display-only version (form values as a table, a sweep\'s frame as plain "data") to snapshot it.',
+			},
+			timestamp: now(),
+		}, 1)
+
+	// Zero charts is a success, not an error — it composes for scripts. Say so on stderr.
+	if (!figMap.length) {
+		log(`${rel} has no chart blocks — nothing to snapshot.`)
+		out({ status: 'snapshotted', canvas: rel, workspace: root, outDir: null, figures: [], timestamp: now() }, 0)
+	}
+
+	// Which figures? --figure n[,n…] else all. An unknown number refuses with the valid map.
+	const byNum = new Map(figMap.map((f) => [f.figure, f]))
+	let requested
+	if (args.figure !== undefined) {
+		requested = String(args.figure).split(',').map((s) => Number(s.trim()))
+		for (const n of requested)
+			if (!Number.isInteger(n) || !byNum.has(n))
+				out({
+					status: 'error',
+					error: {
+						code: 'UNKNOWN_FIGURE',
+						message: `No figure ${JSON.stringify(String(n))} in ${rel}. Valid figures: ${figMap.map((f) => f.figure).join(', ')}.`,
+						figures: figMap.map((f) => ({ figure: f.figure, title: f.title, kind: f.kind })),
+					},
+					timestamp: now(),
+				}, 1)
+	} else {
+		requested = figMap.map((f) => f.figure)
+	}
+
+	// Output lands OUTSIDE the workspace by default (the state dir — the kernel-log
+	// precedent: agent-loop scratch that cannot pollute the repo or churn fs.watch). An
+	// explicit --out-dir re-enters the workspace and re-enters its confinement rules.
+	let outDir
+	if (args.outDir) {
+		const abs = path.resolve(args.outDir)
+		if (!insideRoot(root, abs))
+			specError('PATH_OUTSIDE_WORKSPACE', `--out-dir ${abs} resolves outside the workspace root ${root}. Snapshots default to a scratch folder outside the workspace; an explicit destination must be inside it.`)
+		outDir = abs
+	} else {
+		outDir = path.join(stateDir(), 'snapshots')
+	}
+	fs.mkdirSync(outDir, { recursive: true })
+
+	// snapshot needs Chrome exactly like print (and must NEVER use the swiftshader profile).
+	const envChrome = process.env.CHROME_PATH
+	const chrome = envChrome
+		? (fs.existsSync(envChrome) && fs.statSync(envChrome).isFile() ? envChrome : null)
+		: findChrome()
+	if (!chrome)
+		out({
+			status: 'error',
+			error: {
+				code: 'CHROME_REQUIRED',
+				message: envChrome
+					? `CHROME_PATH points at a non-existent binary: ${envChrome}`
+					: 'snapshot drives a local Chrome/Chromium to capture the deck and none was found. Install Chrome, or set CHROME_PATH to the binary.',
+			},
+			timestamp: now(),
+		}, 2)
+
+	const entry = await ensureKernel(root)
+	const url = `http://127.0.0.1:${entry.port}/?token=${entry.token}&view=deck#/c/${encodeURIComponent(rel)}`
+	const key = workspaceKey(root)
+	const base = (path.basename(rel).replace(/\.(canvas\.json|json|md|mdx|markdown)$/i, '').replace(/[^a-zA-Z0-9._-]+/g, '-')) || 'canvas'
+	log(`capturing ${requested.length} figure(s) of ${rel} via headless Chrome ...`)
+
+	const printWaitMs = Number(process.env.INSTANTCANVAS_PRINT_WAIT_MS) || 60_000
+	const captured = await withChrome(chrome, url, { args: PRINT_CHROME_ARGS, timeoutMs: Math.max(printWaitMs, 15_000) }, async ({ evaluate, send, sleep: pause }) => {
+		// The SAME readiness gate print uses: deck laid out, every chart drew, no fit in flight.
+		const deadline = Date.now() + printWaitMs
+		let ready = false
+		while (!ready && Date.now() < deadline) {
+			ready = await evaluate(`(() => {
+				if (!window.ic || !window.ic.state.tree) return false;
+				if (!document.querySelectorAll('.deck .sheet').length) return false;
+				if (window.ic.state.fits) return false;
+				const boxes = [...document.querySelectorAll('.deck .sheet .chart-box')];
+				return boxes.length > 0 && boxes.every((b) => b.querySelector('.main-svg') || b.querySelector('canvas'));
+			})()`).catch(() => false)
+			if (!ready)
+				await pause(250)
+		}
+		if (!ready)
+			throw new Error('The document never finished rendering (sheets or charts missing after 60 s).')
+		await pause(1200)
+
+		// D10: scale 1, dpr 1. A 1600px-wide viewport lets fitDeck fit an A4 sheet without
+		// scaling, so the capture is the printed geometry 1:1 (~680px content width).
+		await send('Emulation.setDeviceMetricsOverride', { width: 1600, height: 1200, deviceScaleFactor: 1, mobile: false })
+		await pause(600)
+		const scaleX = await evaluate(`(() => { const el = document.querySelector('.deck-scale'); const t = el ? getComputedStyle(el).transform : 'none'; return t === 'none' ? 1 : parseFloat(t.slice(7).split(',')[0]); })()`)
+		if (Math.abs(scaleX - 1) > 0.01)
+			throw new Error(`The deck is not at scale 1 (transform scale ${scaleX}) — refusing to capture blurred, wrong-geometry pixels.`)
+
+		const factsByFigure = new Map((await evaluate(FIGURE_FACTS_JS).catch(() => [])).map((f) => [f.figure, f]))
+
+		const shots = []
+		for (const n of requested) {
+			const f = byNum.get(n)
+			// The deck is inside .main, so captureBeyondViewport misses a below-the-fold
+			// sheet — scroll the box into view and clip within the viewport (§6.1 fallback).
+			// The box is guaranteed present — the readiness gate above only passed once
+			// every .deck .sheet .chart-box had drawn, and blockIndex indexes exactly those.
+			const rect = await evaluate(`(() => {
+				const box = document.querySelector('.deck .sheet .chart-box[data-chart="${f.blockIndex}"]');
+				box.scrollIntoView({ block: 'center' });
+				const r = box.getBoundingClientRect();
+				return { x: r.left, y: r.top, width: r.width, height: r.height };
+			})()`)
+			await pause(250) // let the scroll settle before the clip
+			const shot = await send('Page.captureScreenshot', { format: 'png', clip: { x: rect.x, y: rect.y, width: rect.width, height: rect.height, scale: 1 } })
+			shots.push({ figure: n, data: shot.data, meta: factsByFigure.get(n) || {} })
+		}
+		return shots
+	})
+
+	const figuresOut = []
+	for (const s of captured) {
+		const f = byNum.get(s.figure)
+		const buf = Buffer.from(s.data, 'base64')
+		const width = buf.readUInt32BE(16) // PNG IHDR width
+		const height = buf.readUInt32BE(20) // PNG IHDR height
+		const image = path.join(outDir, `${key}-${base}-fig${s.figure}.png`)
+		writeAtomic(image, buf)
+		figuresOut.push({
+			figure: f.figure, path: f.path, title: f.title, kind: f.kind,
+			page: s.meta.page !== undefined ? s.meta.page : null,
+			image, width, height,
+			facts: s.meta.facts || null,
+			warnings: warningsByFigure.get(f.figure) || [],
+		})
+	}
+	log(`wrote ${figuresOut.length} snapshot(s) to ${outDir}`)
+	out({ status: 'snapshotted', canvas: rel, workspace: root, outDir, figures: figuresOut, timestamp: now() }, 0)
 }
 
 /** Reuse the file's own indentation when a rewrite is unavoidable. */
@@ -977,6 +1225,7 @@ async function main() {
 	switch (command) {
 		case 'open': return cmdOpen(args)
 		case 'print': return cmdPrint(args)
+		case 'snapshot': return cmdSnapshot(args)
 		case 'stamp': return cmdStamp(args)
 		case 'validate': return cmdValidate(args)
 		case 'theme': return cmdTheme(args)
