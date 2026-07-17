@@ -81,6 +81,8 @@ const state = {
 	docLand: false, // true while the current canvas is rendered through the deck machinery
 	presLand: false, // true while the current canvas is a presentation (the filmstrip)
 	imageLand: false, // true while the overlay is rendering an image stage (§4.7)
+	mediaLand: null,  // 'video' | 'audio' while the overlay is rendering a media player (§4.11), else null
+	mediaRate: 1,     // playback speed, sticky across items and across video↔audio (D5)
 	presFit: null, // re-runs the filmstrip scale fit; set by each presentation render
 	presIndex: 0, // the slide the reader is on (drives where Present starts)
 	presenting: false, // true while the fullscreen/in-viewport stage is up
@@ -3592,6 +3594,19 @@ function syncViewToggle() {
 		closePalette()
 		return
 	}
+	// §4.11: a video/audio is not a document either — mirror the image branch. The deck
+	// controls hide; TOC / strips / colors stay in place and disable WITH A REASON.
+	if (state.mediaLand) {
+		const noun = state.mediaLand === 'audio' ? 'audio file' : 'video'
+		$('viewToggle').hidden = true
+		$('presentBtn').hidden = true
+		$('printBtn').hidden = true
+		paperControl('tocBtn', { loaded: true, enabled: false, on: false, label: '', reason: 'This is a ' + noun + ' — a table of contents is a document feature' })
+		paperControl('stripsBtn', { loaded: true, enabled: false, on: false, label: '', reason: 'This is a ' + noun + ' — a running header is a document feature' })
+		paperControl('paletteBtn', { loaded: true, enabled: false, on: false, label: '', reason: 'This is a ' + noun + ' — it carries no document theme' })
+		closePalette()
+		return
+	}
 	// A presentation owns the view-toggle slot with a Present control instead of the
 	// deck/continuous pair (D9): a deck has no continuous twin. The TOC and running-strip
 	// buttons stay in place but disable — a deck has neither — and the palette stays live.
@@ -4636,6 +4651,7 @@ function createMediaStage(kind) {
 
 	// ---- element wiring ----
 	el.addEventListener('loadedmetadata', () => {
+		el.playbackRate = state.mediaRate // load() resets playbackRate to defaultPlaybackRate; re-apply the sticky rate here
 		const d = isFinite(el.duration) ? el.duration : 0
 		seek.max = String(d || 0)
 		timeEl.textContent = clock(el.currentTime) + ' / ' + clock(d)
@@ -4694,7 +4710,7 @@ function createMediaStage(kind) {
 		// A metadata-only kind (a .mov) or an unreadable file never mounts an element — the
 		// placeholder card + the meta panel, the HEIC pattern.
 		if (!m || !m.renderable) { showError('This file can’t be played by this browser.'); return }
-		el.playbackRate = state.mediaRate; rateLabel.textContent = state.mediaRate + '×'
+		el.defaultPlaybackRate = state.mediaRate; el.playbackRate = state.mediaRate; rateLabel.textContent = state.mediaRate + '×'
 		vol.value = String(el.muted ? 0 : el.volume); setRangeFill(vol); syncMuteIcon()
 		el.src = galleryFileUrl(p, m.modified)
 		el.load()
@@ -4762,7 +4778,12 @@ async function renderCanvas() {
 	const modal = $('docModal')
 	const main = $('docModalView')
 	document.body.classList.remove('image-overlay')
+	document.body.classList.remove('media-overlay')
 	state.imageLand = false
+	state.mediaLand = null
+	// Dispose the outgoing stage BEFORE it is replaced — a detached media element keeps
+	// playing until GC, so prev/next between two videos would leak the first one's audio.
+	overlayStage?.dispose?.()
 	overlayStage = null
 	// No item routed → close the modal; the pane behind is the whole view.
 	if (typeof state.activeId !== 'string') {
@@ -4794,6 +4815,23 @@ async function renderCanvas() {
 		overlayStage = stage
 		main.replaceChildren(stage.el)
 		stage.load(state.activeId, {}) // renderable/mtime unknown on a cold deep-link → derived from meta
+		syncViewToggle()
+		return
+	}
+	// §4.11: a video/audio path renders the bespoke player, mirroring the image branch —
+	// /api/canvas is never called for it. Classification is by extension against the
+	// server's own unions (isVideoPath/isAudioPath → VIDEO_EXTS/AUDIO_EXTS), no copied list.
+	const mk = isVideoPath(state.activeId) ? 'video' : isAudioPath(state.activeId) ? 'audio' : null
+	if (mk) {
+		state.canvasDoc = null
+		state.docLand = false
+		state.presLand = false
+		state.mediaLand = mk
+		document.body.classList.add('media-overlay')
+		const stage = createMediaStage(mk)
+		overlayStage = stage
+		main.replaceChildren(stage.el)
+		stage.load(state.activeId)
 		syncViewToggle()
 		return
 	}
@@ -7011,12 +7049,27 @@ document.addEventListener('keydown', (e) => {
 	if (e.key === 'Escape') {
 		if (inField)
 			return
+		// A media stage's speed popover eats Esc first (close it, stay in the overlay); and
+		// while the browser is fullscreen, Esc belongs to the browser (it exits fullscreen).
+		if (state.mediaLand && overlayStage) {
+			if (overlayStage.escape && overlayStage.escape()) { e.preventDefault(); return }
+			if (document.fullscreenElement) return
+		}
 		e.preventDefault()
 		ocClose()
 		return
 	}
 	if (inField)
 		return
+	// §4.11 (D8): the media overlay owns these keys, player-style — ←/→ SEEK ±5s (prev/next
+	// stays on the visible ‹ › buttons), Space play/pause, m mute, f fullscreen (video only).
+	if (state.mediaLand && overlayStage) {
+		if (e.key === ' ' || e.key === 'Spacebar') { e.preventDefault(); overlayStage.toggle(); return }
+		if (e.key === 'ArrowLeft') { e.preventDefault(); overlayStage.seekBy(-5); return }
+		if (e.key === 'ArrowRight') { e.preventDefault(); overlayStage.seekBy(5); return }
+		if (e.key === 'm' || e.key === 'M') { e.preventDefault(); overlayStage.mute(); return }
+		if ((e.key === 'f' || e.key === 'F') && state.mediaLand === 'video') { e.preventDefault(); overlayStage.fullscreen(); return }
+	}
 	if (e.key === 'ArrowLeft') { e.preventDefault(); ocStep(-1) }
 	else if (e.key === 'ArrowRight') { e.preventDefault(); ocStep(1) }
 	// An image stage in the overlay also takes +/- to zoom (wheel + the zoom bar aside).

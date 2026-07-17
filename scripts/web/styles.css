@@ -1408,7 +1408,8 @@ body.presenting.cursor-hidden .stage{cursor:none}
    over a flex:1 view). The view becomes a flex box so the stage fills it, and its own
    scroll is off (the stage handles zoom overflow). Scoped by body.image-overlay so the
    document deck/continuous layouts are untouched. */
-body.image-overlay .doc-modal-view{display:flex;overflow:hidden}
+body.image-overlay .doc-modal-view,
+body.media-overlay .doc-modal-view{display:flex;overflow:hidden}
 .g-stage{flex:1 1 auto;display:flex;align-items:center;justify-content:center;overflow:hidden;
 	background:var(--panel-2);position:relative}
 .g-stage.zoomed{cursor:grab}
