@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-07-17
+
 ### Added
 - **Chart readability feedback loop — a four-tier funnel that lets an agent catch and fix
   unreadable charts without a human screenshotting anything.**
@@ -29,6 +31,13 @@
     in the state dir); `--list` prints the figure map with no browser. It is the response to a
     user naming a figure or asking for a visual review — never a routine step. Refusals:
     `UNKNOWN_FIGURE`, `SNAPSHOT_NEEDS_DECK`, `CHROME_REQUIRED`, `PATH_OUTSIDE_WORKSPACE`.
+
+### Changed
+- **The InstantCanvas skill auto-invokes on a chart-readability request.** The skill's
+  frontmatter description gained a "checking a chart is readable" trigger, so a cold-start
+  "is this chart readable" or "figure 3 looks wrong" now loads the skill — matching the new
+  `snapshot` capability. (The body already taught the funnel; this closes the auto-invocation
+  gap.)
 
 ### Fixed
 - **A printed PDF is now named after the document, not always "InstantCanvas".** The browser
