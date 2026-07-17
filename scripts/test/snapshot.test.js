@@ -82,6 +82,7 @@ function listTree(dir) {
 let root = null
 let snap2 = null // snapshot --figure 2 (2 = the heatmap), default state-dir output
 let snapOutDir = null // bare snapshot into an explicit in-workspace --out-dir (every figure)
+let snapClean = null // a readable chart — its figure carries an EMPTY warnings array
 let wsBefore = null
 let wsAfter = null
 
@@ -112,6 +113,11 @@ test.before(async () => {
 	}))
 	// A bare markdown file with no companion — no envelope, no charts.
 	fs.writeFileSync(path.join(root, 'bare.md'), '# Bare\n\nNothing but prose.\n')
+	// A document canvas with one READABLE chart — its captured figure must carry warnings: [].
+	fs.writeFileSync(path.join(root, 'clean.canvas.json'), JSON.stringify({
+		instantcanvas: 1, createdWith: '0.0.0', title: 'Clean', document: {},
+		blocks: [{ type: 'chart', kind: 'bar', title: 'Small', data: [{ r: 'A', v: 1 }, { r: 'B', v: 2 }], encoding: { x: 'r', y: 'v' } }],
+	}))
 	if (!CHROME)
 		return
 	// TWO captures, sequentially — the whole file's Chrome footprint. --figure 2 to the
@@ -120,6 +126,7 @@ test.before(async () => {
 	snap2 = await runCli(['snapshot', path.join(root, 'dense.canvas.json'), '--figure', '2', '--workspace', root])
 	wsAfter = listTree(root) // measured before the --out-dir run, which deliberately writes inside
 	snapOutDir = await runCli(['snapshot', path.join(root, 'dense.canvas.json'), '--out-dir', path.join(root, 'shots'), '--workspace', root])
+	snapClean = await runCli(['snapshot', path.join(root, 'clean.canvas.json'), '--workspace', root])
 })
 
 test.after(async () => {
@@ -214,6 +221,54 @@ test('a bare markdown file has no figures (--list)', async () => {
 	assert.deepEqual(r.json.figures, [])
 })
 
+test('snapshot with no file argument is refused', async () => {
+	const r = await runCli(['snapshot', '--workspace', root], { preload: true })
+	assert.equal(r.code, 1)
+	assert.equal(r.json.error.code, 'INVALID_SPEC')
+})
+
+test('a non-existent file is refused', async () => {
+	const r = await runCli(['snapshot', path.join(root, 'ghost.canvas.json'), '--workspace', root], { preload: true })
+	assert.equal(r.code, 1)
+	assert.equal(r.json.error.code, 'INVALID_SPEC')
+	assert.match(r.json.error.message, /not found/i)
+})
+
+test('a folder is refused (snapshot acts on a canvas or a markdown file, not a directory)', async () => {
+	const sub = path.join(root, 'subdir')
+	fs.mkdirSync(sub, { recursive: true })
+	const r = await runCli(['snapshot', sub, '--workspace', root], { preload: true })
+	assert.equal(r.code, 1)
+	assert.equal(r.json.error.code, 'INVALID_SPEC')
+	assert.match(r.json.error.message, /folder/)
+})
+
+test('a canvas outside the workspace is refused', async () => {
+	// An existing file, but outside the --workspace root → PATH_OUTSIDE_WORKSPACE.
+	const outsideDir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'ic-snap-out-')))
+	const outsideFile = path.join(outsideDir, 'x.canvas.json')
+	fs.writeFileSync(outsideFile, '{"instantcanvas":1,"createdWith":"0.0.0","title":"X","blocks":[]}')
+	const r = await runCli(['snapshot', outsideFile, '--workspace', root], { preload: true })
+	assert.equal(r.code, 1)
+	assert.equal(r.json.error.code, 'PATH_OUTSIDE_WORKSPACE')
+})
+
+test('a bare markdown snapshot (no --list) also succeeds with no figures', async () => {
+	// Exercises the no-companion capture path: canvasObj is null, so there are no deck
+	// blockers and no charts — a clean empty success without ever reaching Chrome.
+	const r = await runCli(['snapshot', path.join(root, 'bare.md'), '--workspace', root], { preload: true })
+	assert.equal(r.code, 0, JSON.stringify(r.json))
+	assert.deepEqual(r.json.figures, [])
+})
+
+test('CHROME_PATH pointing at a real non-browser binary fails, never silently', { timeout: 60_000 }, async () => {
+	// /bin/sh exists (so the isFile check passes and it is used as the browser), but it is
+	// not Chrome, so no DevTools port ever appears and the drive fails loudly (exit 2).
+	const r = await runCli(['snapshot', path.join(root, 'dense.canvas.json'), '--figure', '1', '--workspace', root],
+		{ env: { CHROME_PATH: '/bin/sh', INSTANTCANVAS_PRINT_WAIT_MS: '1' } })
+	assert.equal(r.code, 2)
+})
+
 test('a canvas with zero charts succeeds with figures: [] (composes for scripts)', async () => {
 	const r = await runCli(['snapshot', path.join(root, 'prose.canvas.json'), '--workspace', root], { preload: true })
 	assert.equal(r.code, 0, JSON.stringify(r.json))
@@ -262,4 +317,13 @@ test('a bare snapshot into an in-workspace --out-dir captures every figure there
 		assert.equal(path.dirname(f.image), path.join(root, 'shots'), 'the explicit destination is honoured')
 		assert.ok(isPng(fs.readFileSync(f.image)), `figure ${f.figure} wrote a real PNG`)
 	}
+})
+
+test('a readable chart snapshots with an empty warnings array', { skip, timeout: 180_000 }, () => {
+	// The dense fixture's figures all carry warnings; a clean chart must carry none — so the
+	// per-figure warnings default resolves to [], not undefined.
+	assert.equal(snapClean.code, 0, JSON.stringify(snapClean.json))
+	assert.equal(snapClean.json.figures.length, 1)
+	assert.deepEqual(snapClean.json.figures[0].warnings, [], 'a readable chart trips no threshold')
+	assert.ok(isPng(fs.readFileSync(snapClean.json.figures[0].image)))
 })

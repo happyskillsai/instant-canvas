@@ -426,6 +426,48 @@ const FIGURE_FACTS_JS = `(() => {
 	return out;
 })()`
 
+// The readiness check, per drive. print waits on the document OR presentation deck and every
+// chart-box; snapshot waits on the document deck's boxes only. The gate itself — the poll, the
+// one defensive `.catch`, the timeout throw and the settle pause — is shared below.
+const PRINT_READY_JS = `(() => {
+	if (!window.ic || !window.ic.state.tree) return false;
+	if (!document.querySelectorAll('.deck .sheet, .strip-scale .slide').length) return false;
+	if (window.ic.state.fits) return false;
+	const boxes = [...document.querySelectorAll('.chart-box')];
+	return boxes.every((b) => b.querySelector('.main-svg') || b.querySelector('canvas'));
+})()`
+const SNAPSHOT_READY_JS = `(() => {
+	if (!window.ic || !window.ic.state.tree) return false;
+	if (!document.querySelectorAll('.deck .sheet').length) return false;
+	if (window.ic.state.fits) return false;
+	const boxes = [...document.querySelectorAll('.deck .sheet .chart-box')];
+	return boxes.length > 0 && boxes.every((b) => b.querySelector('.main-svg') || b.querySelector('canvas'));
+})()`
+
+/**
+ * Drive the deck to readiness, then settle. Poll `readyJs` (charts drawn, no fit in flight)
+ * until it returns true or the deadline passes, then wait one beat for the last SVG/WebGL to
+ * settle. Shared by print and snapshot so the gate — and its single `.catch`, which treats a
+ * transient evaluate error as "not ready yet" — lives in exactly one place (§7.7: a shared
+ * step is shared code, not a copy). Throws past the deadline; the caller's timeout bounds it.
+ */
+async function awaitDeckReady(evaluate, pause, waitMs, readyJs) {
+	const deadline = Date.now() + waitMs
+	let ready = false
+	while (!ready && Date.now() < deadline) {
+		ready = await evaluate(readyJs).catch(() => false)
+		if (!ready)
+			await pause(250)
+	}
+	if (!ready)
+		throw new Error('The document never finished rendering (sheets or charts missing after 60 s).')
+	await pause(1200) // let the last chart settle its SVG/WebGL
+}
+
+/** The per-figure facts join, best-effort: a facts-evaluate failure returns [] rather than
+ *  failing the whole drive. Shared by print and snapshot. */
+const readFigureFacts = (evaluate) => evaluate(FIGURE_FACTS_JS).catch(() => [])
+
 /**
  * Print a document canvas to PDF through the browser's native print engine
  * (Page.printToPDF is the same Skia backend as Cmd+P). The deck's sheets are
@@ -513,33 +555,17 @@ async function cmdPrint(args) {
 	// ≤ 60 s; env knob for tests, mirroring INSTANTCANVAS_LOCK_WAIT_MS.
 	const printWaitMs = Number(process.env.INSTANTCANVAS_PRINT_WAIT_MS) || 60_000
 	const printed = await withChrome(chrome, url, { args: PRINT_CHROME_ARGS, timeoutMs: Math.max(printWaitMs, 15_000) }, async ({ evaluate, send, sleep: pause }) => {
-		// Wait for the deck AND every chart (SVG root or WebGL canvas — never
-		// "ink": a blank chart and a drawn one measure the same gray).
-		const deadline = Date.now() + printWaitMs
-		let ready = false
-		while (!ready && Date.now() < deadline) {
-			ready = await evaluate(`(() => {
-				if (!window.ic || !window.ic.state.tree) return false;
-				// A document decks into '.deck .sheet'; a presentation into '.strip-scale .slide'.
-				if (!document.querySelectorAll('.deck .sheet, .strip-scale .slide').length) return false;
-				// A chart's legend sits on its tick labels until fitLegendBelow() has
-				// relayouted it, and .main-svg exists before that lands.
-				if (window.ic.state.fits) return false;
-				const boxes = [...document.querySelectorAll('.chart-box')];
-				return boxes.every((b) => b.querySelector('.main-svg') || b.querySelector('canvas'));
-			})()`).catch(() => false)
-			if (!ready)
-				await pause(250)
-		}
-		if (!ready)
-			throw new Error('The document never finished rendering (sheets or charts missing after 60 s).')
-		await pause(1200) // let the last chart settle its SVG/WebGL
+		// Wait for the deck AND every chart (SVG root or WebGL canvas — never "ink": a blank
+		// chart and a drawn one measure the same gray). A document decks into '.deck .sheet',
+		// a presentation into '.strip-scale .slide'; a chart's legend sits on its tick labels
+		// until fitLegendBelow() has relayouted it, so state.fits must have drained too.
+		await awaitDeckReady(evaluate, pause, printWaitMs, PRINT_READY_JS)
 		const pages = await evaluate('document.querySelectorAll(\'.deck .sheet\').length || document.querySelectorAll(\'.strip-scale .slide\').length')
 		// The middle tier of the funnel: one evaluate reads the facts the page already
 		// recorded (state.chartFacts) and joins them with the figure map and each chart's
 		// containing sheet. Zero images, zero extra Chrome launches — the readiness gate is
 		// already drained, so this reads final geometry.
-		const figures = await evaluate(FIGURE_FACTS_JS).catch(() => [])
+		const figures = await readFigureFacts(evaluate)
 		const pdf = await send('Page.printToPDF', {
 			printBackground: true,
 			preferCSSPageSize: true,
@@ -718,23 +744,8 @@ async function cmdSnapshot(args) {
 
 	const printWaitMs = Number(process.env.INSTANTCANVAS_PRINT_WAIT_MS) || 60_000
 	const captured = await withChrome(chrome, url, { args: PRINT_CHROME_ARGS, timeoutMs: Math.max(printWaitMs, 15_000) }, async ({ evaluate, send, sleep: pause }) => {
-		// The SAME readiness gate print uses: deck laid out, every chart drew, no fit in flight.
-		const deadline = Date.now() + printWaitMs
-		let ready = false
-		while (!ready && Date.now() < deadline) {
-			ready = await evaluate(`(() => {
-				if (!window.ic || !window.ic.state.tree) return false;
-				if (!document.querySelectorAll('.deck .sheet').length) return false;
-				if (window.ic.state.fits) return false;
-				const boxes = [...document.querySelectorAll('.deck .sheet .chart-box')];
-				return boxes.length > 0 && boxes.every((b) => b.querySelector('.main-svg') || b.querySelector('canvas'));
-			})()`).catch(() => false)
-			if (!ready)
-				await pause(250)
-		}
-		if (!ready)
-			throw new Error('The document never finished rendering (sheets or charts missing after 60 s).')
-		await pause(1200)
+		// The SAME readiness gate print uses (shared code), waiting on the document deck's boxes.
+		await awaitDeckReady(evaluate, pause, printWaitMs, SNAPSHOT_READY_JS)
 
 		// D10: scale 1, dpr 1. A 1600px-wide viewport lets fitDeck fit an A4 sheet without
 		// scaling, so the capture is the printed geometry 1:1 (~680px content width).
@@ -744,7 +755,7 @@ async function cmdSnapshot(args) {
 		if (Math.abs(scaleX - 1) > 0.01)
 			throw new Error(`The deck is not at scale 1 (transform scale ${scaleX}) — refusing to capture blurred, wrong-geometry pixels.`)
 
-		const factsByFigure = new Map((await evaluate(FIGURE_FACTS_JS).catch(() => [])).map((f) => [f.figure, f]))
+		const factsByFigure = new Map((await readFigureFacts(evaluate)).map((f) => [f.figure, f]))
 
 		const shots = []
 		for (const n of requested) {
