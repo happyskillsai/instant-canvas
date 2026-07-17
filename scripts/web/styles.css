@@ -242,6 +242,54 @@ button{font:inherit;cursor:pointer}
 
 /* main */
 .main{flex:1;overflow:auto;min-width:0}
+.main-view{min-width:0}
+
+/* Overlay renderer chrome (§4.6). A light toolbar PINNED to the top of the pane
+   (sticky, so it stays reachable down a long document) while a canvas/document/image
+   is open — the reader clicked out of a light browse grid, so the bar is light too.
+   It carries the breadcrumb back to the owning folder, sibling prev/next, and the
+   document action cluster relocated from the topbar island. The cluster's buttons are
+   .tbtn / .view-toggle, styled for the BLACK island (white ink); here they are re-skinned
+   dark-ink for the pane. It NEVER prints (see @media print) — a route's chrome, not paper. */
+.overlay-chrome{position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:10px;
+	padding:8px 14px;background:var(--bg);border-bottom:1px solid var(--border)}
+.overlay-chrome[hidden]{display:none}
+.oc-left{display:flex;align-items:center;gap:6px;flex:1 1 auto;min-width:0}
+.oc-actions{display:flex;align-items:center;gap:6px;flex:0 0 auto}
+.oc-x{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;padding:0;
+	flex:0 0 auto;border:none;border-radius:8px;background:transparent;color:var(--muted)}
+.oc-x:hover{background:var(--tint);color:var(--text)}
+.oc-x .lucide{width:17px;height:17px}
+.oc-crumb{display:flex;align-items:center;gap:2px;min-width:0;overflow:hidden}
+.oc-seg{display:inline-flex;align-items:center;gap:5px;max-width:200px;padding:4px 7px;border:none;
+	background:transparent;color:var(--muted);border-radius:6px;font-size:12.5px;
+	white-space:nowrap;overflow:hidden}
+.oc-seg>span{overflow:hidden;text-overflow:ellipsis}
+.oc-seg:hover{background:var(--tint);color:var(--text)}
+.oc-seg.oc-here{color:var(--text);font-weight:600;cursor:default}
+.oc-seg.oc-here:hover{background:transparent}
+.oc-seg .lucide{width:14px;height:14px;flex:0 0 auto}
+.oc-slash{flex:0 0 auto;color:var(--muted);opacity:.45;font-size:12px}
+.oc-nav{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;padding:0;
+	flex:0 0 auto;border:1px solid var(--border);border-radius:8px;background:var(--panel);color:var(--text)}
+.oc-nav:hover:not(:disabled){background:var(--tint);border-color:var(--muted)}
+.oc-nav:disabled{opacity:.35;cursor:not-allowed}
+.oc-nav .lucide{width:16px;height:16px}
+.oc-sep{flex:0 0 auto;width:1px;align-self:stretch;margin:3px 2px;background:var(--border)}
+.oc-cluster{display:flex;align-items:center;gap:6px}
+/* Re-skin the relocated island buttons for the LIGHT bar. Element-scoped handlers are
+   unchanged; only the color context differs. The explicit [hidden] rules are REQUIRED —
+   .tbtn's own display beats the UA [hidden] rule (see .view-toggle[hidden] for the same). */
+.overlay-chrome .tbtn{color:var(--muted)}
+.overlay-chrome .tbtn:hover{background:var(--tint);color:var(--text)}
+.overlay-chrome .tbtn.active{background:var(--accent-soft);color:var(--accent);opacity:1}
+.overlay-chrome .tbtn:disabled:hover{background:transparent}
+.overlay-chrome .tbtn[hidden]{display:none}
+.overlay-chrome .view-toggle{background:var(--tint)}
+.overlay-chrome .vt-btn{color:var(--muted)}
+.overlay-chrome .vt-btn:hover{background:var(--tint-strong);color:var(--text)}
+.overlay-chrome .vt-btn.active{background:var(--panel);color:var(--text);box-shadow:0 1px 2px rgba(0,0,0,.12)}
+.overlay-chrome .vt-btn.vt-off{opacity:.4}
 /* Fixed gutters, everything else is content — markdown and charts alike.
    Tune --gutter, not the max-width; there deliberately isn't one. */
 .canvas{max-width:none;margin:0;padding:28px var(--gutter) 80px}
@@ -1429,6 +1477,9 @@ body.presenting.cursor-hidden .stage{cursor:none}
 	.pal{display:none !important}
 	html{print-color-adjust:exact;-webkit-print-color-adjust:exact}
 	.print-fab{display:none !important}
+	/* §4.6: the overlay chrome (breadcrumb, prev/next, action cluster) is a route's
+	   furniture, never part of the printed document — the deck must not photograph it. */
+	.overlay-chrome{display:none !important}
 	/* No `.code-copy` rule here on purpose: the deck mounts no copy button at all
 	   (mountCodeCopy's `{button: false}`), so there is nothing to hide. Hiding a
 	   button that should not exist is a fact that rots — this way a test can

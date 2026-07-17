@@ -4116,6 +4116,111 @@ function renderEmpty() {
 		<div class="empty-note">Watching <code>${esc(root)}</code></div></div>`
 }
 
+// ---------------------------------------------------------------- overlay chrome (§4.6)
+//
+// The #/c/ route presents a canvas, document or image like a modal — but it is a ROUTE,
+// not a dismissible popup. Esc and the × NAVIGATE to the owning folder's #/f/; there is
+// no outside-click dismissal; a pending interactive session survives the close (the kernel
+// session outlives navigation). The bar carries a breadcrumb back to the folder, sibling
+// prev/next across ALL kinds in browse-view displayed order, and the document action
+// cluster relocated here from the topbar island (moved at boot — same nodes, same ids,
+// same element-scoped handlers, so syncViewToggle and the palette panel are untouched).
+
+const ocDirname = (rel) => { const i = rel.lastIndexOf('/'); return i >= 0 ? rel.slice(0, i) : '' }
+
+// The order prev/next flips through. The open browse view already recorded it in state
+// (folders excluded, §4.5); a COLD deep link (no browse state for this folder) derives the
+// same order from /api/dir, through the SAME browseSorted() the grid uses so the two agree.
+let ocOrder = { folder: null, rels: [] }
+async function browseOrderFor(folder) {
+	if (state.browseFolder === folder && state.browseOrder.length) {
+		ocOrder = { folder, rels: state.browseOrder }
+		return ocOrder.rels
+	}
+	if (ocOrder.folder === folder)
+		return ocOrder.rels
+	const { status, json } = await api('/api/dir?path=' + encodeURIComponent(folder))
+	let rels = []
+	if (status === 200 && json && json.ok)
+		rels = browseSorted(Array.isArray(json.items) ? json.items : [], state.browseSort).map((i) => i.rel)
+	ocOrder = { folder, rels }
+	return rels
+}
+
+/** Esc / × — leave the overlay by NAVIGATING to the owning folder's browse view. */
+function ocClose() {
+	if (typeof state.activeId !== 'string')
+		return
+	const folder = ocDirname(state.activeId)
+	location.hash = '#/f/' + (folder ? encodeURIComponent(folder) : '')
+}
+
+/** prev/next — step through the folder's items in displayed order, across every kind. */
+function ocStep(delta) {
+	const rels = ocOrder.rels
+	const i = rels.indexOf(state.activeId)
+	if (i < 0)
+		return
+	const j = i + delta
+	if (j < 0 || j >= rels.length)
+		return
+	location.hash = '#/c/' + encodeURIComponent(rels[j])
+}
+
+/** Breadcrumb of the owning folder: a house to the root, then one button per segment,
+ *  each navigating to that folder's #/f/. */
+function buildCrumb(folder) {
+	const crumb = $('ocCrumb')
+	crumb.textContent = ''
+	const seg = (label, hash, opts = {}) => {
+		const b = document.createElement('button')
+		b.type = 'button'
+		b.className = 'oc-seg' + (opts.here ? ' oc-here' : '')
+		if (opts.icon)
+			b.innerHTML = icon(opts.icon)
+		if (label) {
+			const s = document.createElement('span')
+			s.textContent = label
+			b.append(s)
+		}
+		if (opts.title)
+			b.title = opts.title
+		b.addEventListener('click', () => { location.hash = hash })
+		crumb.append(b)
+	}
+	const slash = () => { const s = document.createElement('span'); s.className = 'oc-slash'; s.textContent = '/'; crumb.append(s) }
+	const parts = folder ? folder.split('/') : []
+	seg('', '#/f/', { icon: 'house', title: 'Workspace root', here: parts.length === 0 })
+	let acc = ''
+	parts.forEach((p, idx) => {
+		acc = acc ? acc + '/' + p : p
+		slash()
+		seg(p, '#/f/' + encodeURIComponent(acc), { here: idx === parts.length - 1, title: p })
+	})
+}
+
+/** Show + populate the overlay chrome for a canvas/image route; hide it when browsing a
+ *  folder or on the empty pane. */
+function syncOverlayChrome() {
+	const open = typeof state.activeId === 'string' && typeof state.browseId !== 'string'
+	$('overlayChrome').hidden = !open
+	if (!open)
+		return
+	const folder = ocDirname(state.activeId)
+	buildCrumb(folder)
+	// prev/next enable once the folder's order is known (async — a stale token is ignored).
+	$('ocPrev').disabled = true
+	$('ocNext').disabled = true
+	const at = state.activeId
+	browseOrderFor(folder).then((rels) => {
+		if (state.activeId !== at)
+			return // navigated away mid-fetch
+		const i = rels.indexOf(at)
+		$('ocPrev').disabled = !(i > 0)
+		$('ocNext').disabled = !(i >= 0 && i < rels.length - 1)
+	})
+}
+
 async function renderCanvas() {
 	disposeCharts()
 	disposeGalleries()
@@ -4123,7 +4228,10 @@ async function renderCanvas() {
 	// reload keeps it (renderPresentationView re-shows it at the held slide).
 	if (state.presenting && state.activeId !== pres.canvasId)
 		stageHide()
-	const main = $('main')
+	// Content renders into #mainView; the overlay chrome (§4.6) is a persistent sibling
+	// inside #main that holds the relocated action cluster, so it survives these rewrites.
+	const main = $('mainView')
+	syncOverlayChrome()
 	// A folder route (#/f/) renders the browse view — a mixed-type grid of the
 	// folder's renderable items — instead of a canvas.
 	if (typeof state.browseId === 'string') {
@@ -4997,6 +5105,28 @@ function disposeBrowse() {
 }
 
 const GROUP_ORDER = { folder: 0, canvas: 1, document: 2, image: 3 }
+const browseTitleOf = (it) => it.title || it.name || it.rel
+function browseSortVal(it, by) {
+	if (by === 'created') return it.mtimeMs || 0
+	if (by === 'size') return it.size || 0
+	return browseTitleOf(it).toLowerCase()
+}
+/** Grouped folders → canvases → documents → images (the group order is FIXED, never
+ *  inverted by direction); the chosen sort applies WITHIN each group. Shared by the
+ *  browse grid and the overlay's cold-deep-link prev/next so the two always agree on
+ *  the sibling order (§4.6). */
+function browseSorted(items, sort) {
+	const by = sort && ['name', 'created', 'size'].includes(sort.by) ? sort.by : 'name'
+	const dir = sort && sort.dir === 'desc' ? -1 : 1
+	return items.slice().sort((a, b) => {
+		const g = GROUP_ORDER[a.kind] - GROUP_ORDER[b.kind]
+		if (g !== 0) return g
+		const av = browseSortVal(a, by), bv = browseSortVal(b, by)
+		let c = av < bv ? -1 : av > bv ? 1 : 0
+		if (c === 0) c = a.rel.localeCompare(b.rel)
+		return c * dir
+	})
+}
 
 async function renderBrowse(main, rel) {
 	const bs = {
@@ -5040,27 +5170,9 @@ async function renderBrowse(main, rel) {
 	}
 
 	const isImage = (it) => it.kind === 'image'
-	const titleOf = (it) => it.title || it.name || it.rel
 
-	function sortVal(it, by) {
-		if (by === 'created') return it.mtimeMs || 0
-		if (by === 'size') return it.size || 0
-		return titleOf(it).toLowerCase()
-	}
-
-	/** Grouped canvases → documents → images (the group order is FIXED, never
-	 *  inverted by direction); the chosen sort applies WITHIN each group. */
-	function sortedItems() {
-		const dir = bs.sort.dir === 'desc' ? -1 : 1
-		return bs.items.slice().sort((a, b) => {
-			const g = GROUP_ORDER[a.kind] - GROUP_ORDER[b.kind]
-			if (g !== 0) return g
-			const av = sortVal(a, bs.sort.by), bv = sortVal(b, bs.sort.by)
-			let c = av < bv ? -1 : av > bv ? 1 : 0
-			if (c === 0) c = a.rel.localeCompare(b.rel)
-			return c * dir
-		})
-	}
+	// Grouping + sort is shared with the overlay's prev/next (browseSorted, above).
+	const sortedItems = () => browseSorted(bs.items, bs.sort)
 	const sortedRels = () => sortedItems().map((i) => i.rel)
 	const itemFor = (r) => bs.items.find((i) => i.rel === r) || null
 
@@ -6284,6 +6396,44 @@ function route() {
 	renderCanvas()
 }
 window.addEventListener('hashchange', route)
+
+// Relocate the document action cluster from the topbar island into the overlay chrome
+// (§4.6). The nodes keep their ids and element-scoped handlers — syncViewToggle's
+// disable-with-reason, the palette panel's capture-phase click rules — so only their
+// parent changes; verify, don't rewrite.
+for (const id of ['viewToggle', 'presentBtn', 'tocBtn', 'stripsBtn', 'paletteBtn'])
+	$('ocCluster').append($(id))
+
+$('ocClose').addEventListener('click', ocClose)
+$('ocPrev').addEventListener('click', () => ocStep(-1))
+$('ocNext').addEventListener('click', () => ocStep(1))
+
+// Overlay keyboard: Esc leaves to the folder, ←/→ flip siblings. Inert whenever another
+// surface owns the keyboard — the presenting stage (its capture-phase handler already
+// swallows every key and stops propagation), ⌘K search, the palette panel, a gallery-block
+// modal, or focus inside a form (so Esc closes a popover first and never cancels a session).
+document.addEventListener('keydown', (e) => {
+	if ($('overlayChrome').hidden || state.presenting || document.body.classList.contains('nav-open'))
+		return
+	// Yield to any sub-surface that owns the keyboard: ⌘K search, the palette panel, a
+	// gallery-block detail/delete modal (.g-modal), or a gallery block IN selection mode
+	// (.g-selecting) — whose own Escape exits the selection rather than the overlay.
+	if (!$('searchModal').hidden || !$('palettePanel').hidden || document.querySelector('.g-modal, .gallery.g-selecting'))
+		return
+	const ae = document.activeElement
+	const inField = !!(ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.tagName === 'SELECT' || ae.isContentEditable || ae.closest('form')))
+	if (e.key === 'Escape') {
+		if (inField)
+			return
+		e.preventDefault()
+		ocClose()
+		return
+	}
+	if (inField)
+		return
+	if (e.key === 'ArrowLeft') { e.preventDefault(); ocStep(-1) }
+	else if (e.key === 'ArrowRight') { e.preventDefault(); ocStep(1) }
+})
 
 // ---------------------------------------------------------------- hot reload (WebSocket)
 
