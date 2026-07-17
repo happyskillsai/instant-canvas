@@ -71,6 +71,7 @@
       "links_to": [
         "docs/canvas-schema.md",
         "docs/cli.md",
+        "docs/frontend.md",
         "docs/gotchas/frontend.md",
         "docs/gotchas/runtime.md",
         "docs/security.md"
@@ -239,7 +240,7 @@
         "CSP shim",
         "Icons and vendored assets"
       ],
-      "line_count": 123,
+      "line_count": 125,
       "links_to": [
         "docs/architecture.md",
         "docs/canvas-schema.md",
@@ -341,9 +342,11 @@
         "Constraint API quirks around custom widgets",
         "A CSS `url()` cannot carry the per-request token, so a tokened asset gate 403s `@font-face` SILENTLY",
         "A responsive `@media` block must sit LAST, or a same-specificity base rule beats it",
-        "Printing a presentation, every slide came out on TWO pages — and the culprit was 12px of screen gutter"
+        "Printing a presentation, every slide came out on TWO pages — and the culprit was 12px of screen gutter",
+        "The `hidden` attribute does NOT hide a `.tbtn` — an author `display` rule outranks it",
+        "A document-level Esc/arrow handler must yield to EVERY open sub-surface"
       ],
-      "line_count": 264,
+      "line_count": 272,
       "links_to": [
         "docs/architecture.md",
         "docs/security.md"

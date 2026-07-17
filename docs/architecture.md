@@ -61,7 +61,7 @@ Every request passes the same gate in `kernel.js`:
 4. POST bodies must be `application/json`, ≤ 10 MB.
 5. Responses carry `X-Content-Type-Options: nosniff`; HTML gets a strict CSP (`default-src 'none'`, `script-src 'self'`, `connect-src 'self' ws://127.0.0.1:<port>`). **No CORS headers, ever.** The CSP also blocks inline `style=""` attributes — a constraint the frontend is built around (see [gotchas/frontend.md](gotchas/frontend.md)).
 
-The token reaches the browser via `__IC_TOKEN__` placeholder substitution when the shell is served (CSP forbids inline scripts, so it cannot be injected as a `<script>` variable). Asset URLs carry it as a query parameter — except the vendored fonts, which are served tokenless (a CSS `url()` cannot append the token) and are exempt at the gate.
+The token reaches the browser via `__IC_TOKEN__` placeholder substitution when the shell is served (CSP forbids inline scripts, so it cannot be injected as a `<script>` variable). Asset URLs carry it as a query parameter — except the vendored fonts, which are served tokenless (a CSS `url()` cannot append the token) and are exempt at the gate. `serveShell` substitutes two more placeholders the same way: `__IC_VERSION__` (the footer version) and `__IC_IMAGE_EXTS__` (the image extension union `GALLERY_IMAGE_EXTS` from `lib/gallery.js`, landed in `<body data-image-exts>`) — the latter lets the overlay renderer classify a routed `#/c/` path as an image without a copied list (see [frontend.md](frontend.md)).
 
 ## Routes
 

@@ -2,6 +2,42 @@
 
 ## [Unreleased]
 
+### Added
+- **Universal navigation — one paradigm across canvases, documents and images.** The sidebar,
+  the main pane and everything the reader opens now share a single model instead of two.
+  - **Folders-only sidebar tree** — a lazy folder tree of the workspace (no file leaves), fed
+    per expanded level by `GET /api/dir?…&dirs=1`. Hidden dot-folders show **muted**;
+    `.git`/`node_modules` never appear. Expansion and the active highlight are **incremental**
+    (an inserted subtree and a class toggle), never a rebuild.
+  - **Browse view (`#/f/<rel>`)** — the main pane per folder: a grid/list of that folder's
+    renderable items (child folders, canvases, documents, images), grouped folders → canvases →
+    documents → images and sortable within each group, with the gallery affordances (thumbnails,
+    sort, grid/list, images-only select + permanent delete). The app **lands on the workspace
+    root's browse view**.
+  - **`GET /api/dir`** (`lib/browse.js`) — one folder's immediate renderable children plus its
+    child directories, reusing the scan's builders (titles, deck flag, companion collapse) and
+    the gallery's stat; `insideRoot` + `lstat` confinement, decide-from-extension, and a
+    byte-clean 404 for `.env`, a non-directory, or traversal.
+  - **Routed overlay renderer (`#/c/`)** — every item opens in an overlay that *presents* like a
+    modal but **is a route**: a breadcrumb back to the owning folder, **prev/next across all kinds**
+    in displayed order, **Esc / ×** to return to the folder, and the document action cluster
+    (view toggle, Present, TOC, running strips, colors) **relocated from the topbar** into the
+    overlay bar. Documents render as before; **images now render in the overlay too** — a
+    zoom/pan detail stage (shared with the gallery block's modal) with a metadata panel, and a
+    metadata card for a non-renderable HEIC/TIFF. The overlay chrome never prints.
+  - **Workspace nudge** — `open` from a subfolder of a git project (with no `--workspace`) prints
+    a one-line **stderr** note naming the project root; a nudge only, behaviour never changes.
+    SKILL.md gains a "Choosing the workspace" resolution procedure for agents.
+
+### Changed
+- **`open <folder>` opens the folder's browse view** (`#/f/…`), not a synthesised gallery canvas.
+- The file watcher now **reaches hidden folders** (an edit under `.claude/…` hot-reloads) while
+  `.git`/`node_modules` stay excluded everywhere via a shared rule.
+
+### Removed
+- The **virtual gallery canvas** (`virtualGalleryFor`) and the first-canvas landing. A directory
+  is no longer served as a canvas — `GET /api/canvas?path=<dir>` is a byte-clean 404.
+
 ## [0.10.0] - 2026-07-16
 
 ### Added

@@ -1,6 +1,6 @@
 'use strict'
 
-// lib/gallery.js — the recursive image listing and the virtual gallery canvas.
+// lib/gallery.js — the recursive image listing and per-image stat.
 // The security spine mirrors the markdown allowlist: a non-image file is never
 // listed and never opened, and traversal / symlink escapes are refused. Content
 // reads are hooked so "never opened" is proven, not assumed.

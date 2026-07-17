@@ -35,7 +35,7 @@ Every command that takes a path first passes `assertReadable()`: a canvas is a `
 
 ### open
 
-1. Workspace root = `--workspace` else cwd (realpath'd). The canvas must resolve inside it — otherwise exit 1 `PATH_OUTSIDE_WORKSPACE` with a message telling the agent to pass `--workspace`.
+1. Workspace root = `--workspace` else cwd (realpath'd). The canvas must resolve inside it — otherwise exit 1 `PATH_OUTSIDE_WORKSPACE` with a message telling the agent to pass `--workspace`. When no `--workspace` was given and the cwd is **nested inside a git project** (an *ancestor* holds `.git`), `open` prints a one-line **stderr nudge** naming that project root and suggesting `--workspace` — the folders-only tree makes a nested workspace very visible. It is a nudge only: behaviour never changes, stdout still carries exactly one JSON document, and the agent-side resolution procedure lives in SKILL.md ("Choosing the workspace").
 2. **Validate locally first.** An invalid canvas never launches the UI; the CLI exits 1 with the full `errors[]` array. A **markdown file — or a folder — skips this step entirely**: a `.md` has no envelope to check (the runtime synthesises a markdown block; see [canvas-schema.md](canvas-schema.md)), and a folder is navigation, not a canvas — it just opens its browse view.
 3. Ensure a kernel: reuse via registry health ping, else spawn under the spawn lock (detached — survives the CLI exiting) and poll `/healthz` up to 10 s (`KERNEL_UNREACHABLE`, exit 2, includes the kernel log path). A version mismatch restarts an idle kernel.
 4. `POST /api/open`, then open the browser (unless `--no-open`; a failed browser launch is a stderr warning `BROWSER_OPEN_FAILED` with the URL, never an error).
