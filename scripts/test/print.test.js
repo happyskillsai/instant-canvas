@@ -70,6 +70,8 @@ let presDeck = null
 let presPdf = null
 let printedNoTitle = null
 let noTitlePdf = null
+let printedDense = null
+let densePdf = null
 
 test.before(async () => {
 	root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'ic-print-ws-')))
@@ -132,6 +134,13 @@ test.before(async () => {
 	printedNoTitle = runCli(['print', path.join(root, '@@@.md'), '--out', path.join(root, 'out', 'untitled.pdf'), '--workspace', root])
 	if (printedNoTitle.code === 0)
 		noTitlePdf = fs.readFileSync(path.join(root, 'out', 'untitled.pdf'))
+
+	// The dense fixture: print's figures[] must carry rendered facts (an elided count
+	// > 0), a page per chart, and the density warnings restated per figure.
+	fs.copyFileSync(path.join(FIXTURES, 'dense.canvas.json'), path.join(root, 'dense.canvas.json'))
+	printedDense = runCli(['print', path.join(root, 'dense.canvas.json'), '--out', path.join(root, 'out', 'dense.pdf'), '--workspace', root])
+	if (printedDense.code === 0)
+		densePdf = fs.readFileSync(path.join(root, 'out', 'dense.pdf'))
 })
 
 test.after(() => {
@@ -348,4 +357,71 @@ test('print fails loudly when the document never finishes rendering', { skip, ti
 	assert.equal(r.code, 2, JSON.stringify(r.json))
 	assert.match(r.json.error.message, /never finished rendering/)
 	assert.ok(!fs.existsSync(path.join(root, 'late.pdf')), 'no partial PDF is left behind')
+})
+
+// ---------------------------------------------------------------- rendered facts (tier 3)
+
+const pdfPageText = (file, n) => execFileSync('pdftotext', ['-f', String(n), '-l', String(n), file, '-'], { encoding: 'utf8' })
+
+test('print reports figures[] with rendered facts, page numbers and per-figure density warnings', { skip, timeout: 120_000 }, () => {
+	assert.equal(printedDense.code, 0, JSON.stringify(printedDense.json))
+	const figs = printedDense.json.figures
+	assert.ok(Array.isArray(figs) && figs.length === 4, `four charts → four figures (got ${figs && figs.length})`)
+
+	// Every figure carries its identity, a page, and a facts object.
+	for (const f of figs) {
+		assert.equal(typeof f.figure, 'number')
+		assert.ok(typeof f.page === 'number' && f.page >= 1, `figure ${f.figure} landed on a real page`)
+		assert.ok(f.facts && typeof f.facts === 'object', `figure ${f.figure} has facts`)
+		assert.ok(Array.isArray(f.warnings))
+	}
+
+	// The dense bar's 62 long labels were measured as ELIDED — the whole point of the
+	// funnel's middle tier: a number the agent could not otherwise see.
+	const bar = figs.find((f) => f.kind === 'bar')
+	assert.ok(bar.facts.elided > 0, `the dense bar reports elided ticks (got ${bar.facts.elided})`)
+	assert.equal(bar.facts.ticks, 62, 'all 62 category ticks were rendered')
+	assert.ok(bar.facts.axisPx > 0, 'the plot-area width was measured')
+
+	// Threshold breaches are restated per figure with the D3 codes.
+	const codesFor = (kind) => (figs.find((f) => f.kind === kind).warnings || []).map((w) => w.code)
+	assert.ok(codesFor('bar').includes('AXIS_TOO_DENSE') && codesFor('bar').includes('LABELS_WILL_ELIDE'))
+	assert.ok(codesFor('heatmap').includes('HEATMAP_TOO_DENSE'))
+	assert.ok(codesFor('pie').includes('TOO_MANY_SLICES'))
+	assert.ok(codesFor('line').includes('TOO_MANY_SERIES'))
+	// Each restated warning carries its teaching hint.
+	assert.ok(figs.every((f) => f.warnings.every((w) => w.code && w.hint)))
+})
+
+test('a figure\'s reported page matches the sheet its caption prints on', { skip: skip || (hasPoppler ? false : 'poppler not installed'), timeout: 120_000 }, () => {
+	// The caption "Figure N — <title>" is text, so pdftotext can confirm the chart's
+	// reported page is the sheet it actually printed on (page → sheet mapping is real).
+	const bar = printedDense.json.figures.find((f) => f.kind === 'bar')
+	const onPage = pdfPageText(path.join(root, 'out', 'dense.pdf'), bar.page)
+	assert.match(onPage, new RegExp(`Figure ${bar.figure}`), `Figure ${bar.figure}'s caption is on the page print reported (${bar.page})`)
+})
+
+test('a quiet document still reports figures[], with empty warnings', { skip, timeout: 120_000 }, () => {
+	// report.canvas.json (document-full) carries two ordinary charts — figures[] is present
+	// and additive whether or not anything is dense, and its warnings are empty.
+	const figs = printed.json.figures
+	assert.ok(Array.isArray(figs) && figs.length === 2, `two charts → two figures (got ${figs && figs.length})`)
+	assert.ok(figs.every((f) => Array.isArray(f.warnings) && f.warnings.length === 0), 'a readable chart trips no threshold')
+	assert.ok(figs.every((f) => f.facts && typeof f.facts.axisPx === 'number'))
+})
+
+test('the print result stays backward-compatible — figures[] is purely additive', { skip, timeout: 120_000 }, () => {
+	const r = printed.json
+	assert.equal(r.status, 'printed')
+	assert.equal(typeof r.path, 'string')
+	assert.equal(typeof r.pages, 'number')
+	assert.equal(typeof r.bytes, 'number')
+	assert.equal(typeof r.timestamp, 'string')
+	assert.ok('figures' in r, 'figures[] was added')
+})
+
+test('a markdown print carries an (empty) figures[] — no charts, no facts', { skip, timeout: 120_000 }, () => {
+	// handbook.md has no chart blocks, so its figure map is empty — but the field is
+	// present and additive, so a script can read it uniformly.
+	assert.ok(Array.isArray(printedMd.json.figures) && printedMd.json.figures.length === 0)
 })

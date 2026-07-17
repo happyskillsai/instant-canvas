@@ -3,6 +3,7 @@
   "createdWith": "0.11.0",
   "title": "Dense fixture — every density warning at once",
   "description": "A hard case: trips all five density codes so none of them is unfailable.",
+  "document": {},
   "blocks": [
     {
       "type": "chart",

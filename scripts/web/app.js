@@ -91,6 +91,8 @@ const state = {
 	// rules, only the answer.
 	canvasTheme: null, // resolved tokens + colorway currently painted
 	figByBlock: new Map(), // chart block -> runtime-derived figure number (from the payload)
+	figures: [], // the raw figure map from the payload: {figure, blockIndex, path, title, kind}
+	chartFacts: {}, // data-chart index -> {ticks, elided, axisPx, legendOverlap}, recorded at mount
 	themeDeclared: null, // what the canvas/config actually SAYS (preset + overrides), for the picker
 	themeSource: 'default', // 'canvas' | 'workspace' | 'default' — where the above came from
 	themeDirty: false, // previewing an unsaved theme
@@ -2684,6 +2686,37 @@ async function fitLegendBelow(box, block) {
 	}
 }
 
+/** Record per-chart rendered facts, keyed by the box's data-chart index. A BYSTANDER:
+ *  it reads the DOM the page already produced (the rendered tick labels, the plot-area
+ *  size Plotly computed, the legend rect) and changes nothing — catTicks and
+ *  fitLegendBelow are production-fitted and stay untouched. `print` reads state.chartFacts
+ *  at final geometry to report per-figure facts for free; the browser is the only party
+ *  that ever sees rendered geometry. Elided ticks are those the runtime shortened to 30
+ *  chars (their text ends with the ellipsis catTicks appends); Plotly's own truncation
+ *  ends the same way, so the DOM is the honest source either way. */
+function recordChartFacts(box) {
+	const idx = box.dataset.chart
+	if (idx === undefined)
+		return
+	const fl = box._fullLayout
+	const tickEls = [...box.querySelectorAll('.xtick > text')]
+	let legendOverlap = 0
+	const legendEl = box.querySelector('.legend')
+	if (legendEl && tickEls.length) {
+		const legendTop = legendEl.getBoundingClientRect().top
+		let lowestTick = 0
+		for (const t of tickEls)
+			lowestTick = Math.max(lowestTick, t.getBoundingClientRect().bottom)
+		legendOverlap = Math.max(0, Math.round(lowestTick - legendTop)) // px the ticks intrude into the legend; 0 = clean
+	}
+	state.chartFacts[idx] = {
+		ticks: tickEls.length,
+		elided: tickEls.filter((t) => /…$/.test(t.textContent || '')).length,
+		axisPx: fl && fl._size ? Math.round(fl._size.w) : null, // plot-area width
+		legendOverlap,
+	}
+}
+
 function mountCharts(blocks, scope = document) {
 	const generation = ++mountGeneration
 	const boxes = [...scope.querySelectorAll('[data-chart]')]
@@ -2711,10 +2744,12 @@ function mountCharts(blocks, scope = document) {
 			if (generation !== mountGeneration)
 				return
 			state.charts.push(entry)
+			recordChartFacts(box) // bystander: read the rendered geometry once it has settled
 			// A narrower box re-rotates the tick labels, so the margin must be re-measured.
 			const ro = new ResizeObserver(async () => {
 				await window.Plotly.Plots.resize(box)
 				await fitLegendBelow(box, block)
+				recordChartFacts(box) // geometry changed — keep the facts current
 			})
 			ro.observe(box)
 			state.observers.push(ro)
@@ -2748,6 +2783,7 @@ function disposeCharts() {
 	state.observers.forEach((o) => o.disconnect())
 	state.charts = []
 	state.observers = []
+	state.chartFacts = {} // recorded fresh as the next render mounts
 }
 
 // ---------------------------------------------------------------- document mode (deck + packer)
@@ -4562,6 +4598,7 @@ async function renderCanvas() {
 	// Figure numbers are the runtime's, not the browser's: the kernel ships a map keyed
 	// by the flat block index and the page only binds it to block objects. It never
 	// re-derives which chart is Figure N.
+	state.figures = Array.isArray(json.figures) ? json.figures : []
 	state.figByBlock = indexFigures(canvas, json.figures)
 	// Name the tab (and therefore the printed PDF / Cmd+P filename) after the document itself.
 	// Set before the slides / deck / continuous branches below so every printable kind is named.

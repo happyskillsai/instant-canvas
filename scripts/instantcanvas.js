@@ -416,6 +416,11 @@ async function cmdPrint(args) {
 	// COMPANION, the kernel serves that instead, so the cover and the theme reach the PDF
 	// without `print` knowing anything about it. That uniformity is the point: a reader who
 	// sees a cover on screen and no cover in the PDF has been lied to.
+	// Density warnings the validator already computed, grouped by figure so `print`'s
+	// result can restate each figure's threshold breaches beside its rendered facts.
+	const DENSITY_CODES = new Set(['AXIS_TOO_DENSE', 'HEATMAP_TOO_DENSE', 'LABELS_WILL_ELIDE', 'TOO_MANY_SERIES', 'TOO_MANY_SLICES'])
+	const warningsByFigure = new Map()
+
 	const isDoc = hasMarkdownExtension(rel)
 	if (!isDoc) {
 		const raw = fs.readFileSync(canvasAbs, 'utf8')
@@ -427,6 +432,13 @@ async function cmdPrint(args) {
 				error: { code: 'INVALID_SPEC', message: `Canvas failed validation with ${verdict.errorCount} error(s).`, errors: verdict.errors },
 				timestamp: now(),
 			}, 1)
+		for (const w of verdict.warnings || []) {
+			if (!DENSITY_CODES.has(w.code) || typeof w.figure !== 'number')
+				continue
+			if (!warningsByFigure.has(w.figure))
+				warningsByFigure.set(w.figure, [])
+			warningsByFigure.get(w.figure).push({ code: w.code, path: w.path, message: w.message, hint: w.hint })
+		}
 		const parsed = JSON.parse(raw)
 		// A presentation prints too — one landscape page per slide. A slides canvas needs no
 		// "document" (they are mutually exclusive: DOCUMENT_ON_PRESENTATION).
@@ -485,20 +497,45 @@ async function cmdPrint(args) {
 			throw new Error('The document never finished rendering (sheets or charts missing after 60 s).')
 		await pause(1200) // let the last chart settle its SVG/WebGL
 		const pages = await evaluate('document.querySelectorAll(\'.deck .sheet\').length || document.querySelectorAll(\'.strip-scale .slide\').length')
+		// The middle tier of the funnel: one evaluate reads the facts the page already
+		// recorded (state.chartFacts) and joins them with the figure map and each chart's
+		// containing sheet. Zero images, zero extra Chrome launches — the readiness gate is
+		// already drained, so this reads final geometry.
+		const figures = await evaluate(`(() => {
+			const facts = (window.ic && window.ic.state.chartFacts) || {};
+			const figs = (window.ic && window.ic.state.figures) || [];
+			const byIndex = new Map(figs.map((f) => [String(f.blockIndex), f]));
+			const sheets = [...document.querySelectorAll('.deck .sheet')];
+			const out = [];
+			for (const box of document.querySelectorAll('.deck .sheet .chart-box[data-chart]')) {
+				const f = byIndex.get(box.dataset.chart);
+				if (!f) continue;
+				const sheetIdx = sheets.indexOf(box.closest('.sheet'));
+				out.push({ figure: f.figure, path: f.path, title: f.title, kind: f.kind, page: sheetIdx >= 0 ? sheetIdx + 1 : null, facts: facts[box.dataset.chart] || null });
+			}
+			return out;
+		})()`).catch(() => [])
 		const pdf = await send('Page.printToPDF', {
 			printBackground: true,
 			preferCSSPageSize: true,
 			displayHeaderFooter: false,
 			marginTop: 0, marginBottom: 0, marginLeft: 0, marginRight: 0,
 		})
-		return { pages, data: pdf.data }
+		return { pages, data: pdf.data, figures }
 	})
 
 	const buf = Buffer.from(printed.data, 'base64')
 	writeAtomic(outAbs, buf)
 	const outRel = path.relative(root, outAbs).split(path.sep).join('/')
 	log(`wrote ${outRel} (${printed.pages} pages, ${buf.length} bytes)`)
-	out({ status: 'printed', path: outRel, pages: printed.pages, bytes: buf.length, timestamp: now() }, 0)
+	// Additive: every chart on paper, with the page it landed on, its rendered facts, and
+	// the density warnings restated per figure. Existing result fields are untouched.
+	const figures = (printed.figures || []).map((f) => ({
+		figure: f.figure, path: f.path, title: f.title, kind: f.kind,
+		page: f.page, facts: f.facts,
+		warnings: warningsByFigure.get(f.figure) || [],
+	}))
+	out({ status: 'printed', path: outRel, pages: printed.pages, bytes: buf.length, figures, timestamp: now() }, 0)
 }
 
 /** Reuse the file's own indentation when a rewrite is unavoidable. */
