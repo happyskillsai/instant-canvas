@@ -763,10 +763,11 @@ body.modal-open .main{overflow:hidden}
 .vt-btn.vt-off{opacity:.4}
 .vt-btn .lucide{width:15px;height:15px}
 
-/* floating print action — the document's main deliverable is the PDF, so its
-   trigger floats bottom-right, only while a document canvas is open. App
-   chrome, not paper: it follows the app theme and never prints. */
-.print-fab{position:fixed;right:28px;bottom:28px;width:54px;height:54px;border-radius:50%;
+/* floating print action — the document's main deliverable is the PDF, so its trigger
+   floats at the bottom-right, only while a document canvas is open. It is ABSOLUTE to the
+   modal card (position:relative), so it sits inside the card's corner rather than straddling
+   the card edge and the frosted backdrop. App chrome, not paper: never prints. */
+.print-fab{position:absolute;right:24px;bottom:24px;width:54px;height:54px;border-radius:50%;
 	display:flex;align-items:center;justify-content:center;border:none;cursor:pointer;
 	background:var(--accent);color:#fff;z-index:45;
 	box-shadow:0 6px 18px rgba(16,20,30,.28),0 2px 6px rgba(16,20,30,.18)}

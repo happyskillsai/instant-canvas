@@ -570,7 +570,7 @@ test('the view toggle is visible for a document canvas, deck first', { skip: bro
 	assert.equal(v.toggleHidden, false, 'the toggle shows for a document canvas')
 	assert.equal(v.printBtnHidden, false, 'the print button shows for a document canvas — the reader will not guess ⌘P')
 	assert.equal(v.printBtnIsFab, true, 'it is the floating action button')
-	assert.equal(v.printBtnFloating, 'fixed', 'it floats (bottom-right), independent of scroll')
+	assert.equal(v.printBtnFloating, 'absolute', 'it floats bottom-right of the modal card (absolute to the card, so it clears the card edge; the content scrolls under it in #docModalView)')
 	assert.equal(v.deckActive, true, 'the deck is the default view')
 	assert.notEqual(v.deckDisplay, 'none', 'the deck is on screen')
 	assert.equal(v.htmlDisplay, 'none', 'the continuous view is hidden')

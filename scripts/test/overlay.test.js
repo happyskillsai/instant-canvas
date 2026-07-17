@@ -113,14 +113,15 @@ test.before(async () => {
 			out.lastPrevDisabled = await evaluate('document.getElementById("ocPrev").disabled')
 			out.lastNextDisabled = await evaluate('document.getElementById("ocNext").disabled')
 
-			// ---- breadcrumb: a nested doc shows its folder segment; the house goes to root ----
+			// ---- breadcrumb: a nested doc shows its folder path (NO house), each segment
+			// navigating to that folder ----
 			await openC('sub/inner.md')
 			await sleep(200)
 			out.crumbSegs = await evaluate('Array.from(document.querySelectorAll("#ocCrumb .oc-seg span")).map(function(s){ return s.textContent })')
 			out.crumbHere = await evaluate('(document.querySelector("#ocCrumb .oc-here span")||{}).textContent || ""')
-			out.crumbHasHouse = await evaluate('!!document.querySelector("#ocCrumb .oc-seg .lucide")')
-			await evaluate('document.querySelector("#ocCrumb .oc-seg").click()') // the house
-			out.steps.houseNav = await until(evaluate, 'location.hash === "#/f/"', 4000)
+			out.crumbNoHouse = await evaluate('!document.querySelector("#ocCrumb .oc-seg .lucide")')
+			await evaluate('document.querySelector("#ocCrumb .oc-seg").click()') // the folder segment
+			out.steps.crumbNav = await until(evaluate, 'location.hash === "#/f/sub"', 4000)
 
 			// ---- Esc from a document navigates to the owning folder's browse view ----
 			await openC('guide.md')
@@ -216,11 +217,11 @@ test('overlay: prev/next traverses siblings and disables at the boundaries', { s
 	assert.equal(R.lastNextDisabled, true, 'the last item disables next')
 })
 
-test('overlay: the breadcrumb names the owning folder and navigates back to it', { skip }, () => {
+test('overlay: the breadcrumb is the owning folder path (no house) and navigates to it', { skip }, () => {
 	assert.deepEqual(R.crumbSegs, ['sub'], 'a nested document shows its folder segment')
 	assert.equal(R.crumbHere, 'sub', 'the owning folder is the current (here) crumb')
-	assert.equal(R.crumbHasHouse, true, 'a house segment leads to the workspace root')
-	assert.equal(R.steps.houseNav, true, 'the house segment navigates to the root browse view')
+	assert.equal(R.crumbNoHouse, true, 'there is no house segment (the × already returns to the folder)')
+	assert.equal(R.steps.crumbNav, true, "a folder segment navigates to that folder's browse view")
 })
 
 test('overlay: Esc leaves to the owning folder; the chrome hides on the browse view', { skip }, () => {

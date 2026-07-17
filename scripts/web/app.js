@@ -4211,12 +4211,14 @@ function buildCrumb(folder) {
 		crumb.append(b)
 	}
 	const slash = () => { const s = document.createElement('span'); s.className = 'oc-slash'; s.textContent = '/'; crumb.append(s) }
+	// Just the owning folder's path — no leading house (the × already returns to the folder,
+	// so a separate "go to root" was redundant). A root-level item shows an empty breadcrumb.
 	const parts = folder ? folder.split('/') : []
-	seg('', '#/f/', { icon: 'house', title: 'Workspace root', here: parts.length === 0 })
 	let acc = ''
 	parts.forEach((p, idx) => {
 		acc = acc ? acc + '/' + p : p
-		slash()
+		if (idx > 0)
+			slash()
 		seg(p, '#/f/' + encodeURIComponent(acc), { here: idx === parts.length - 1, title: p })
 	})
 }
