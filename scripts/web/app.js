@@ -4771,6 +4771,118 @@ function galleryFileUrl(p, v) {
 	return '/api/gallery/file?path=' + encodeURIComponent(p) + '&v=' + Math.round(v || 0) + '&token=' + encodeURIComponent(TOKEN)
 }
 
+// -------------------------------------------------- video poster capture (client-side)
+//
+// A video tile earns a real first-frame thumbnail, drawn entirely in the browser: the
+// bytes are served same-origin, so the canvas is untainted and toDataURL yields a real
+// JPEG. At most TWO captures run at once (a plain promise queue, in listing order — no
+// IntersectionObserver, the simple decision), and every element is RELEASED after use
+// because media decoders are a limited resource. A failure resolves null and the tile
+// keeps its placeholder — never a broken tile. Results are cached by rel+mtime and the
+// cache is bounded (oldest evicted).
+const posterCache = new Map() // JSON([rel, mtimeMs]) -> Promise<{ url, duration, w, h } | null>
+const POSTER_CACHE_MAX = 200
+let posterActive = 0
+const posterQueue = []
+
+function posterPump() {
+	while (posterActive < 2 && posterQueue.length) {
+		const job = posterQueue.shift()
+		posterActive++
+		Promise.resolve().then(job).finally(() => { posterActive--; posterPump() })
+	}
+}
+
+/** Poster for (rel, mtimeMs), cached and deduped. Resolves null on any failure. */
+function capturePoster(rel, mtimeMs) {
+	const key = JSON.stringify([rel, mtimeMs])
+	if (posterCache.has(key)) return posterCache.get(key)
+	const p = new Promise((resolve) => {
+		posterQueue.push(() => grabPoster(rel, mtimeMs).then((r) => resolve(r), () => resolve(null)))
+		posterPump()
+	})
+	posterCache.set(key, p)
+	while (posterCache.size > POSTER_CACHE_MAX)
+		posterCache.delete(posterCache.keys().next().value)
+	return p
+}
+
+/** Drop a cached poster so the next request re-captures (an mtime change invalidates it). */
+function invalidatePoster(rel, mtimeMs) {
+	posterCache.delete(JSON.stringify([rel, mtimeMs]))
+}
+
+function grabPoster(rel, mtimeMs) {
+	return new Promise((resolve, reject) => {
+		const v = document.createElement('video') // OFF-DOM: never appended to the document
+		v.muted = true
+		v.preload = 'metadata'
+		let done = false
+		const release = () => { try { v.removeAttribute('src'); v.load() } catch { /* already gone */ } }
+		const fail = (e) => { if (done) return; done = true; clearTimeout(timer); release(); reject(e) }
+		const timer = setTimeout(() => fail(new Error('poster timeout')), 8000)
+		v.addEventListener('error', () => fail(new Error('poster decode error')))
+		v.addEventListener('loadeddata', () => {
+			const duration = isFinite(v.duration) ? v.duration : 0
+			const draw = () => {
+				if (done) return
+				try {
+					const vw = v.videoWidth || 0, vh = v.videoHeight || 0
+					if (!vw || !vh) return fail(new Error('no video dimensions'))
+					const scale = Math.min(1, 320 / Math.max(vw, vh)) // cap the long edge at 320px
+					const cw = Math.max(1, Math.round(vw * scale)), ch = Math.max(1, Math.round(vh * scale))
+					const canvas = document.createElement('canvas')
+					canvas.width = cw; canvas.height = ch
+					canvas.getContext('2d').drawImage(v, 0, 0, cw, ch)
+					const url = canvas.toDataURL('image/jpeg', 0.72)
+					done = true; clearTimeout(timer); release()
+					resolve({ url, duration, w: vw, h: vh })
+				} catch (e) { fail(e) }
+			}
+			v.addEventListener('seeked', draw, { once: true })
+			try { v.currentTime = Math.min(0.1, duration / 2) } catch { draw() }
+		})
+		v.src = galleryFileUrl(rel, mtimeMs)
+	})
+}
+
+/** m:ss for a tile's duration badge (0:01 for a one-second clip). */
+function mediaDuration(sec) {
+	const s = Math.max(0, Math.round(sec || 0))
+	return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0')
+}
+
+/** The typed placeholder card a media tile shows before (or instead of) a thumbnail. */
+function mediaPlaceholder(glyph, name) {
+	const ph = document.createElement('div'); ph.className = 'gt-ph'; ph.innerHTML = icon(glyph)
+	const label = document.createElement('span'); label.className = 'gt-fmt'
+	label.textContent = (String(name).split('.').pop() || 'file').toUpperCase()
+	ph.append(label)
+	return ph
+}
+
+/**
+ * Kick off a poster for a renderable video tile and value-sync it onto the EXISTING
+ * node when it resolves — the placeholder becomes a `.gt-img`, and a `.gt-dur` badge
+ * carries the duration. Never a rebuild, so a selection or an expando on the tile
+ * survives (the in-place-sync proof). A stale or removed tile is skipped.
+ */
+function mountVideoPoster(tile, rel, mtimeMs) {
+	const stamp = String(Math.round(mtimeMs || 0))
+	capturePoster(rel, mtimeMs).then((res) => {
+		if (!res || !tile.isConnected) return
+		if (tile.dataset.rel !== rel || tile.dataset.mtime !== stamp) return // tile moved on
+		const ph = tile.querySelector('.gt-ph')
+		if (!ph || tile.querySelector('.gt-img')) return // already posted, or not a placeholder tile
+		const img = document.createElement('img')
+		img.className = 'gt-img'; img.decoding = 'async'; img.setAttribute('alt', '')
+		img.src = res.url
+		ph.replaceWith(img)
+		const dur = document.createElement('div'); dur.className = 'gt-dur'; dur.textContent = mediaDuration(res.duration)
+		tile.append(dur)
+	})
+}
+
 function createGallery(root, block) {
 	const gs = {
 		src: typeof block.src === 'string' && block.src ? block.src : '.',
@@ -5465,12 +5577,6 @@ async function renderBrowse(main, rel) {
 			// file and audio stay a card. All three are selectable (§4.9).
 			tile.dataset.mtime = String(Math.round(it.mtimeMs || 0))
 			const check = document.createElement('div'); check.className = 'gt-check'; check.innerHTML = icon('check'); tile.append(check)
-			const placeholder = (glyph) => {
-				const ph = document.createElement('div'); ph.className = 'gt-ph'; ph.innerHTML = icon(glyph)
-				const label = document.createElement('span'); label.className = 'gt-fmt'
-				label.textContent = (it.name.split('.').pop() || 'file').toUpperCase()
-				ph.append(label); return ph
-			}
 			if (it.kind === 'image' && it.renderable) {
 				const img = document.createElement('img')
 				img.className = 'gt-img'; img.loading = 'lazy'; img.decoding = 'async'
@@ -5478,7 +5584,7 @@ async function renderBrowse(main, rel) {
 				img.setAttribute('src', galleryFileUrl(it.rel, it.mtimeMs))
 				tile.append(img)
 			} else {
-				tile.append(placeholder(it.kind === 'video' ? 'film' : it.kind === 'audio' ? 'music' : 'image'))
+				tile.append(mediaPlaceholder(it.kind === 'video' ? 'film' : it.kind === 'audio' ? 'music' : 'image', it.name))
 			}
 			const name = document.createElement('div'); name.className = 'gt-name'; name.textContent = it.name; tile.append(name)
 			if (bs.layout === 'list') {
@@ -5488,6 +5594,8 @@ async function renderBrowse(main, rel) {
 				tile.append(size, date, fmt)
 			}
 			if (bs.selection.has(it.rel)) tile.classList.add('selected')
+			// A renderable video earns a first-frame poster, value-synced onto this tile (§4.8).
+			if (it.kind === 'video' && it.renderable) mountVideoPoster(tile, it.rel, it.mtimeMs)
 		} else {
 			// A canvas or a markdown document — an editorial card, never a thumbnail
 			// (§5: no canvas/document previews). A top-anchored vertical stack: the icon
@@ -5552,13 +5660,20 @@ async function renderBrowse(main, rel) {
 		for (const it of newItems) {
 			const tile = bs.tiles.get(it.rel)
 			if (!tile) continue
-			if (isImage(it)) {
-				const mt = String(Math.round(it.mtimeMs || 0))
-				if (tile.dataset.mtime !== mt) {
-					tile.dataset.mtime = mt
-					const img = tile.querySelector('.gt-img')
-					if (img) img.setAttribute('src', galleryFileUrl(it.rel, it.mtimeMs))
-				}
+			const mt = String(Math.round(it.mtimeMs || 0))
+			if (tile.dataset.mtime === mt) continue
+			tile.dataset.mtime = mt
+			if (it.kind === 'image') {
+				const img = tile.querySelector('.gt-img')
+				if (img) img.setAttribute('src', galleryFileUrl(it.rel, it.mtimeMs))
+			} else if (it.kind === 'video' && it.renderable) {
+				// The file changed, so its poster is stale: invalidate the cache, reset the
+				// tile to a film placeholder, and re-capture against the new mtime (value-sync).
+				invalidatePoster(it.rel, it.mtimeMs)
+				const vis = tile.querySelector('.gt-img, .gt-ph')
+				if (vis) vis.replaceWith(mediaPlaceholder('film', it.name))
+				const dur = tile.querySelector('.gt-dur'); if (dur) dur.remove()
+				mountVideoPoster(tile, it.rel, it.mtimeMs)
 			}
 		}
 		bs.items = newItems

@@ -1370,6 +1370,11 @@ body.presenting.cursor-hidden .stage{cursor:none}
 .gt.selected{outline:3px solid var(--accent);outline-offset:-3px}
 .gt.selected .gt-check{background:var(--accent);border-color:var(--accent)}
 .gt.selected .gt-check .lucide{opacity:1}
+/* A video tile's duration chip — bottom-right over the poster (or the film placeholder). */
+.gt-dur{position:absolute;right:6px;bottom:6px;z-index:2;padding:1px 5px;border-radius:5px;
+	font-size:10.5px;line-height:1.4;font-variant-numeric:tabular-nums;color:#fff;
+	background:rgba(0,0,0,.66);pointer-events:none}
+.gallery.g-list .gt-dur{display:none}
 
 /* list */
 .gallery.g-list .g-tiles{display:flex;flex-direction:column;gap:2px}
