@@ -16,7 +16,7 @@ const { scan, dirsUnder, readCanvasFile, MAX_CANVAS_BYTES, isExcludedDir } = req
 const { validate, collectBlocks, isInteractiveBlock, flattenFields } = require('./lib/validate')
 const { readMarkdownSrc, inlineLocalImages, inlineImageFile, hasMarkdownExtension, renderableMarkdown, MAX_COVER_IMAGE_BYTES } = require('./lib/markdownsrc')
 const { virtualCanvasFor } = require('./lib/mdcanvas')
-const { listImages, mediaStat, isStreamableFile, mediaKind, galleryMime, parseByteRange, normalizeRelDir, GALLERY_IMAGE_EXTS } = require('./lib/gallery')
+const { listImages, mediaStat, isStreamableFile, mediaKind, galleryMime, parseByteRange, normalizeRelDir, GALLERY_IMAGE_EXTS, MEDIA_VIDEO_EXTS, MEDIA_AUDIO_EXTS } = require('./lib/gallery')
 const { listDir } = require('./lib/browse')
 const { dimensions } = require('./lib/imagemeta')
 const { companionFor, enhancesOf } = require('./lib/companion')
@@ -864,7 +864,7 @@ async function route(req, res, url) {
 // ---------------------------------------------------------------- static
 
 function cspHeader() {
-	return "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; " +
+	return "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; media-src 'self'; font-src 'self'; " +
 		`connect-src 'self' ws://127.0.0.1:${PORT}`
 }
 
@@ -875,13 +875,15 @@ function serveShell(res) {
 	} catch {
 		return sendJson(res, 500, { ok: false, message: 'App shell missing.' })
 	}
-	// CSP forbids inline <script>, so the token, the version, and the image-extension
-	// union (which lets the overlay classify a routed path as an image without a copied
-	// list, §4.7) reach the page as placeholder substitutions rather than injected globals.
+	// CSP forbids inline <script>, so the token, the version, and the image/video/audio
+	// extension unions (which let the browser classify a routed path WITHOUT a copied
+	// list) reach the page as placeholder substitutions rather than injected globals.
 	html = html
 		.replaceAll('__IC_TOKEN__', TOKEN)
 		.replaceAll('__IC_VERSION__', VERSION)
 		.replaceAll('__IC_IMAGE_EXTS__', JSON.stringify(GALLERY_IMAGE_EXTS))
+		.replaceAll('__IC_VIDEO_EXTS__', JSON.stringify(MEDIA_VIDEO_EXTS))
+		.replaceAll('__IC_AUDIO_EXTS__', JSON.stringify(MEDIA_AUDIO_EXTS))
 	res.writeHead(200, {
 		'Content-Type': 'text/html; charset=utf-8',
 		'X-Content-Type-Options': 'nosniff',
