@@ -301,3 +301,31 @@ test('cli: without --no-open the opener is spawned; headless Linux warns with th
 		assert.equal(stop.json.status, 'stopped')
 	}
 })
+
+test('cli: open nudges toward the git project root when the cwd is nested (§4.8)', () => {
+	// A stderr NUDGE only — the workspace is still the (deterministic) cwd/--workspace;
+	// this just names the git project root the agent may have meant. No kernel is spawned:
+	// the note fires before the missing-canvas check, so `open` errors out immediately.
+	const base = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'ic-nudge-')))
+	const proj = path.join(base, 'proj')
+	const sub = path.join(proj, 'sub')
+	fs.mkdirSync(sub, { recursive: true })
+	fs.mkdirSync(path.join(proj, '.git')) // a project marker — no real repo needed
+
+	// Nested cwd, no --workspace → the nudge names the project root on stderr only.
+	const nested = run(['open', 'missing.canvas.json', '--no-open'], { cwd: sub })
+	assert.match(nested.stderr, /nested inside the git project/, 'the nudge fired')
+	assert.ok(nested.stderr.includes(proj), 'the nudge names the git project root')
+	assert.doesNotMatch(nested.stdout, /nested inside the git project/, 'the nudge never touches stdout')
+
+	// cwd IS the git root → no nudge (the .git is not an ANCESTOR).
+	const atRoot = run(['open', 'missing.canvas.json', '--no-open'], { cwd: proj })
+	assert.doesNotMatch(atRoot.stderr, /nested inside the git project/, 'no nudge at the project root')
+
+	// --workspace suppresses the nudge, and stdout is unchanged by it (modulo the per-run
+	// timestamp): the note lives on stderr, never leaking into the one stdout document.
+	const withWs = run(['open', 'missing.canvas.json', '--no-open', '--workspace', sub], { cwd: sub })
+	assert.doesNotMatch(withWs.stderr, /nested inside the git project/, '--workspace suppresses the nudge')
+	const norm = (s) => { const j = JSON.parse(s); delete j.timestamp; return JSON.stringify(j) }
+	assert.equal(norm(withWs.stdout), norm(nested.stdout), 'stdout JSON is identical with and without the nudge')
+})

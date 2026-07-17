@@ -14,9 +14,20 @@ All commands run via `npx` from any directory — the current directory is the w
 
 - **Presenting wrangled data visually**: metrics, comparisons, reports, query results → `markdown`, `kpi`, `chart`, `table` blocks.
 - **Showing a markdown file that already exists** → just `$IC open report.md`. See below: no canvas, no JSON.
-- **Showing a folder of images** → just `$IC open <folder>` (a live, sortable grid the reader can zoom and delete; no canvas, no JSON), or a `gallery` block to place one beside other blocks.
+- **Browsing a folder** → `$IC open <folder>` opens a **browse view** of its canvases, documents and images — the reader sorts, opens any item, zooms images, and can delete them; no canvas, no JSON. A `gallery` block places an image grid *beside* other blocks in a canvas.
 - **Collecting credentials, env vars, or multi-field setup input** → a `form` block with `secret` fields and a file destination.
 - **Confirmation before a destructive action** (drop DB, delete infra) → a `confirm` block.
+
+## Choosing the workspace
+
+The workspace is the folder the kernel serves, and the folders-only sidebar makes a wrong choice obvious. Decide it before opening:
+
+1. **A named target** (the user points at a folder or file) — the workspace is that target's **project root** if it sits inside a project, else the named folder itself (e.g. `~/Downloads`).
+2. **Otherwise, inside a project** — the workspace is the **project root**: walk up from the current directory to the nearest marker (a `.git` directory, else `.agents/`, `.claude/`, or `skills-config.json`).
+3. Never the global skill-install folder.
+4. **Ambiguous?** Confirm the folder with the user before opening.
+
+Pass `--workspace <dir>` to set it. Opening from a subfolder of a git project without `--workspace` prints a one-line stderr note naming that root — a nudge only; behaviour never changes.
 
 ## Markdown files need no canvas
 
@@ -65,15 +76,15 @@ It is an **ordinary canvas** — nothing new to validate, nothing new to learn, 
 
 **When NOT to use**: trivial yes/no questions or one-word answers (just ask in chat); headless environments — CI, SSH without a display — check before invoking. A human must be present at the browser: if `open` cannot launch one it prints the URL on stderr and keeps waiting, but nobody will answer in CI.
 
-## A folder of images needs no canvas
+## A folder needs no canvas — open it to browse
 
-A folder of images is a canvas too. Point at the folder and the runtime renders every image under it (subfolders included) as a live grid or list — the reader sorts, zooms a detail view, and can multi-select and permanently delete:
+Point `open` at a folder and it navigates to that folder's **browse view**: a grid of the folder's own renderable items — canvases, markdown documents and images together — while a folders-only sidebar tree navigates the rest of the workspace. The reader clicks any item to open it (documents render, images get a zoomable detail view), sorts by name/date/size, and can multi-select and permanently delete images. Nothing is written to disk.
 
 ```bash
-$IC open photos/                            # renders the folder as a gallery; nothing written to disk
+$IC open photos/                            # opens the folder's browse view; nothing written to disk
 ```
 
-Same rule as a markdown file: **do not write a canvas to show a folder you could have opened directly.** `validate`, `stamp`, `print` and `theme` all refuse a folder — there is no contract to check and no paper to print. To place a gallery *beside* other blocks, use the `gallery` block (`$IC catalog gallery` for its full contract): `{"type": "gallery", "src": "photos"}`. Previewable formats are png, jpg, jpeg, gif, webp, avif, bmp, ico and svg; HEIC and TIFF are listed with their metadata but shown as a placeholder card.
+Same rule as a markdown file: **do not write a canvas to show a folder you could have opened directly.** `validate`, `stamp`, `print` and `theme` all refuse a folder — there is no contract to check and no paper to print. To place an image grid *beside* other blocks in a canvas, use the `gallery` block (`$IC catalog gallery` for its full contract): `{"type": "gallery", "src": "photos"}` — it lists images recursively. Previewable formats are png, jpg, jpeg, gif, webp, avif, bmp, ico and svg; HEIC and TIFF are listed with their metadata but shown as a placeholder card.
 
 **The images are yours to provide** — the runtime never fetches, so there is no way to point a gallery at a remote URL. Download or generate the files into a workspace folder first (the same asset rule a markdown image follows), then `open` that folder or point a `gallery` block's `src` at it.
 

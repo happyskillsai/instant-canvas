@@ -168,6 +168,20 @@ function resolveWorkspace(args) {
 	return fs.realpathSync(raw)
 }
 
+/** The nearest ANCESTOR of `dir` (never dir itself) that holds a `.git` directory, or
+ *  null. A hint that a kernel may have been opened on a nested folder instead of the
+ *  project root — which the folders-only sidebar makes very visible. */
+function gitRootAbove(dir) {
+	let cur = path.dirname(dir)
+	let prev = dir
+	while (cur && cur !== prev) {
+		try { if (fs.statSync(path.join(cur, '.git')).isDirectory()) return cur } catch { /* keep walking */ }
+		prev = cur
+		cur = path.dirname(cur)
+	}
+	return null
+}
+
 /**
  * Refuse a file the CLI has no business reading — BEFORE it is read.
  *
@@ -280,6 +294,15 @@ async function cmdOpen(args) {
 	if (!canvasArg)
 		specError('INVALID_SPEC', 'open requires a canvas file argument.')
 	const root = resolveWorkspace(args)
+	// A stderr NUDGE only — it never changes what happens. When no --workspace was given
+	// and the current directory is nested inside a git project, the workspace is that
+	// subfolder (the folders-only tree makes this obvious). Name the project root so the
+	// agent can reconsider. stdout still carries exactly one JSON document (§4.8).
+	if (!args.workspace) {
+		const gitRoot = gitRootAbove(root)
+		if (gitRoot)
+			log(`note: workspace is ${root}, nested inside the git project ${gitRoot} — pass --workspace ${gitRoot} to serve the whole project.`)
+	}
 	const canvasAbs = path.resolve(canvasArg)
 	if (!fs.existsSync(canvasAbs))
 		specError('INVALID_SPEC', `Canvas file not found: ${canvasAbs}`)
