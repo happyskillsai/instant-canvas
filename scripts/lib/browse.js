@@ -5,7 +5,7 @@ const path = require('node:path')
 const { insideRoot } = require('./paths')
 const { isExcludedDir, canvasEntry, documentEntry } = require('./scan')
 const { companionIndex } = require('./companion')
-const { normalizeRelDir, isGalleryImage, mediaStat } = require('./gallery')
+const { normalizeRelDir, mediaKind, mediaStat } = require('./gallery')
 const { hasMarkdownExtension } = require('./markdownsrc')
 
 const toPosix = (p) => String(p).split(path.sep).join('/')
@@ -35,7 +35,8 @@ function withRel(entry) {
  *   dirs       immediate child dirs, A→Z, EXCLUDED_DIRS omitted, symlinked dirs
  *              excluded; each `{ name, rel, hidden }` (hidden = name starts with '.')
  *   items      immediate children only (NON-recursive, unlike the gallery block),
- *              grouped canvases → documents → images, each group A→Z, capped
+ *              grouped canvases → documents → images → videos → audios, each
+ *              group A→Z, capped
  *   truncated  true iff the cap was hit
  *
  * Returns `null` when `dirRel` is not a real directory inside the root — the
@@ -44,7 +45,8 @@ function withRel(entry) {
  * opened to decide what it is), and `lstat` so a symlink is refused — the
  * requested dir is `lstat`'d (a symlinked directory is not a directory), the
  * child dirs/files come from dirents whose isDirectory()/isFile() are already
- * false for a symlink, and each image goes through `mediaStat` (lstat) again.
+ * false for a symlink, and each image/video/audio goes through `mediaStat`
+ * (lstat) again.
  *
  * `dirsOnly` returns just `dirs` (for lazy tree expansion) and skips the item
  * work entirely — no companion index built, no files stat'd.
@@ -101,6 +103,8 @@ function listDir(root, dirRel, { cap = DEFAULT_CAP, dirsOnly = false } = {}) {
 	const canvases = []
 	const documents = []
 	const images = []
+	const videos = []
+	const audios = []
 	let total = 0
 	let truncated = false
 	const add = (group, item) => {
@@ -123,14 +127,20 @@ function listDir(root, dirRel, { cap = DEFAULT_CAP, dirsOnly = false } = {}) {
 			add(canvases, withRel(canvasEntry(root, rel)))
 		} else if (hasMarkdownExtension(name)) {
 			add(documents, withRel(documentEntry(root, rel, index)))
-		} else if (isGalleryImage(name)) {
-			const m = mediaStat(root, rel)
-			add(images, m ? { kind: 'image', rel: m.path, name: m.name, mtimeMs: m.modified, size: m.size, renderable: m.renderable } : null)
+		} else {
+			// image / video / audio all share the same stat-only shape (plus kind),
+			// gated and lstat-refused by mediaStat exactly as an image always was.
+			const kind = mediaKind(name)
+			if (kind) {
+				const m = mediaStat(root, rel)
+				const group = kind === 'video' ? videos : kind === 'audio' ? audios : images
+				add(group, m ? { kind: m.kind, rel: m.path, name: m.name, mtimeMs: m.modified, size: m.size, renderable: m.renderable } : null)
+			}
+			// anything else (a `.txt`, a source file) is not renderable → not an item
 		}
-		// anything else (a `.txt`, a source file) is not renderable → not an item
 	}
 
-	return { dir: toPosix(relDir), dirs, items: [...canvases, ...documents, ...images], truncated }
+	return { dir: toPosix(relDir), dirs, items: [...canvases, ...documents, ...images, ...videos, ...audios], truncated }
 }
 
 module.exports = { listDir }
