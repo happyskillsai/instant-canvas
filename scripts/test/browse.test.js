@@ -1,8 +1,8 @@
 'use strict'
 
 // The browse view (#/f/, §4.5), driven in real headless Chrome. A mixed-type
-// grid — grouping, sort-within-groups, live sync, images-only selection, click-to-
-// navigate — only exists once laid out. Follows the galleryui/tree conventions:
+// grid — grouping, sort-within-groups, live sync, image/video/audio selection,
+// click-to-navigate — only exists once laid out. Follows the galleryui/tree conventions:
 //   - poll for the app, never a bare element
 //   - a NON-THROWING until() in the hook
 //   - fixtures in a mkdtemp workspace; INSTANTCANVAS_STATE_DIR set with ||=
@@ -21,6 +21,7 @@ const path = require('node:path')
 process.env.INSTANTCANVAS_STATE_DIR = process.env.INSTANTCANVAS_STATE_DIR || fs.mkdtempSync(path.join(os.tmpdir(), 'ic-state-'))
 const { withChrome, findChrome, sleep } = require('./helpers/cdp')
 const { PKG_VERSION } = require('../lib/pkgmeta')
+const { FIXTURES } = require('./helpers/mediafixtures')
 
 const CLI = path.join(__dirname, '..', 'instantcanvas.js')
 const CHROME = findChrome()
@@ -53,12 +54,15 @@ test.before(async () => {
 	fs.writeFileSync(path.join(root, 'README.md'), '# Readme\n')
 	fs.writeFileSync(path.join(root, 'README.canvas.json'), canvas('Readme cover', { enhances: 'README.md' }))
 	fs.writeFileSync(path.join(root, 'deck.canvas.json'), canvas('Deck', { slides: [{ layout: 'title', title: 'S' }] }))
-	// A subfolder with EXACTLY 1 canvas + 1 md + 2 images, to pin the group order.
+	// A subfolder with EXACTLY 1 canvas + 1 md + 2 images + 1 video + 1 audio, to pin the
+	// group order AND to give selection its hard case (media is selectable, cards are not).
 	fs.mkdirSync(path.join(root, 'mix'))
 	fs.writeFileSync(path.join(root, 'mix', 'report.canvas.json'), canvas('Report'))
 	fs.writeFileSync(path.join(root, 'mix', 'guide.md'), '# Guide\n')
 	fs.writeFileSync(path.join(root, 'mix', 'a.png'), pngOf(0))
 	fs.writeFileSync(path.join(root, 'mix', 'b.png'), pngOf(100))
+	fs.writeFileSync(path.join(root, 'mix', 'tiny.mp4'), Buffer.from(FIXTURES['tiny.mp4'], 'base64'))
+	fs.writeFileSync(path.join(root, 'mix', 'tiny.mp3'), Buffer.from(FIXTURES['tiny.mp3'], 'base64'))
 
 	const out = execFileSync(process.execPath, [CLI, 'open', '.', '--workspace', root, '--no-open'], { cwd: root, encoding: 'utf8' })
 	const url = JSON.parse(out).url
@@ -91,7 +95,7 @@ test.before(async () => {
 		// ---- CLICK the mix folder tile → it navigates INTO the folder (#/f/mix) ----
 		await click('.browse .gt[data-rel="mix"]')
 		out.steps.folderClickNav = await until(evaluate, 'location.hash === "#/f/mix"', 4000)
-		out.steps.mixShown = await until(evaluate, 'location.hash === "#/f/mix" && ' + q('.browse .gt') + ' === 4', 6000)
+		out.steps.mixShown = await until(evaluate, 'location.hash === "#/f/mix" && ' + q('.browse .gt') + ' === 6', 6000)
 		await sleep(150)
 		// In mix the breadcrumb gains the folder segment (house + mix, mix current).
 		out.mixCrumbLast = await evaluate('(function(){ var s = document.querySelectorAll(".browse-crumb .oc-seg"); var l = s[s.length-1]; return l ? l.innerText.trim() : "" })()')
@@ -127,15 +131,21 @@ test.before(async () => {
 		await until(evaluate, 'location.hash === "#/f/mix" && ' + q('.browse .gt') + ' >= 4', 6000)
 		await sleep(150)
 
-		// ---- selection is IMAGES ONLY ----
+		// ---- selection covers IMAGE / VIDEO / AUDIO, never a canvas or document ----
 		await evaluate('(function(){ var b = Array.from(document.querySelectorAll(".browse .g-btn")).find(function(x){ return x.textContent.trim() === "Select" }); b && b.click() })()')
 		out.steps.selecting = await until(evaluate, q('.browse.g-selecting') + ' === 1', 4000)
 		await click('.browse .gt[data-rel="mix/a.png"]')
 		await sleep(120)
 		out.imageSelected = await evaluate(q('.browse .gt.selected') + ' === 1')
+		await click('.browse .gt[data-rel="mix/tiny.mp4"]')
+		await sleep(120)
+		out.videoSelected = await evaluate(q('.browse .gt.selected') + ' === 2') // the video joined the selection
+		await click('.browse .gt[data-rel="mix/tiny.mp3"]')
+		await sleep(120)
+		out.audioSelected = await evaluate(q('.browse .gt.selected') + ' === 3') // and the audio
 		await click('.browse .gt[data-rel="mix/report.canvas.json"]')
 		await sleep(120)
-		out.cardNotSelected = await evaluate(q('.browse .gt.selected') + ' === 1') // still just the one image
+		out.cardNotSelected = await evaluate(q('.browse .gt.selected') + ' === 3') // a canvas adds nothing
 		out.cardsHaveNoCheck = await evaluate(q('.browse .bt-canvas .gt-check') + ' === 0 && ' + q('.browse .bt-document .gt-check') + ' === 0')
 		// The grid/list toggle stays available in select mode (it used to vanish).
 		out.viewToggleInSelect = await evaluate(q('.browse.g-selecting .g-seg.g-view') + ' >= 1')
@@ -198,15 +208,15 @@ test('browse: child folders appear first, look distinct, and open on click', { s
 	assert.equal(R.steps.folderClickNav, true, 'clicking a folder tile navigates into it (#/f/)')
 })
 
-test('browse: a folder renders its items grouped canvases → documents → images', { skip, timeout: 120_000 }, () => {
-	assert.equal(R.steps.mixShown, true, 'the mix folder rendered 4 tiles')
-	assert.deepEqual(R.mixKinds, ['canvas', 'document', 'image', 'image'], 'fixed group order')
-	assert.deepEqual(R.mixRels, ['mix/report.canvas.json', 'mix/guide.md', 'mix/a.png', 'mix/b.png'])
+test('browse: a folder renders its items grouped canvases → documents → images → videos → audios', { skip, timeout: 120_000 }, () => {
+	assert.equal(R.steps.mixShown, true, 'the mix folder rendered 6 tiles')
+	assert.deepEqual(R.mixKinds, ['canvas', 'document', 'image', 'image', 'video', 'audio'], 'fixed group order, media after images')
+	assert.deepEqual(R.mixRels, ['mix/report.canvas.json', 'mix/guide.md', 'mix/a.png', 'mix/b.png', 'mix/tiny.mp4', 'mix/tiny.mp3'])
 	assert.equal(R.mixInlineStyles, 0, 'no inline style attribute anywhere under .browse (CSP discipline)')
 })
 
 test('browse: sort direction flips WITHIN each group, never the group order', { skip, timeout: 120_000 }, () => {
-	assert.deepEqual(R.descKinds, ['canvas', 'document', 'image', 'image'], 'group order survives a direction flip')
+	assert.deepEqual(R.descKinds, ['canvas', 'document', 'image', 'image', 'video', 'audio'], 'group order survives a direction flip')
 	assert.deepEqual(R.descImageRels, ['mix/b.png', 'mix/a.png'], 'within the image group, order reversed')
 })
 
@@ -220,9 +230,11 @@ test('browse: clicking a document or an image tile navigates to its overlay rout
 	assert.equal(R.steps.imgNavigated, true, 'an image tile navigates to #/c/ too')
 })
 
-test('browse: selection and delete are images-only', { skip, timeout: 120_000 }, () => {
+test('browse: selection covers image/video/audio; a canvas or document never selectable', { skip, timeout: 120_000 }, () => {
 	assert.equal(R.steps.selecting, true, 'select mode engaged')
 	assert.equal(R.imageSelected, true, 'an image tile is selectable')
+	assert.equal(R.videoSelected, true, 'a video tile is selectable')
+	assert.equal(R.audioSelected, true, 'an audio tile is selectable')
 	assert.equal(R.cardNotSelected, true, 'clicking a canvas/document tile selects nothing')
 	assert.equal(R.cardsHaveNoCheck, true, 'canvas/document tiles carry no selection checkbox')
 })

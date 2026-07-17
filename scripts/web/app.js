@@ -5529,7 +5529,9 @@ async function renderBrowse(main, rel) {
 		}
 	}
 
-	const isImage = (it) => it.kind === 'image'
+	// Images, videos and audio are all selectable + deletable; a canvas or a document
+	// never is — the reader's browser does not destroy those (browse.test.js pins it).
+	const isSelectable = (it) => !!it && ['image', 'video', 'audio'].includes(it.kind)
 
 	// Grouping + sort is shared with the overlay's prev/next (browseSorted, above).
 	const sortedItems = () => browseSorted(bs.items, bs.sort)
@@ -5723,7 +5725,7 @@ async function renderBrowse(main, rel) {
 			const label = document.createElement('div'); label.className = 'g-count'
 			label.textContent = n + ' selected'
 			info.append(label)
-			const del = makeBtn('g-btn g-danger', icon('trash-2') + '<span>Delete</span>', () => openDeleteDialog(), 'Delete the selected images')
+			const del = makeBtn('g-btn g-danger', icon('trash-2') + '<span>Delete</span>', () => openDeleteDialog(), 'Delete the selected files')
 			del.disabled = n === 0
 			const clear = makeBtn('g-btn', 'Clear', () => clearSelection(), 'Clear the selection')
 			const done = makeBtn('g-btn', 'Done', () => exitSelect(), 'Leave selection mode')
@@ -5760,9 +5762,10 @@ async function renderBrowse(main, rel) {
 		sortSeg.append(makeBtn('g-segbtn g-dir', bs.sort.dir === 'asc' ? '↑' : '↓', () => setSort(bs.sort.by, bs.sort.dir === 'asc' ? 'desc' : 'asc'), 'Toggle direction'))
 
 		controls.append(sortSeg, viewSeg())
-		// Select/delete is images-only — the affordance only appears when there is an image.
-		if (ni > 0)
-			controls.append(makeBtn('g-btn', 'Select', () => enterSelect(), 'Select images to delete'))
+		// Select/delete covers images, videos and audio — the affordance appears when the
+		// folder holds at least one such file (never for a canvas or document alone).
+		if (ni + nv + na > 0)
+			controls.append(makeBtn('g-btn', 'Select', () => enterSelect(), 'Select files to delete'))
 		toolbar.append(info, controls)
 	}
 
@@ -5792,7 +5795,7 @@ async function renderBrowse(main, rel) {
 	}
 	function toggleSelect(r) {
 		const it = itemFor(r)
-		if (!it || !isImage(it)) return // never a canvas or a document
+		if (!isSelectable(it)) return // never a canvas or a document
 		const tile = bs.tiles.get(r)
 		if (!tile) return
 		if (bs.selection.has(r)) { bs.selection.delete(r); tile.classList.remove('selected') }
@@ -5811,7 +5814,7 @@ async function renderBrowse(main, rel) {
 		if (!tile || (e.button !== undefined && e.button !== 0)) return
 		pressRel = tile.dataset.rel; pressX = e.clientX; pressY = e.clientY; pressMoved = false; suppressClick = false
 		cancelPress()
-		if (tile.dataset.kind === 'image') {
+		if (['image', 'video', 'audio'].includes(tile.dataset.kind)) {
 			pressTimer = setTimeout(() => {
 				pressTimer = null
 				// The long-press ACTS now (select). The click that fires on release must
@@ -5833,15 +5836,15 @@ async function renderBrowse(main, rel) {
 		if (!tile) return
 		const r = tile.dataset.rel
 		const kind = tile.dataset.kind
-		const isImg = kind === 'image'
+		const canSelect = ['image', 'video', 'audio'].includes(kind)
 		// A long-press already acted → swallow the click that follows it.
 		if (suppressClick) { suppressClick = false; return }
 		if (pressMoved) { pressMoved = false; return }
 		if (bs.selecting) {
-			if (isImg) toggleSelect(r)
+			if (canSelect) toggleSelect(r)
 			return
 		}
-		if (isImg && (e.metaKey || e.ctrlKey)) { enterSelect(); toggleSelect(r); return }
+		if (canSelect && (e.metaKey || e.ctrlKey)) { enterSelect(); toggleSelect(r); return }
 		// A folder navigates INTO itself (the pane is a second folder navigation); a
 		// document/image/canvas opens at #/c/ (the overlay branches by kind in §4.6/§4.7).
 		if (kind === 'folder') { location.hash = '#/f/' + encodeURIComponent(r); return }
@@ -5864,7 +5867,7 @@ async function renderBrowse(main, rel) {
 		const overlay = document.createElement('div'); overlay.className = 'g-modal g-confirm'
 		const card = document.createElement('div'); card.className = 'g-cbox'
 		const h = document.createElement('h2')
-		h.textContent = 'Permanently delete ' + rels.length + (rels.length === 1 ? ' image?' : ' images?')
+		h.textContent = 'Permanently delete ' + rels.length + (rels.length === 1 ? ' file?' : ' files?')
 		const listEl = document.createElement('div'); listEl.className = 'g-clist'
 		for (const name of names) { const li = document.createElement('div'); li.className = 'g-cli'; li.textContent = name; listEl.append(li) }
 		const warn = document.createElement('p'); warn.className = 'g-cwarn'
@@ -5892,7 +5895,7 @@ async function renderBrowse(main, rel) {
 		if (json.failed && json.failed.length)
 			toast('Deleted ' + okN + '; could not delete: ' + json.failed.map((f) => f.path.split('/').pop()).join(', '))
 		else
-			toast('Deleted ' + okN + (okN === 1 ? ' image.' : ' images.'))
+			toast('Deleted ' + okN + (okN === 1 ? ' file.' : ' files.'))
 		for (const p of json.deleted) {
 			bs.selection.delete(p)
 			const tile = bs.tiles.get(p)
