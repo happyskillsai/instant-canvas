@@ -79,3 +79,10 @@ $RECYCLE.BIN/
 
 # ─── HappySkills local publish cache ───────────────────────────────────────
 .happyskills/
+
+# ─── Local media sandbox ───────────────────────────────────────────────────
+# A drop folder for hand-testing the video/audio/image browse view and player
+# with your OWN files — never source-controlled. Only the README that documents
+# the folder is tracked; every media file (or anything else) dropped in is ignored.
+/media-sandbox/*
+!/media-sandbox/README.md
