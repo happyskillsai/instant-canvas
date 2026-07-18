@@ -14,7 +14,7 @@ All commands run via `npx` from any directory — the current directory is the w
 
 - **Presenting wrangled data visually**: metrics, comparisons, reports, query results → `markdown`, `kpi`, `chart`, `table` blocks.
 - **Showing a markdown file that already exists** → just `$IC open report.md`. See below: no canvas, no JSON.
-- **Browsing a folder** → `$IC open <folder>` opens a **browse view** of its canvases, documents and images — the reader sorts, opens any item, zooms images, and can delete them; no canvas, no JSON. A `gallery` block places an image grid *beside* other blocks in a canvas.
+- **Browsing a folder** → `$IC open <folder>` opens a **browse view** of its canvases, documents, images, video and audio — the reader sorts, opens any item (zooming an image, or playing a video/audio clip in a bespoke player with a 0.5×–3× speed control), and can delete media; no canvas, no JSON. A `gallery` block places an image grid *beside* other blocks in a canvas.
 - **Collecting credentials, env vars, or multi-field setup input** → a `form` block with `secret` fields and a file destination.
 - **Confirmation before a destructive action** (drop DB, delete infra) → a `confirm` block.
 
@@ -78,17 +78,17 @@ It is an **ordinary canvas** — nothing new to validate, nothing new to learn, 
 
 ## A folder needs no canvas — open it to browse
 
-Point `open` at a folder and it navigates to that folder's **browse view**: a grid of the folder's own renderable items — canvases, markdown documents and images together — while a folders-only sidebar tree navigates the rest of the workspace. The reader clicks any item to open it (documents render, images get a zoomable detail view), sorts by name/date/size, and can multi-select and permanently delete images. Nothing is written to disk.
+Point `open` at a folder and it navigates to that folder's **browse view**: a grid of the folder's own renderable items — canvases, markdown documents, images, video and audio together — while a folders-only sidebar tree navigates the rest of the workspace. The reader clicks any item to open it (documents render, images get a zoomable detail view, and video/audio play in a bespoke player — play/pause, scrubber, volume, a 0.5×–3× speed control, fullscreen for video), sorts by name/date/size, and can multi-select and permanently delete images, video and audio. Nothing is written to disk.
 
 ```bash
 $IC open photos/                            # opens the folder's browse view; nothing written to disk
 ```
 
-Same rule as a markdown file: **do not write a canvas to show a folder you could have opened directly.** `validate`, `stamp`, `print` and `theme` all refuse a folder — there is no contract to check and no paper to print. To place an image grid *beside* other blocks in a canvas, use the `gallery` block (`$IC catalog gallery` for its full contract): `{"type": "gallery", "src": "photos"}` — it lists images recursively. Previewable formats are png, jpg, jpeg, gif, webp, avif, bmp, ico and svg; HEIC and TIFF are listed with their metadata but shown as a placeholder card.
+Same rule as a markdown file: **do not write a canvas to show a folder you could have opened directly.** `validate`, `stamp`, `print` and `theme` all refuse a folder — there is no contract to check and no paper to print. To place an image grid *beside* other blocks in a canvas, use the `gallery` block (`$IC catalog gallery` for its full contract): `{"type": "gallery", "src": "photos"}` — it lists images recursively. Previewable image formats are png, jpg, jpeg, gif, webp, avif, bmp, ico and svg; HEIC and TIFF are listed with their metadata but shown as a placeholder card. **Video and audio are browse-only, not authorable**: a folder's `.mp4`/`.webm` and `.mp3`/`.m4a`/`.wav`/`.ogg` files play in the browse view's bespoke player (`.mov`/`.mkv`/`.avi` and `.flac`/`.aiff`/`.wma` are listed as metadata-only cards) — but there is **no media block**, and you cannot `open` a media file directly, only the folder that holds it (exactly the rule images follow). So to let someone review clips, drop them in a folder and `open` it.
 
 **The images are yours to provide** — the runtime never fetches, so there is no way to point a gallery at a remote URL. Download or generate the files into a workspace folder first (the same asset rule a markdown image follows), then `open` that folder or point a `gallery` block's `src` at it.
 
-**Deletion belongs to the reader, not to you.** The reader multi-selects images in the browser and permanently deletes them; you never delete images, and you are not notified when they do — there is no session and no result to read. A gallery cannot render on paper, so it is invalid beside an envelope-level `document`, and its deck toggle is muted in the browser.
+**Deletion belongs to the reader, not to you.** The reader multi-selects images, video or audio in the browse view and permanently deletes them; you never delete media, and you are not notified when they do — there is no session and no result to read. A gallery cannot render on paper, so it is invalid beside an envelope-level `document`, and its deck toggle is muted in the browser.
 
 ## The secret rule
 
