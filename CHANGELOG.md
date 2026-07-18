@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-07-18
+
 ### Added
 - **Video & audio in the browse view and a bespoke player.** The image pipeline now extends to
   video (`.mp4`, `.webm`) and audio (`.mp3`, `.m4a`, `.wav`, `.ogg`), with `.mov`/`.mkv`/`.avi`
