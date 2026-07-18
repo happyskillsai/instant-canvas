@@ -65,6 +65,12 @@ const state = {
 	// (§4.6) can flip through folder siblings in exactly the order the grid shows.
 	browseLayout: 'grid',
 	browseSort: { by: 'name', dir: 'asc' },
+	// The browse filter (sticky across folders, like layout/sort): which item KINDS
+	// to show ([] = all) and whether to reach into subfolders. `subtree` fetches the
+	// recursive, server-type-filtered listing; `folder` filters the immediate listing
+	// on the client (instant, no refetch).
+	browseTypes: [],        // selected item kinds ⊆ ITEM_KINDS; [] = every kind
+	browseScope: 'folder',  // 'folder' (this folder only) | 'subtree' (+ all subfolders)
 	browseOrder: [],        // [rel] of the open folder's items, in displayed order
 	browseFolder: null,     // which folder browseOrder belongs to
 	charts: [], // {el, block} for every mounted Plotly graph in the current view
@@ -118,6 +124,7 @@ const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&
 const LUCIDE = {
 	'calendar': '<path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/>',
 	'check': '<path d="M20 6 9 17l-5-5"/>',
+	'list-filter': '<path d="M3 6h18"/><path d="M7 12h10"/><path d="M10 18h4"/>',
 	'copy': '<rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>',
 	'chevron-down': '<path d="m6 9 6 6 6-6"/>',
 	'chevron-left': '<path d="m15 18-6-6 6-6"/>',
@@ -5019,6 +5026,21 @@ function normalizeGallerySort(sort) {
 
 const G_SORTS = [{ by: 'name', label: 'Name' }, { by: 'created', label: 'Created' }, { by: 'size', label: 'Size' }]
 
+// The browse view's TYPE filter. "Media" is not a sixth kind — it is the three
+// media kinds toggled together (selecting it subsumes and disables the trio).
+const MEDIA_KINDS = ['image', 'video', 'audio']
+// The filterable kinds in the browse view's Filter modal. FOLDERS are a kind here
+// (the reader chooses whether to see them) even though they are navigation, not
+// items — folders exist only in "this folder" scope.
+const FILTER_TYPES = [
+	{ kind: 'folder', label: 'Folders', icon: 'folder' },
+	{ kind: 'canvas', label: 'Canvases', icon: 'file-json' },
+	{ kind: 'document', label: 'Docs', icon: 'file-text' },
+	{ kind: 'image', label: 'Images', icon: 'image' },
+	{ kind: 'video', label: 'Videos', icon: 'film' },
+	{ kind: 'audio', label: 'Audio', icon: 'music' },
+]
+
 function galleryHumanBytes(n) {
 	if (!Number.isFinite(n)) return ''
 	if (n < 1024) return n + ' B'
@@ -5735,6 +5757,8 @@ async function renderBrowse(main, rel) {
 		truncated: false,
 		layout: state.browseLayout === 'list' ? 'list' : 'grid',
 		sort: state.browseSort,
+		types: new Set((Array.isArray(state.browseTypes) ? state.browseTypes : []).filter((k) => FILTER_TYPES.some((t) => t.kind === k))),
+		scope: state.browseScope === 'subtree' ? 'subtree' : 'folder',
 		selecting: false,
 		selection: new Set(), // image rels only
 		tiles: new Map(),     // rel -> tile node
@@ -5754,6 +5778,7 @@ async function renderBrowse(main, rel) {
 	const tilesWrap = document.createElement('div'); tilesWrap.className = 'g-tiles'
 	const empty = document.createElement('div'); empty.className = 'g-empty'; empty.hidden = true
 	empty.textContent = 'Nothing to show in this folder yet — drop a canvas, a markdown file, or an image in and it appears.'
+	root.classList.toggle('bf-subtree', bs.scope === 'subtree')
 	root.append(crumb, toolbar, tilesWrap, empty)
 	main.append(root)
 
@@ -5785,11 +5810,29 @@ async function renderBrowse(main, rel) {
 	// ---------- data ----------
 
 	async function load() {
-		const { status, json } = await api('/api/dir?path=' + encodeURIComponent(rel))
+		// Folder scope fetches this folder's immediate listing (folders + items) and
+		// filters KIND on the client — instant, no refetch per chip. Subtree scope asks
+		// the server to walk recursively and filter by kind BEFORE the cap (so a rare
+		// kind is never starved), and carries NO folder items — you are locating files,
+		// not navigating (§ path caption).
+		let path = '/api/dir?path=' + encodeURIComponent(rel)
+		if (bs.scope === 'subtree') {
+			path += '&recursive=1'
+			// 'folder' is a CLIENT-only kind (folders are navigation, not server items,
+			// and subtree scope has none anyway) — never sent to /api/dir.
+			const serverTypes = [...bs.types].filter((k) => k !== 'folder')
+			if (serverTypes.length)
+				path += '&types=' + encodeURIComponent(serverTypes.join(','))
+		}
+		const { status, json } = await api(path)
 		if (status === 200 && json && json.ok) {
 			// Child FOLDERS are items too — a second way to navigate the tree, right in
 			// the pane. They render first (GROUP_ORDER), look distinct, and open at #/f/.
-			const folders = (Array.isArray(json.dirs) ? json.dirs : []).map((d) => ({ kind: 'folder', rel: d.rel, name: d.name, hidden: !!d.hidden }))
+			// In subtree scope there are no folder tiles: the flattened items carry a
+			// clickable path caption instead.
+			const folders = bs.scope === 'folder'
+				? (Array.isArray(json.dirs) ? json.dirs : []).map((d) => ({ kind: 'folder', rel: d.rel, name: d.name, hidden: !!d.hidden }))
+				: []
 			bs.items = [...folders, ...(Array.isArray(json.items) ? json.items : [])]
 			bs.truncated = !!json.truncated
 		} else {
@@ -5802,8 +5845,22 @@ async function renderBrowse(main, rel) {
 	// never is — the reader's browser does not destroy those (browse.test.js pins it).
 	const isSelectable = (it) => !!it && ['image', 'video', 'audio'].includes(it.kind)
 
-	// Grouping + sort is shared with the overlay's prev/next (browseSorted, above).
-	const sortedItems = () => browseSorted(bs.items, bs.sort)
+	// "Media" is on iff all three media kinds are selected together.
+	const mediaSelected = () => MEDIA_KINDS.every((k) => bs.types.has(k))
+	const dirOf = (r) => { const i = r.lastIndexOf('/'); return i >= 0 ? r.slice(0, i) : '' }
+	/** The TYPE filter, applied on the client. Folders exist only in folder scope, and
+	 *  are now a filterable kind: they show when nothing is selected (All) or when
+	 *  'folder' is chosen. Every other kind passes when nothing is selected, else only
+	 *  when its kind is chosen. */
+	function typeOK(it) {
+		if (it.kind === 'folder')
+			return bs.scope === 'folder' && (bs.types.size === 0 || bs.types.has('folder'))
+		return bs.types.size === 0 || bs.types.has(it.kind)
+	}
+
+	// Grouping + sort is shared with the overlay's prev/next (browseSorted, above). The
+	// TYPE filter narrows the raw listing to the SHOWN set everything else renders from.
+	const sortedItems = () => browseSorted(bs.items.filter(typeOK), bs.sort)
 	const sortedRels = () => sortedItems().map((i) => i.rel)
 	const itemFor = (r) => bs.items.find((i) => i.rel === r) || null
 
@@ -5892,11 +5949,41 @@ async function renderBrowse(main, rel) {
 			text.append(title, fname)
 			tile.append(glyph, kicker, text)
 		}
+		// In subtree scope a tile can come from anywhere below the folder, so it carries
+		// a clickable path caption — WHERE it lives — that navigates to that folder
+		// (handled in the delegated click, so it works on live tiles). This is the whole
+		// point of "all subfolders": find the file visually, then jump to where it is.
+		if (bs.scope === 'subtree' && it.kind !== 'folder') {
+			const dir = dirOf(it.rel)
+			const pathEl = document.createElement('button')
+			pathEl.type = 'button'; pathEl.className = 'bt-path'
+			pathEl.dataset.dir = dir
+			pathEl.innerHTML = icon('folder')
+			const ps = document.createElement('span')
+			ps.textContent = dir || (state.tree ? baseName(state.tree.root) : 'workspace root')
+			pathEl.append(ps)
+			pathEl.title = 'Go to ' + (dir || 'the workspace root')
+			tile.append(pathEl)
+		}
 		return tile
 	}
 
-	/** Full rebuild — first load and a layout toggle only. Never on sort (MOVE) or a
-	 *  live sync (DIFF). */
+	/** The empty state reflects the SHOWN set, and its wording depends on whether a
+	 *  filter is doing the emptying (so "no images here" reads as a filter result, not
+	 *  an empty folder). */
+	function updateEmpty() {
+		const n = sortedItems().length
+		empty.hidden = n > 0
+		if (n > 0)
+			return
+		if (bs.types.size || bs.scope === 'subtree')
+			empty.textContent = 'No matching files ' + (bs.scope === 'subtree' ? 'in this folder or any subfolder.' : 'in this folder.') + ' Try a different type or scope.'
+		else
+			empty.textContent = 'Nothing to show in this folder yet — drop a canvas, a markdown file, or an image in and it appears.'
+	}
+
+	/** Full rebuild — first load, a layout toggle, or a filter change. Never on sort
+	 *  (MOVE) or a live sync (DIFF). */
 	function buildAll() {
 		tilesWrap.textContent = ''
 		bs.tiles.clear()
@@ -5905,7 +5992,7 @@ async function renderBrowse(main, rel) {
 			bs.tiles.set(it.rel, tile)
 			tilesWrap.append(tile)
 		}
-		empty.hidden = bs.items.length > 0
+		updateEmpty()
 		recordOrder()
 	}
 
@@ -5956,7 +6043,7 @@ async function renderBrowse(main, rel) {
 			}
 		}
 		sortNodes()
-		empty.hidden = bs.items.length > 0
+		updateEmpty()
 		renderToolbar()
 	}
 
@@ -6003,25 +6090,32 @@ async function renderBrowse(main, rel) {
 			return
 		}
 
-		const nf = bs.items.filter((i) => i.kind === 'folder').length
-		const nc = bs.items.filter((i) => i.kind === 'canvas').length
-		const nd = bs.items.filter((i) => i.kind === 'document').length
-		const ni = bs.items.filter((i) => i.kind === 'image').length
-		const nv = bs.items.filter((i) => i.kind === 'video').length
-		const na = bs.items.filter((i) => i.kind === 'audio').length
+		// Counts are of the SHOWN set (after the TYPE filter), so the line always
+		// describes what is on screen. With NO filter it is the familiar full tally
+		// (canvas·doc·image always, folders/video/audio when present); with a filter it
+		// names ONLY the selected kinds (each shown even at 0, so the line confirms the
+		// filter rather than going blank).
+		const shown = sortedItems()
+		const kn = (k) => shown.filter((i) => i.kind === k).length
+		const label = (n, one, many) => n + ' ' + (n === 1 ? one : many)
+		const KIND_WORDS = [['canvas', 'canvas', 'canvases'], ['document', 'doc', 'docs'], ['image', 'image', 'images'], ['video', 'video', 'videos'], ['audio', 'audio file', 'audio files']]
+		const nf = kn('folder'), ni = kn('image'), nv = kn('video'), na = kn('audio')
+		const parts = []
+		if (nf) parts.push(label(nf, 'folder', 'folders'))
+		if (bs.types.size === 0) {
+			parts.push(label(kn('canvas'), 'canvas', 'canvases'), label(kn('document'), 'doc', 'docs'), label(ni, 'image', 'images'))
+			if (nv) parts.push(label(nv, 'video', 'videos'))
+			if (na) parts.push(label(na, 'audio file', 'audio files'))
+		} else {
+			for (const [k, one, many] of KIND_WORDS)
+				if (bs.types.has(k)) parts.push(label(kn(k), one, many))
+		}
 		const count = document.createElement('div'); count.className = 'g-count'
-		count.textContent = [
-			...(nf ? [nf + (nf === 1 ? ' folder' : ' folders')] : []),
-			nc + (nc === 1 ? ' canvas' : ' canvases'),
-			nd + (nd === 1 ? ' doc' : ' docs'),
-			ni + (ni === 1 ? ' image' : ' images'),
-			...(nv ? [nv + (nv === 1 ? ' video' : ' videos')] : []),
-			...(na ? [na + (na === 1 ? ' audio file' : ' audio files')] : []),
-		].join(' · ')
+		count.textContent = (parts.length ? parts.join(' · ') : '0 items') + (bs.scope === 'subtree' ? ' · all subfolders' : '')
 		info.append(count)
 		if (bs.truncated) {
 			const trunc = document.createElement('div'); trunc.className = 'g-trunc'
-			trunc.textContent = 'Showing the first ' + bs.items.length + ' — this folder holds more.'
+			trunc.textContent = 'Showing the first ' + shown.length + ' — there are more.'
 			info.append(trunc)
 		}
 
@@ -6030,11 +6124,20 @@ async function renderBrowse(main, rel) {
 			sortSeg.append(makeBtn('g-segbtn' + (bs.sort.by === s.by ? ' on' : ''), s.label, () => setSort(s.by, null), 'Sort by ' + s.label.toLowerCase()))
 		sortSeg.append(makeBtn('g-segbtn g-dir', bs.sort.dir === 'asc' ? '↑' : '↓', () => setSort(bs.sort.by, bs.sort.dir === 'asc' ? 'desc' : 'asc'), 'Toggle direction'))
 
-		controls.append(sortSeg, viewSeg())
-		// Select/delete covers images, videos and audio — the affordance appears when the
-		// folder holds at least one such file (never for a canvas or document alone).
-		if (ni + nv + na > 0)
-			controls.append(makeBtn('g-btn', 'Select', () => enterSelect(), 'Select files to delete'))
+		// One Filter button opens the modal — the whole filter UI lives there, so the
+		// toolbar stays uncluttered. An active ring + a count badge say a filter is on
+		// even while the modal is closed.
+		const nActive = filterActiveCount()
+		const filterBtn = makeBtn('g-btn g-filter' + (nActive ? ' on' : ''), icon('list-filter') + '<span>Filter</span>' + (bs.types.size ? '<span class="g-badge">' + bs.types.size + '</span>' : ''), () => openFilterDialog(), 'Filter what shows')
+		// Select/delete covers images, videos and audio — the affordance appears only when
+		// the folder holds at least one such file (never for a canvas or document alone).
+		const selectBtn = ni + nv + na > 0 ? makeBtn('g-btn g-select', 'Select', () => enterSelect(), 'Select files to delete') : null
+		// Order (desktop, L→R): sort · filter · select · grid-or-list. On a phone the sort
+		// control drops to a FULL-WIDTH second row (via flex order in styles.css), leaving
+		// filter · select · grid-or-list on the first row.
+		controls.append(sortSeg, filterBtn)
+		if (selectBtn) controls.append(selectBtn)
+		controls.append(viewSeg())
 		toolbar.append(info, controls)
 	}
 
@@ -6052,6 +6155,169 @@ async function renderBrowse(main, rel) {
 		state.browseSort = bs.sort
 		sortNodes()
 		renderToolbar()
+	}
+
+	// ---------- filter (a modal, opened from the toolbar Filter button) ----------
+
+	// The open modal's repaint hook, or null when it is closed — so a live toggle
+	// updates BOTH the grid behind and the modal's own controls/result line.
+	let filterRepaint = null
+
+	function toggleType(kind) {
+		if (bs.types.has(kind)) bs.types.delete(kind)
+		else bs.types.add(kind)
+		applyTypes()
+	}
+	function toggleMedia() {
+		if (mediaSelected()) MEDIA_KINDS.forEach((k) => bs.types.delete(k))
+		else MEDIA_KINDS.forEach((k) => bs.types.add(k))
+		applyTypes()
+	}
+	function resetFilter() {
+		const wasSubtree = bs.scope === 'subtree'
+		bs.types.clear()
+		if (wasSubtree) setScope('folder') // reloads + repaints
+		else applyTypes()
+	}
+	/** How many filters are active — drives the toolbar Filter button's ring + badge. */
+	function filterActiveCount() {
+		return bs.types.size + (bs.scope === 'subtree' ? 1 : 0)
+	}
+
+	/** A TYPE change. Folder scope filters the loaded listing on the client (instant);
+	 *  subtree scope refetches (the server kind-filters recursively, before the cap).
+	 *  The grid, the toolbar (Filter ring/badge + counts) and the open modal all refresh. */
+	async function applyTypes() {
+		state.browseTypes = [...bs.types]
+		if (bs.scope === 'subtree') { await reload(); return }
+		clearSelection()
+		buildAll()
+		renderToolbar()
+		if (filterRepaint) filterRepaint()
+	}
+
+	/** A SCOPE change always refetches — folder⇄subtree are different listings. */
+	async function setScope(scope) {
+		if (bs.scope === scope) return
+		bs.scope = scope
+		state.browseScope = scope
+		root.classList.toggle('bf-subtree', scope === 'subtree')
+		await reload()
+	}
+
+	async function reload() {
+		if (bs.selecting) exitSelect()
+		await load()
+		buildAll()
+		renderToolbar()
+		if (filterRepaint) filterRepaint()
+	}
+
+	/** The live one-liner in the modal: what the current filter yields. */
+	function filterResultText() {
+		const n = sortedItems().length
+		const scope = bs.scope === 'subtree' ? ' · all subfolders' : ''
+		if (bs.types.size === 0)
+			return 'Showing everything' + scope
+		return (n === 1 ? '1 match' : n + ' matches') + scope
+	}
+
+	/** A modal toggle chip. No handler is wired here — the caller does, so an
+	 *  included/locked chip can simply be left un-wired. */
+	function filterChip(label, on, ic) {
+		const b = document.createElement('button')
+		b.type = 'button'; b.className = 'filter-chip' + (on ? ' on' : '')
+		if (ic) { const g = document.createElement('span'); g.className = 'filter-chip-ic'; g.innerHTML = icon(ic); b.append(g) }
+		const s = document.createElement('span'); s.className = 'filter-chip-label'; s.textContent = label; b.append(s)
+		const ck = document.createElement('span'); ck.className = 'filter-chip-check'; ck.innerHTML = icon('check'); b.append(ck)
+		return b
+	}
+
+	/** The filter MODAL — a frosted card: a Type section (Folders + the five kinds, plus
+	 *  a Media row that subsumes image/video/audio), a Scope segmented control with a
+	 *  hint, a live result line, and Reset / Done. Everything applies LIVE (the grid
+	 *  updates behind; the result line counts as you go). Class-based only (the CSP drops
+	 *  inline styles). A `.g-modal`, so the overlay's Esc/arrow handler already yields to
+	 *  it (§ the cross-surface keyboard rule). */
+	function openFilterDialog() {
+		document.body.classList.add('modal-open')
+		const overlay = document.createElement('div'); overlay.className = 'g-modal filter-modal'
+		const card = document.createElement('div'); card.className = 'filter-card'
+		const head = document.createElement('div'); head.className = 'filter-head'
+		const h = document.createElement('h2'); h.textContent = 'Filter'
+		const xBtn = makeBtn('filter-x', icon('x'), () => teardown(), 'Close')
+		head.append(h, xBtn)
+		const body = document.createElement('div'); body.className = 'filter-body'
+		const foot = document.createElement('div'); foot.className = 'filter-foot'
+		const reset = makeBtn('g-btn', 'Reset', () => resetFilter(), 'Clear the filter')
+		const done = makeBtn('g-btn g-primary', 'Done', () => teardown(), 'Close')
+		foot.append(reset, done)
+		card.append(head, body, foot)
+		overlay.append(card)
+		document.body.append(overlay)
+
+		function paint() {
+			body.textContent = ''
+			const media = mediaSelected()
+
+			const typeSec = document.createElement('div'); typeSec.className = 'filter-sec'
+			const tlab = document.createElement('div'); tlab.className = 'filter-sec-label'; tlab.textContent = 'Type'
+			typeSec.append(tlab)
+			const grid = document.createElement('div'); grid.className = 'filter-chips'
+			for (const t of FILTER_TYPES) {
+				// Folders do not exist in subtree scope — omit the toggle rather than show a dead one.
+				if (t.kind === 'folder' && bs.scope === 'subtree')
+					continue
+				const c = filterChip(t.label, bs.types.has(t.kind), t.icon)
+				if (media && MEDIA_KINDS.includes(t.kind)) {
+					c.disabled = true; c.classList.add('is-included'); c.title = 'Included in Media'
+				} else {
+					c.addEventListener('click', () => toggleType(t.kind))
+				}
+				grid.append(c)
+			}
+			typeSec.append(grid)
+			// The Media grouping — one toggle for image + video + audio.
+			const mediaRow = filterChip('Media', media, 'film')
+			mediaRow.classList.add('filter-media')
+			const sub = document.createElement('span'); sub.className = 'filter-sub'; sub.textContent = 'Images, video & audio'
+			mediaRow.append(sub)
+			mediaRow.addEventListener('click', () => toggleMedia())
+			typeSec.append(mediaRow)
+			body.append(typeSec)
+
+			const scopeSec = document.createElement('div'); scopeSec.className = 'filter-sec'
+			const slab = document.createElement('div'); slab.className = 'filter-sec-label'; slab.textContent = 'Scope'
+			const seg = document.createElement('div'); seg.className = 'g-seg filter-scope'
+			seg.append(makeBtn('g-segbtn' + (bs.scope === 'folder' ? ' on' : ''), 'This folder', () => setScope('folder')))
+			seg.append(makeBtn('g-segbtn' + (bs.scope === 'subtree' ? ' on' : ''), 'All subfolders', () => setScope('subtree')))
+			const help = document.createElement('p'); help.className = 'filter-help'
+			help.textContent = bs.scope === 'subtree'
+				? 'Reaching into every subfolder — each result shows the folder it lives in.'
+				: 'Only the files directly in this folder.'
+			scopeSec.append(slab, seg, help)
+			body.append(scopeSec)
+
+			const res = document.createElement('div'); res.className = 'filter-result'
+			res.textContent = filterResultText()
+			body.append(res)
+
+			reset.disabled = bs.types.size === 0 && bs.scope === 'folder'
+		}
+
+		filterRepaint = paint
+		paint()
+		done.focus()
+
+		function onKey(e) { if (e.key === 'Escape') { e.stopPropagation(); teardown() } }
+		function teardown() {
+			filterRepaint = null
+			document.removeEventListener('keydown', onKey, true)
+			overlay.remove()
+			document.body.classList.remove('modal-open')
+		}
+		overlay.addEventListener('click', (e) => { if (e.target === overlay) teardown() })
+		document.addEventListener('keydown', onKey, true)
 	}
 
 	// ---------- selection (images only) ----------
@@ -6106,6 +6372,10 @@ async function renderBrowse(main, rel) {
 		const r = tile.dataset.rel
 		const kind = tile.dataset.kind
 		const canSelect = ['image', 'video', 'audio'].includes(kind)
+		// The path caption (subtree scope) navigates to WHERE the file lives instead of
+		// opening it — but not mid-selection, where a tile click means toggle.
+		const pathBtn = e.target.closest('.bt-path')
+		if (pathBtn && !bs.selecting) { location.hash = '#/f/' + encodeURIComponent(pathBtn.dataset.dir || ''); return }
 		// A long-press already acted → swallow the click that follows it.
 		if (suppressClick) { suppressClick = false; return }
 		if (pressMoved) { pressMoved = false; return }
@@ -6123,6 +6393,9 @@ async function renderBrowse(main, rel) {
 	tilesWrap.addEventListener('keydown', (e) => {
 		const tile = e.target.closest('.gt')
 		if (!tile) return
+		// The path caption is its own <button> — let it handle Enter/Space itself, or a
+		// keypress on it would ALSO open the tile.
+		if (e.target.closest('.bt-path')) return
 		if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); tile.click() }
 	})
 
@@ -6171,7 +6444,7 @@ async function renderBrowse(main, rel) {
 			if (tile) { tile.remove(); bs.tiles.delete(p) }
 		}
 		bs.items = bs.items.filter((i) => !json.deleted.includes(i.rel))
-		empty.hidden = bs.items.length > 0
+		updateEmpty()
 		exitSelect()
 		refresh()
 	}

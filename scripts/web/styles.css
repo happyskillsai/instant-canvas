@@ -1562,6 +1562,73 @@ audio.m-el{display:none} /* the audio element is never shown — the art card st
 .browse.g-list .bt-kicker{order:3;margin:0 0 0 auto;flex:0 0 auto}
 .browse.g-list .gt-name{margin-top:0}
 
+/* The toolbar Filter button: an active ring + a count badge say a filter is on while
+   the modal is closed. The whole filter UI lives in the modal (below), so the toolbar
+   stays uncluttered (count · Filter · sort · grid/list · Select). */
+.g-btn.g-filter.on{border-color:var(--accent);color:var(--accent)}
+.g-btn.g-filter.on .lucide{color:var(--accent)}
+.g-badge{display:inline-flex;align-items:center;justify-content:center;min-width:16px;height:16px;padding:0 4px;
+	margin-left:1px;border-radius:999px;background:var(--accent);color:#fff;font-size:10.5px;font-weight:700;line-height:1}
+
+/* The filter MODAL. Frosted overlay (reusing .g-modal) with a centered card. Class-based
+   only (the CSP drops inline styles). "Media" is the three media kinds toggled together;
+   its trio shows as included (tinted) and locked. */
+.filter-modal{align-items:center;justify-content:center;padding:20px}
+.filter-card{width:min(460px,100%);max-height:calc(100vh - 40px);display:flex;flex-direction:column;
+	background:var(--panel);border:1px solid var(--border);border-radius:16px;box-shadow:var(--shadow);overflow:hidden}
+.filter-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:18px 20px 12px}
+.filter-head h2{margin:0;font-size:17px;font-weight:600;color:var(--text)}
+.filter-x{border:none;background:transparent;color:var(--muted);cursor:pointer;width:30px;height:30px;
+	border-radius:8px;display:inline-flex;align-items:center;justify-content:center}
+.filter-x:hover{background:var(--tint);color:var(--text)}
+.filter-x .lucide{width:18px;height:18px}
+.filter-body{padding:4px 20px 8px;overflow:auto}
+.filter-sec{margin-bottom:20px}
+.filter-sec-label{font-size:10.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:10px}
+.filter-chips{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.filter-chip{display:inline-flex;align-items:center;gap:7px;height:38px;padding:0 12px;border:1px solid var(--border);
+	border-radius:10px;background:var(--panel);color:var(--text);font-size:13px;font-weight:500;cursor:pointer;
+	text-align:left;transition:background .12s,border-color .12s,color .12s}
+.filter-chip .filter-chip-ic{flex:0 0 auto;display:inline-flex;color:var(--muted)}
+.filter-chip .filter-chip-ic .lucide{width:16px;height:16px}
+.filter-chip-label{flex:1 1 auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.filter-chip-check{flex:0 0 auto;display:none;color:var(--accent)}
+.filter-chip-check .lucide{width:15px;height:15px}
+.filter-chip:hover{border-color:var(--accent);background:var(--tint)}
+.filter-chip.on{border-color:var(--accent);background:var(--accent-soft)}
+.filter-chip.on .filter-chip-ic,.filter-chip.on .filter-chip-label{color:var(--accent)}
+.filter-chip.on .filter-chip-check{display:inline-flex}
+/* A Media-covered kind: included (tinted) and locked, never a redundant toggle. */
+.filter-chip.is-included{background:var(--accent-soft);border-color:transparent;color:var(--accent);cursor:default}
+.filter-chip.is-included .filter-chip-ic{color:var(--accent)}
+.filter-chip.is-included:hover{background:var(--accent-soft);border-color:transparent}
+/* The Media grouping row — full width, with its sublabel. */
+.filter-media{display:flex;width:100%;margin-top:8px;height:auto;padding:10px 12px}
+.filter-media .filter-sub{flex:0 0 auto;margin-left:auto;font-size:11.5px;font-weight:400;color:var(--muted)}
+.filter-media.on .filter-sub{color:var(--accent)}
+.filter-scope{width:100%}
+.filter-scope .g-segbtn{flex:1 1 0}
+.filter-help{margin:8px 0 0;font-size:12px;line-height:1.45;color:var(--muted)}
+.filter-result{margin-top:4px;padding:11px 13px;border-radius:10px;background:var(--panel-2);
+	border:1px solid var(--border-2);font-size:12.5px;font-weight:500;color:var(--text)}
+.filter-foot{display:flex;justify-content:space-between;gap:8px;padding:14px 20px 18px;border-top:1px solid var(--border-2)}
+.g-btn.g-primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.g-btn.g-primary:hover:not(:disabled){background:var(--accent);filter:brightness(1.05)}
+
+/* The path caption (subtree scope): WHERE a tile lives — click it to jump to that folder.
+   Over a media thumbnail it is an absolute chip bottom-left (like the duration chip); on a
+   canvas/document card, whose content is top-anchored, it flows below the file name. In
+   list mode the row is tight, so the path rides the tile's hover title instead. */
+.bt-path{display:inline-flex;align-items:center;gap:3px;max-width:100%;padding:2px 7px 2px 5px;border-radius:6px;
+	border:1px solid var(--border);background:var(--panel);color:var(--muted);font-size:11px;line-height:1.4;
+	cursor:pointer;overflow:hidden;transition:color .12s,border-color .12s}
+.bt-path .lucide{width:12px;height:12px;flex:0 0 auto}
+.bt-path>span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+.bt-path:hover{color:var(--accent);border-color:var(--accent)}
+.gt:not(.bt-card) .bt-path{position:absolute;left:6px;bottom:6px;z-index:2;max-width:calc(100% - 12px)}
+.bt-card .bt-path{margin-top:8px}
+.browse.g-list .bt-path{display:none}
+
 @media print{
 	.pal{display:none !important}
 	html{print-color-adjust:exact;-webkit-print-color-adjust:exact}
@@ -1680,9 +1747,15 @@ audio.m-el{display:none} /* the audio element is never shown — the art card st
 	.g-controls .g-sort .g-segbtn{flex:1 1 auto}
 	.g-controls .g-sort .g-dir{flex:0 0 48px}
 	.g-controls > .g-btn:last-child{margin-left:auto}
-	/* Browse: the sort control shares its row with the grid/list toggle — sort grows
-	   on the left, the grid/list toggle sits on the right — rather than taking a full
-	   row of its own. Wraps gracefully only when there truly is no room. */
-	.browse .g-controls .g-sort{flex:1 1 auto;min-width:0}
+	/* Browse: row 1 is Filter · Select · grid-or-list; row 2 is a FULL-WIDTH sort
+	   control on its own (big tap targets). The DOM order is sort → filter → select →
+	   view (desktop order), so a flex `order` bumps sort BELOW the rest on a phone. */
+	.browse .g-controls{flex-wrap:wrap}
+	.browse .g-controls .g-sort{order:2;flex:1 1 100%;min-width:0}
 	.browse .g-controls .g-view{flex:0 0 auto}
+	.browse .g-controls > .g-btn:last-child{margin-left:0}
+	/* Right-align row 1 (Filter · Select · grid/list): an auto left-margin on its
+	   leading item (Filter) soaks up the free space before it. The full-width sort
+	   row is unaffected. */
+	.browse .g-controls .g-filter{margin-left:auto}
 }

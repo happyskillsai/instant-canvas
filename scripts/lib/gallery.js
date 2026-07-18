@@ -333,4 +333,5 @@ module.exports = {
 	normalizeRelDir,
 	listImages,
 	mediaStat,
+	isSkippable,
 }

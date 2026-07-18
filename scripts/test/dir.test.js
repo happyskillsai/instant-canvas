@@ -135,3 +135,97 @@ test('browse: the cap is enforced and surfaced as truncated', () => {
 	const full = listDir(root, '', { cap: 2000 })
 	assert.equal(full.truncated, false)
 })
+
+// ---------------------------------------------------------------------------
+// recursive + type filter (the browse view's "all subfolders" scope and its
+// TYPE chips). listDir stays a pure function of the filesystem, so these are
+// unit tests with no kernel.
+
+/** A nested tree: items at the root and under sub/ and sub/deep/, plus excluded trees. */
+function nested() {
+	const root = mkroot()
+	// root
+	fs.writeFileSync(path.join(root, 'top.canvas.json'), canvas('Top'))
+	fs.writeFileSync(path.join(root, 'cover.png'), PNG)
+	// sub/
+	fs.mkdirSync(path.join(root, 'sub'))
+	fs.writeFileSync(path.join(root, 'sub', 'a.canvas.json'), canvas('A'))
+	fs.writeFileSync(path.join(root, 'sub', 'pic.png'), PNG)
+	fs.writeFileSync(path.join(root, 'sub', 'clip.mp4'), Buffer.from('fake mp4')) // renderable video
+	// sub/deep/
+	fs.mkdirSync(path.join(root, 'sub', 'deep'))
+	fs.writeFileSync(path.join(root, 'sub', 'deep', 'song.mp3'), Buffer.from('fake mp3')) // renderable audio
+	fs.writeFileSync(path.join(root, 'sub', 'deep', 'note.md'), '# Note\n')
+	// excluded from a recursive walk (isSkippable = all dot-dirs + node_modules)
+	fs.mkdirSync(path.join(root, 'node_modules', 'pkg'), { recursive: true })
+	fs.writeFileSync(path.join(root, 'node_modules', 'pkg', 'logo.png'), PNG)
+	fs.mkdirSync(path.join(root, '.git'))
+	fs.writeFileSync(path.join(root, '.git', 'x.png'), PNG)
+	fs.mkdirSync(path.join(root, '.cache')) // a dot-dir: SHOWN at the immediate level, but not descended into
+	fs.writeFileSync(path.join(root, '.cache', 'hidden.png'), PNG)
+	return root
+}
+
+test('browse: recursive gathers items from the whole subtree, full rels, still grouped', () => {
+	const root = nested()
+	const r = listDir(root, '', { recursive: true })
+	assert.equal(r.recursive, true)
+	// Items are GROUPED canvases → documents → images → videos → audios; within a
+	// group the order is walk order (the client re-sorts by name/created/size), so
+	// membership is what the server contract fixes, not the intra-group sequence.
+	assert.deepEqual(kindsOf(r.items), ['canvas', 'canvas', 'document', 'image', 'image', 'video', 'audio'])
+	assert.deepEqual(relsOf(r.items).slice().sort(), [
+		'cover.png', 'sub/a.canvas.json', 'sub/clip.mp4', 'sub/deep/note.md', 'sub/deep/song.mp3', 'sub/pic.png', 'top.canvas.json',
+	])
+})
+
+test('browse: recursive never descends into .git / node_modules / dot-dirs', () => {
+	const root = nested()
+	const rels = relsOf(listDir(root, '', { recursive: true }).items)
+	assert.equal(rels.includes('node_modules/pkg/logo.png'), false)
+	assert.equal(rels.includes('.git/x.png'), false)
+	assert.equal(rels.includes('.cache/hidden.png'), false, 'a dot-dir is shown but not auto-descended')
+})
+
+test('browse: types filters the listing to the requested kinds (flat)', () => {
+	const root = nested()
+	const r = listDir(root, '', { types: ['image'] })
+	assert.deepEqual(relsOf(r.items), ['cover.png']) // only the root-level image; no canvas, no descent
+})
+
+test('browse: recursive + types returns only that kind across the subtree', () => {
+	const root = nested()
+	const imgs = listDir(root, '', { recursive: true, types: ['image'] })
+	assert.deepEqual(relsOf(imgs.items), ['cover.png', 'sub/pic.png'])
+
+	// "Media" = image + video + audio, the three passed together.
+	const media = listDir(root, '', { recursive: true, types: ['image', 'video', 'audio'] })
+	assert.deepEqual(kindsOf(media.items), ['image', 'image', 'video', 'audio'])
+	assert.equal(media.items.find((i) => i.kind === 'canvas'), undefined)
+})
+
+test('browse: the type filter runs BEFORE the cap — a filtered kind is never starved', () => {
+	const root = mkroot()
+	// three canvases and two images (one nested): a naive cap that counted the
+	// canvases would exhaust at cap:2 and return ZERO images.
+	fs.writeFileSync(path.join(root, 'c1.canvas.json'), canvas('C1'))
+	fs.writeFileSync(path.join(root, 'c2.canvas.json'), canvas('C2'))
+	fs.writeFileSync(path.join(root, 'c3.canvas.json'), canvas('C3'))
+	fs.writeFileSync(path.join(root, 'i1.png'), PNG)
+	fs.mkdirSync(path.join(root, 'sub'))
+	fs.writeFileSync(path.join(root, 'sub', 'i2.png'), PNG)
+
+	const r = listDir(root, '', { recursive: true, types: ['image'], cap: 2 })
+	assert.deepEqual(kindsOf(r.items), ['image', 'image'])
+	assert.equal(r.truncated, false, 'the cap is spent on matches, not on filtered-away canvases')
+})
+
+test('browse: an unknown or empty type filter behaves like no filter', () => {
+	const root = nested()
+	const bogus = listDir(root, '', { types: ['nonsense'] })
+	// unknown kinds drop to null → every kind, exactly as an unfiltered listing
+	assert.deepEqual(relsOf(bogus.items), relsOf(listDir(root, '').items))
+
+	const emptyArr = listDir(root, '', { types: [] })
+	assert.deepEqual(relsOf(emptyArr.items), relsOf(listDir(root, '').items))
+})

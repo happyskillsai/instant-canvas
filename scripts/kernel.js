@@ -696,16 +696,22 @@ async function route(req, res, url) {
 		return sendJson(res, 200, { ...load.body, session: active ? { id: active.id, expiresAt: active.expiresAt } : null })
 	}
 
-	// The browse listing: one folder's IMMEDIATE renderable children (canvases,
-	// documents, images — grouped) plus its immediate child directories. Non-
-	// recursive, unlike /api/gallery. `&dirs=1` returns just the dirs, for lazy
-	// tree expansion. A path that is not a real directory inside the root — a
-	// file like `.env`, a symlinked dir, a traversal — is a byte-clean 404: the
+	// The browse listing: one folder's renderable children (canvases, documents,
+	// images, videos, audios — grouped) plus its immediate child directories.
+	// `&dirs=1` returns just the dirs, for lazy tree expansion. `&recursive=1`
+	// gathers items from the whole subtree (the browse view's "all subfolders"
+	// scope); `&types=image,video` filters to those kinds BEFORE the cap (so the
+	// filter never starves under a wall of another kind — invalid kinds are
+	// dropped in listDir). A path that is not a real directory inside the root —
+	// a file like `.env`, a symlinked dir, a traversal — is a byte-clean 404: the
 	// body carries no bytes of the target, because listDir decides from the
 	// extension/lstat and never opens it.
 	if (method === 'GET' && p === '/api/dir') {
 		const dirsOnly = url.searchParams.get('dirs') === '1'
-		const result = listDir(ROOT, url.searchParams.get('path') || '', { dirsOnly })
+		const recursive = url.searchParams.get('recursive') === '1'
+		const typesRaw = url.searchParams.get('types')
+		const types = typesRaw ? typesRaw.split(',') : null
+		const result = listDir(ROOT, url.searchParams.get('path') || '', { dirsOnly, recursive, types })
 		if (!result)
 			return sendJson(res, 404, { ok: false, message: 'Not a folder inside this workspace.' })
 		return sendJson(res, 200, { ok: true, ...result })

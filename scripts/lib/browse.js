@@ -5,7 +5,7 @@ const path = require('node:path')
 const { insideRoot } = require('./paths')
 const { isExcludedDir, canvasEntry, documentEntry } = require('./scan')
 const { companionIndex } = require('./companion')
-const { normalizeRelDir, mediaKind, mediaStat } = require('./gallery')
+const { normalizeRelDir, mediaKind, mediaStat, isSkippable } = require('./gallery')
 const { hasMarkdownExtension } = require('./markdownsrc')
 
 const toPosix = (p) => String(p).split(path.sep).join('/')
@@ -13,6 +13,11 @@ const toPosix = (p) => String(p).split(path.sep).join('/')
 // The browse listing caps at the same 2000 the gallery does — a silent cap reads
 // as "covered everything", so hitting it sets `truncated` and the UI must say so.
 const DEFAULT_CAP = 2000
+
+// The five item kinds the browse view can filter by, in display group order.
+// FOLDERS are navigation, not items — they are never in this set and never a
+// filterable type.
+const ITEM_KINDS = ['canvas', 'document', 'image', 'video', 'audio']
 
 /**
  * The scan's canvas/document builders return the sidebar's entry shape keyed by
@@ -29,29 +34,140 @@ function withRel(entry) {
 }
 
 /**
- * One folder's IMMEDIATE renderable children and its immediate child directories.
+ * Normalize a caller-supplied type filter to a Set of valid item kinds, or `null`
+ * ("no filter — every kind"). The value arrives from an untrusted query string,
+ * so unknown kinds are dropped and an empty or all-invalid filter collapses to
+ * `null` — the listing and the cap then behave exactly as they did before types
+ * existed. Accepts an array, a Set, or a single string.
+ */
+function normalizeTypes(types) {
+	if (!types)
+		return null
+	const arr = types instanceof Set ? [...types] : Array.isArray(types) ? types : [types]
+	const set = new Set(arr.filter((k) => ITEM_KINDS.includes(k)))
+	return set.size ? set : null
+}
+
+/** One image/video/audio file's stat-only tile shape (kind + rel + name + mtime + size + renderable). */
+function mediaItem(root, rel) {
+	const m = mediaStat(root, rel)
+	return m ? { kind: m.kind, rel: m.path, name: m.name, mtimeMs: m.modified, size: m.size, renderable: m.renderable } : null
+}
+
+/**
+ * Classify ONE directory's immediate files into the five kind-buckets, honoring
+ * the type filter `want` (a Set, or null for all) and the shared cap counter
+ * `cc`. `relDir` is the OS-separator rel of the directory ('' = root). Shared by
+ * the flat listing and the recursive walk so the two classify identically.
+ *
+ * Security is decide-from-extension + lstat, exactly as before: `.json` without
+ * the marker is dropped by canvasEntry, a companion canvas returns null (its
+ * enhanced document carries `enhanced`), dot-FILES never appear, and a symlink is
+ * refused by mediaStat's lstat / the dirent's lstat-based isFile().
+ */
+function collectFiles(root, relDir, index, want, buckets, cc) {
+	let dirents
+	try {
+		dirents = fs.readdirSync(relDir ? path.resolve(root, relDir) : path.resolve(root), { withFileTypes: true })
+	} catch {
+		return // an unreadable directory contributes nothing, never throws
+	}
+	const fileNames = dirents
+		.filter((d) => d.isFile() && !d.name.startsWith('.'))
+		.map((d) => d.name)
+		.sort((a, b) => a.localeCompare(b))
+	const relOf = (name) => (relDir ? path.join(relDir, name) : name)
+	// A silent cap reads as "covered everything", so a DROPPED item (not merely a
+	// non-item, and not a filtered-out kind) is what sets `truncated`.
+	const add = (group, item) => {
+		if (!item)
+			return
+		if (cc.total >= cc.cap) {
+			cc.truncated = true
+			return
+		}
+		group.push(item)
+		cc.total++
+	}
+	for (const name of fileNames) {
+		const rel = relOf(name)
+		if (name.endsWith('.json')) {
+			if (!want || want.has('canvas'))
+				add(buckets.canvas, withRel(canvasEntry(root, rel)))
+		} else if (hasMarkdownExtension(name)) {
+			if (!want || want.has('document'))
+				add(buckets.document, withRel(documentEntry(root, rel, index)))
+		} else {
+			// image / video / audio — decided from the extension, never opened, and
+			// only when the filter wants that kind (so the cap is spent on matches,
+			// not on files the reader filtered away — the cap-starvation trap).
+			const kind = mediaKind(name)
+			if (kind && (!want || want.has(kind)))
+				add(buckets[kind], mediaItem(root, rel))
+		}
+		if (cc.truncated)
+			break // an item was dropped — stop; the rest of this dir is beyond the cap
+	}
+}
+
+/**
+ * Recursive descent: this directory's files, then each child directory A→Z. The
+ * descent uses the gallery's `isSkippable` (all dot-dirs + node_modules) — the
+ * SAME rule the recursive image gallery walks with — so "all subfolders" does not
+ * dive into `.git` / `.venv` / `node_modules` noise (the immediate-level `dirs`,
+ * by contrast, only excludes `.git`/`node_modules` and still SHOWS other
+ * dot-folders for explicit navigation). A symlinked directory is never followed:
+ * a dirent's isDirectory() is lstat-based.
+ */
+function walkTree(root, relDir, index, want, buckets, cc) {
+	collectFiles(root, relDir, index, want, buckets, cc)
+	if (cc.truncated || cc.total >= cc.cap)
+		return
+	let dirents
+	try {
+		dirents = fs.readdirSync(relDir ? path.resolve(root, relDir) : path.resolve(root), { withFileTypes: true })
+	} catch {
+		return
+	}
+	const subdirs = dirents
+		.filter((d) => d.isDirectory() && !isSkippable(d.name))
+		.map((d) => d.name)
+		.sort((a, b) => a.localeCompare(b))
+	for (const name of subdirs) {
+		if (cc.truncated || cc.total >= cc.cap)
+			return
+		walkTree(root, relDir ? path.join(relDir, name) : name, index, want, buckets, cc)
+	}
+}
+
+/**
+ * One folder's renderable children and its immediate child directories.
  *
  *   dir        the normalized posix rel of the folder ('' for the root)
- *   dirs       immediate child dirs, A→Z, EXCLUDED_DIRS omitted, symlinked dirs
- *              excluded; each `{ name, rel, hidden }` (hidden = name starts with '.')
- *   items      immediate children only (NON-recursive, unlike the gallery block),
- *              grouped canvases → documents → images → videos → audios, each
- *              group A→Z, capped
+ *   dirs       IMMEDIATE child dirs, A→Z, `.git`/`node_modules` omitted, symlinked
+ *              dirs excluded; each `{ name, rel, hidden }` (hidden = starts with '.')
+ *   items      by default IMMEDIATE children only (NON-recursive), grouped
+ *              canvases → documents → images → videos → audios, each group A→Z,
+ *              capped. With `recursive`, the same grouped shape but gathered from
+ *              the whole subtree (each item's `rel` is its full workspace-relative
+ *              path, so the caller can show WHERE it lives).
  *   truncated  true iff the cap was hit
+ *   recursive  echoes the option back, so the caller can confirm what it received
+ *
+ * Options:
+ *   dirsOnly   return just `dirs` (lazy tree expansion) — no item work at all
+ *   recursive  gather items from the whole subtree, not just this level
+ *   types      an array/Set of item kinds to include, or null for every kind. The
+ *              filter runs BEFORE the cap, so a folder of 2000 canvases and 5
+ *              nested images, filtered to `image`, returns the five — not a
+ *              truncated wall of canvases with the images starved out.
  *
  * Returns `null` when `dirRel` is not a real directory inside the root — the
- * caller turns that into a byte-clean 404. Security is the gallery discipline
- * verbatim: `insideRoot` confinement, decide-from-extension (a file is never
- * opened to decide what it is), and `lstat` so a symlink is refused — the
- * requested dir is `lstat`'d (a symlinked directory is not a directory), the
- * child dirs/files come from dirents whose isDirectory()/isFile() are already
- * false for a symlink, and each image/video/audio goes through `mediaStat`
- * (lstat) again.
- *
- * `dirsOnly` returns just `dirs` (for lazy tree expansion) and skips the item
- * work entirely — no companion index built, no files stat'd.
+ * caller turns that into a byte-clean 404. Security is the gallery discipline:
+ * `insideRoot` confinement, decide-from-extension, and `lstat` so a symlink is
+ * refused (the requested dir, the child dirents, and every media file).
  */
-function listDir(root, dirRel, { cap = DEFAULT_CAP, dirsOnly = false } = {}) {
+function listDir(root, dirRel, { cap = DEFAULT_CAP, dirsOnly = false, recursive = false, types = null } = {}) {
 	const relDir = normalizeRelDir(dirRel)
 	const abs = relDir ? path.resolve(root, relDir) : path.resolve(root)
 	if (!insideRoot(root, abs))
@@ -76,7 +192,7 @@ function listDir(root, dirRel, { cap = DEFAULT_CAP, dirsOnly = false } = {}) {
 
 	// isDirectory() on a dirent is lstat-based: a symlinked directory is NOT one,
 	// so it never appears. `.git`/`node_modules` are excluded; other dot-dirs stay
-	// (muted) with `hidden: true`.
+	// (shown) with `hidden: true`.
 	const dirs = dirents
 		.filter((d) => d.isDirectory() && !isExcludedDir(d.name))
 		.map((d) => d.name)
@@ -88,59 +204,20 @@ function listDir(root, dirRel, { cap = DEFAULT_CAP, dirsOnly = false } = {}) {
 		}))
 
 	if (dirsOnly)
-		return { dir: toPosix(relDir), dirs, items: [], truncated: false }
+		return { dir: toPosix(relDir), dirs, items: [], truncated: false, recursive: false }
 
+	const want = normalizeTypes(types)
 	const index = companionIndex(root)
-	const relOf = (name) => (relDir ? path.join(relDir, name) : name)
+	const buckets = { canvas: [], document: [], image: [], video: [], audio: [] }
+	const cc = { total: 0, truncated: false, cap }
 
-	// Dot-FILES are never items (dot-dirs still show, muted). isFile() is false for
-	// a symlink, so a `photo.png` symlinked at `.env` is dropped here too.
-	const fileNames = dirents
-		.filter((d) => d.isFile() && !d.name.startsWith('.'))
-		.map((d) => d.name)
-		.sort((a, b) => a.localeCompare(b))
+	if (recursive)
+		walkTree(root, relDir, index, want, buckets, cc)
+	else
+		collectFiles(root, relDir, index, want, buckets, cc)
 
-	const canvases = []
-	const documents = []
-	const images = []
-	const videos = []
-	const audios = []
-	let total = 0
-	let truncated = false
-	const add = (group, item) => {
-		if (!item)
-			return
-		if (total >= cap) {
-			truncated = true
-			return
-		}
-		group.push(item)
-		total++
-	}
-
-	for (const name of fileNames) {
-		const rel = relOf(name)
-		if (name.endsWith('.json')) {
-			// canvasEntry returns null for a companion canvas, so an enhanced
-			// document's companion is dropped from the listing automatically — the
-			// same collapse scan() does. The document below carries `enhanced`.
-			add(canvases, withRel(canvasEntry(root, rel)))
-		} else if (hasMarkdownExtension(name)) {
-			add(documents, withRel(documentEntry(root, rel, index)))
-		} else {
-			// image / video / audio all share the same stat-only shape (plus kind),
-			// gated and lstat-refused by mediaStat exactly as an image always was.
-			const kind = mediaKind(name)
-			if (kind) {
-				const m = mediaStat(root, rel)
-				const group = kind === 'video' ? videos : kind === 'audio' ? audios : images
-				add(group, m ? { kind: m.kind, rel: m.path, name: m.name, mtimeMs: m.modified, size: m.size, renderable: m.renderable } : null)
-			}
-			// anything else (a `.txt`, a source file) is not renderable → not an item
-		}
-	}
-
-	return { dir: toPosix(relDir), dirs, items: [...canvases, ...documents, ...images, ...videos, ...audios], truncated }
+	const items = [...buckets.canvas, ...buckets.document, ...buckets.image, ...buckets.video, ...buckets.audio]
+	return { dir: toPosix(relDir), dirs, items, truncated: cc.truncated, recursive: !!recursive }
 }
 
-module.exports = { listDir }
+module.exports = { listDir, ITEM_KINDS }

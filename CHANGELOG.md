@@ -2,7 +2,19 @@
 
 ## [Unreleased]
 
-## [0.13.0] - 2026-07-18
+### Added
+- **Filter the browse view by type, across subfolders.** A single **Filter** button in the browse
+  toolbar (with an active ring + a count badge) opens a modal to choose which types to show —
+  **Folders**, Canvases, Docs, Images, Videos, Audio, or **Media** (image + video + audio together,
+  which locks the trio) — and a **Scope** control (**This folder** / **All subfolders**). Filters
+  apply live, are sticky across folders, and the modal shows a running match count. **All
+  subfolders** flattens every matching file from the whole subtree into one grid, each tile carrying
+  a **clickable path caption** of the folder it lives in — so you can scroll a wall of every image
+  (or every media file) beneath the current folder and jump straight to where one lives, without
+  digging through the tree. `GET /api/dir` gains `&recursive=1` and `&types=…`, filtering by kind
+  **before** the 2000 cap (so a rare kind is never starved under a wall of another), with the
+  recursive descent skipping `.git`/`node_modules`/dot-dirs. Folder scope filters client-side
+  (instant); subtree scope is server-filtered.
 
 ### Added
 - **Video & audio in the browse view and a bespoke player.** The image pipeline now extends to
