@@ -1485,7 +1485,11 @@ audio.m-el{display:none} /* the audio element is never shown — the art card st
 .m-vol{flex:0 0 72px}
 .m-rate{position:relative;font-size:12.5px;font-weight:600;color:var(--text);min-width:40px;justify-content:center}
 .m-rate-label{pointer-events:none}
-.m-rate-menu{left:auto;right:0;min-width:86px}
+/* The speed button sits in the transport bar pinned to the bottom, so its menu must open
+   UPWARD (a dropup) — a downward `.menu` renders below the bar, off-screen and clipped by
+   the overlay's overflow:hidden. Right-aligned to the button. */
+.m-rate-menu{left:auto;right:0;top:auto;bottom:calc(100% + 6px);min-width:86px;
+	transform:translateY(6px) scale(.99)}
 .m-col:fullscreen{background:#000}
 .m-col:fullscreen .m-stage{background:#000}
 

@@ -113,6 +113,11 @@ test.before(async () => {
 			await evaluate('document.querySelector(".m-rate").click()')
 			await sleep(140)
 			out.rateMenuOpen = await evaluate(q('.m-rate-menu') + ' === 1')
+			out.rateOptions = await evaluate('document.querySelectorAll(".m-rate-menu [data-rate]").length')
+			// The button is in the bottom transport bar, so the menu must open UPWARD and be
+			// fully on-screen — a downward menu renders off the bottom edge, clipped and invisible
+			// (a programmatic click on an item still "works", which is why existence != visible).
+			out.rateMenuOnScreen = await evaluate('(function(){ var m = document.querySelector(".m-rate-menu"); if (!m) return false; var r = m.getBoundingClientRect(); return r.height > 0 && r.top >= 0 && r.bottom <= window.innerHeight && r.left >= 0 && r.right <= window.innerWidth })()')
 			await evaluate('(function(){ var b = Array.from(document.querySelectorAll(".m-rate-menu [data-rate]")).find(function(x){ return x.dataset.rate === "2" }); b && b.click() })()')
 			await sleep(140)
 			out.rate2 = await evaluate(V + '.playbackRate === 2')
@@ -264,6 +269,8 @@ test('mediaui: (2) the player mounts with duration/dimensions, plays, and disabl
 
 test('mediaui: (3) the speed menu sets playbackRate and the rate is sticky across navigation', { skip, timeout: 180_000 }, () => {
 	assert.equal(R.rateMenuOpen, true, 'the rate popover opened')
+	assert.equal(R.rateOptions, 6, 'the rate popover lists all six rates (0.5×–3×)')
+	assert.equal(R.rateMenuOnScreen, true, 'the rate popover opens UPWARD and is fully on-screen, not clipped below the bottom bar')
 	assert.equal(R.rate2, true, 'picking 2× set playbackRate to 2')
 	assert.equal(R.rateLabel, '2×', 'the rate button label follows')
 	assert.equal(R.steps.backToVideo, true, 'navigated back to the video')
