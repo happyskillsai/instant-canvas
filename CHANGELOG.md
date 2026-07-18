@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.14.0] - 2026-07-18
+
 ### Added
 - **Move the workspace up a folder from the topbar.** The workspace path is now a breadcrumb:
   clicking a parent folder re-roots the workspace up to it. Because a parent is a different
@@ -25,6 +27,8 @@
   **before** the 2000 cap (so a rare kind is never starved under a wall of another), with the
   recursive descent skipping `.git`/`node_modules`/dot-dirs. Folder scope filters client-side
   (instant); subtree scope is server-filtered.
+
+## [0.13.0] - 2026-07-18
 
 ### Added
 - **Video & audio in the browse view and a bespoke player.** The image pipeline now extends to
