@@ -5,6 +5,59 @@ The agent-facing contract for InstantCanvas. The runtime ships as the
 and LICENSE, and agents drive the CLI through `npx`. Versions track the runtime
 package they were authored alongside.
 
+## [0.13.0] - 2026-07-18
+
+### Added
+- **Video and audio in the folder browse view.** `open <folder>` now surfaces `.mp4`/`.webm`
+  video and `.mp3`/`.m4a`/`.wav`/`.ogg` audio alongside images, canvases and documents — video
+  tiles carry a first-frame poster, and clicking a clip opens a bespoke player (play/pause,
+  scrubber, volume, a 0.5×–3× speed control, fullscreen for video). `.mov`/`.mkv`/`.avi` and
+  `.flac`/`.aiff`/`.wma` list as metadata-only cards, and the reader can select and delete media
+  too. **Browse-only, not authorable**: there is no media block, and a media file cannot be
+  `open`ed directly — only the folder that holds it, exactly the rule images follow. SKILL.md
+  teaches the capability and that boundary.
+
+## [0.12.0] - 2026-07-17
+
+### Added
+- **Chart-readability funnel.** `validate` now warns when a chart is too dense for paper
+  (`AXIS_TOO_DENSE`, `HEATMAP_TOO_DENSE`, `LABELS_WILL_ELIDE`, `TOO_MANY_SERIES`,
+  `TOO_MANY_SLICES`), each teaching the fix and carrying a figure number. Every chart on paper
+  wears a derived `Figure N — <title>` caption (numbered by the runtime, never authored, never
+  persisted — cite them, don't type them). `print`'s result JSON gains a per-figure `figures[]`
+  (page, rendered facts, restated warnings). A new **`snapshot <canvas | file.md> [--figure
+  n[,n…]] [--out-dir <dir>] [--list]`** captures a named figure as a PNG at true A4 geometry for
+  an agent to read back with its own vision — the response to a user naming a figure or asking
+  for a visual review, never a routine step. `catalog chart` teaches the density rules.
+
+### Changed
+- The skill **auto-invokes on a chart-readability request** — the description gained a "checking
+  a chart is readable" trigger, matching the new `snapshot` capability.
+
+## [0.11.0] - 2026-07-17
+
+### Changed
+- **`open <folder>` opens a browse view**, not a synthesised gallery canvas: a folder's child
+  folders, canvases, documents and images together, each opening in a frosted-glass **route
+  modal** (Esc / × return to the folder, prev/next across all kinds). Images render in it with a
+  zoom/pan stage; a non-renderable HEIC/TIFF shows a metadata card. Nothing is written to disk,
+  and `validate` / `stamp` / `print` / `theme` still refuse a folder.
+- **Workspace nudge**: `open` from a subfolder of a git project (no `--workspace`) prints a
+  one-line stderr note naming the project root — a nudge only, behaviour never changes. SKILL.md
+  gains a "Choosing the workspace" resolution procedure.
+
+## [0.10.0] - 2026-07-16
+
+### Added
+- **The `gallery` block — a folder of images beside other blocks.** `{"type": "gallery", "src":
+  "<folder>", "recursive"?, "layout"?, "sort"?}` (the seventh block type, `kind: display`)
+  renders every image under a workspace folder as a live grid or list — the reader sorts, opens a
+  zoom/pan detail modal, and multi-selects (button, long-press, Cmd/Ctrl-click) to permanently
+  delete. `open <folder>` renders a folder's images with no canvas file (the gallery sibling of
+  `open <file.md>`). Previewable formats are png/jpg/jpeg/gif/webp/avif/bmp/ico/svg; HEIC/TIFF are
+  metadata-only cards. A gallery cannot render on paper (invalid beside an envelope-level
+  `document`). Deletion is reader-owned — the agent is never involved. See `catalog gallery`.
+
 ## [0.9.0] - 2026-07-16
 
 ### Added
