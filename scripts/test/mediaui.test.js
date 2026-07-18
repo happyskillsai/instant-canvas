@@ -136,10 +136,13 @@ test.before(async () => {
 			await sleep(200)
 			out.seekJumped = await evaluate(V + '.currentTime > 0.4') // +5 clamped to the ~1s duration
 			await evaluate(V + '.pause()')
-			await sleep(80)
+			// Poll the pre-state and the toggle instead of fixed sleeps: under heavy
+			// concurrent-suite load (many Chromes + kernel spawns) a 200 ms wait raced
+			// play()'s state flip. A bounded `until` cannot turn a real no-toggle green —
+			// a genuinely stuck player still times out to false.
+			await until(evaluate, V + ' && ' + V + '.paused === true', 2000)
 			await evaluate(dkey(' '))
-			await sleep(200)
-			out.spaceToggled = await evaluate(V + ' && ' + V + '.paused === false')
+			out.spaceToggled = await until(evaluate, V + ' && ' + V + '.paused === false', 4000)
 			await evaluate('document.body.focus(); ' + dkey('Escape'))
 			out.escLanded = await until(evaluate, 'location.hash === "#/f/m"', 4000)
 

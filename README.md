@@ -66,7 +66,7 @@ npx -y @happyskillsai/instant-canvas status
 npx -y @happyskillsai/instant-canvas stop
 ```
 
-Maintainers run the same CLI from the working tree — `node scripts/instantcanvas.js <command>` — and the tests with `npm test` (487 tests, zero deps; the browser tests skip without Chrome; equivalent to `node --test scripts/test/`). `npm run coverage:cli` enforces the CLI's 100% line coverage. `npm run rls <major|minor|patch|x.y.z>` bumps the package version — validated semver, forward-only. Releases are orchestrated end to end by the `/release-cli` project skill — see [docs/releasing.md](docs/releasing.md).
+Maintainers run the same CLI from the working tree — `node scripts/instantcanvas.js <command>` — and the tests with `npm test` (590 tests, zero deps; the browser tests skip without Chrome; equivalent to `node --test scripts/test/`). `npm run coverage:cli` enforces the CLI's 100% line coverage. `npm run rls <major|minor|patch|x.y.z>` bumps the package version — validated semver, forward-only. Releases are orchestrated end to end by the `/release-cli` project skill — see [docs/releasing.md](docs/releasing.md).
 
 `examples/` contains four ready canvases (visual report, secrets → `.env` form, danger confirm, mixed); `demos/` holds larger showcases (all 17 general chart kinds, the 9 scientific ones, slider-driven sweeps, the form kitchen sink).
 

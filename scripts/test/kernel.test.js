@@ -588,15 +588,16 @@ test('kernel: interactive open creates a session; polling and cancel round-trip'
 })
 
 test('kernel: the removed reader-facing routes are gone — 404, and nothing is deleted or listed', async () => {
-	// /api/browse (the only unconfined route this kernel ever had),
-	// /api/workspace/open and /api/collection/delete were removed with the
-	// sidebar "+" and the folder delete. A 404 here is the perimeter holding:
-	// every remaining route answers only for the workspace it serves.
+	// /api/browse (the only unconfined route this kernel ever had) and
+	// /api/collection/delete were removed with the sidebar "+" and the folder
+	// delete. A 404 here is the perimeter holding: every remaining route answers
+	// only for the workspace it serves. (/api/workspace/open was later re-added,
+	// narrowly and guarded — see reroot.test.js — so it is NOT in this list.)
 	const dir = path.join(K.root, 'undeletable')
 	fs.mkdirSync(dir)
 	fs.copyFileSync(path.join(FIXTURES, 'valid-display.canvas.json'), path.join(dir, 'a.canvas.json'))
 
-	for (const p of ['/api/browse', '/api/workspace/open', '/api/collection/delete']) {
+	for (const p of ['/api/browse', '/api/collection/delete']) {
 		const r = await httpReq({ port: K.port, method: 'POST', path: p, headers: K.auth, body: { dir: K.root, path: K.root, name: 'undeletable' } })
 		assert.equal(r.status, 404, `${p} must not exist`)
 	}

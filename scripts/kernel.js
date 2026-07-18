@@ -8,6 +8,9 @@ const http = require('node:http')
 const fs = require('node:fs')
 const path = require('node:path')
 const crypto = require('node:crypto')
+const os = require('node:os')
+const { execFile } = require('node:child_process')
+const { promisify } = require('node:util')
 
 const { normalizeRoot, insideRoot, stateDir } = require('./lib/paths')
 const registry = require('./lib/registry')
@@ -458,6 +461,102 @@ function folderUrl(rel) {
 	return `http://127.0.0.1:${PORT}/?token=${TOKEN}#/f/${rel ? encodeURIComponent(rel) : ''}`
 }
 
+// ---------------------------------------------------------------- workspace re-root
+//
+// The topbar path is a breadcrumb: clicking an ANCESTOR of this workspace moves the
+// workspace up to it. A parent is a DIFFERENT workspace — a different kernel — so this
+// is NOT an in-place re-point: we ensure (spawn or reuse) a kernel for the parent via
+// the CLI's own `open`, reusing its spawn lock, version handshake and registry, and
+// hand its URL back for the browser to navigate to. Two guards, enforced HERE and never
+// trusted from the browser: the target must be a STRICT ANCESTOR of this root (you can
+// only climb your own path), and it must stay at or below the user's HOME directory, so
+// a stray click can never re-root onto the whole disk.
+const CLI = path.join(__dirname, 'instantcanvas.js')
+const execFileP = promisify(execFile)
+const HOME = (() => { try { return fs.realpathSync(os.homedir()) } catch { return os.homedir() } })()
+
+/** True iff `ancestor` is a STRICT ancestor of `descendant` (case-folded per platform). */
+function isStrictAncestor(ancestor, descendant) {
+	const a = normalizeRoot(ancestor), d = normalizeRoot(descendant)
+	if (a === d)
+		return false
+	const rel = path.relative(a, d)
+	return rel !== '' && !rel.startsWith('..') && !path.isAbsolute(rel)
+}
+
+/** True iff `dir` is HOME or below it — the re-root floor. */
+function withinHome(dir) {
+	const h = normalizeRoot(HOME), d = normalizeRoot(dir)
+	if (d === h)
+		return true
+	const rel = path.relative(h, d)
+	return rel !== '' && !rel.startsWith('..') && !path.isAbsolute(rel)
+}
+
+/** The ancestors of ROOT that are valid re-root targets: the immediate parent up to and
+ *  including HOME. Empty when ROOT is not under HOME (a /tmp or /opt workspace) — the
+ *  breadcrumb then shows the path but offers no climb. */
+function reRootAncestors() {
+	const out = []
+	let cur = path.dirname(ROOT), prev = ROOT
+	while (cur && cur !== prev) {
+		if (!withinHome(cur))
+			break
+		out.push(cur)
+		prev = cur
+		cur = path.dirname(cur)
+	}
+	return out
+}
+
+/** The topbar breadcrumb, computed server-side so the browser needs no path parsing and
+ *  no casing/separator rules: every ancestor of ROOT, filesystem-root → ROOT, each
+ *  `{ name, path, current, clickable }`. `clickable` is exactly the re-root allowlist. */
+function pathCrumb() {
+	const chain = []
+	let cur = ROOT, prev = null
+	while (cur && cur !== prev) { chain.push(cur); prev = cur; cur = path.dirname(cur) }
+	chain.reverse()
+	const allow = new Set(reRootAncestors().map(normalizeRoot))
+	return chain.map((abs, i) => ({
+		name: path.basename(abs) || abs, // basename('/') === '' → show the abs ('/')
+		path: abs,
+		current: i === chain.length - 1,
+		clickable: i !== chain.length - 1 && allow.has(normalizeRoot(abs)),
+	}))
+}
+
+/** Validate a re-root request from the browser. Returns `{ root }` (realpath'd) on
+ *  success, else `{ code, message }`. */
+function validateReRoot(rawRoot) {
+	if (typeof rawRoot !== 'string' || !rawRoot.trim())
+		return { code: 'BAD_ROOT', message: 'A folder path is required.' }
+	let real
+	try { real = fs.realpathSync(path.resolve(rawRoot)) } catch { return { code: 'NOT_FOUND', message: 'That folder no longer exists.' } }
+	let st
+	try { st = fs.lstatSync(real) } catch { return { code: 'NOT_FOUND', message: 'That folder no longer exists.' } }
+	if (!st.isDirectory())
+		return { code: 'NOT_DIR', message: 'That path is not a folder.' }
+	if (!isStrictAncestor(real, ROOT))
+		return { code: 'NOT_ANCESTOR', message: 'You can only move up to a parent of this workspace.' }
+	if (!withinHome(real))
+		return { code: 'ABOVE_HOME', message: 'For safety, you can move up only as far as your home folder.' }
+	return { root: real }
+}
+
+/** Ensure a kernel serves `root` (spawn or reuse) and return its browser URL. Runs the
+ *  CLI's own `open` as an ASYNC subprocess — so this kernel keeps serving while the child
+ *  comes up — reusing the spawn lock, handshake and registry rather than re-implementing
+ *  them. Inherits this process's env (INSTANTCANVAS_STATE_DIR &c.) so the child registers
+ *  in the same registry. */
+async function ensureWorkspaceUrl(root) {
+	const { stdout } = await execFileP(process.execPath, [CLI, 'open', root, '--workspace', root, '--no-open'], { timeout: 20000 })
+	const parsed = JSON.parse(stdout)
+	if (parsed.status !== 'opened' || !parsed.url)
+		throw new Error('open did not return a url')
+	return parsed.url
+}
+
 function activeSessionFor(rel) {
 	for (const s of sessions.byId.values())
 		if (s.canvasPath === rel && !sessions.get(s.id).result)
@@ -684,7 +783,7 @@ async function route(req, res, url) {
 
 	if (method === 'GET' && p === '/api/workspace') {
 		const tree = scan(ROOT)
-		return sendJson(res, 200, { ok: true, root: ROOT, ...tree })
+		return sendJson(res, 200, { ok: true, root: ROOT, crumb: pathCrumb(), ...tree })
 	}
 
 	if (method === 'GET' && p === '/api/canvas') {
@@ -829,6 +928,25 @@ async function route(req, res, url) {
 		broadcast({ type: 'navigate', path: rel, kind: 'file' })
 		klog('session', session.id, 'created for', rel, `(timeout ${session.timeoutSeconds}s)`)
 		return sendJson(res, 200, { ok: true, url: canvasUrl(rel), sessionId: session.id })
+	}
+
+	// Re-root: the topbar breadcrumb clicked an ancestor. Guarded to strict ancestors of
+	// this root, at or below HOME (validateReRoot), then a kernel for that folder is
+	// spawned/reused and its URL handed back for the browser to navigate to. This
+	// re-opens the workspace-switch surface removed in 0.8.0 — deliberately, and narrowly.
+	if (method === 'POST' && p === '/api/workspace/open') {
+		const body = await readBody(req)
+		const check = validateReRoot(body && body.root)
+		if (check.code)
+			return sendJson(res, 400, { ok: false, code: check.code, message: check.message })
+		let url
+		try {
+			url = await ensureWorkspaceUrl(check.root)
+		} catch (err) {
+			klog('re-root spawn failed for', check.root, err && err.message)
+			return sendJson(res, 502, { ok: false, code: 'SPAWN_FAILED', message: 'Could not open that folder as a workspace.' })
+		}
+		return sendJson(res, 200, { ok: true, url, root: check.root })
 	}
 
 	const sessionMatch = /^\/api\/session\/([A-Za-z0-9_-]+)(\/submit|\/cancel)?$/.exec(p)

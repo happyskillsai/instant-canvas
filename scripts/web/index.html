@@ -17,9 +17,9 @@
 		     long to retype and too elided to read off the screen. So the whole group copies
 		     it: the path itself is the click target, and the button on the end is there to
 		     say so — an affordance a bare <span> could never advertise. -->
-		<div class="rootpath-group" id="rootpathGroup" title="The workspace folder this kernel serves and watches — click to copy its full path">
-			<button class="rootpath" id="rootpath" type="button" data-copy-label="Copy workspace path" aria-label="Copy workspace path">…</button>
-			<button class="rootpath-copy" id="rootpathCopy" type="button" data-copy-label="Copy workspace path" aria-label="Copy workspace path"><svg class="lucide" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg></button>
+		<div class="rootpath-group" id="rootpathGroup">
+			<nav class="rootpath" id="rootpath" aria-label="Workspace path — click a parent folder to move up"></nav>
+			<button class="rootpath-copy" id="rootpathCopy" type="button" data-copy-label="Copy workspace path" aria-label="Copy workspace path" title="Copy the workspace path"><svg class="lucide" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg></button>
 		</div>
 		<div class="topbar-actions"><div class="view-toggle" id="viewToggle" hidden role="group" aria-label="Canvas view">
 			<button class="vt-btn active" id="viewDeck" title="Document view (prints 1:1)" aria-label="Document view"><svg class="lucide" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></svg></button>

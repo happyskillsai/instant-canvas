@@ -125,6 +125,7 @@ const LUCIDE = {
 	'calendar': '<path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/>',
 	'check': '<path d="M20 6 9 17l-5-5"/>',
 	'list-filter': '<path d="M3 6h18"/><path d="M7 12h10"/><path d="M10 18h4"/>',
+	'pencil': '<path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/><path d="m15 5 4 4"/>',
 	'copy': '<rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>',
 	'chevron-down': '<path d="m6 9 6 6 6-6"/>',
 	'chevron-left': '<path d="m15 18-6-6 6-6"/>',
@@ -1271,6 +1272,19 @@ function makeTreeRow(dir, { root = false } = {}) {
 	name.className = 'tname'
 	name.textContent = dir.name
 	row.append(caret, ico, name)
+	// The root row carries a "Move workspace" pencil — the phone-only way up (the topbar
+	// breadcrumb is hidden below 600px; CSS shows this only there). It re-roots via the
+	// same modal + guarded flow. stopPropagation so it never navigates the row.
+	if (root) {
+		const edit = document.createElement('button')
+		edit.type = 'button'
+		edit.className = 'ws-edit'
+		edit.title = 'Move the workspace up to a parent folder'
+		edit.setAttribute('aria-label', 'Move workspace')
+		edit.innerHTML = icon('pencil')
+		edit.addEventListener('click', (e) => { e.stopPropagation(); openReRootDialog() })
+		row.append(edit)
+	}
 	return row
 }
 
@@ -1366,48 +1380,157 @@ function updateSidebarChrome() {
 		`${ng} group${ng === 1 ? '' : 's'}`,
 	].join(' · ')
 	fullRootPath = state.tree.root
-	// On the group, not the path: a title on both would nest two tooltips, and the
-	// hover target the reader aims at is the whole control.
-	$('rootpathGroup').title = `${state.tree.root}\n\nClick to copy this path`
-	fitRootPath()
+	buildRootCrumb()
 	const watchEl = $('watchPath')
 	watchEl.textContent = rootBase
 	watchEl.title = state.tree.root
 }
 
-// The header path fills whatever space is available; when it can't, it is
-// trimmed from the START (the tail of a path is the informative part).
 let fullRootPath = ''
-function fitRootPath() {
-	const el = $('rootpath')
-	if (!fullRootPath)
-		return
-	el.textContent = fullRootPath
-	if (el.scrollWidth <= el.clientWidth)
-		return
-	let lo = 1, hi = fullRootPath.length
-	while (lo < hi) { // smallest number of leading chars to drop
-		const mid = Math.floor((lo + hi) / 2)
-		el.textContent = '…' + fullRootPath.slice(mid)
-		if (el.scrollWidth <= el.clientWidth)
-			hi = mid
-		else
-			lo = mid + 1
-	}
-	el.textContent = '…' + fullRootPath.slice(lo)
-}
-new ResizeObserver(fitRootPath).observe($('rootpath'))
 
-// Copy the FULL path, never what is on screen: fitRootPath elides the head to fit the
-// topbar, so the visible string is routinely "…/scratchpad/ws" — pasting that into a
-// terminal is worse than useless. One listener on the group, because both halves are
-// the same action. The flash always lands on the icon button: `flashCopied` swaps the
-// button's innerHTML for a tick, and the path button's innerHTML *is* the path.
-$('rootpathGroup').addEventListener('click', async () => {
+// The topbar path is a BREADCRUMB, computed server-side (state.tree.crumb): every
+// ancestor of the workspace root, filesystem-root → current folder. An ancestor at or
+// below $HOME is a button that RE-ROOTS the workspace up to it — a parent is a different
+// workspace (a different kernel), so a click navigates the browser to that kernel's URL
+// (new port + token). Segments above home and the current folder are plain text. The
+// copy ICON still copies the full path; the breadcrumb itself no longer copies.
+function buildRootCrumb() {
+	const el = $('rootpath')
+	el.textContent = ''
+	const crumb = state.tree && Array.isArray(state.tree.crumb) ? state.tree.crumb : null
+	if (!crumb || !crumb.length) {
+		el.textContent = fullRootPath
+		return
+	}
+	crumb.forEach((c, i) => {
+		// The filesystem root ('/') already carries the leading separator, so the next
+		// segment does not get one — otherwise the path reads "/ /Users".
+		const prevIsRoot = i > 0 && crumb[i - 1].path === '/'
+		if (i > 0 && !prevIsRoot) {
+			const sep = document.createElement('span'); sep.className = 'rp-sep'; sep.textContent = '/'; el.append(sep)
+		}
+		let node
+		if (c.clickable) {
+			node = document.createElement('button')
+			node.type = 'button'; node.className = 'rp-seg rp-link'
+			node.dataset.root = c.path
+			node.title = 'Move the workspace up to ' + c.path
+		} else {
+			node = document.createElement('span')
+			node.className = 'rp-seg' + (c.current ? ' rp-current' : '')
+			node.title = c.path
+		}
+		node.textContent = c.name
+		el.append(node)
+	})
+	fitRootCrumb()
+}
+
+// The tail (the current folder) is the informative end, so keep it in view: scroll the
+// breadcrumb fully right. Higher ancestors stay reachable by scrolling left.
+function fitRootCrumb() {
+	const el = $('rootpath')
+	el.scrollLeft = el.scrollWidth
+}
+new ResizeObserver(fitRootCrumb).observe($('rootpath'))
+
+// The copy ICON copies the FULL path (never the scrolled/partial view) — the breadcrumb
+// segments navigate instead of copying, so the copy action lives on the icon alone.
+$('rootpathCopy').addEventListener('click', async () => {
 	if (!fullRootPath)
 		return
 	flashCopied($('rootpathCopy'), await copyText(fullRootPath))
 })
+
+// Re-root the workspace to `root`: the kernel spawns/reuses a kernel for that folder and
+// returns its URL, and we navigate there (a fresh page load on the new kernel). The
+// server re-validates the target — the browser is not trusted. Shared by the topbar
+// breadcrumb and the sidebar's mobile "Move workspace" modal. Returns false on refusal.
+async function reRootWorkspace(root) {
+	const { status, json } = await api('/api/workspace/open', { method: 'POST', body: JSON.stringify({ root }) })
+	if (status === 200 && json && json.ok && json.url) {
+		location.href = json.url
+		return true
+	}
+	toast((json && json.message) || 'Could not move the workspace to that folder.')
+	return false
+}
+
+// A clickable ancestor segment re-roots the workspace to it.
+$('rootpath').addEventListener('click', async (e) => {
+	const link = e.target.closest('.rp-link')
+	if (!link)
+		return
+	link.disabled = true
+	if (!await reRootWorkspace(link.dataset.root))
+		link.disabled = false
+})
+
+// The mobile way up: the topbar breadcrumb is hidden on a phone, so the sidebar's root
+// (house) row carries a pencil that opens a modal listing the current folder plus the
+// tappable parents up to $HOME — the same server-computed crumb + guarded re-root, with
+// no path to type. `#reRootModal` is a `.g-modal`, so the overlay Esc handler yields.
+function rrRow(c, { here = false } = {}) {
+	const el = document.createElement(here ? 'div' : 'button')
+	if (!here) el.type = 'button'
+	el.className = 'rr-row' + (here ? ' rr-here' : '')
+	const ic = document.createElement('span'); ic.className = 'rr-ic'; ic.innerHTML = icon(here ? 'house' : 'folder')
+	const txt = document.createElement('span'); txt.className = 'rr-txt'
+	const nm = document.createElement('span'); nm.className = 'rr-name'; nm.textContent = c.name
+	const pth = document.createElement('span'); pth.className = 'rr-path'; pth.textContent = c.path
+	txt.append(nm, pth)
+	el.append(ic, txt)
+	if (!here) { const chev = document.createElement('span'); chev.className = 'rr-chev'; chev.innerHTML = icon('chevron-right'); el.append(chev) }
+	return el
+}
+
+function openReRootDialog() {
+	const crumb = state.tree && Array.isArray(state.tree.crumb) ? state.tree.crumb : []
+	const current = crumb.find((c) => c.current)
+	const ancestors = crumb.filter((c) => c.clickable).reverse() // nearest parent → home
+
+	document.body.classList.add('modal-open')
+	const overlay = document.createElement('div'); overlay.className = 'g-modal filter-modal rr-modal'
+	const card = document.createElement('div'); card.className = 'filter-card'
+	const head = document.createElement('div'); head.className = 'filter-head'
+	const h = document.createElement('h2'); h.textContent = 'Move workspace'
+	const xBtn = document.createElement('button'); xBtn.type = 'button'; xBtn.className = 'filter-x'; xBtn.title = 'Close'; xBtn.innerHTML = icon('x')
+	xBtn.addEventListener('click', () => teardown())
+	head.append(h, xBtn)
+
+	const body = document.createElement('div'); body.className = 'filter-body'
+	if (current) {
+		const lab = document.createElement('div'); lab.className = 'filter-sec-label'; lab.textContent = 'Current folder'
+		body.append(lab, rrRow(current, { here: true }))
+	}
+	const upLab = document.createElement('div'); upLab.className = 'filter-sec-label rr-uplabel'; upLab.textContent = 'Move up to'
+	body.append(upLab)
+	if (ancestors.length) {
+		for (const a of ancestors) {
+			const row = rrRow(a)
+			row.addEventListener('click', () => { row.disabled = true; reRootWorkspace(a.path).then((ok) => { if (!ok) row.disabled = false }) })
+			body.append(row)
+		}
+	} else {
+		const note = document.createElement('p'); note.className = 'filter-help'
+		note.textContent = 'This is as far up as you can go — a workspace can move up only as far as your home folder.'
+		body.append(note)
+	}
+
+	card.append(head, body)
+	overlay.append(card)
+	document.body.append(overlay)
+	xBtn.focus()
+
+	function onKey(e) { if (e.key === 'Escape') { e.stopPropagation(); teardown() } }
+	function teardown() {
+		document.removeEventListener('keydown', onKey, true)
+		overlay.remove()
+		document.body.classList.remove('modal-open')
+	}
+	overlay.addEventListener('click', (e) => { if (e.target === overlay) teardown() })
+	document.addEventListener('keydown', onKey, true)
+}
 
 $('tree').addEventListener('click', (e) => {
 	// The chevron is its OWN hit target: a single click expands/collapses and does

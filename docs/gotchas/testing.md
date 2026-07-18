@@ -134,3 +134,25 @@ And the audio-advance discipline: **wait for `canplaythrough` (`readyState >= 4`
 playing, and give it ~900 ms before asserting `currentTime > 0`.** Asserting right after
 `loadedmetadata` reads `0` — the element has its duration but has not started decoding audio
 yet — and the test fails for the wrong reason.
+
+## A piped `npm test` reports the PIPE's exit code, not the suite's
+
+`npm test 2>&1 | tail -9` exits **0 even when tests fail**, because a shell pipeline's status
+is the *last* command's — `tail` — not `npm`'s. A run trusted through that pipe looked green
+(`582 pass`) while a real failure scrolled past above the tail window; two genuine regressions
+(`topbar.test.js` asserting a since-changed label, `kernel.test.js` pinning a since-re-added
+route) hid there for a full cycle. **The gating run must never be piped** — run `npm test`
+unpiped (or capture to a file and read the `ℹ pass/fail` summary), so exit 1 actually surfaces.
+`set -o pipefail` also fixes it, but "don't pipe the run you're trusting" is the durable rule.
+
+## A timing-fragile browser assertion breaks when the suite gets HEAVIER, not just when the code does
+
+`mediaui.test.js`'s Space-toggle read `paused` a fixed 200 ms after dispatching the key. That
+margin held until `reroot.test.js` was added — its extra concurrent **kernel spawns** (a kernel
+spawning a sibling kernel via the CLI) stole enough CPU from the headless Chromes that `play()`'s
+state flip lost the race, and the test began failing *with no change to the code it covers*. A
+fixed sleep encodes an assumption about machine load that a growing suite silently violates.
+Replace it with a **bounded poll** (`until(evaluate, V + '.paused === false', 4000)`, the pattern
+the file already uses) — which cannot turn a real no-toggle green (a stuck player still times out)
+but absorbs load. When a browser test starts flaking right after you add unrelated load, suspect
+a fixed-time wait before the code under test.

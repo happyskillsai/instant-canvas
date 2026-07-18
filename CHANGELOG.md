@@ -3,6 +3,16 @@
 ## [Unreleased]
 
 ### Added
+- **Move the workspace up a folder from the topbar.** The workspace path is now a breadcrumb:
+  clicking a parent folder re-roots the workspace up to it. Because a parent is a different
+  workspace, this spawns/reuses a separate kernel for it (its own port + token) and navigates
+  there — a visible, deliberate move, never an in-place re-point. It is bounded to **ancestors at
+  or below your home folder**, so a stray click can never serve your whole disk; folders above home
+  are shown but not clickable. The copy icon still copies the full path. On a phone (where the
+  breadcrumb is hidden) the sidebar's root row shows a **Move workspace** pencil that opens a modal
+  listing the same tappable parent folders — no path to type. Server: a guarded
+  `POST /api/workspace/open` (strict-ancestor + home-floor checks), and `GET /api/workspace` now
+  returns the breadcrumb. (Re-opens, narrowly, the in-browser workspace switch removed in 0.8.0.)
 - **Filter the browse view by type, across subfolders.** A single **Filter** button in the browse
   toolbar (with an active ring + a count badge) opens a modal to choose which types to show —
   **Folders**, Canvases, Docs, Images, Videos, Audio, or **Media** (image + video + audio together,

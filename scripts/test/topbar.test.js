@@ -2,15 +2,17 @@
 
 // The workspace path control — real-browser behavior test.
 //
-// The path in the topbar is the one string a reader routinely wants OUT of this app
-// and into a terminal, and it is exactly the string that is too long to retype. So
-// the whole group copies it.
+// The path in the topbar is now a BREADCRUMB (server-computed in state.tree.crumb):
+// ancestors of the workspace root, filesystem-root → current folder, each an in-home
+// ancestor being a button that re-roots the workspace up to it (that re-root, with its
+// guards, is covered server-side in reroot.test.js). Two invariants worth a browser
+// test, both of which a future change could quietly break:
+//   1. the COPY ICON copies the FULL path (and flashes, then restores its own label);
+//   2. the breadcrumb itself no longer copies — only the icon does, because a segment
+//      click navigates, so wiring copy onto the path would fight the re-root.
 //
-// The invariant worth a test is the one a future simplification would break: what
-// lands on the clipboard is the FULL path, never the text on screen. `fitRootPath()`
-// elides the head to fit the topbar, so the visible string is routinely
-// "…/scratchpad/ws" — a copy of `textContent` would paste something that is not a
-// path at all, and would look right in every screenshot.
+// The fixture workspace sits under a temp dir (NOT under $HOME), so no segment is a
+// re-root target here — exactly what lets us prove a path click does nothing.
 //
 // Skips cleanly when Chrome is absent, so CI without a browser stays green.
 
@@ -35,16 +37,12 @@ const skip = CHROME ? false : 'Chrome not found — set CHROME_PATH to run the t
 const CLICK_AND_CAPTURE = (id) => `(async () => {
 	let captured = null;
 	navigator.clipboard.writeText = (t) => { captured = t; return Promise.resolve(); };
-	const path = document.getElementById('rootpath');
 	const btn = document.getElementById('rootpathCopy');
-	const shown = path.textContent;
 	document.getElementById(${JSON.stringify(id)}).click();
 	await new Promise((r) => setTimeout(r, 300));
 	return {
-		shown,
 		copied: captured,
 		flashed: btn.classList.contains('copied'),
-		pathTextIntact: path.textContent === shown,
 		aria: btn.getAttribute('aria-label'),
 	};
 })()`
@@ -55,8 +53,8 @@ let snap = null
 test.before(async () => {
 	if (skip)
 		return
-	// A deep directory name, so the topbar CANNOT show the whole path and fitRootPath
-	// is forced to elide it. That elision is the entire point of the test.
+	// A deep directory name, so the breadcrumb has several segments and the current one
+	// (the deepest) is what a copy of on-screen text would mangle.
 	root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'ic-topbar-')))
 	const deep = path.join(root, 'a-deliberately-long-workspace-folder-name', 'nested-another-long-one', 'and-one-more')
 	fs.mkdirSync(deep, { recursive: true })
@@ -68,42 +66,83 @@ test.before(async () => {
 	const out = execFileSync(process.execPath, [CLI, 'open', path.join(deep, 'home.canvas.json'), '--workspace', deep, '--no-open'], { encoding: 'utf8' })
 	const url = JSON.parse(out).url
 
-	snap = await withChrome(CHROME, url, {}, async ({ evaluate }) => {
+	snap = await withChrome(CHROME, url, {}, async ({ evaluate, send }) => {
 		for (let i = 0; i < 80; i++) {
-			if (await evaluate(`!!(window.ic && window.ic.state && window.ic.state.tree)`).catch(() => false))
+			if (await evaluate(`!!(window.ic && window.ic.state && window.ic.state.tree && document.querySelector('#rootpath .rp-seg'))`).catch(() => false))
 				break
 			await sleep(100)
 		}
 		await sleep(400)
 		const viaButton = await evaluate(CLICK_AND_CAPTURE('rootpathCopy'))
-		await sleep(1800) // let the flash restore before the second probe
+		await sleep(1800) // let the flash restore before the next probe
 		const viaPath = await evaluate(CLICK_AND_CAPTURE('rootpath'))
-		await sleep(1800) // that click flashed the button too — let it expire before probing
+		await sleep(400)
+		const crumb = await evaluate(`(() => {
+			const segs = Array.from(document.querySelectorAll('#rootpath .rp-seg'));
+			const cur = document.querySelector('#rootpath .rp-current');
+			return {
+				count: segs.length,
+				current: cur ? cur.textContent : null,
+				links: document.querySelectorAll('#rootpath .rp-link').length,
+			};
+		})()`)
 		const restored = await evaluate(`(() => {
 			const btn = document.getElementById('rootpathCopy');
 			return { aria: btn.getAttribute('aria-label'), flashed: btn.classList.contains('copied') };
 		})()`)
-		return { viaButton, viaPath, restored, root: deep }
+
+		// The sidebar "Move workspace" pencil is the phone-only way up (the breadcrumb is
+		// hidden below 600px). It is display:none on the desktop viewport, inline-flex on a
+		// phone, and opens the modal. This workspace is under a temp dir (not $HOME), so the
+		// modal lists the current folder and NO up-options — exactly what proves the floor.
+		const pencilDesktop = await evaluate(`(() => { const e = document.querySelector('.trow-root .ws-edit'); return e ? getComputedStyle(e).display : 'missing'; })()`)
+		await send('Emulation.setDeviceMetricsOverride', { width: 390, height: 800, deviceScaleFactor: 1, mobile: true })
+		await sleep(200)
+		const pencilMobile = await evaluate(`(() => { const e = document.querySelector('.trow-root .ws-edit'); return e ? getComputedStyle(e).display : 'missing'; })()`)
+		await evaluate(`document.body.classList.add('nav-open')`)
+		await evaluate(`(() => { const e = document.querySelector('.trow-root .ws-edit'); if (e) e.click(); })()`)
+		await sleep(250)
+		const modal = await evaluate(`(() => {
+			const here = document.querySelector('.rr-modal .rr-here .rr-name');
+			return {
+				open: !!document.querySelector('.rr-modal'),
+				here: here ? here.textContent : null,
+				upCount: document.querySelectorAll('.rr-modal button.rr-row').length,
+				inline: document.querySelectorAll('.rr-modal [style]').length,
+			};
+		})()`)
+
+		return { viaButton, viaPath, crumb, restored, pencilDesktop, pencilMobile, modal, root: deep, base: path.basename(deep) }
 	})
 
 	try { execFileSync(process.execPath, [CLI, 'stop', '--workspace', deep], { stdio: 'ignore' }) } catch { /* best effort */ }
 })
 
-test('topbar: the copy button puts the FULL workspace path on the clipboard, not the elided text', { skip, timeout: 120_000 }, () => {
-	const s = snap.viaButton
-	assert.ok(s.shown.startsWith('…'), `the path must be elided on screen for this test to mean anything, got ${JSON.stringify(s.shown)}`)
-	assert.notEqual(s.copied, s.shown, 'copying what is on screen would paste a truncated non-path')
-	assert.equal(s.copied, snap.root, 'the clipboard gets the whole path')
+test('topbar: the copy ICON puts the FULL workspace path on the clipboard', { skip, timeout: 120_000 }, () => {
+	assert.equal(snap.viaButton.copied, snap.root, 'the clipboard gets the whole path')
 })
 
-test('topbar: the path itself is a click target too, and copying it does not eat the path', { skip, timeout: 120_000 }, () => {
-	assert.equal(snap.viaPath.copied, snap.root, 'clicking the path copies it as well')
-	// flashCopied() swaps a button's innerHTML for a tick — and the path button's
-	// innerHTML IS the path. The flash must therefore land on the icon button only.
-	assert.equal(snap.viaPath.pathTextIntact, true, 'the path survived the copy feedback')
+test('topbar: the breadcrumb itself does NOT copy — only the icon does', { skip, timeout: 120_000 }, () => {
+	assert.equal(snap.viaPath.copied, null, 'clicking the path navigates, never copies')
 })
 
-test('topbar: the copy button flashes, then restores its own label — not "Copy code"', { skip, timeout: 120_000 }, () => {
+test('topbar: the path renders as a breadcrumb whose last segment is the current folder', { skip, timeout: 120_000 }, () => {
+	assert.ok(snap.crumb.count > 1, `the breadcrumb has several segments, got ${snap.crumb.count}`)
+	assert.equal(snap.crumb.current, snap.base, 'the current (bold) segment is the workspace folder name')
+	// A temp workspace is not under $HOME, so nothing is a re-root target here.
+	assert.equal(snap.crumb.links, 0, 'no clickable ancestors for an out-of-home workspace')
+})
+
+test('topbar: the sidebar "Move workspace" pencil is phone-only and opens the re-root modal', { skip, timeout: 120_000 }, () => {
+	assert.equal(snap.pencilDesktop, 'none', 'the pencil is hidden on the desktop viewport (the breadcrumb is used there)')
+	assert.notEqual(snap.pencilMobile, 'none', 'the pencil appears on a phone, where the breadcrumb is hidden (got ' + snap.pencilMobile + ')')
+	assert.equal(snap.modal.open, true, 'tapping the pencil opens the Move workspace modal')
+	assert.equal(snap.modal.here, snap.base, 'the modal names the current folder')
+	assert.equal(snap.modal.upCount, 0, 'a workspace outside $HOME offers no move-up targets (the floor holds)')
+	assert.equal(snap.modal.inline, 0, 'the modal is class-based — no inline styles (CSP)')
+})
+
+test('topbar: the copy icon flashes, then restores its own label — not "Copy code"', { skip, timeout: 120_000 }, () => {
 	assert.equal(snap.viaButton.flashed, true, 'the reader gets confirmation')
 	assert.equal(snap.viaButton.aria, 'Copied')
 	// flashCopied() is shared with the code-block button, whose restore label was

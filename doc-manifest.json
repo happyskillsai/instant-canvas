@@ -67,7 +67,7 @@
         "Hot reload",
         "Version handshake"
       ],
-      "line_count": 187,
+      "line_count": 190,
       "links_to": [
         "docs/canvas-schema.md",
         "docs/cli.md",
@@ -499,9 +499,11 @@
         "Fake registry entries in shared state dirs look like leaks",
         "A green suite proves the schemas agree; nobody was testing the prose",
         "A synchronous `execFileSync` in a before hook FREEZES every other file's async test — and hangs the whole single-process suite",
-        "Audio never autoplays in headless Chrome without a flag, and `opts.args` REPLACES the defaults"
+        "Audio never autoplays in headless Chrome without a flag, and `opts.args` REPLACES the defaults",
+        "A piped `npm test` reports the PIPE's exit code, not the suite's",
+        "A timing-fragile browser assertion breaks when the suite gets HEAVIER, not just when the code does"
       ],
-      "line_count": 136,
+      "line_count": 158,
       "links_to": [
         "docs/gotchas/frontend.md"
       ],
@@ -602,7 +604,7 @@
         "Network perimeter",
         "What this does NOT protect against"
       ],
-      "line_count": 65,
+      "line_count": 66,
       "links_to": [
         "docs/architecture.md"
       ],
@@ -651,7 +653,7 @@
         "Security regressions",
         "Browser verification"
       ],
-      "line_count": 112,
+      "line_count": 114,
       "links_to": [
         "docs/gotchas/frontend.md",
         "docs/gotchas/testing.md",
