@@ -241,7 +241,7 @@
         "CSP shim",
         "Icons and vendored assets"
       ],
-      "line_count": 130,
+      "line_count": 132,
       "links_to": [
         "docs/architecture.md",
         "docs/canvas-schema.md",
@@ -347,9 +347,11 @@
         "Printing a presentation, every slide came out on TWO pages — and the culprit was 12px of screen gutter",
         "The `hidden` attribute does NOT hide a `.tbtn` — an author `display` rule outranks it",
         "A document-level Esc/arrow handler must yield to EVERY open sub-surface",
-        "`captureScreenshot` with `captureBeyondViewport` misses a below-the-fold deck sheet — the deck scrolls inside `.main`, not the page"
+        "`captureScreenshot` with `captureBeyondViewport` misses a below-the-fold deck sheet — the deck scrolls inside `.main`, not the page",
+        "A detached media element keeps playing",
+        "Chrome plays from a 200-only server, so a playback test cannot prove Range works"
       ],
-      "line_count": 280,
+      "line_count": 313,
       "links_to": [
         "docs/architecture.md",
         "docs/security.md"
@@ -496,9 +498,10 @@
         "A security scan can trip over its own test file",
         "Fake registry entries in shared state dirs look like leaks",
         "A green suite proves the schemas agree; nobody was testing the prose",
-        "A synchronous `execFileSync` in a before hook FREEZES every other file's async test — and hangs the whole single-process suite"
+        "A synchronous `execFileSync` in a before hook FREEZES every other file's async test — and hangs the whole single-process suite",
+        "Audio never autoplays in headless Chrome without a flag, and `opts.args` REPLACES the defaults"
       ],
-      "line_count": 116,
+      "line_count": 136,
       "links_to": [
         "docs/gotchas/frontend.md"
       ],
@@ -648,7 +651,7 @@
         "Security regressions",
         "Browser verification"
       ],
-      "line_count": 110,
+      "line_count": 112,
       "links_to": [
         "docs/gotchas/frontend.md",
         "docs/gotchas/testing.md",
