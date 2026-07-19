@@ -410,6 +410,11 @@ test.before(async () => {
 			+ '\n\n## Section Two\n\n'
 			+ 'More body content to guarantee the deck spans at least two sheets. '.repeat(45) }],
 	}))
+	// A native markdown file with NO companion — the #paperBtn target. Clicking the button
+	// on it must CREATE its companion carrying document.paper, and a fresh load must then
+	// render it as a paper (persistence reaches print).
+	fs.writeFileSync(path.join(root, 'paperless.md'),
+		'# A Plain Note\n\n## First\n\nSome prose that will become serif and justified once this is a paper.\n\n## Second\n\nMore prose here.\n')
 	K.root = root
 	K.child = spawn(process.execPath, [KERNEL, root], {
 		env: { ...process.env, INSTANTCANVAS_STATE_DIR: STATE_DIR },
@@ -449,6 +454,9 @@ test.before(async () => {
 		stripsDrive = await driveHandbookStrips()
 		paperDrive = await drivePaper('paper.canvas.json', 1)
 		paperTallDrive = await drivePaper('paper-tall.canvas.json', 2)
+		paperFormDrive = await drivePaperButtonState('formy.canvas.json')
+		paperBtnClick = await drivePaperButtonClick('paperless.md')
+		paperReloadDrive = await drivePaperReload('paperless.md')
 	}
 })
 
@@ -1630,3 +1638,147 @@ test('paper: the packer invariant holds and the PDF page count equals the sheet 
 	assert.equal(pdfPageCount(paperTallDrive.pdf), paperTallDrive.snap.sheetCount,
 		'the printed PDF /Count equals the deck sheet count — no sliver page from the front matter')
 })
+
+// ---------------------------------------------------------------- browser: the #paperBtn (Tier 2)
+//
+// (No backticks inside evaluate() — the whole block is a template literal.)
+
+const BTN_STATE_JS = `
+	(() => {
+		const b = document.getElementById('paperBtn');
+		return { hidden: b.hidden, disabled: b.disabled, title: b.title, active: b.classList.contains('active') };
+	})()
+`
+
+let paperFormDrive = null
+let paperBtnClick = null
+let paperReloadDrive = null
+
+// Open a canvas/document and read the #paperBtn's state (enabled/disabled + reason).
+async function drivePaperButtonState(canvasFile) {
+	const url = `http://127.0.0.1:${K.port}/?token=${encodeURIComponent(K.token)}#/c/${encodeURIComponent(canvasFile)}`
+	return withChrome(CHROME, url, { onNewDocument: PROBE }, async ({ evaluate }) => {
+		const deadline = Date.now() + 30_000
+		for (;;) {
+			const ready = await evaluate(`(() => !!(window.ic && window.ic.state.tree
+				&& window.ic.state.activeId === '${canvasFile}'
+				&& !document.getElementById('paperBtn').hidden))()`).catch(() => false)
+			if (ready || Date.now() > deadline)
+				break
+			await cdpSleep(250)
+		}
+		await cdpSleep(400)
+		return await evaluate(BTN_STATE_JS)
+	})
+}
+
+// Open a native .md (no companion), confirm the button is enabled, click it, and watch the
+// document become a paper — the companion is written and the deck re-renders.
+async function drivePaperButtonClick(mdFile) {
+	const url = `http://127.0.0.1:${K.port}/?token=${encodeURIComponent(K.token)}#/c/${encodeURIComponent(mdFile)}`
+	return withChrome(CHROME, url, { onNewDocument: PROBE }, async ({ evaluate }) => {
+		let deadline = Date.now() + 30_000
+		for (;;) {
+			const ready = await evaluate(`(() => !!(window.ic && window.ic.state.tree
+				&& window.ic.state.activeId === '${mdFile}'
+				&& !document.getElementById('paperBtn').hidden))()`).catch(() => false)
+			if (ready || Date.now() > deadline)
+				break
+			await cdpSleep(250)
+		}
+		await cdpSleep(400)
+		const before = await evaluate(BTN_STATE_JS)
+		await evaluate(`(() => { document.getElementById('paperBtn').click(); return true })()`)
+		// Wait for the write + broadcast + re-render: the loaded canvas now declares paper.
+		deadline = Date.now() + 30_000
+		for (;;) {
+			const done = await evaluate(`(() => !!(window.ic.state.canvasDoc
+				&& window.ic.state.canvasDoc.document && window.ic.state.canvasDoc.document.paper))()`).catch(() => false)
+			if (done || Date.now() > deadline)
+				break
+			await cdpSleep(200)
+		}
+		await cdpSleep(500)
+		const after = await evaluate(`(() => {
+			const b = document.getElementById('paperBtn');
+			return {
+				btnDisabled: b.disabled,
+				btnTitle: b.title,
+				docHasPaper: !!(window.ic.state.canvasDoc && window.ic.state.canvasDoc.document && window.ic.state.canvasDoc.document.paper),
+				toasts: [...document.querySelectorAll('.toast')].map((t) => t.textContent).join(' | '),
+			};
+		})()`)
+		return { before, after }
+	})
+}
+
+// A FRESH page load of the same .md — equivalent to what `print` does — must now render it
+// as a paper (the companion persisted the setting). Also print it and check the PDF.
+async function drivePaperReload(mdFile) {
+	const url = `http://127.0.0.1:${K.port}/?token=${encodeURIComponent(K.token)}#/c/${encodeURIComponent(mdFile)}`
+	return withChrome(CHROME, url, { onNewDocument: PROBE }, async ({ evaluate, send }) => {
+		const deadline = Date.now() + 30_000
+		for (;;) {
+			const ready = await evaluate(`(() => !!(window.ic && window.ic.state.tree
+				&& document.querySelector('.deck .sheet:first-child .paper-frontmatter')))()`).catch(() => false)
+			if (ready || Date.now() > deadline)
+				break
+			await cdpSleep(250)
+		}
+		await cdpSleep(600)
+		const snap = await evaluate(`(() => ({
+			paperMode: !!document.querySelector('.doc-mode.paper-mode'),
+			hasFrontMatter: !!document.querySelector('.deck .sheet:first-child .paper-frontmatter'),
+			fmTitle: (document.querySelector('.paper-frontmatter .paper-title') || {}).textContent || '',
+			firstH2: (document.querySelector('.deck .sheet .md h2') || {}).textContent || '',
+		}))()`)
+		const pdf = await send('Page.printToPDF', {
+			printBackground: true, preferCSSPageSize: true, displayHeaderFooter: false,
+			marginTop: 0, marginBottom: 0, marginLeft: 0, marginRight: 0,
+		})
+		return { snap, pdf: Buffer.from(pdf.data, 'base64') }
+	})
+}
+
+test('paperBtn: disabled with a reason on a form canvas (it cannot carry a document)', { skip: browserSkip, timeout: 120_000 }, () => {
+	assert.equal(paperFormDrive.hidden, false, 'the button shows but is disabled — a hidden control teaches nothing')
+	assert.equal(paperFormDrive.disabled, true, 'a form canvas cannot become a paper')
+	assert.match(paperFormDrive.title, /cannot become a paper/, 'the reason is on the tooltip')
+})
+
+test('paperBtn: clicking on a .md writes its companion and turns the document into a paper', { skip: browserSkip, timeout: 120_000 }, () => {
+	assert.equal(paperBtnClick.before.hidden, false, 'the button shows on a markdown document')
+	assert.equal(paperBtnClick.before.disabled, false, 'and is enabled — a plain .md can become a paper')
+	assert.equal(paperBtnClick.after.docHasPaper, true, 'after the click the loaded canvas declares document.paper')
+	assert.equal(paperBtnClick.after.btnDisabled, true, 'the button now reports the document is already a paper')
+	assert.match(paperBtnClick.after.btnTitle, /already a white paper/)
+	assert.match(paperBtnClick.after.toasts, /paperless\.canvas\.json/, 'a toast announces the companion that was created')
+
+	// The companion is real on disk, declares paper mode, enhances the document, and validates.
+	const compPath = path.join(K.root, 'paperless.canvas.json')
+	assert.ok(fs.existsSync(compPath), 'the companion file was written')
+	const comp = JSON.parse(fs.readFileSync(compPath, 'utf8'))
+	assert.equal(comp.enhances, 'paperless.md')
+	assert.ok(comp.document.paper, 'it declares document.paper')
+	assert.equal(validate(fs.readFileSync(compPath, 'utf8'), { root: K.root }).ok, true, 'the companion is a valid canvas')
+})
+
+test('paperBtn: the write PERSISTS — a fresh load (like print) renders the paper, and the PDF is one', { skip: browserSkip, timeout: 120_000 }, () => {
+	const s = paperReloadDrive.snap
+	assert.equal(s.paperMode, true, 'a fresh page load renders the document in paper mode')
+	assert.equal(s.hasFrontMatter, true, 'with the front matter on sheet 1')
+	assert.match(s.fmTitle, /A Plain Note/, 'the title is derived from the H1')
+	assert.match(s.firstH2, /^1\s+First/, 'sections number on the persisted paper')
+	// Reaches print: the PDF of that fresh load is a paper (front matter + numbered section).
+	if (hasPoppler) {
+		const p1 = pdfPageText(saveTmpPdf(paperReloadDrive.pdf), 1)
+		assert.match(p1, /A Plain Note/, 'the printed page 1 carries the front-matter title')
+		assert.match(p1, /1\s+First/, 'and the numbered section')
+	}
+})
+
+function saveTmpPdf(buf) {
+	const f = path.join(os.tmpdir(), 'ic-paper-print-' + process.pid + '.pdf')
+	fs.writeFileSync(f, buf)
+	return f
+}

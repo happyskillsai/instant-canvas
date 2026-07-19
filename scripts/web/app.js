@@ -1221,6 +1221,41 @@ function closePalette() {
 
 $('paletteBtn').addEventListener('click', () => openPalette(false))
 
+/**
+ * Convert the open document to a white paper — the #paperBtn.
+ *
+ * It ANNOUNCES the file it is about to create (a markdown file's companion) BEFORE the
+ * write, because a colour-click that makes a file appear is only a good trade if nobody
+ * discovers it afterwards — the same rule the palette Save follows. It is a persistent
+ * write (POST /api/paper), not a per-tab toggle, so the paper reaches `print`; the deck
+ * re-renders from the broadcast. The button seeds no authors/abstract — the human adds
+ * those by editing the companion, which the success toast points at.
+ */
+async function convertToPaper() {
+	if (!state.activeId)
+		return
+	const { json: plan } = await api('/api/paper/plan?path=' + encodeURIComponent(state.activeId))
+	if (plan && Array.isArray(plan.blocked)) {
+		toast('This canvas cannot become a white paper: it holds a ' + plan.blocked.join('/') + '.', 5000)
+		return
+	}
+	if (plan && plan.creates)
+		toast('Save will create ' + plan.creates + ' — this document’s companion canvas — to hold the paper settings.', 4000)
+	const { status, json } = await api('/api/paper', {
+		method: 'POST',
+		body: JSON.stringify({ path: state.activeId, paper: { columns: 1, font: 'serif' } }),
+	})
+	if (status !== 200) {
+		toast('Could not turn on white-paper mode' + (json && json.error ? ': ' + json.error.message : '') + '.', 5000)
+		return
+	}
+	toast(json.created
+		? 'Created ' + json.created + ' and turned on white-paper mode. Add authors and an abstract by editing it.'
+		: 'White-paper mode on — serif, numbered sections and front matter.', json.created ? 6000 : 3500)
+}
+
+$('paperBtn').addEventListener('click', convertToPaper)
+
 // Close on an outside click — and decide what "outside" means in the CAPTURE phase,
 // which is the whole point. The panel's own handlers re-render it (a preset chip
 // rebuilds the chip grid), and they run on the way UP, before this listener does. By
@@ -3902,6 +3937,7 @@ function syncViewToggle() {
 		paperControl('tocBtn', { loaded: true, enabled: false, on: false, label: '', reason: 'This is an image — a table of contents is a document feature' })
 		paperControl('stripsBtn', { loaded: true, enabled: false, on: false, label: '', reason: 'This is an image — a running header is a document feature' })
 		paperControl('paletteBtn', { loaded: true, enabled: false, on: false, label: '', reason: 'This is an image — it carries no document theme' })
+		paperControl('paperBtn', { loaded: true, enabled: false, on: false, label: '', reason: 'This is an image — it cannot become a paper' })
 		closePalette()
 		return
 	}
@@ -3915,6 +3951,7 @@ function syncViewToggle() {
 		paperControl('tocBtn', { loaded: true, enabled: false, on: false, label: '', reason: 'This is a ' + noun + ' — a table of contents is a document feature' })
 		paperControl('stripsBtn', { loaded: true, enabled: false, on: false, label: '', reason: 'This is a ' + noun + ' — a running header is a document feature' })
 		paperControl('paletteBtn', { loaded: true, enabled: false, on: false, label: '', reason: 'This is a ' + noun + ' — it carries no document theme' })
+		paperControl('paperBtn', { loaded: true, enabled: false, on: false, label: '', reason: 'This is a ' + noun + ' — it cannot become a paper' })
 		closePalette()
 		return
 	}
@@ -3928,6 +3965,7 @@ function syncViewToggle() {
 		paperControl('tocBtn', { loaded: true, enabled: false, on: false, label: '', reason: 'A presentation has no table of contents — its structure is its slides' })
 		paperControl('stripsBtn', { loaded: true, enabled: false, on: false, label: '', reason: 'A presentation\'s footer is declared in its JSON ("presentation.footer"), not toggled here' })
 		paperControl('paletteBtn', { loaded: true, enabled: true, on: !$('palettePanel').hidden, label: 'Deck colors — preset and tokens', reason: '' })
+		paperControl('paperBtn', { loaded: true, enabled: false, on: false, label: '', reason: 'A presentation cannot become a paper — its layout is fixed slides' })
 		return
 	}
 
@@ -3973,6 +4011,25 @@ function syncViewToggle() {
 		on: !$('palettePanel').hidden,
 		label: 'Document colors — preset and tokens',
 		reason: '',
+	})
+	// The white-paper convert button: enabled on a document/markdown canvas that is not
+	// already a paper, and can hold one. A form/confirm/sweep cannot become a paper (it
+	// cannot carry a "document"), and a canvas already in paper mode says so. It is a
+	// persistent WRITE (like theme Save), not a per-tab view toggle — which is what makes
+	// the paper reach `print`.
+	const docObj = loaded && state.canvasDoc.document && typeof state.canvasDoc.document === 'object' ? state.canvasDoc.document : null
+	const isPaper = !!(docObj && docObj.paper)
+	const hasCover = !!(docObj && docObj.cover)
+	paperControl('paperBtn', {
+		loaded,
+		enabled: loaded && !blocked && !isPaper && !hasCover,
+		on: isPaper,
+		label: 'Convert to a white paper — serif, numbered sections, front matter',
+		reason: blocked
+			? 'A ' + deckBlockers(state.canvasDoc).join('/') + ' canvas cannot become a paper — paper cannot submit or drag'
+			: hasCover
+				? 'This document has a cover — a paper has none (the front matter is page 1). Remove the cover first'
+				: isPaper ? 'This document is already a white paper' : '',
 	})
 	if (!loaded)
 		closePalette()
@@ -7786,7 +7843,7 @@ window.addEventListener('hashchange', route)
 // (§4.6). The nodes keep their ids and element-scoped handlers — syncViewToggle's
 // disable-with-reason, the palette panel's capture-phase click rules — so only their
 // parent changes; verify, don't rewrite.
-for (const id of ['viewToggle', 'presentBtn', 'tocBtn', 'stripsBtn', 'paletteBtn'])
+for (const id of ['viewToggle', 'presentBtn', 'tocBtn', 'stripsBtn', 'paperBtn', 'paletteBtn'])
 	$('ocCluster').append($(id))
 
 $('ocClose').addEventListener('click', ocClose)
