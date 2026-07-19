@@ -328,6 +328,11 @@ body.modal-open .doc-modal-view{overflow:hidden}
 .oc-nav:hover:not(:disabled){background:var(--tint);border-color:var(--muted)}
 .oc-nav:disabled{opacity:.35;cursor:not-allowed}
 .oc-nav .lucide{width:16px;height:16px}
+/* #ocInfo's OWN explicit [hidden] rule is load-bearing — an author display rule on a
+   .oc-nav beats the UA [hidden] (docs/gotchas/frontend.md). Its open-state ring reuses
+   the .tbtn.active accent treatment. */
+.oc-info[hidden]{display:none}
+.oc-info.active{background:var(--accent-soft);color:var(--accent);border-color:var(--accent)}
 .oc-sep{flex:0 0 auto;width:1px;align-self:stretch;margin:3px 2px;background:var(--border)}
 .oc-cluster{display:flex;align-items:center;gap:6px}
 /* Re-skin the relocated island buttons for the LIGHT bar. Element-scoped handlers are
@@ -1498,6 +1503,29 @@ body.media-overlay .doc-modal-view{display:flex;overflow:hidden}
 .g-copy:hover{color:var(--accent)}
 .g-copy .lucide{width:14px;height:14px}
 .g-mnote{margin-top:8px;font-size:12px;color:var(--amber)}
+
+/* The info drawer (§4.6): a right-side sheet inside .doc-modal-card (its positioning
+   context), collapsed by default and revealed by #ocInfo. It OVERLAYS #docModalView —
+   absolutely positioned, full card height — so opening it never reflows the content
+   underneath; a left border + shadow lift it off the card, and its body scrolls so a
+   long field set never overflows. All geometry is class-based (CSP drops style=""). The
+   OWN [hidden] rule is load-bearing here too: a base display rule would beat UA [hidden]
+   (docs/gotchas/frontend.md), so collapsed computes display:none and the tests assert it. */
+.info-drawer{position:absolute;top:0;right:0;bottom:0;z-index:5;display:flex;flex-direction:column;
+	width:min(340px,86vw);background:var(--panel);border-left:1px solid var(--border);
+	box-shadow:-8px 0 28px rgba(10,14,25,.22);
+	transform:translateX(100%);opacity:0;transition:transform .18s ease-out,opacity .18s ease-out}
+.info-drawer[hidden]{display:none}
+.info-drawer.open{transform:none;opacity:1}
+.info-drawer-head{flex:0 0 auto;display:flex;align-items:center;justify-content:space-between;gap:10px;
+	padding:12px 12px 12px 16px;border-bottom:1px solid var(--border)}
+.info-drawer-title{font-size:13px;font-weight:600;color:var(--text);
+	overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.info-drawer-body{flex:1 1 auto;min-height:0;overflow:auto}
+/* The single .g-meta panel fills the drawer body — the ROW styles (.g-mrow/.g-mlabel/
+   .g-mval/.g-copy) are reused unchanged; only the in-stage container box (the flex basis,
+   left border and max-width meant for the image stage's flex row) is neutralized here. */
+.info-drawer .g-meta{flex:none;max-width:none;border-left:none}
 .g-x{position:absolute;top:14px;right:14px;z-index:3;width:34px;height:34px;border:none;border-radius:50%;
 	background:var(--panel);color:var(--text);cursor:pointer;display:flex;align-items:center;justify-content:center;
 	box-shadow:var(--shadow)}
@@ -1740,6 +1768,9 @@ button.rr-row:hover{border-color:var(--accent);background:var(--tint)}
 	/* §4.6: the overlay chrome (breadcrumb, prev/next, action cluster) is a route's
 	   furniture, never part of the printed document — the deck must not photograph it. */
 	.overlay-chrome{display:none !important}
+	/* The info drawer is chrome too — it must never perturb deck pagination if a reader
+	   Cmd+Ps with it open (verify a printed PDF's /Count is unchanged). */
+	.info-drawer{display:none !important}
 	/* No `.code-copy` rule here on purpose: the deck mounts no copy button at all
 	   (mountCodeCopy's `{button: false}`), so there is nothing to hide. Hiding a
 	   button that should not exist is a fact that rots — this way a test can
@@ -1862,4 +1893,12 @@ button.rr-row:hover{border-color:var(--accent);background:var(--tint)}
 	   leading item (Filter) soaks up the free space before it. The full-width sort
 	   row is unaffected. */
 	.browse .g-controls .g-filter{margin-left:auto}
+}
+
+/* The info drawer becomes a near-full-width sheet on a phone (§4.6). This lives at the
+   END of the file, AFTER the base .info-drawer rule, or a same-specificity base rule
+   beats it by source order (docs/gotchas/frontend.md) — assert the COMPUTED width, never
+   the source. */
+@media (max-width:600px){
+	.info-drawer{width:100vw;max-width:none}
 }
