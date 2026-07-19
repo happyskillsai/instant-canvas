@@ -1004,6 +1004,60 @@ body.modal-open .main{overflow:hidden}
 .sheet .md table.wide th,.sheet .md table.wide td{padding:5px 8px;font-size:inherit;overflow-wrap:break-word}
 .sheet .md table.wide code{font-size:10px;padding:1px 3px}
 
+/* ============================================================================
+   WHITE-PAPER / ACADEMIC MODE — a single-column variant of the deck.
+
+   `paper-mode` is a class on the deck ROOT (`.doc-mode`), mirroring how
+   `data-paper` sits there, so EVERY rule below reaches both the real sheets and
+   the packer's hidden measuring replica (both are descendants of that root) —
+   the replica must measure the same serif, justified, looser-leading layout the
+   printer produces, or the packer sizes the wrong thing and prints sliver pages.
+   Everything is class-based: no inline styles the CSP would drop.
+   Font "serif" is the default; "sans" (a `paper-sans` root class) keeps the
+   layout and swaps only the family. Code stays mono, math is vector SVG.
+   ========================================================================== */
+.doc-mode.paper-mode .sheet{--paper-serif:Georgia,'Times New Roman',Cambria,'Noto Serif',serif}
+.doc-mode.paper-mode .sheet .md,
+.doc-mode.paper-mode .sheet .paper-frontmatter{font-family:var(--paper-serif)}
+.doc-mode.paper-mode .sheet .md p{text-align:justify;hyphens:auto;-webkit-hyphens:auto}
+/* Code and math must NOT take the serif switch — code is mono, math is SVG. */
+.doc-mode.paper-mode .sheet .md pre,
+.doc-mode.paper-mode .sheet .md code,
+.doc-mode.paper-mode .sheet .md kbd{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+/* "sans" font option — same specificity as the serif rule, placed AFTER it so it wins. */
+.doc-mode.paper-sans .sheet .md,
+.doc-mode.paper-sans .sheet .paper-frontmatter{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+
+/* Numbered bold section headings, sizes tracking the arXiv baseline (§A). */
+.doc-mode.paper-mode .sheet .md h1{font-size:22px;font-weight:700}
+.doc-mode.paper-mode .sheet .md h2{font-size:17px;font-weight:700}
+.doc-mode.paper-mode .sheet .md h3{font-size:14px;font-weight:700}
+.doc-mode.paper-mode .sheet .md h4,
+.doc-mode.paper-mode .sheet .md h5,
+.doc-mode.paper-mode .sheet .md h6{font-size:13px;font-weight:700}
+
+/* Front matter — full-width, centered, at the top of sheet 1. */
+.doc-mode.paper-mode .sheet .paper-frontmatter{text-align:center;margin:0 0 12mm}
+.doc-mode.paper-mode .sheet .paper-title{font-size:26px;font-weight:700;line-height:1.15;letter-spacing:-.01em;margin:0 0 10px}
+.doc-mode.paper-mode .sheet .paper-authors{font-size:15px;margin:6px 0 2px}
+.doc-mode.paper-mode .sheet .paper-affils{font-size:13px;color:var(--muted);margin:0 0 2px}
+.doc-mode.paper-mode .sheet .paper-abstract{max-width:80%;margin:14px auto 0}
+.doc-mode.paper-mode .sheet .paper-abstract-head{text-align:center;font-weight:700;font-size:12px;margin-bottom:4px}
+.doc-mode.paper-mode .sheet .paper-abstract p{margin:0;text-align:justify;hyphens:auto;-webkit-hyphens:auto;font-size:12px;line-height:1.55}
+.doc-mode.paper-mode .sheet .paper-keywords{max-width:80%;margin:8px auto 0;font-size:11px;color:var(--muted)}
+
+/* Equation numbers — right-aligned in the margin. Absolutely positioned so they add NO
+   block height (the numbering pass runs after the packer has measured). */
+.doc-mode.paper-mode .sheet .math-block{position:relative}
+.doc-mode.paper-mode .sheet .math-block .eqno{position:absolute;right:0;top:50%;transform:translateY(-50%);font-size:12px;color:var(--text);font-family:var(--paper-serif)}
+
+/* References — hanging indent, slightly smaller, list marker kept. */
+.doc-mode.paper-mode .sheet .md .paper-refs{font-size:12px;padding-left:0}
+.doc-mode.paper-mode .sheet .md .paper-refs li{list-style-position:inside;padding-left:1.7em;text-indent:-1.7em;margin:4px 0}
+
+/* Figure captions read as academic "Figure N:" at ~9pt. */
+.doc-mode.paper-mode .sheet .chart-title{font-size:11px;font-weight:650;color:var(--muted)}
+
 /* running header/footer — ordinary DOM inside each sheet, so they survive
    Cmd+P exactly like they survive the print command */
 .sheet-hdr,.sheet-ftr{display:flex;align-items:baseline;gap:12px;font-size:11px;color:var(--muted);flex-shrink:0}

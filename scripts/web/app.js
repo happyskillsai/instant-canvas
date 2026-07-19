@@ -3027,7 +3027,10 @@ function docGeometry(doc) {
 	const land = page.orientation === 'landscape'
 	const wMm = land ? paper.h : paper.w
 	const hMm = land ? paper.w : paper.h
-	const marginMm = /^\d+(\.\d+)?mm$/.test(page.margin || '') ? parseFloat(page.margin) : 15
+	// Paper/academic mode wants wider (~1in) margins by default (§A); an explicit
+	// page.margin still wins. Plain document mode keeps its 15mm default.
+	const defaultMargin = doc && doc.paper && typeof doc.paper === 'object' ? 25 : 15
+	const marginMm = /^\d+(\.\d+)?mm$/.test(page.margin || '') ? parseFloat(page.margin) : defaultMargin
 	return { wMm, hMm, marginMm, wPx: wMm * MM_PX }
 }
 
@@ -3075,11 +3078,19 @@ function stripEl(cls, spec) {
  *  same rule that lets any display canvas be viewed as paper. */
 function docStrips(canvas, doc) {
 	const declared = !!(doc.header || doc.footer)
-	const on = state.docStrips !== null ? state.docStrips : declared
+	const paper = !!(doc.paper && typeof doc.paper === 'object')
+	// Paper mode defaults its strips ON: a page number is part of the paper look, not an
+	// opt-in — so a paper always carries one unless the reader toggles it off.
+	const on = state.docStrips !== null ? state.docStrips : (declared || paper)
 	if (!on)
 		return { header: null, footer: null, on: false }
 	if (declared)
 		return { header: doc.header || null, footer: doc.footer || null, on: true }
+	// A paper's derived strips are lean: a centered page number and NO running header
+	// (the front matter is the top of page 1; a header band above it would be noise).
+	// An author who declares header/footer still wins — that is the `declared` branch above.
+	if (paper)
+		return { header: null, footer: { center: '{{pageNumber}}' }, on: true }
 	const title = (doc.cover && doc.cover.title) || canvas.title || ''
 	return { header: { left: title }, footer: { right: '{{pageNumber}} / {{totalPages}}' }, on: true }
 }
@@ -3102,7 +3113,25 @@ function substitutePageVars(scaleEl, total) {
 
 let docAnchorSeq = 0
 
-function mdFragments(block, entries, depth) {
+// Headings a paper leaves UNNUMBERED — front/back-matter, not body sections. Matched on
+// TEXT (English convention for v1; a limitation, noted). REFS_HEADINGS additionally tag
+// the list that follows them as the styled references list.
+const UNNUMBERED_HEADINGS = new Set(['abstract', 'references', 'bibliography', 'acknowledgements', 'acknowledgments'])
+const REFS_HEADINGS = new Set(['references', 'bibliography'])
+
+/** Paper-mode section numbers, derived from a running counter keyed by heading DEPTH.
+ *  H1 is the paper title (consumed into the front matter), so body sections start at H2:
+ *  H2 → "1", H3 → "1.1", H4 → "1.1.1". Runtime-derived, never authored or persisted. */
+function paperSectionNumber(ctx, level, text) {
+	if (!ctx || !ctx.numberSections || level < 2 || UNNUMBERED_HEADINGS.has(text.trim().toLowerCase()))
+		return ''
+	const depth = level - 1 // H2 → 1, H3 → 2, …
+	ctx.counters[depth] = (ctx.counters[depth] || 0) + 1
+	ctx.counters.length = depth + 1 // reset every deeper level
+	return ctx.counters.slice(1, depth + 1).join('.')
+}
+
+function mdFragments(block, entries, depth, paperCtx) {
 	const tmp = document.createElement('div')
 	tmp.innerHTML = md.render(block.text || '')
 	const out = []
@@ -3114,11 +3143,32 @@ function mdFragments(block, entries, depth) {
 		const frag = { el: wrap, kind: null }
 		if (tag === 'PRE') frag.kind = 'lines'
 		else if (tag === 'TABLE') frag.kind = 'rows'
-		else if (tag === 'UL' || tag === 'OL') frag.kind = 'items'
-		else if (/^H[1-6]$/.test(tag)) {
+		else if (tag === 'UL' || tag === 'OL') {
+			frag.kind = 'items'
+			// The list right after a "References"/"Bibliography" heading is the reference
+			// list — style it with a hanging indent.
+			if (paperCtx && paperCtx.refsPending) {
+				child.classList.add('paper-refs')
+				paperCtx.refsPending = false
+			}
+		} else if (/^H[1-6]$/.test(tag)) {
+			const level = Number(tag[1])
+			const htext = child.textContent.trim().toLowerCase()
+			// In a paper the first H1 is the title: capture it for the front matter and drop
+			// it from the body (rendering it twice — as front matter and as a heading — is wrong).
+			if (paperCtx && level === 1 && !paperCtx.h1Done) {
+				paperCtx.h1 = child.textContent
+				paperCtx.h1Done = true
+				continue
+			}
+			if (paperCtx) {
+				const num = paperSectionNumber(paperCtx, level, child.textContent)
+				if (num)
+					child.textContent = num + ' ' + child.textContent
+				paperCtx.refsPending = REFS_HEADINGS.has(htext)
+			}
 			frag.heading = true
 			wrap.classList.add('doc-h')
-			const level = Number(tag[1])
 			if (level <= depth) {
 				const anchor = String(++docAnchorSeq)
 				wrap.dataset.docAnchor = anchor
@@ -3158,6 +3208,58 @@ function tocEntries(structure, captions) {
 	return structure.length ? structure : captions
 }
 
+/**
+ * The academic front matter, built as ONE atomic fragment prepended before the body
+ * (§4.3). Because the packer measures it into sheet-1's budget like any fragment, it
+ * consumes real height and pushes overflowing body onto sheet 2 — and, unlike a cover,
+ * it does NOT get its own page. Authors/affiliations are flat centered lines (no
+ * superscript linking); the title falls back to the document's first H1.
+ */
+function buildFrontMatter(paper, titleFallback) {
+	const fm = paper.frontmatter && typeof paper.frontmatter === 'object' ? paper.frontmatter : {}
+	const strs = (a) => (Array.isArray(a) ? a.filter((x) => typeof x === 'string' && x.trim()) : [])
+	const wrap = document.createElement('div')
+	wrap.className = 'paper-frontmatter doc-frag'
+	const title = document.createElement('h1')
+	title.className = 'paper-title'
+	title.textContent = (typeof fm.title === 'string' && fm.title) || titleFallback || ''
+	wrap.appendChild(title)
+	const authors = strs(fm.authors)
+	if (authors.length) {
+		const a = document.createElement('div')
+		a.className = 'paper-authors'
+		a.textContent = authors.join(' · ')
+		wrap.appendChild(a)
+	}
+	const affils = strs(fm.affiliations)
+	if (affils.length) {
+		const af = document.createElement('div')
+		af.className = 'paper-affils'
+		af.textContent = affils.join(' · ')
+		wrap.appendChild(af)
+	}
+	if (typeof fm.abstract === 'string' && fm.abstract.trim()) {
+		const ab = document.createElement('div')
+		ab.className = 'paper-abstract'
+		const head = document.createElement('div')
+		head.className = 'paper-abstract-head'
+		head.textContent = 'Abstract'
+		const p = document.createElement('p')
+		p.textContent = fm.abstract
+		ab.appendChild(head)
+		ab.appendChild(p)
+		wrap.appendChild(ab)
+	}
+	const keywords = strs(fm.keywords)
+	if (keywords.length) {
+		const k = document.createElement('div')
+		k.className = 'paper-keywords'
+		k.textContent = 'Keywords — ' + keywords.join(', ')
+		wrap.appendChild(k)
+	}
+	return wrap
+}
+
 /** Flatten the canvas into fragments + TOC entries. Chapters (pages) force a
  *  new sheet and contribute top-level entries. */
 function docFragments(canvas, doc) {
@@ -3170,6 +3272,10 @@ function docFragments(canvas, doc) {
 	const entries = []   // headings + chapter names — the document's structure
 	const captions = []  // chart/table titles — listed only when there is no structure
 	docAnchorSeq = 0
+	const paper = doc.paper && typeof doc.paper === 'object' ? doc.paper : null
+	const paperCtx = paper
+		? { numberSections: paper.numberSections !== false, counters: [], h1: null, h1Done: false, refsPending: false }
+		: null
 	chapters.forEach((chapter, ci) => {
 		if (chapter.name) {
 			const head = document.createElement('div')
@@ -3190,7 +3296,7 @@ function docFragments(canvas, doc) {
 			if (!b || typeof b !== 'object')
 				continue
 			if (b.type === 'markdown') {
-				fragments.push(...mdFragments(b, entries, depth))
+				fragments.push(...mdFragments(b, entries, depth, paperCtx))
 			} else if (b.type === 'chart') {
 				// A slot per view; the ONE chart box moves between slots on toggle.
 				// The DECK always numbers its captions. `b.title` (not the prefixed
@@ -3216,7 +3322,13 @@ function docFragments(canvas, doc) {
 		f.el.querySelector('.chart-slot').dataset.slot = idx
 		f.el.querySelector('.chart-box').dataset.chart = idx
 	})
-	return { fragments, entries: tocEntries(entries, captions), flatBlocks }
+	// Paper mode: the front matter is built now that the body's first H1 (the title
+	// fallback) is known, and returned for the assembler to lead the deck with. It is one
+	// atomic fragment with no `brk`, measured into the budget like anything else — no
+	// standalone page, unlike a cover. The assembler puts it at the very top of the first
+	// sheet (ahead of a TOC if there is one), which is what "front matter IS page 1" means.
+	const frontMatter = paperCtx ? buildFrontMatter(paper, paperCtx.h1 || canvas.title) : null
+	return { fragments, entries: tocEntries(entries, captions), flatBlocks, frontMatter }
 }
 
 /** Chart card with an empty slot — used by both document views. The live plot
@@ -3902,6 +4014,31 @@ function switchDocView(view) {
 	syncViewToggle()
 }
 
+/**
+ * Number display equations (1)…(N) in document order — a paper-mode pass.
+ *
+ * Walks `.math-block` nodes across the assembled deck and appends a right-aligned
+ * `<span class="eqno">(N)</span>` to each. The number is absolutely positioned (CSS),
+ * so it adds NO block height — which is why this can run at the mount sequence, AFTER
+ * the packer has measured, rather than in the before-measure pass. When `numbered` is
+ * false, or there are no `.math-block` nodes (math not implemented, or no equations),
+ * it is a clean no-op. Idempotent: a stale `.eqno` from a previous pass is removed first.
+ */
+function mountEquationNumbers(scope, numbered) {
+	const blocks = [...scope.querySelectorAll('.math-block')]
+	blocks.forEach((b, i) => {
+		const old = b.querySelector(':scope > .eqno')
+		if (old)
+			old.remove()
+		if (!numbered)
+			return
+		const n = document.createElement('span')
+		n.className = 'eqno'
+		n.textContent = '(' + (i + 1) + ')'
+		b.appendChild(n)
+	})
+}
+
 async function renderDocumentView(main, canvas) {
 	// A declared `document` brings its furnishings (cover, strips, theme…).
 	// An undeclared canvas viewed as paper gets pure defaults: A4/15mm, no
@@ -3919,11 +4056,17 @@ async function renderDocumentView(main, canvas) {
 	setPageRule(geo)
 	main.innerHTML = '<div class="canvas doc-mode"><div class="deck"><div class="deck-scale"></div></div></div>'
 	const rootEl = main.querySelector('.doc-mode')
+	// Paper mode is a class on the deck ROOT, so every sheet the paper CSS scopes to —
+	// the real ones AND the packer's hidden measuring replica, both descendants of this
+	// root — measures and prints the identical serif/justified/looser-leading layout.
+	const paper = doc.paper && typeof doc.paper === 'object' ? doc.paper : null
+	rootEl.classList.toggle('paper-mode', !!paper)
+	rootEl.classList.toggle('paper-sans', !!(paper && paper.font === 'sans'))
 	applyDocumentTheme(rootEl, docTheme())
 	const deckEl = main.querySelector('.deck')
 	const scaleEl = main.querySelector('.deck-scale')
 
-	const { fragments, entries, flatBlocks } = docFragments(canvas, doc)
+	const { fragments, entries, flatBlocks, frontMatter } = docFragments(canvas, doc)
 	// Everything that changes a fragment's HEIGHT must happen before it is measured.
 	// Two such things exist, and both were learned the hard way:
 	//   1. Images must have decoded, or a sheet overflows the moment they do. All
@@ -3939,6 +4082,20 @@ async function renderDocumentView(main, canvas) {
 		.flatMap((f) => [...f.el.querySelectorAll('img')])
 		.map((img) => img.decode().catch(() => {})))
 
+	const hasCover = doc.cover && typeof doc.cover === 'object'
+	// The TOC belongs to the renderer: generated automatically whenever there
+	// is anything to list, declared or not. The JSON `toc` key only customizes
+	// it (title, depth), and the reader can toggle it off/on from the topbar.
+	const wantToc = entries.length > 0 && (state.docToc !== null ? state.docToc : true)
+	state.docTocOn = wantToc
+	state.docEntries = entries.length
+	// Paper mode: the front matter LEADS the deck — it is the top of sheet 1 (§4.3), so it
+	// is prepended to the TOC group when there is one, else to the body. Either way it is
+	// measured into the same budget as an ordinary fragment (no standalone page).
+	const fmFrag = frontMatter ? { el: frontMatter, kind: null } : null
+	if (fmFrag && !wantToc)
+		fragments.unshift(fmFrag)
+
 	// The body packs FIRST: TOC page numbers need to know which sheet every
 	// anchored heading and block title landed on. The TOC packs second (its
 	// own sheet count shifts the absolute numbers), and only then are the
@@ -3950,16 +4107,12 @@ async function renderDocumentView(main, canvas) {
 		for (const el of sheet.querySelectorAll('[data-doc-anchor]'))
 			anchorSheet.set(el.dataset.docAnchor, i)
 	})
-	const hasCover = doc.cover && typeof doc.cover === 'object'
-	// The TOC belongs to the renderer: generated automatically whenever there
-	// is anything to list, declared or not. The JSON `toc` key only customizes
-	// it (title, depth), and the reader can toggle it off/on from the topbar.
-	const wantToc = entries.length > 0 && (state.docToc !== null ? state.docToc : true)
-	state.docTocOn = wantToc
-	state.docEntries = entries.length
 	let tocSheets = []
 	if (wantToc) {
-		tocSheets = packFragments(tocFragments(doc, entries), geo, docP, rootEl)
+		const tocFrags = tocFragments(doc, entries)
+		if (fmFrag)
+			tocFrags.unshift(fmFrag)
+		tocSheets = packFragments(tocFrags, geo, docP, rootEl)
 		const offset = (hasCover ? 1 : 0) + tocSheets.length
 		for (const ts of tocSheets) {
 			for (const row of ts.querySelectorAll('.toc-entry')) {
@@ -3981,6 +4134,9 @@ async function renderDocumentView(main, canvas) {
 	for (const s of sheets)
 		scaleEl.appendChild(s)
 	substitutePageVars(scaleEl, sheets.length)
+	// Paper mode: number the display equations across the assembled deck, in document
+	// order. Absolute-positioned, so it adds no height and needs no repack.
+	mountEquationNumbers(scaleEl, !!(paper && paper.numberEquations !== false))
 
 	// The continuous twin lives beside the deck; the view class hides one.
 	rootEl.insertAdjacentHTML('beforeend', docHtmlView(canvas, flatBlocks))
