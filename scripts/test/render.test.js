@@ -41,7 +41,15 @@ const DOC = [
 	'- [x] done', '- [ ] todo', '',
 	'| a | b |', '|---|---:|', '| 1 | 2 |', '',
 	'```js', 'const x = 1; // hi', '```', '',
-	'```', 'no language declared', '```', '',
+	'```', 'no language and $x$ literal', '```', '',   // a fenced $x$ must stay literal, not become math
+	// Math, server-rendered to inline SVG. The HARD cases per the fixture-must-
+	// -contain-the-breaking-input rule: a deep-descent inline integral (baseline
+	// bucket), a \(…\) alias, a display sum, a matrix, a $5 price that must stay
+	// text, and a bad formula that must degrade to a .math-error node.
+	'Inline the area is $\\int_0^\\infty e^{-x^2}dx$, also \\(a^2+b^2=c^2\\).', '',
+	'$$ \\sum_{n=1}^{\\infty} \\frac{1}{n^2} = \\frac{\\pi^2}{6} $$', '',
+	'A matrix $\\begin{pmatrix} a & b \\\\ c & d \\end{pmatrix}$ inline.', '',
+	'It costs $5 today; bad $\\notacommand$ degrades.', '',
 	'![local](logo.png)', '',   // inlined server-side as a data: URI
 	'![vector](logo.svg)', '',  // markdown-it's validateLink refuses data:image/svg+xml by default
 	'![huge](huge.png)', '',    // over the cap → labeled fallback, never a broken image
@@ -264,6 +272,44 @@ test.before(async () => {
 						const edges = f.data.filter((d) => d.mode === 'lines');
 						return { traces: f.data.length, edgeTraces: edges.length, widths: edges.map((e) => e.line.width) };
 					})(),
+					// Math, rendered server-side to inline SVG and re-expanded by the
+					// math core rule. Asserted in the real DOM because the whole point is
+					// CSP purity and theme-following, neither of which a server-side test can
+					// see. (No backticks in here: this whole block is inside a template literal.)
+					math: (() => {
+						const inlineSvgs = document.querySelectorAll('.md .math-inline svg').length;
+						const blockSvg = document.querySelector('.md .math-block svg');
+						const err = document.querySelector('.md .math-error');
+						// The deep-descent integral: its baseline bucket must compute to a
+						// real NEGATIVE vertical-align, never baseline/0.
+						const intg = [...document.querySelectorAll('.md .math-inline')]
+							.find((s) => /int/.test(s.getAttribute('title') || ''));
+						const valign = intg ? getComputedStyle(intg).verticalAlign : '';
+						// Theme-follow: the svg paints in currentColor, so its computed color
+						// must track --text when the app theme flips. Force light then dark
+						// explicitly (the page may already be in either via prefers-color-scheme),
+						// then restore — a self-contained probe.
+						const probe = document.querySelector('.md .math svg');
+						const rootEl = document.documentElement;
+						const prev = rootEl.getAttribute('data-theme');
+						rootEl.setAttribute('data-theme', 'light');
+						const colorA = probe ? getComputedStyle(probe).color : '';
+						rootEl.setAttribute('data-theme', 'dark');
+						const colorB = probe ? getComputedStyle(probe).color : '';
+						if (prev === null) rootEl.removeAttribute('data-theme'); else rootEl.setAttribute('data-theme', prev);
+						return {
+							inlineSvgs,
+							blockHasPath: !!(blockSvg && blockSvg.querySelector('path')),
+							styledInside: document.querySelectorAll('.md .math [style]').length,
+							errText: err ? err.textContent : null,
+							errTitle: err ? err.getAttribute('title') : null,
+							valign,
+							colorA, colorB,
+							priceLiteral: document.querySelector('.md').textContent.includes('It costs $5 today'),
+							fenceLiteral: [...document.querySelectorAll('.md pre:not(.hljs)')]
+								.some((p) => p.textContent.includes('$x$')),
+						};
+					})(),
 					mdTasks: document.querySelectorAll('.md li.task').length,
 					mdChecked: document.querySelectorAll('.md li.task input[type=checkbox]:checked').length,
 					mdRightAligned: document.querySelectorAll('.md table .ta-right').length,
@@ -393,6 +439,33 @@ test('every code block carries an always-visible copy button that really copies'
 	assert.ok(snapshot.clipboard.clicked, 'the copy button was clickable')
 	assert.equal(snapshot.clipboard.text, 'const x = 1; // hi', 'the fence source landed on the clipboard verbatim')
 	assert.ok(snapshot.clipboard.copiedClass, 'the button confirmed the copy to the reader')
+})
+
+test('math renders as themed inline SVG, degrades on bad input, and never breaks CSP purity', { skip, timeout: 120_000 }, () => {
+	const m = snapshot.math
+	// The integral, the \(…\) alias, and the matrix are three inline formulas.
+	assert.ok(m.inlineSvgs >= 3, `inline math drew SVG (got ${m.inlineSvgs})`)
+	assert.equal(m.blockHasPath, true, 'the display sum drew a block SVG with <path> geometry')
+
+	// CSP purity: the math carries no inline style. This is the wall that
+	// disqualified KaTeX/MathJax-CHTML — baseline is a class, not a style="".
+	assert.equal(m.styledInside, 0, 'no [style] attribute anywhere inside a .math node')
+
+	// Baseline: a deep-descent integral computes to a real negative vertical-align.
+	assert.ok(m.valign && parseFloat(m.valign) < 0, `the integral sits below the baseline (got ${JSON.stringify(m.valign)})`)
+
+	// Theming: the glyph color is currentColor, so it tracks --text across the toggle.
+	assert.ok(m.colorA && m.colorB, 'read the math color in both themes')
+	assert.notEqual(m.colorA, m.colorB, `math color follows the app theme (${m.colorA} → ${m.colorB})`)
+
+	// Degrade: bad LaTeX is a visible error node carrying the source and message,
+	// not a broken page.
+	assert.equal(m.errText, '\\notacommand', 'the error node shows the raw source')
+	assert.match(m.errTitle, /Undefined control sequence/, 'and the parser message in its title')
+
+	// Guards proven in the real DOM: a price stays text, a fenced $x$ stays literal.
+	assert.equal(m.priceLiteral, true, 'the $5 price rendered as literal text, not math')
+	assert.equal(m.fenceLiteral, true, 'a fenced $x$ stayed literal, never rendered as math')
 })
 
 test('the sidebar footer shows the running version', { skip, timeout: 120_000 }, () => {

@@ -2,6 +2,18 @@
 
 ## [Unreleased]
 
+### Added
+- **Math in markdown.** Write LaTeX between `$…$` / `\(…\)` (inline) or `$$…$$` / `\[…\]`
+  (display) in any markdown — a `markdown` block, an inline `text`, or a native `.md`/`.mdx` —
+  and the reader sees typeset math in the continuous view, the printed PDF, and slides. It
+  follows the document theme (glyphs paint in `currentColor`) and scales with the surrounding
+  text (`ex` units). Rendering happens **once, server-side**, to self-contained inline SVG, so a
+  page with no math ships no math engine and `print` gets static math for free. A `$` next to a
+  digit (`$5`, `\$10`) stays a literal price, `$x$` inside a code fence stays literal, and invalid
+  LaTeX (`$\notacommand$`) degrades to a visible error showing the source — never a broken page.
+  Holds the strict CSP with zero violations and **no new runtime dependencies** (MathJax is
+  vendored as a pre-built Node bundle, the Plotly pattern).
+
 ## [0.14.0] - 2026-07-18
 
 ### Added

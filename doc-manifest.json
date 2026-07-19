@@ -138,7 +138,7 @@
         "Validator behavior",
         "Catalog: progressive disclosure"
       ],
-      "line_count": 370,
+      "line_count": 373,
       "links_to": [
         "docs/architecture.md",
         "docs/cli.md",
@@ -159,6 +159,7 @@
         "scripts/lib/skillsconfig.js",
         "scripts/lib/companion.js",
         "scripts/lib/markdownsrc.js",
+        "scripts/lib/mathsvg.js",
         "scripts/lib/mdcanvas.js",
         "scripts/lib/gallery.js",
         "scripts/lib/pkgmeta.js"
@@ -314,6 +315,7 @@
         "markdown-it silently refuses most `data:` image URIs",
         "`html: false` escapes raw HTML, so \"not rendering\" it means showing it",
         "Shiki cannot be used for syntax highlighting, and it is not about size",
+        "Math must be MathJax SVG output, never KaTeX or MathJax-CHTML",
         "Plotly injects a `<style>` element unless you claim its id",
         "Plotly's automargin takes the MAX of its pushers, never the sum",
         "Changing a default in the template SILENTLY RELOCATES every `options` patch written against the old one",
@@ -351,7 +353,7 @@
         "A detached media element keeps playing",
         "Chrome plays from a 200-only server, so a playback test cannot prove Range works"
       ],
-      "line_count": 313,
+      "line_count": 317,
       "links_to": [
         "docs/architecture.md",
         "docs/security.md"
@@ -653,7 +655,7 @@
         "Security regressions",
         "Browser verification"
       ],
-      "line_count": 114,
+      "line_count": 115,
       "links_to": [
         "docs/gotchas/frontend.md",
         "docs/gotchas/testing.md",

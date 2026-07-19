@@ -3,6 +3,10 @@
 These files are served to the browser by the kernel (`/assets/vendor/...`).
 They are **never** `require()`d by Node. Do not edit them.
 
+(The one Node-`require`d vendored asset lives elsewhere — the server-side MathJax
+tex2svg bundle at `../vendor/mathjax-tex2svg.cjs`, documented in `../vendor/VENDORED.md`.
+This "never `require()`d by Node" claim is scoped to *this* directory.)
+
 | File | Package | Version | Source | SHA-256 | Vendored |
 |---|---|---|---|---|---|
 | `plotly.min.js` | Plotly.js — **custom strict build** (see recipe) | 3.7.0 | https://github.com/plotly/plotly.js @ `v3.7.0` | `211735ddd425ea73dc910c713b74d4f80621988a217b61832b2aaf27c85814e0` | 2026-07-09 |

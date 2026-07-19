@@ -133,6 +133,23 @@ test('catalog markdown carries the asset rule, and the lean index does not', () 
 	assert.ok(!/data:/.test(lean.blocks.markdown), 'the asset rule does not leak into the index')
 })
 
+test('catalog markdown teaches math rendering and its guards', () => {
+	// A claim in agent-facing prose is a behavior: the math contract must not silently
+	// rot behind a green suite. Pin that the note exists and names the delimiters, the
+	// price guard, and the degrade behavior — so a change to any of them fails here.
+	const md = catalog('markdown')
+	const note = md.notes.find((n) => /\bMATH\b/i.test(n) && /LaTeX/.test(n))
+	assert.ok(note, 'the markdown contract teaches math')
+	assert.match(note, /\$\$/, 'names the $$…$$ display delimiter')
+	assert.match(note, /\\\(/, 'names the \\(…\\) inline delimiter alias')
+	assert.match(note, /matri/i, 'names matrices — the construct authors most doubt works')
+	assert.match(note, /price|\\\$/, 'warns about the $-next-to-a-digit price guard')
+	assert.match(note, /invalid LaTeX|degrade/i, 'says invalid LaTeX degrades, not breaks')
+
+	// And it stays out of the size-capped lean index — the note is pulled on demand.
+	assert.ok(!/LaTeX/.test(JSON.stringify(catalog())), 'math teaching does not leak into the lean index')
+})
+
 test('catalog(name) returns exactly one schema: block, chart kind, field type, fieldset, envelope', () => {
 	const chart = catalog('chart')
 	assert.equal(chart.block, 'chart')

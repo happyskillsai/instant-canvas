@@ -10,7 +10,7 @@ const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
 
-const { hasMarkdownExtension, readMarkdownSrc, stripFrontmatter, inlineLocalImages } = require('../lib/markdownsrc')
+const { hasMarkdownExtension, readMarkdownSrc, stripFrontmatter, inlineLocalImages, inlineMath } = require('../lib/markdownsrc')
 
 // The smallest valid PNG: 1x1, transparent.
 const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64')
@@ -145,4 +145,77 @@ test('readMarkdownSrc degrades to a labeled fallback, never a throw', () => {
 
 	fs.writeFileSync(path.join(root, 'big.md'), 'x'.repeat(64))
 	assert.equal(readMarkdownSrc(root, 'big.md', 32), '*(markdown source unavailable)*')
+})
+
+// ------------------------------------------------------------------ inlineMath
+//
+// The server-side math pass. It replaces $…$ / $$…$$ / \(…\) / \[…\] with an
+// inert PUA+base64 sentinel the browser re-expands (the client `math` core rule,
+// asserted for real in render.test.js). Here we decode the sentinel and check the
+// grammar: delimiters, price guards, code exclusion, and the bad-TeX error path.
+
+// The sentinel's Private-Use-Area delimiters (never NUL — see the app.js gotcha).
+const MS = String.fromCharCode(0xE000), MU = String.fromCharCode(0xE001), ME = String.fromCharCode(0xE002)
+const SENTINEL_RE = new RegExp(MS + '([ibe])' + MU + '([\\s\\S]*?)' + ME, 'g')
+
+// Decode every sentinel in an inlineMath output into a plain object.
+function sentinels(out) {
+	const list = []
+	for (const m of out.matchAll(SENTINEL_RE)) {
+		const f = m[2].split(MU)
+		if (m[1] === 'e')
+			list.push({ mode: 'error', source: Buffer.from(f[0], 'base64').toString('utf8'), message: Buffer.from(f[1], 'base64').toString('utf8') })
+		else
+			list.push({ mode: m[1], bucket: Number(f[0]), svg: Buffer.from(f[1], 'base64').toString('utf8'), tex: Buffer.from(f[2], 'base64').toString('utf8') })
+	}
+	return list
+}
+
+test('inlineMath recognizes all four delimiter forms', () => {
+	const s = sentinels(inlineMath('a $x^2$ b \\(y\\) c $$z$$ d \\[w\\] e'))
+	assert.deepEqual(s.map((m) => [m.mode, m.tex]), [
+		['i', 'x^2'], ['i', 'y'], ['b', 'z'], ['b', 'w'],
+	])
+})
+
+test('inlineMath renders each span to a CSP-clean inline svg', () => {
+	const [m] = sentinels(inlineMath('area $\\int_0^\\infty e^{-x^2}dx$ here'))
+	assert.equal(m.mode, 'i')
+	assert.equal(/style\s*=/.test(m.svg), false, 'svg carries no inline style')
+	assert.match(m.svg, /currentColor/)
+	assert.match(m.svg, /<path\b/)
+	assert.ok(m.bucket > 0, 'a descending formula gets a non-zero baseline bucket')
+})
+
+test('inlineMath skips prices and escaped dollars', () => {
+	const out = inlineMath('it costs $5 today and \\$10 tomorrow and 100$ later')
+	assert.equal(sentinels(out).length, 0, 'no formula from prices')
+	assert.ok(out.includes('$5 today'), 'the price text is left literal')
+})
+
+test('inlineMath does not fire inside fenced or inline code', () => {
+	const fenced = '```\n$x$ stays literal\n```\n'
+	assert.equal(inlineMath(fenced), fenced)
+	assert.equal(inlineMath('use `$y$` inline'), 'use `$y$` inline')
+})
+
+test('inlineMath matches display before inline, so $$ is never two empty $…$', () => {
+	const s = sentinels(inlineMath('$$a+b$$'))
+	assert.equal(s.length, 1)
+	assert.equal(s[0].mode, 'b')
+	assert.equal(s[0].tex, 'a+b')
+})
+
+test('inlineMath emits an error sentinel for bad LaTeX, keeping the source and message', () => {
+	const [m] = sentinels(inlineMath('bad $\\notacommand$ ok'))
+	assert.equal(m.mode, 'error')
+	assert.equal(m.source, '\\notacommand')
+	assert.match(m.message, /Undefined control sequence/)
+})
+
+test('inlineMath is a no-op (and loads no engine) when there is no math', () => {
+	const plain = 'plain prose, a price $ sign alone, no closing.'
+	assert.equal(inlineMath('no math here at all'), 'no math here at all')
+	// A lone $ with no valid pair is left untouched.
+	assert.equal(inlineMath(plain), plain)
 })

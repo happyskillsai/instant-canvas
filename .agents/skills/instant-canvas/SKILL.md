@@ -42,6 +42,8 @@ $IC print docs/report.md --out report.pdf   # and prints as paper (needs a local
 
 Two consequences worth knowing. A natively-opened markdown file is rendered as best it can be rather than validated: raw HTML is dropped (its prose kept) and a remote image becomes `*(remote image not shown)*`, because the runtime never fetches. And `validate` / `stamp` refuse a markdown file — there is no contract to check and nothing to stamp. Author a real canvas with a `markdown` block only when you need the file *beside* other blocks (charts, KPIs, a form).
 
+**Math just works.** Write LaTeX between `$…$` or `\(…\)` (inline) and `$$…$$` or `\[…\]` (a centered block) in any markdown — a native `.md`, an inline `text`, or a `src` file. It is typeset server-side to themed, print-ready SVG (the standard TeX set: fractions, sums, integrals, Greek, matrices via `\begin{pmatrix}…`, aligned systems, cases), so you ship only the LaTeX and nothing else changes — it renders in the browser, the PDF, and slides. Guards worth knowing: a `$` next to a digit is treated as a literal **price** (`$5`), so write `\$` for a literal dollar; a `$` inside a code fence stays literal; and invalid LaTeX shows a visible error with the source rather than breaking the page.
+
 ### To give a markdown file a cover or a theme, write a **companion canvas**
 
 A `.md` has **no envelope** — it *is* the canvas, synthesised in memory and never written — so it has nowhere to keep a cover, a theme, a running header, or page geometry. All of that lives in `document`, and a markdown file cannot hold one.

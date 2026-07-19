@@ -10,6 +10,7 @@ source:
   - scripts/lib/skillsconfig.js
   - scripts/lib/companion.js
   - scripts/lib/markdownsrc.js
+  - scripts/lib/mathsvg.js
   - scripts/lib/mdcanvas.js
   - scripts/lib/gallery.js
   - scripts/lib/pkgmeta.js
@@ -75,6 +76,8 @@ A leading `---` … `---` YAML frontmatter block is stripped from **every** mark
 So a remote image (`![](https://…)` or a raw `<img src="https://…">`) is a **`REMOTE_ASSET_BLOCKED` error**, not a silent broken image: the CSP would block the request anyway, and the agent is the only party that can still fix it. The error teaches the fix, and the `catalog markdown` `notes` carry the storage lifecycle the agent owns — inline as a `data:` URI for a disposable canvas, a workspace-local file beside a durable report. A path *outside* the workspace root cannot be referenced at all (`insideRoot`), so "outside the project" means "inline as `data:`".
 
 Workspace-local images **are** inlined, server-side, as `data:` URIs in the same pass that inlines `src` (see [frontend.md](frontend.md)); the browser only ever sees `data:` or a labeled fallback. The source scan blanks fenced and inline code first, so a README that documents `<table>` or a ```` ```jsx ```` sample is never warned about the code it merely quotes.
+
+**Math renders inline.** LaTeX between `$…$` / `\(…\)` (inline) or `$$…$$` / `\[…\]` (display) is typeset to self-contained SVG by `lib/mathsvg.js` (vendored MathJax, `tex2svg` run in Node), in the **same server-side pass** that inlines images — so the browser ships no math engine and `print` inherits static math for free. The SVG is CSP-clean by construction: it positions glyphs with `<path>` geometry rather than the inline `style=""` that disqualifies KaTeX and MathJax-CHTML (the Shiki wall — see [gotchas/frontend.md](gotchas/frontend.md)), paints in `currentColor` so it follows the document theme, and sizes in `ex` so it scales with the surrounding text. The standard TeX set works — fractions, sums, integrals, matrices, aligned systems, cases. A `$` next to a digit is a literal price (`$5`), `$` inside code stays literal (matched against the `blankCode` twin), and invalid LaTeX degrades to a visible `.math-error` carrying the source. The rendered math travels to the browser as an inert PUA+base64 **sentinel** inside the markdown text, re-expanded into inline `<svg>` by a markdown-it core rule (see [frontend.md](frontend.md)). This is a markdown surface only — v1 does not render math in chart titles, table headers, or KPI labels.
 
 ## The gallery block
 

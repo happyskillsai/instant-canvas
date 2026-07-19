@@ -16,7 +16,9 @@ const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
-const { execFileSync } = require('node:child_process')
+const { execFileSync, execFile } = require('node:child_process')
+const { promisify } = require('node:util')
+const execFileP = promisify(execFile)
 
 process.env.INSTANTCANVAS_STATE_DIR = process.env.INSTANTCANVAS_STATE_DIR || fs.mkdtempSync(path.join(os.tmpdir(), 'ic-print-state-'))
 const STATE_DIR = process.env.INSTANTCANVAS_STATE_DIR
@@ -72,6 +74,8 @@ let printedNoTitle = null
 let noTitlePdf = null
 let printedDense = null
 let densePdf = null
+let printedMath = null
+let mathPdf = null
 
 test.before(async () => {
 	root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'ic-print-ws-')))
@@ -141,6 +145,30 @@ test.before(async () => {
 	printedDense = runCli(['print', path.join(root, 'dense.canvas.json'), '--out', path.join(root, 'out', 'dense.pdf'), '--workspace', root])
 	if (printedDense.code === 0)
 		densePdf = fs.readFileSync(path.join(root, 'out', 'dense.pdf'))
+
+	// Math prints too: the rendered SVG must reach the PDF (never the literal $…$),
+	// and because math is 2D SVG there is no gl3d blank-page hazard, so /Count stays
+	// exact. Uses ASYNC execFile (never *Sync), so this Chrome-spawning call does not
+	// freeze every other file's in-flight CDP drive (the single-process-suite gotcha).
+	fs.writeFileSync(path.join(root, 'math.md'), [
+		'# Math smoke',
+		'',
+		'Inline the area is $\\int_0^\\infty e^{-x^2}dx$ within a sentence.',
+		'',
+		'$$ \\sum_{n=1}^{\\infty} \\frac{1}{n^2} = \\frac{\\pi^2}{6} $$',
+		'',
+	].join('\n'))
+	try {
+		const { stdout } = await execFileP(process.execPath,
+			[CLI, 'print', path.join(root, 'math.md'), '--out', path.join(root, 'out', 'math.pdf'), '--workspace', root],
+			{ encoding: 'utf8', env: { ...process.env, INSTANTCANVAS_STATE_DIR: STATE_DIR }, timeout: 90_000 })
+		printedMath = { code: 0, json: JSON.parse(stdout) }
+		mathPdf = fs.readFileSync(path.join(root, 'out', 'math.pdf'))
+	} catch (err) {
+		let json = null
+		try { json = JSON.parse(err.stdout || '') } catch { /* non-JSON */ }
+		printedMath = { code: err.code || 1, json }
+	}
 })
 
 test.after(() => {
@@ -189,6 +217,26 @@ test('a document with no usable title falls back to a full-timestamp generic nam
 	// fallbacks sort and do not collide within the minute.
 	assert.match(pdfTitle(noTitlePdf), /^\d{4}-\d{2}-\d{2}-\d{4}-instant-canvas$/,
 		'the /Title is a timestamped generic name, not "InstantCanvas"')
+})
+
+test('a markdown file with math prints, and math is 2D SVG so /Count stays exact', { skip, timeout: 120_000 }, () => {
+	assert.equal(printedMath.code, 0, JSON.stringify(printedMath.json))
+	assert.equal(mathPdf.subarray(0, 5).toString(), '%PDF-', 'the file is a PDF')
+	// Math is 2D SVG — no gl3d blank-page/sliver hazard — so sheets ARE the pages.
+	assert.equal(pdfPageCount(mathPdf), printedMath.json.pages, 'PDF page count equals the reported sheet count')
+})
+
+test('the printed math is the rendered SVG, not the literal LaTeX source', {
+	skip: skip || (hasPoppler ? false : 'poppler (pdftotext) not installed'), timeout: 120_000,
+}, () => {
+	// MathJax renders each glyph to a <path> (fontCache:none), so the math is vector
+	// geometry, not selectable text — and the raw `$…$` / `\int` source must be GONE
+	// from the text layer. (A byte-grep would be unreliable: streams are FlateDecoded.)
+	const text = pdfText(path.join(root, 'out', 'math.pdf'))
+	assert.match(text, /Math smoke/, 'the surrounding prose is present')
+	assert.ok(!text.includes('\\int'), 'no literal \\int LaTeX source survived into the PDF')
+	assert.ok(!text.includes('$$'), 'no literal $$ display delimiters survived into the PDF')
+	assert.ok(!text.includes('$\\'), 'no literal $ … math delimiters survived into the PDF')
 })
 
 test('leak regression: neither the kernel token nor 127.0.0.1 appears in the PDF bytes', { skip, timeout: 120_000 }, () => {

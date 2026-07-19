@@ -17,7 +17,7 @@ const registry = require('./lib/registry')
 const { registerSecret, redact, errorOut } = require('./lib/redact')
 const { scan, dirsUnder, readCanvasFile, MAX_CANVAS_BYTES, isExcludedDir } = require('./lib/scan')
 const { validate, collectBlocks, isInteractiveBlock, flattenFields } = require('./lib/validate')
-const { readMarkdownSrc, inlineLocalImages, inlineImageFile, hasMarkdownExtension, renderableMarkdown, MAX_COVER_IMAGE_BYTES } = require('./lib/markdownsrc')
+const { readMarkdownSrc, inlineLocalImages, inlineImageFile, inlineMath, hasMarkdownExtension, renderableMarkdown, MAX_COVER_IMAGE_BYTES } = require('./lib/markdownsrc')
 const { virtualCanvasFor } = require('./lib/mdcanvas')
 const { listImages, mediaStat, isStreamableFile, mediaKind, galleryMime, parseByteRange, normalizeRelDir, GALLERY_IMAGE_EXTS, MEDIA_VIDEO_EXTS, MEDIA_AUDIO_EXTS } = require('./lib/gallery')
 const { listDir } = require('./lib/browse')
@@ -389,6 +389,9 @@ function resolveMarkdownSrc(canvas, { native = false } = {}) {
 			continue
 		if (native || isOwnDocument)
 			block.text = renderableMarkdown(block.text)
+		// Math BEFORE images: math delimiters cannot occur inside a base64 image
+		// payload, and the math sentinel carries no `![](`, so the two never overlap.
+		block.text = inlineMath(block.text)
 		block.text = inlineLocalImages(block.text, ROOT, baseDir, MAX_CANVAS_BYTES)
 	}
 }

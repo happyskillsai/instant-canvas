@@ -301,12 +301,98 @@ function inlineImageFile(root, target, baseDir = root, maxBytes = MAX_MARKDOWN_B
 	}
 }
 
+// ---------------------------------------------------------------- math inlining
+
+/*
+ * Math travels to the browser INSIDE the markdown text, as an inert payload the
+ * client re-expands — the same shape as image inlining above, because the kernel
+ * ships processed markdown *text*, not HTML. The server does the expensive
+ * MathJax render once (see lib/mathsvg.js) and packs the resulting <svg> into a
+ * sentinel; the client's `math` core rule (app.js) decodes it into inline SVG.
+ *
+ * The sentinel is delimited by Private-Use-Area characters (NOT NUL — a literal
+ * NUL turns app.js into `data` to file(1), see the app.js gotcha) and its fields
+ * are STANDARD base64 (`A-Za-z0-9+/=`), none of which is markdown-inline
+ * significant, so the payload survives inline tokenization as one text token.
+ *
+ *   ok:    <S> i|b <U> <bucket> <U> base64(svg) <U> base64(tex) <E>
+ *   error: <S> e   <U> base64(source) <U> base64(message) <E>
+ */
+const MATH_S = '\uE000' // start (Private-Use-Area, never NUL)
+const MATH_U = '\uE001' // field separator (unit)
+const MATH_E = '\uE002' // end
+
+// Baseline is set by a CSS class (never an inline style the CSP would drop), one
+// class per quarter-ex of descent. K covers ~4ex, deeper than any real inline
+// formula descends; anything past it clamps to the floor. Must match styles.css.
+const MATH_BUCKETS = 16
+
+// Cheap pre-check chars: a `$`, or a `\(` / `\[`. If none are present we neither
+// scan nor pay to load the ~1.7MB MathJax engine (lazy-required below), so a
+// math-free document — the overwhelming common case — costs nothing.
+const MATH_PRECHECK_RE = /\$|\\[([]/
+
+// Display before inline (so `$$` is never read as two empty `$…$`), longest match
+// via non-greedy pairs. Matched against the code-blanked twin so a `$` inside a
+// fence or an inline-code span never fires. Price guards on the `$…$` form: the
+// open `$` is rejected when escaped (`\$`), preceded by a digit (`5$`), or
+// followed by whitespace or a digit (`$5`); the close `$` when preceded by
+// whitespace. `\(…\)` / `\[…\]` carry no such ambiguity.
+const MATH_RE = new RegExp(
+	'\\\\\\[([\\s\\S]+?)\\\\\\]' +                                  // \[ … \]  display
+	'|\\$\\$([\\s\\S]+?)\\$\\$' +                                   // $$ … $$  display
+	'|\\\\\\(([\\s\\S]+?)\\\\\\)' +                                 // \( … \)  inline
+	'|(?<![\\\\\\d])\\$(?![\\s\\d$])([^$\\n]+?)(?<!\\s)\\$(?!\\$)',  // $ … $    inline
+	'g',
+)
+
+const b64 = (s) => Buffer.from(String(s), 'utf8').toString('base64')
+
+/** Map a MathJax baseline (ex, negative) to a quarter-ex bucket 0..MATH_BUCKETS. */
+function baselineBucket(valignEx) {
+	if (typeof valignEx !== 'number' || !Number.isFinite(valignEx))
+		return 0
+	return Math.min(Math.max(Math.round(-valignEx / 0.25), 0), MATH_BUCKETS)
+}
+
+/**
+ * Replace every `$…$` / `$$…$$` / `\(…\)` / `\[…\]` math span with a rendered-SVG
+ * sentinel the client re-expands. Bad LaTeX becomes an error sentinel carrying
+ * the source and the parser message — the page still renders.
+ *
+ * Runs BEFORE inlineLocalImages: math delimiters cannot appear in a base64 image
+ * payload, and the sentinel's base64 carries no `![](`, so the two passes never
+ * overlap. Scans the `blankCode` twin, exactly like inlineLocalImages.
+ */
+function inlineMath(text) {
+	const str = String(text)
+	if (!MATH_PRECHECK_RE.test(str))
+		return str
+	const mathsvg = require('./mathsvg') // lazy: only load the engine when there IS math
+
+	const masked = blankCode(str)
+	let out = '', last = 0
+	for (const m of masked.matchAll(MATH_RE)) {
+		out += str.slice(last, m.index)
+		last = m.index + m[0].length
+
+		const display = m[1] !== undefined || m[2] !== undefined
+		const tex = (m[1] ?? m[2] ?? m[3] ?? m[4]).trim()
+		const r = mathsvg.render(tex, { display })
+		out += r.ok
+			? MATH_S + (display ? 'b' : 'i') + MATH_U + (display ? 0 : baselineBucket(r.valignEx)) + MATH_U + b64(r.svg) + MATH_U + b64(tex) + MATH_E
+			: MATH_S + 'e' + MATH_U + b64(tex) + MATH_U + b64(r.error || 'Invalid LaTeX') + MATH_E
+	}
+	return out + str.slice(last)
+}
+
 module.exports = {
 	MARKDOWN_EXTENSIONS,
 	MAX_MARKDOWN_BYTES,
 	MAX_COVER_IMAGE_BYTES,
 	IMAGE_MIME,
 	NOT_A_FILE_RE,
+	inlineMath,
 	hasMarkdownExtension,
 	stripFrontmatter,
 	readMarkdownText,

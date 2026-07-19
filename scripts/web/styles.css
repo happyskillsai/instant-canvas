@@ -432,6 +432,39 @@ body.modal-open .doc-modal-view{overflow:hidden}
 .md li.task input[type=checkbox]:disabled{cursor:default}
 .md li.task input[type=checkbox]:disabled:not(:checked){background:var(--panel-2)}
 
+/* Math (rendered server-side to inline SVG by the markdown-it `math` core rule in
+   app.js). The <svg> uses fill/stroke=currentColor — so it FOLLOWS the text color
+   and themes for free — and sizes in `ex`, so it scales with the surrounding text.
+   Baseline is set ONLY by the mv-<bucket> class below, never an inline style the
+   CSP would drop (render.test.js asserts `.md [style]` stays 0). */
+.math svg{max-width:100%;height:auto}
+.math-inline{display:inline-block;vertical-align:0}
+.math-inline.mv-0{vertical-align:0}
+.math-inline.mv-1{vertical-align:-0.25ex}
+.math-inline.mv-2{vertical-align:-0.5ex}
+.math-inline.mv-3{vertical-align:-0.75ex}
+.math-inline.mv-4{vertical-align:-1ex}
+.math-inline.mv-5{vertical-align:-1.25ex}
+.math-inline.mv-6{vertical-align:-1.5ex}
+.math-inline.mv-7{vertical-align:-1.75ex}
+.math-inline.mv-8{vertical-align:-2ex}
+.math-inline.mv-9{vertical-align:-2.25ex}
+.math-inline.mv-10{vertical-align:-2.5ex}
+.math-inline.mv-11{vertical-align:-2.75ex}
+.math-inline.mv-12{vertical-align:-3ex}
+.math-inline.mv-13{vertical-align:-3.25ex}
+.math-inline.mv-14{vertical-align:-3.5ex}
+.math-inline.mv-15{vertical-align:-3.75ex}
+.math-inline.mv-16{vertical-align:-4ex}
+/* Display math is its own centered block; a wide equation scrolls rather than
+   overflowing the column (the print-safe analog of the wide-table fold). */
+.math-block{display:block;text-align:center;margin:1em 0;overflow-x:auto}
+/* A LaTeX typo is visible but non-fatal: the source shown in a tinted mono span,
+   the parser message in its title. */
+.math-error{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.9em;
+	color:var(--down,#ef4444);background:color-mix(in srgb,var(--down,#ef4444) 10%,transparent);
+	border-radius:4px;padding:0 4px}
+
 /* highlight.js theme. hljs emits classes (never inline styles), so it survives
    `style-src 'self'`; these rules replace the vendored hljs stylesheet, which we
    deliberately do not ship — one theme, driven by the same tokens as everything else. */
@@ -893,6 +926,12 @@ body.modal-open .main{overflow:hidden}
 .sheet .md li{margin:6px 0}
 .sheet .md blockquote,.sheet .md table,.sheet .md img,.sheet .md pre{margin:18px 0}
 .sheet .md hr{margin:30px 0}
+/* Math on paper. A wide display equation scales to the measure (never clips — the
+   wide-table lesson) and never scrolls, since a PDF has no scrollbar: `overflow:auto`
+   is a scrollbar on screen but a guillotine in print, so the paper block is
+   `overflow:visible` and leans on the svg's max-width to fit. */
+.sheet .math-block{overflow:visible;margin:16px 0}
+.sheet .math svg{max-width:100%;height:auto}
 /* No dead band at the top of a page: whichever fragment lands first starts
    flush. The packer's measuring body carries `.sheet-body` too, so it measures
    this rule rather than discovering it at render time. */

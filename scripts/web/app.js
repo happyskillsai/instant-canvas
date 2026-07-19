@@ -289,8 +289,77 @@ function tableAlign(state) {
 	return true
 }
 
+// Server-side math arrives inside the markdown TEXT as an inert PUA+base64
+// sentinel (see inlineMath in lib/markdownsrc.js) — the kernel already did the
+// expensive MathJax render. This rule only decodes the payload and drops the
+// <svg> into the DOM as INLINE svg, so it inherits `currentColor` and themes for
+// free (an <img>-linked SVG cannot see the page's custom properties). Modeled on
+// taskLists: it injects html tokens, the project's way to emit trusted HTML under
+// html:false.
+const MATH_S = '\uE000', MATH_U = '\uE001', MATH_E = '\uE002' // Private-Use-Area, never NUL
+const MATH_RE = new RegExp(MATH_S + '([ibe])' + MATH_U + '([\\s\\S]*?)' + MATH_E, 'g')
+
+// base64 → UTF-8 (the SVG or TeX may carry non-ASCII); a raw atob would mangle
+// multibyte bytes into mojibake.
+function decodeB64Utf8(s) {
+	const bin = atob(s)
+	const bytes = new Uint8Array(bin.length)
+	for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i)
+	return new TextDecoder().decode(bytes)
+}
+
+// One decoded sentinel → the trusted HTML for an injected html token. The SVG was
+// already style-stripped server-side; the title/error text is escaped, never
+// concatenated raw into an attribute or element (the appendHighlighted lesson).
+function mathTokenHtml(mode, fields) {
+	const esc = md.utils.escapeHtml
+	if (mode === 'e') {
+		const [src, msg] = fields
+		return `<span class="math math-error" title="${esc(decodeB64Utf8(msg))}">${esc(decodeB64Utf8(src))}</span>`
+	}
+	const svg = decodeB64Utf8(fields[1]), tex = esc(decodeB64Utf8(fields[2]))
+	if (mode === 'b')
+		return `<span class="math math-block" title="${tex}">${svg}</span>`
+	return `<span class="math math-inline mv-${fields[0]}" title="${tex}">${svg}</span>`
+}
+
+// Split any text token carrying a sentinel into text / math / text children,
+// exactly as taskLists splices new children into an inline token.
+function mathRule(state) {
+	for (const tok of state.tokens) {
+		if (tok.type !== 'inline' || !tok.children || tok.content.indexOf(MATH_S) === -1) continue
+		const kids = []
+		for (const child of tok.children) {
+			if (child.type !== 'text' || child.content.indexOf(MATH_S) === -1) { kids.push(child); continue }
+			const text = child.content
+			let last = 0, m
+			MATH_RE.lastIndex = 0
+			while ((m = MATH_RE.exec(text))) {
+				if (m.index > last) {
+					const t = new state.Token('text', '', 0)
+					t.content = text.slice(last, m.index)
+					kids.push(t)
+				}
+				const display = m[1] === 'b'
+				const html = new state.Token(display ? 'html_block' : 'html_inline', '', 0)
+				html.content = mathTokenHtml(m[1], m[2].split(MATH_U))
+				kids.push(html)
+				last = m.index + m[0].length
+			}
+			if (last < text.length) {
+				const t = new state.Token('text', '', 0)
+				t.content = text.slice(last)
+				kids.push(t)
+			}
+		}
+		tok.children = kids
+	}
+	return true
+}
+
 md.core.ruler.after('inline', 'task_lists', taskLists)
 md.core.ruler.after('inline', 'table_align', tableAlign)
+md.core.ruler.after('inline', 'math', mathRule)
 
 // ---------------------------------------------------------------- theming
 
