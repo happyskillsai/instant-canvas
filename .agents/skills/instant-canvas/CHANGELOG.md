@@ -5,6 +5,27 @@ The agent-facing contract for InstantCanvas. The runtime ships as the
 and LICENSE, and agents drive the CLI through `npx`. Versions track the runtime
 package they were authored alongside.
 
+## [0.18.0] - 2026-07-19
+
+### Added
+- **White-paper / academic mode.** A new `document.paper` object (pull `$IC catalog paper`) renders
+  a document — or a markdown file via its companion — as a single-column academic paper: serif
+  justified body, wide margins, and a centered **front matter** block (title, authors, affiliations,
+  abstract, keywords) that IS the top of page 1, so a paper has no separate cover (declaring both is
+  refused). Sections and display equations **auto-number** (`1` / `1.1`, `(1)` / `(2)`) — derived at
+  render, never authored, the same rule as `Figure N`; a `## References` list is styled with a
+  hanging indent; and the footer defaults to a centered page number with no running header. The full
+  contract is on the deterministic surface (`$IC catalog paper`, now listed among the `catalog <name>`
+  entries), and a human at the browser also gets a one-click white-paper toggle in Document view.
+
+### Changed
+- **Messaging is shell-aware, not bash-only.** The `$IC` shorthand is now given for **bash/zsh**
+  (`$IC`), **cmd.exe** (`%IC%`), and **PowerShell** (a function), and the one shell-specific gotcha is
+  spelled out: a `--set` JSON argument takes single quotes in bash/zsh but escaped double quotes on
+  cmd.exe. A Windows platform note records that path handling, process spawn, Chrome/Edge discovery,
+  and CRLF-preserving writes are implemented and unit-tested, though not yet verified end to end on a
+  Windows machine.
+
 ## [0.14.0] - 2026-07-19
 
 ### Added
