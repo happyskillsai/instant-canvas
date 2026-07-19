@@ -48,6 +48,68 @@ function normalizeTypes(types) {
 	return set.size ? set : null
 }
 
+/**
+ * Stat-only metadata for ANY renderable path — the item info drawer's single
+ * source, warm and cold. Classifies `kind` from the EXTENSION using the very
+ * predicates `collectFiles` uses (no second extension list): `mediaKind` for
+ * image/video/audio, the markdown allowlist for `document`, a `.json` for
+ * `canvas`. Returns `null` (→ 404) for anything else — an unknown extension, a
+ * directory, `.env`.
+ *
+ * Media kinds delegate to `mediaStat` VERBATIM (insideRoot + lstat, refusing a
+ * symlink and a directory in one check); the route adds an image's pixel
+ * dimensions after this gate, exactly as `/api/gallery/meta` does. Canvas /
+ * document do the same discipline by hand: `insideRoot`, then `lstat` (a symlink
+ * OR a directory fails `!st.isFile()`). This route NEVER opens or parses the file
+ * — it is pure `fs` stat, so the `JSON.parse`-leak class does not apply, and the
+ * extension gate + `lstat` is the whole defense. It serves no file bytes.
+ */
+function itemMeta(root, rel) {
+	if (typeof rel !== 'string' || rel === '')
+		return null
+
+	// Media: mediaStat is the shared image/video/audio gate (extension + lstat).
+	const mkind = mediaKind(rel)
+	if (mkind)
+		return mediaStat(root, rel)
+
+	// Canvas / document: decide from the extension, never open the file.
+	let kind = null
+	if (hasMarkdownExtension(rel))
+		kind = 'document'
+	else if (rel.endsWith('.json'))
+		kind = 'canvas'
+	if (!kind)
+		return null
+
+	const abs = path.resolve(root, rel)
+	if (!insideRoot(root, abs))
+		return null
+	let st
+	try {
+		st = fs.lstatSync(abs)
+	} catch {
+		return null
+	}
+	if (!st.isFile()) // refuses a symlink AND a directory in one check
+		return null
+	const relPosix = toPosix(path.relative(root, abs))
+	const slash = relPosix.lastIndexOf('/')
+	const ext = path.extname(abs).toLowerCase()
+	return {
+		path: relPosix,
+		name: path.basename(abs),
+		dir: slash >= 0 ? relPosix.slice(0, slash) : '',
+		abspath: abs,
+		kind,
+		size: st.size,
+		// Linux birthtime can be 0; fall back to mtime so "created" is never epoch.
+		created: st.birthtimeMs || st.mtimeMs,
+		modified: st.mtimeMs,
+		format: ext.replace(/^\./, ''),
+	}
+}
+
 /** One image/video/audio file's stat-only tile shape (kind + rel + name + mtime + size + renderable). */
 function mediaItem(root, rel) {
 	const m = mediaStat(root, rel)
@@ -220,4 +282,4 @@ function listDir(root, dirRel, { cap = DEFAULT_CAP, dirsOnly = false, recursive 
 	return { dir: toPosix(relDir), dirs, items, truncated: cc.truncated, recursive: !!recursive }
 }
 
-module.exports = { listDir, ITEM_KINDS }
+module.exports = { listDir, itemMeta, ITEM_KINDS }

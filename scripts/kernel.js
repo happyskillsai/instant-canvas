@@ -20,7 +20,7 @@ const { validate, collectBlocks, isInteractiveBlock, flattenFields } = require('
 const { readMarkdownSrc, inlineLocalImages, inlineImageFile, inlineMath, hasMarkdownExtension, renderableMarkdown, MAX_COVER_IMAGE_BYTES } = require('./lib/markdownsrc')
 const { virtualCanvasFor } = require('./lib/mdcanvas')
 const { listImages, mediaStat, isStreamableFile, mediaKind, galleryMime, parseByteRange, normalizeRelDir, GALLERY_IMAGE_EXTS, MEDIA_VIDEO_EXTS, MEDIA_AUDIO_EXTS } = require('./lib/gallery')
-const { listDir } = require('./lib/browse')
+const { listDir, itemMeta } = require('./lib/browse')
 const { dimensions } = require('./lib/imagemeta')
 const { companionFor, enhancesOf } = require('./lib/companion')
 const { figureMap } = require('./lib/figures')
@@ -847,6 +847,22 @@ async function route(req, res, url) {
 		// as metadata-only cards with null dims. Video/audio never touch it: their
 		// pixel size and duration come from the media element in the browser, so
 		// there is deliberately NO server-side media parsing.
+		const d = meta.kind === 'image' ? dimensions(meta.abspath) : null
+		return sendJson(res, 200, { ok: true, ...meta, width: d ? d.width : null, height: d ? d.height : null })
+	}
+
+	// One item's stat-only metadata for EVERY renderable kind — canvas, document,
+	// image, video, audio — the info drawer's single source (warm navigation and
+	// cold deep-link alike). itemMeta decides `kind` from the extension and gates
+	// with insideRoot + lstat BEFORE any open, so a non-renderable path, a
+	// directory, or a symlink is a byte-clean 404 whose body carries none of the
+	// file. It is pure `fs` stat — no bytes served — so the `.env`/JSON.parse-leak
+	// class does not apply. For an image it adds pixel dimensions exactly as
+	// /api/gallery/meta does; other kinds carry stat only.
+	if (method === 'GET' && p === '/api/meta') {
+		const meta = itemMeta(ROOT, url.searchParams.get('path') || '')
+		if (!meta)
+			return sendJson(res, 404, { ok: false, message: 'Not a renderable file in this workspace.' })
 		const d = meta.kind === 'image' ? dimensions(meta.abspath) : null
 		return sendJson(res, 200, { ok: true, ...meta, width: d ? d.width : null, height: d ? d.height : null })
 	}
