@@ -461,6 +461,7 @@ test.before(async () => {
 		paperCompanionRaw = fs.existsSync(compPath) ? fs.readFileSync(compPath, 'utf8') : null
 		paperReloadDrive = await drivePaperReload('paperless.md')
 		paperRevertDrive = await drivePaperRevert('paperless.md')
+		printToastDrive = await drivePrintToast('paper.canvas.json')
 	}
 })
 
@@ -1855,3 +1856,60 @@ function saveTmpPdf(buf) {
 	fs.writeFileSync(f, buf)
 	return f
 }
+
+// ---------------------------------------------------------------- browser: a toast never prints
+//
+// (No backticks inside evaluate() — the block is a template literal.)
+
+let printToastDrive = null
+
+// A toast is position:fixed, which the print engine repeats on EVERY page. Prove it is hidden
+// in print media, absent from the PDF, and cleared on screen by beforeprint (Cmd+P) — the
+// print button clears it the same way before window.print().
+async function drivePrintToast(canvasFile) {
+	const url = `http://127.0.0.1:${K.port}/?token=${encodeURIComponent(K.token)}#/c/${encodeURIComponent(canvasFile)}`
+	return withChrome(CHROME, url, { onNewDocument: PROBE }, async ({ evaluate, send }) => {
+		const deadline = Date.now() + 30_000
+		for (;;) {
+			const ready = await evaluate(`(() => !!(window.ic && window.ic.state.tree
+				&& document.querySelector('.deck .sheet:first-child .paper-frontmatter')))()`).catch(() => false)
+			if (ready || Date.now() > deadline)
+				break
+			await cdpSleep(250)
+		}
+		await cdpSleep(500)
+		// Inject a toast carrying a unique marker so we can look for it in the PDF text.
+		await evaluate(`(() => {
+			const t = document.createElement('div');
+			t.className = 'toast';
+			t.textContent = 'TOASTMARKERZZZ';
+			document.body.appendChild(t);
+			return true;
+		})()`)
+		const onScreen = await evaluate(`(() => { const t = document.querySelector('.toast'); return t ? getComputedStyle(t).display : 'missing'; })()`)
+		await send('Emulation.setEmulatedMedia', { media: 'print' })
+		const inPrintMedia = await evaluate(`(() => { const t = document.querySelector('.toast'); return t ? getComputedStyle(t).display : 'missing'; })()`)
+		await send('Emulation.setEmulatedMedia', { media: '' })
+		// The real PDF (printToPDF always renders in print media) must not carry the marker.
+		const pdf = await send('Page.printToPDF', {
+			printBackground: true, preferCSSPageSize: true, displayHeaderFooter: false,
+			marginTop: 0, marginBottom: 0, marginLeft: 0, marginRight: 0,
+		})
+		// beforeprint (what Cmd+P fires, and the print button mirrors) clears it on screen.
+		await evaluate(`(() => { window.dispatchEvent(new Event('beforeprint')); return true; })()`)
+		const afterBeforeprint = await evaluate(`(() => document.querySelectorAll('.toast').length)()`)
+		return { onScreen, inPrintMedia, afterBeforeprint, pdf: Buffer.from(pdf.data, 'base64') }
+	})
+}
+
+test('a toast is hidden in print, absent from the PDF, and cleared before printing', { skip: browserSkip, timeout: 120_000 }, () => {
+	const d = printToastDrive
+	assert.notEqual(d.onScreen, 'none', 'a toast is visible on screen')
+	assert.notEqual(d.onScreen, 'missing', 'the toast was injected')
+	assert.equal(d.inPrintMedia, 'none', 'the @media print rule hides the toast so it cannot repeat on every page')
+	assert.equal(d.afterBeforeprint, 0, 'beforeprint clears the toast on screen (the print button does the same before window.print())')
+	if (hasPoppler) {
+		const text = execFileSync('pdftotext', [saveTmpPdf(d.pdf), '-'], { encoding: 'utf8' })
+		assert.ok(!/TOASTMARKERZZZ/.test(text), 'the toast text appears on NO printed page')
+	}
+})

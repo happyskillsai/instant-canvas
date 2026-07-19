@@ -202,6 +202,11 @@ function toast(msg, ms = 2600) {
 	setTimeout(() => t.remove(), ms)
 }
 
+/** Remove any visible toasts. A toast is `position: fixed`, which the print engine repeats
+ *  on every page, so it must be gone before we hand the deck to print (belt-and-suspenders
+ *  with the `@media print` rule that hides it). */
+const clearToasts = () => document.querySelectorAll('.toast').forEach((t) => t.remove())
+
 // Syntax highlighting is the skill's job (presentation of local data), and hljs emits
 // CLASSES, so it survives `style-src 'self'`. Shiki was rejected for the opposite
 // reason: it writes an inline style= on every token, which the CSP drops silently.
@@ -553,7 +558,10 @@ $('viewHtml').addEventListener('click', () => switchDocView('html'))
 // document's main action a visible button. window.print() opens the native
 // dialog (where "Save as PDF" lives) and fires beforeprint, so the chart
 // relocation below covers this path too.
-$('printBtn').addEventListener('click', () => window.print())
+$('printBtn').addEventListener('click', () => {
+	clearToasts() // the toast must vanish BEFORE the pages are pushed to the PDF
+	window.print()
+})
 
 // TOC on/off — a reader choice, not a schema field. Repacks the deck (the
 // TOC's own sheets shift every page number after them).
@@ -1299,6 +1307,7 @@ document.addEventListener('keydown', (e) => {
 // live chart nodes into the deck's slots (cheap, synchronous). The .printing
 // class keeps the deck laid out (off-screen) so Plots.resize sees real sizes.
 window.addEventListener('beforeprint', () => {
+	clearToasts() // covers Cmd+P too (which never touches the print button)
 	const rootEl = document.querySelector('.doc-mode')
 	if (!rootEl || state.docView === 'deck')
 		return

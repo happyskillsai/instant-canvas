@@ -749,7 +749,7 @@ select.inp{appearance:auto}
 .errline .path{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;color:var(--muted)}
 .errline .hint{color:var(--muted)}
 
-.toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:var(--panel);color:var(--text);
+.toast{position:fixed;bottom:64px;left:50%;transform:translateX(-50%);background:var(--panel);color:var(--text);
 	border:1px solid var(--border);box-shadow:var(--shadow);padding:11px 16px;border-radius:10px;z-index:60;font-size:13px}
 
 /* canvas search — frosted glass: a blurred, darkened field with an opaque panel
@@ -1819,6 +1819,11 @@ button.rr-row:hover{border-color:var(--accent);background:var(--tint)}
 	.pal{display:none !important}
 	html{print-color-adjust:exact;-webkit-print-color-adjust:exact}
 	.print-fab{display:none !important}
+	/* A toast is `position: fixed`, which the print engine REPEATS on every page — so a
+	   deck printed while a toast was still up got that toast stamped onto each PDF page.
+	   Hide it here (the guardrail that covers Cmd+P too); the print button also clears it
+	   on screen before it prints (app.js). */
+	.toast{display:none !important}
 	/* §4.6: the overlay chrome (breadcrumb, prev/next, action cluster) is a route's
 	   furniture, never part of the printed document — the deck must not photograph it. */
 	.overlay-chrome{display:none !important}
