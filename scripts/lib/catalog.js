@@ -177,7 +177,7 @@ function lead(text) {
 function leanIndex() {
 	return {
 		version: VERSION,
-		usage: 'This is the lean index. Pull ONE full schema at a time with `catalog <name>` (a block, a chart kind, a field type, "fieldset", "sweep", "document", "theme", "presentation", "slide", or "envelope"). `catalog --full` dumps everything (large).',
+		usage: 'This is the lean index. Pull ONE full schema at a time with `catalog <name>` (a block, a chart kind, a field type, "fieldset", "sweep", "document", "paper", "theme", "presentation", "slide", or "envelope"). `catalog --full` dumps everything (large).',
 		markdownFiles: 'A .md/.mdx/.markdown file that ALREADY EXISTS needs no canvas: `open <file.md>` renders it, `print <file.md> --out <f.pdf>` prints it. Author a canvas only for data you wrangled, or to put markdown beside other blocks.',
 		envelope: 'Every canvas: {"instantcanvas":1,"createdWith":<written by `stamp`, never by you>,"title":...,then "blocks":[...] XOR "pages":[{"name","blocks"}]} — `catalog envelope`',
 		companionCanvas: 'A .md has NO envelope, so it cannot hold a cover, a theme, a running header or page geometry. Give it one: a canvas declaring {"enhances":"README.md"} (plus a markdown block whose "src" is that file) is its COMPANION — write it as README.canvas.json. The companion then SUPERSEDES the document: `open README.md` and `print README.md` both render it, and the sidebar still shows one entry — `catalog envelope`',
@@ -187,6 +187,7 @@ function leanIndex() {
 		fieldTypes: oneLiners(FIELD_TYPES, (f) => lead(f.description)),
 		chartSweep: 'Any chart kind becomes a parameter sweep with {"sweep":{"label"?,"frames":[{"label","data"}]}} instead of "data": a slider steps through frames you precompute — `catalog sweep`',
 		documentMode: 'Envelope "document":{...} renders the canvas as print-ready paper sheets (cover, contents, header/footer, back cover, brand theme; display blocks only) that print 1:1 — `catalog document`',
+		paperMode: 'Envelope "document":{"paper":{...}} renders a single-column ACADEMIC / white paper: serif justified type, centered front matter (title, authors, affiliations, abstract), auto-numbered sections and equations, hanging-indent references, page-number-only footer. The front matter is the top of page 1, so there is no "cover" — `catalog paper`',
 		presentationMode: 'Envelope "slides":[...] (XOR "blocks"/"pages") renders a SLIDE DECK: a filmstrip in the browser, a fullscreen Present mode, one landscape PDF page per slide from `print`. Deck settings (aspect, theme, footer) live in "presentation":{...} — `catalog presentation`',
 		slideLayouts: 'Seven slide layouts — title, section, content, two-column, quadrant, statement, closing — each filling its regions with display blocks (markdown/chart/table/kpi); a lone chart fills its region. Forms, confirms and sweeps are refused on a slide — `catalog slide`',
 		documentTheme: `Document colors, charts included: "document":{"theme":{"preset":"forest|dracula|okabe|…"}} — ${THEME_PRESETS.length} presets, ${THEME_PRESETS.filter((p) => p.mode !== 'dark').length} on light paper and ${THEME_PRESETS.filter((p) => p.mode === 'dark').length} on dark (dark paper prints dark); each brings a chart colorway, and any token (accent, paper, text, …) overrides it. A markdown file keeps its theme in its COMPANION canvas, beside its cover — \`catalog theme\` for the names`,
@@ -219,6 +220,7 @@ function fullCatalog() {
 		// pulled the whole contract to see what existed concluded document mode and
 		// sweeps did not — the one mistake a catalog must never cause.
 		document: catalog('document'),
+		paper: catalog('paper'),
 		theme: catalog('theme'),
 		sweep: catalog('sweep'),
 		presentation: catalog('presentation'),
@@ -253,6 +255,7 @@ function catalog(name) {
 				'A running header/footer is DERIVED when you declare none: the reader turns one on from the browser (canvas title, "{{pageNumber}} / {{totalPages}}"), and can equally turn a declared one off. That choice lives in their browser, so `print` never sees it — if the PDF *you* generate must carry page numbers, declare "header"/"footer" yourself. Either way the strips cost content height: they are measured into every sheet, so adding them can add a page and renumber the TOC.',
 				'On paper, code fences WRAP rather than scroll (a PDF has no scrollbar, so an overflowing line would simply be cut off) and carry no copy button. A table too wide for the page FOLDS its cells for the same reason, so no column is ever dropped. Long lines and wide tables are both safe to ship — do not pre-trim either to "make it fit".',
 				'Every chart on paper wears a derived "Figure N" caption in document order (untitled charts read "Figure N" alone). The numbers are the runtime\'s — recomputed on every load, never written into the JSON — so a human can name "figure 3" and both "print" and "snapshot --figure 3" resolve exactly which chart that is.',
+				'FOR AN ACADEMIC / WHITE-PAPER LOOK add "paper": {...} — serif justified single-column type, wide margins, centered front matter (title, authors, affiliations, abstract, keywords), auto-numbered sections (1, 1.1) and display equations ((1), (2)), a hanging-indent references list, and a page-number-only footer. The front matter IS the top of page 1, so a paper has NO "cover" (declaring both is refused). Sections and equation numbers are derived at render, never authored. See `catalog paper`.',
 				'cover.logo / backCover.logo must be a workspace-local image file (inlined server-side) or a data:image/ URI — remote URLs are never fetched. "logo" is the small 48px MARK, not a cover photo.',
 				'FOR A REAL COVER PHOTO use cover.background: {"src":"assets/hero.jpg","size":"cover","position":"center","scrim":{"color":"#000000","opacity":0.35},"ink":"#ffffff"} — a full-bleed image on the cover sheet, edge to edge. backCover.background is the same shape and entirely independent. A PHOTO BEHIND TEXT NEEDS A "scrim" — AN "ink" ALONE IS A BET ON THE PHOTOGRAPH. An ink fixes the text and cannot see the pixels behind it: white is legible over a dark photo and invisible over a bright one, and nothing can tell which yours is (a cover that set only an ink shipped white-on-white). A scrim is a known wash laid between an image nobody inspected and text that must be read. Set both: scrim for certainty, ink for the color. And theme.text cannot help — that token paints the WHOLE document, so a white cover title would come with white body text on white paper.',
 				'Percentage "position" is a FOCAL POINT, not an offset — "25% 50%" aligns the point 25% across the image with the point 25% across the page, i.e. which part survives the crop. It only moves the axis the image actually OVERFLOWS: an image wider in aspect than the page (a square OR a landscape photo on portrait A4) is cropped left/right, so the FIRST number is the live one; only a taller-than-the-page image is cropped top/bottom. On portrait A4 almost every photograph overflows sideways, so reach for the first number.',
@@ -274,6 +277,35 @@ function catalog(name) {
 					{ type: 'markdown', text: '# Summary\n\nRevenue was up **12% QoQ**.' },
 					{ type: 'chart', kind: 'line', title: 'Signups', data: [{ month: 'Apr', signups: 2000 }, { month: 'May', signups: 2600 }], encoding: { x: 'month', y: 'signups' } },
 				],
+			},
+		}
+	if (name === 'paper')
+		return {
+			paper: true,
+			...renderShape(SHAPES.documentPaper),
+			notes: [
+				'Add "document":{"paper":{...}} to render any document canvas (or a markdown file, via its COMPANION) as a single-column academic paper: serif justified type, ~25mm margins, centered front matter, auto-numbered sections and equations, a styled references list, and a page-number-only footer. It is a VARIANT of document mode, not a new canvas kind — cover/back-cover excepted, every other "document" furnishing (theme, page geometry, header/footer TEXT) still applies.',
+				'A paper has NO separate cover: the front matter (title / authors / affiliations / abstract / keywords) is the top of page 1. Declaring "paper" and "cover" together is refused (DOCUMENT_PAPER_AND_COVER).',
+				'Authors and affiliations are FLAT lists rendered as centered lines — there is no author↔institution superscript linking. Omit "frontmatter.title" to fall back to the document\'s first H1, so the minimal paper is just {"paper":{}} over a markdown file with an H1.',
+				'Section numbers (1, 1.1, 1.1.1) and display-equation numbers ((1)…(N)) are DERIVED at render in document order, never authored and never written into the JSON — the createdWith/figureMap rule. Set "numberSections": false or "numberEquations": false to turn either off. Headings named Abstract, References, Acknowledgements or Bibliography stay unnumbered (English convention).',
+				'References: write a normal "## References" heading followed by a markdown list — it is styled with a hanging indent. There is no citation manager and no [@key] syntax; the list is yours to author.',
+				'The footer defaults to a centered page number with NO running header, unless you declare "header"/"footer" yourself (then your declaration wins). Paper mode also widens the default margin to ~25mm when "document.page.margin" is unset; an explicit margin still wins.',
+			],
+			example: {
+				instantcanvas: 1,
+				createdWith: PKG_VERSION,
+				title: 'Understanding Diffusion Models',
+				document: {
+					paper: {
+						font: 'serif',
+						frontmatter: {
+							authors: ['Jane Smith', 'John Doe'],
+							affiliations: ['MIT', 'Stanford'],
+							abstract: 'A short abstract set apart from the body, indented on both sides.',
+						},
+					},
+				},
+				blocks: [{ type: 'markdown', text: '# Understanding Diffusion Models\n\n## Introduction\n\nBody text.\n\n## References\n\n1. Smith, J. A paper. 2024.' }],
 			},
 		}
 	if (name === 'theme')

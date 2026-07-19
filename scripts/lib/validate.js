@@ -879,6 +879,12 @@ function checkDocument(canvas, ctx) {
 			example: { page: { margin: '15mm' } },
 		})
 
+	// A paper/academic document has no separate cover — the front matter IS the top of page 1.
+	if (typeOf(doc.paper) === 'object' && typeOf(doc.cover) === 'object')
+		ctx.error('DOCUMENT_PAPER_AND_COVER', 'document.paper', 'A paper/academic document has no separate cover — the front matter is the top of page 1.', {
+			hint: 'Drop "cover", or drop "paper".',
+		})
+
 	for (const key of ['cover', 'backCover']) {
 		const section = doc[key]
 		if (typeOf(section) !== 'object')

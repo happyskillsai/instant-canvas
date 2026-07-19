@@ -52,8 +52,12 @@ test('bare catalog is the LEAN index: one-liners for everything, no schemas (pro
 	// learn a canvas can be a deck at all — it would keep faking a presentation out of a
 	// document. The seven layout names ARE the payload (an agent picks one without a second
 	// call), and each entry points at its schema (`catalog presentation` / `catalog slide`).
-	// The raise stays inside the spec's ≤ 9500 ceiling; the fragment guard below still holds.
-	assert.ok(JSON.stringify(lean).length < 9000, 'index stays small: ' + JSON.stringify(lean).length)
+	// Raised 9000 → 9400 for PAPER mode: one entry (paperMode), the same argument once more —
+	// an agent that cannot see the white-paper look here has no way to learn "document.paper"
+	// exists, and would keep hand-styling a paper out of a plain document. It points at its
+	// schema (`catalog paper`). The raise stays inside the spec's ≤ 9500 ceiling; the fragment
+	// guard below still holds.
+	assert.ok(JSON.stringify(lean).length < 9400, 'index stays small: ' + JSON.stringify(lean).length)
 
 	// The defects that forced the rewrite, pinned so they cannot return: no entry may
 	// be a fragment, end mid-abbreviation, or carry an unbalanced paren. This is what
@@ -113,9 +117,26 @@ test('catalog --full still exposes the complete contract', () => {
 	// only by name, so an agent that pulled the WHOLE contract to learn what exists
 	// learned they do not. A catalog may be lean or complete; it may not be wrong.
 	assert.ok(full.document && full.document.properties.cover, 'document mode is in --full')
+	assert.ok(full.document.properties.paper, 'the paper property is on the document shape')
+	assert.ok(full.paper && full.paper.properties.frontmatter, 'paper mode is in --full')
 	assert.ok(full.sweep, 'sweeps are in --full')
 	assert.ok(full.fieldCommonShape.properties.name.required)
 	assert.ok(full.fieldsetShape.properties.columns)
+})
+
+test('catalog paper is one schema: front-matter shape, the no-cover rule, and a valid example', () => {
+	const paper = catalog('paper')
+	assert.equal(paper.paper, true)
+	assert.ok(paper.properties.frontmatter.shape.properties.authors, 'front matter carries authors')
+	assert.ok(paper.properties.columns.enum && paper.properties.columns.enum.length === 1, 'columns is single-column only')
+	assert.ok(paper.notes.some((n) => /DOCUMENT_PAPER_AND_COVER|no separate cover|no "?cover"?/i.test(n)), 'teaches the no-cover rule')
+	assert.ok(paper.notes.some((n) => /derived|never authored|never written/i.test(n)), 'teaches numbers are runtime-derived')
+	assert.equal(validate(JSON.stringify(paper.example)).ok, true, 'the paper example validates: ' + JSON.stringify(validate(JSON.stringify(paper.example)).errors))
+
+	// It stays out of the lean index as prose, but the mode is discoverable there.
+	const lean = catalog()
+	assert.equal(typeof lean.paperMode, 'string', 'the lean index advertises paper mode')
+	assert.ok(/catalog paper/.test(lean.paperMode), 'and points at its schema')
 })
 
 test('catalog markdown carries the asset rule, and the lean index does not', () => {

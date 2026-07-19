@@ -211,6 +211,26 @@ const SHAPES = {
 			margin: { type: 'string', default: '15mm', description: 'Sheet margin, a millimeter length.', example: '15mm' },
 		},
 	},
+	documentFrontmatter: {
+		description: 'The academic front matter at the top of page 1 (NOT a cover page): title, authors, affiliations, abstract, keywords. Authors and affiliations are FLAT lists rendered as centered lines — there is no author↔institution superscript linking. Every key is optional; omit "title" to fall back to the document\'s first H1.',
+		properties: {
+			title: { type: 'string', description: 'Paper title, centered and bold at the top of page 1. Defaults to the document\'s first H1 when absent.', example: 'Understanding Diffusion Models' },
+			authors: { type: 'array', description: 'Author names, rendered as one centered line (joined by middots). A flat list — no superscript affiliation linking.', example: ['Jane Smith', 'John Doe'] },
+			affiliations: { type: 'array', description: 'Institutions, rendered as one centered line beneath the authors. A flat list, not linked to individual authors.', example: ['MIT', 'Stanford'] },
+			abstract: { type: 'string', description: 'A single-paragraph abstract, set apart from the body — indented on both sides and slightly smaller.', example: 'A short abstract set apart from the body.' },
+			keywords: { type: 'array', description: 'Optional keyword list, shown beneath the abstract.', example: ['diffusion', 'generative models'] },
+		},
+	},
+	documentPaper: {
+		description: 'White-paper / academic rendering mode — a single-column variant of document mode with serif justified type, wide (~25mm) margins, centered front matter, auto-numbered sections and display equations, a hanging-indent references list, and a page-number-only footer. Presence switches the mode on; the front matter is the top of page 1, so a paper canvas has NO separate "cover" (declaring both is refused). Section and equation numbers are derived at render, never authored.',
+		properties: {
+			columns: { type: 'number', enum: [1], default: 1, description: 'Column count. Only single-column is supported; two-column is reserved for a later phase.' },
+			font: { type: 'string', enum: ['serif', 'sans'], default: 'serif', description: 'Body typeface family. Serif is the academic default; "sans" keeps the mode\'s layout with a sans body.' },
+			numberSections: { type: 'boolean', default: true, description: 'Auto-number markdown section headings (1, 1.1, 1.1.1). Abstract / References / Acknowledgements headings stay unnumbered.' },
+			numberEquations: { type: 'boolean', default: true, description: 'Auto-number display equations (1)…(N) in document order, right-aligned in the margin.' },
+			frontmatter: { type: 'object', itemShape: 'documentFrontmatter', description: 'Title, authors, affiliations, abstract and keywords for the top of page 1. Optional — with none, a minimal centered title is derived from the H1.' },
+		},
+	},
 	document: {
 		description: 'Document furnishings. Any display canvas can be VIEWED as paper sheets in the browser (a topbar toggle; sheets print 1:1); this object makes the deck the DEFAULT view and carries what the reader cannot conjure — cover, back cover, brand theme, paper geometry, and the TEXT of the running strips. Geometry, the TOC and the strips themselves are derived when you omit them, and the reader can toggle the last two in the browser — but `print` never sees a reader toggle, so declare "header"/"footer" if the PDF you generate must carry page numbers. Every key is optional. With "pages", each page becomes a chapter starting on a new sheet. Interactive blocks (form, confirm) and chart sweeps are refused: paper cannot submit or drag.',
 		properties: {
@@ -221,6 +241,7 @@ const SHAPES = {
 			backCover: { type: 'object', itemShape: 'documentBackCover', description: 'Closing sheet.' },
 			theme: { type: 'object', itemShape: 'documentTheme', description: 'Color system — a named preset, plus any token override (strict hex). Reader-overridable in the browser, which writes its choice back into this object.' },
 			page: { type: 'object', itemShape: 'documentPage', description: 'Paper size, orientation and margin.' },
+			paper: { type: 'object', itemShape: 'documentPaper', description: 'White-paper / academic mode — serif justified single-column type, centered front matter, auto-numbered sections and equations. A paper has no "cover" (the front matter is the top of page 1); declaring both is refused.' },
 		},
 	},
 

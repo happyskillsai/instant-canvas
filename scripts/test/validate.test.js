@@ -497,6 +497,39 @@ test('density: geometry is the declared page — a wider page raises the budget'
 	assert.ok(!dcodes(wide).includes('AXIS_TOO_DENSE'), 'the same 58 fit on a wide landscape page')
 })
 
+test('paper: document.paper and document.cover together is DOCUMENT_PAPER_AND_COVER', () => {
+	const r = validate({ instantcanvas: 1, createdWith: PKG_VERSION, title: 'T',
+		document: { paper: {}, cover: { title: 'C' } },
+		blocks: [{ type: 'markdown', text: '# Hi' }] })
+	assert.equal(r.ok, false)
+	assert.ok(codes(r).includes('DOCUMENT_PAPER_AND_COVER'), 'paper+cover is refused')
+	assert.equal(r.errors.find((e) => e.code === 'DOCUMENT_PAPER_AND_COVER').path, 'document.paper')
+})
+
+test('paper: a valid document.paper with frontmatter passes clean', () => {
+	const r = validate({ instantcanvas: 1, createdWith: PKG_VERSION, title: 'T',
+		document: { paper: { font: 'serif', numberSections: true, numberEquations: true,
+			frontmatter: { title: 'A Paper', authors: ['Jane Smith'], affiliations: ['MIT'], abstract: 'Ab', keywords: ['x'] } } },
+		blocks: [{ type: 'markdown', text: '# Hi\n\n## Introduction\n\nText.' }] })
+	assert.equal(r.ok, true, JSON.stringify(r.errors))
+	assert.deepEqual(r.warnings, [])
+})
+
+test('paper: registry-driven checks reject a bad enum and an unknown key', () => {
+	const r = validate({ instantcanvas: 1, createdWith: PKG_VERSION, title: 'T',
+		document: { paper: { columns: 2, font: 'italic', bogus: 1 } },
+		blocks: [{ type: 'markdown', text: '# Hi' }] })
+	assert.ok(codes(r).includes('INVALID_ENUM_VALUE'), 'columns:2 and font:italic are enum violations')
+	assert.ok(r.warnings.some((w) => w.code === 'UNKNOWN_PROPERTY' && /bogus/.test(w.path)), 'unknown paper key warns')
+})
+
+test('paper: document.paper WITHOUT a cover passes (mutual exclusion is one-sided)', () => {
+	const r = validate({ instantcanvas: 1, createdWith: PKG_VERSION, title: 'T',
+		document: { paper: {}, footer: { center: '{{pageNumber}}' } },
+		blocks: [{ type: 'markdown', text: '# Hi' }] })
+	assert.equal(r.ok, true, JSON.stringify(r.errors))
+})
+
 test('density: every shipped canvas in examples/ and demos/ is warning-free (the calibration gate)', () => {
 	const REPO = path.join(__dirname, '..', '..')
 	const files = []
