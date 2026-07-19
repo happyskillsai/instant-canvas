@@ -101,7 +101,7 @@ Honest framing: this keeps secrets out of the conversation **during capture**. N
 ## The agentic loop (progressive disclosure — pull only what you need)
 
 1. **Browse lean**: `$IC catalog` prints a compact index — one-liners for every block, chart kind, and field type, plus when to use each. No schemas. Skip this step if you already know what you want.
-2. **Pull exact schemas, one at a time**: `$IC catalog <name>` where name is a block (`chart`, `form`, …), a **chart kind** (`sankey`, `heatmap`, `scatter`, …), a field type (`secret`, `range`, …), `fieldset`, `sweep`, `document`, `theme`, or `envelope`. Each returns that thing's full contract: encoding/properties, data shape, and a complete working example. Do NOT use `catalog --full` unless you truly need everything.
+2. **Pull exact schemas, one at a time**: `$IC catalog <name>` where name is a block (`chart`, `form`, …), a **chart kind** (`sankey`, `heatmap`, `scatter`, …), a field type (`secret`, `range`, …), `fieldset`, `sweep`, `document`, `paper`, `theme`, `presentation`, `slide`, or `envelope`. Each returns that thing's full contract: encoding/properties, data shape, and a complete working example. Do NOT use `catalog --full` unless you truly need everything.
 3. **Write** the canvas: `<name>.canvas.json` with `"instantcanvas": 1` at the top level, inside the user's workspace.
 4. **Stamp it**: `$IC stamp <file>` writes `"createdWith"` — the version of the runtime — into the file. Run it once on every canvas you create. Never type that value yourself: you cannot know the runtime's version, and a wrong stamp is worse than none. Stamping again is a safe no-op.
 5. **Validate deterministically**: `$IC validate <file>`. On exit 1, read `errors[]` — each has `code`, `path`, `message`, and usually a `hint` ("Did you mean …") and a correct `example`. Fix and re-validate until `{"ok": true}`. `open` also refuses invalid canvases with the same errors.
@@ -224,6 +224,33 @@ Adding a `document` object is **not** a reason to print. It is what makes a canv
 **It only moves the axis the image actually overflows**, and this catches people out: an image whose aspect is *wider than the page* — which on portrait A4 (aspect 0.71) means a square photo **and** any landscape photo — is cropped **left/right**, so the **first** number is the live one and the second does nothing. Only an image *taller* than the page is cropped top/bottom.
 
 `backCover.background` is the same shape and entirely independent. Both are inlined server-side and reach the **PDF**, not just the screen. An oversize image is a hard `ASSET_TOO_LARGE` error, never a silent truncation — a full-bleed photo is paid for twice, in the canvas and in the PDF.
+
+### White papers — a single-column academic variant
+
+Add **`document.paper`** to render a document (or a markdown file, via its companion) as a single-column academic / arXiv-style paper: serif justified body, wide (~25 mm) margins, centered **front matter**, auto-numbered sections and display equations, a styled references list, and a lean page-number-only footer. It is a *variant* of document mode — theme, page geometry and declared header/footer still apply — so pull the full contract with **`$IC catalog paper`** rather than guessing the shape.
+
+```jsonc
+"document": {
+  "paper": {
+    "font": "serif",                          // "serif" (default) | "sans"
+    "frontmatter": {                          // all optional; omit "title" to fall back to the H1
+      "authors": ["Jane Smith", "John Doe"],  // flat list, no author-to-institution linking
+      "affiliations": ["MIT", "Stanford"],
+      "abstract": "One paragraph, set apart from the body.",
+      "keywords": ["diffusion", "generative models"]
+    }
+  }
+}
+```
+
+Rules an agent must not get wrong:
+
+- **A paper has NO cover.** The front matter (title / authors / affiliations / abstract / keywords) *is* the top of page 1, so `document.paper` beside `document.cover` is refused (`DOCUMENT_PAPER_AND_COVER`). Drop one.
+- **Sections and display equations auto-number** — `1`, `1.1`, `(1)`, `(2)` — derived at render in document order. **Never type or persist a number**, exactly like `Figure N`: a value you author drifts and mis-renumbers on the first edit. Headings named `Abstract` / `References` / `Acknowledgements` stay unnumbered. Turn either off with `"numberSections": false` / `"numberEquations": false`.
+- **References**: write a normal `## References` heading followed by a markdown list — it is styled with a hanging indent. There is no citation manager and no `[@key]`; the list is yours to author.
+- **The footer defaults to a centered page number with no running header.** Declare `header`/`footer` yourself to override.
+- **A white paper has no table of contents** — it is not auto-generated here, and the front matter is the document's opening.
+- **To give a markdown file paper mode, put `document.paper` in its companion canvas** — the same place its theme and cover live (the **companion canvas** section above). There is no `paper` CLI command; author the JSON, then `validate` and `open` / `print` as usual. (A human at the browser has a one-click white-paper toggle in Document view, which writes the same thing.)
 
 ## Presentations: a deck of slides
 
