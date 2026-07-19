@@ -456,7 +456,11 @@ test.before(async () => {
 		paperTallDrive = await drivePaper('paper-tall.canvas.json', 2)
 		paperFormDrive = await drivePaperButtonState('formy.canvas.json')
 		paperBtnClick = await drivePaperButtonClick('paperless.md')
+		// Capture the companion the convert wrote NOW — the revert drive below deletes it.
+		const compPath = path.join(K.root, 'paperless.canvas.json')
+		paperCompanionRaw = fs.existsSync(compPath) ? fs.readFileSync(compPath, 'utf8') : null
 		paperReloadDrive = await drivePaperReload('paperless.md')
+		paperRevertDrive = await drivePaperRevert('paperless.md')
 	}
 })
 
@@ -1537,6 +1541,8 @@ const PAPER_SNAPSHOT_JS = `
 			tocBtnDisabled: document.getElementById('tocBtn').disabled,
 			tocBtnTitle: document.getElementById('tocBtn').title,
 			paperBtnHidden: document.getElementById('paperBtn').hidden,
+			paperBtnActive: document.getElementById('paperBtn').classList.contains('active'),
+			paperBtnTitle: document.getElementById('paperBtn').title,
 			csp: window.__csp || [],
 			styleEls: document.querySelectorAll('style').length,
 			offenders: qa('.deck [style]')
@@ -1612,8 +1618,11 @@ test('paper: has NO table of contents, and the TOC button disables with that rea
 	assert.deepEqual(s.tocRows, [], 'no Contents page is generated in paper mode')
 	assert.equal(s.tocBtnDisabled, true, 'the TOC toggle is disabled')
 	assert.match(s.tocBtnTitle, /white paper has no table of contents/, 'and says why')
-	// The document IS a paper, so the convert button has nothing to do — it hides.
-	assert.equal(s.paperBtnHidden, true, 'the convert button hides once the document is already a paper')
+	// The paper button is a TOGGLE: on a paper it stays visible and LIT, so the reader can
+	// revert to a normal document — not a hidden one-way trip.
+	assert.equal(s.paperBtnHidden, false, 'the paper toggle stays visible on a paper')
+	assert.equal(s.paperBtnActive, true, 'and is lit, showing paper mode is on')
+	assert.match(s.paperBtnTitle, /revert to a normal document/, 'its tooltip offers the way back')
 })
 
 test('paper: display equations auto-number (1), (2) in document order', { skip: browserSkip, timeout: 120_000 }, () => {
@@ -1664,6 +1673,8 @@ const BTN_STATE_JS = `
 let paperFormDrive = null
 let paperBtnClick = null
 let paperReloadDrive = null
+let paperRevertDrive = null
+let paperCompanionRaw = null
 
 // Open a canvas/document and read the #paperBtn's state (enabled/disabled + reason).
 async function drivePaperButtonState(canvasFile) {
@@ -1714,11 +1725,51 @@ async function drivePaperButtonClick(mdFile) {
 			const b = document.getElementById('paperBtn');
 			return {
 				btnHidden: b.hidden,
+				btnActive: b.classList.contains('active'),
 				docHasPaper: !!(window.ic.state.canvasDoc && window.ic.state.canvasDoc.document && window.ic.state.canvasDoc.document.paper),
 				toasts: [...document.querySelectorAll('.toast')].map((t) => t.textContent).join(' | '),
 			};
 		})()`)
 		return { before, after }
+	})
+}
+
+// Open a document already in paper mode and click the LIT button to REVERT it to normal.
+async function drivePaperRevert(mdFile) {
+	const url = `http://127.0.0.1:${K.port}/?token=${encodeURIComponent(K.token)}#/c/${encodeURIComponent(mdFile)}`
+	return withChrome(CHROME, url, { onNewDocument: PROBE }, async ({ evaluate }) => {
+		let deadline = Date.now() + 30_000
+		for (;;) {
+			// Wait for the paper deck AND the lit toggle.
+			const ready = await evaluate(`(() => !!(window.ic && window.ic.state.tree
+				&& window.ic.state.activeId === '${mdFile}'
+				&& window.ic.state.canvasDoc && window.ic.state.canvasDoc.document && window.ic.state.canvasDoc.document.paper
+				&& document.getElementById('paperBtn').classList.contains('active')))()`).catch(() => false)
+			if (ready || Date.now() > deadline)
+				break
+			await cdpSleep(250)
+		}
+		await cdpSleep(400)
+		await evaluate(`(() => { document.getElementById('paperBtn').click(); return true })()`)
+		deadline = Date.now() + 30_000
+		for (;;) {
+			const done = await evaluate(`(() => !(window.ic.state.canvasDoc
+				&& window.ic.state.canvasDoc.document && window.ic.state.canvasDoc.document.paper))()`).catch(() => false)
+			if (done || Date.now() > deadline)
+				break
+			await cdpSleep(200)
+		}
+		await cdpSleep(500)
+		return await evaluate(`(() => {
+			const b = document.getElementById('paperBtn');
+			return {
+				btnActive: b.classList.contains('active'),
+				btnHidden: b.hidden,
+				docHasPaper: !!(window.ic.state.canvasDoc && window.ic.state.canvasDoc.document && window.ic.state.canvasDoc.document.paper),
+				paperMode: !!document.querySelector('.doc-mode.paper-mode'),
+				toasts: [...document.querySelectorAll('.toast')].map((t) => t.textContent).join(' | '),
+			};
+		})()`)
 	})
 }
 
@@ -1760,16 +1811,29 @@ test('paperBtn: clicking on a .md writes its companion and turns the document in
 	assert.equal(paperBtnClick.before.hidden, false, 'the button shows on a plain markdown document')
 	assert.equal(paperBtnClick.before.disabled, false, 'and is enabled — a plain .md can become a paper')
 	assert.equal(paperBtnClick.after.docHasPaper, true, 'after the click the loaded canvas declares document.paper')
-	assert.equal(paperBtnClick.after.btnHidden, true, 'the button then HIDES — the document is a paper now, nothing left to convert')
+	assert.equal(paperBtnClick.after.btnHidden, false, 'the button STAYS visible — it is a toggle, not a one-way trip')
+	assert.equal(paperBtnClick.after.btnActive, true, 'and lights up to show paper mode is on')
 	assert.match(paperBtnClick.after.toasts, /paperless\.canvas\.json/, 'a toast announces the companion that was created')
 
-	// The companion is real on disk, declares paper mode, enhances the document, and validates.
-	const compPath = path.join(K.root, 'paperless.canvas.json')
-	assert.ok(fs.existsSync(compPath), 'the companion file was written')
-	const comp = JSON.parse(fs.readFileSync(compPath, 'utf8'))
+	// The companion the convert wrote (captured before the revert drive deleted it) enhances
+	// the document, declares paper mode, and validates.
+	assert.ok(paperCompanionRaw, 'the companion file was written by the convert click')
+	const comp = JSON.parse(paperCompanionRaw)
 	assert.equal(comp.enhances, 'paperless.md')
 	assert.ok(comp.document.paper, 'it declares document.paper')
-	assert.equal(validate(fs.readFileSync(compPath, 'utf8'), { root: K.root }).ok, true, 'the companion is a valid canvas')
+	assert.equal(validate(paperCompanionRaw, { root: K.root }).ok, true, 'the companion is a valid canvas')
+})
+
+test('paperBtn: clicking the LIT button REVERTS the document to normal — the way back', { skip: browserSkip, timeout: 120_000 }, () => {
+	// The bug this fixes: once converted, the reader could not get back. The toggle's off
+	// direction removes paper mode and — for a .md — deletes the bare companion it created.
+	assert.equal(paperRevertDrive.docHasPaper, false, 'after clicking the lit button the document no longer declares paper')
+	assert.equal(paperRevertDrive.paperMode, false, 'it renders as a normal document again')
+	assert.equal(paperRevertDrive.btnActive, false, 'the button is no longer lit')
+	assert.match(paperRevertDrive.toasts, /[Rr]everted/, 'a toast confirms the revert')
+	// The companion the button created was deleted — a clean undo back to the plain .md.
+	assert.equal(fs.existsSync(path.join(K.root, 'paperless.canvas.json')), false,
+		'the bare companion is gone — the .md is a plain document again')
 })
 
 test('paperBtn: the write PERSISTS — a fresh load (like print) renders the paper, and the PDF is one', { skip: browserSkip, timeout: 120_000 }, () => {

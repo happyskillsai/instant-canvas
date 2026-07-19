@@ -490,3 +490,59 @@ test('paper: the splice diff-verify REJECTS a candidate that does not match the 
 	// A canvas with no document object has nowhere to splice into.
 	assert.equal(setDocumentPaper('{"instantcanvas":1,"blocks":[]}', { instantcanvas: 1, blocks: [] }, { columns: 1 }), null)
 })
+
+// ------------------------------------------------------ paper mode: the OFF toggle (revert)
+
+const { removeDocumentPaper } = require('../lib/jsonedit')
+
+test('paper revert: a .md whose companion the button created deletes it — clean undo', () => {
+	const root = tmpRoot()
+	write(root, 'note.md', '# Note\n\n## One\n\nText.')
+	themestore.applyPaper(root, 'note.md', { columns: 1, font: 'serif' })
+	assert.ok(fs.existsSync(path.join(root, 'note.canvas.json')), 'the button created the companion')
+	const res = themestore.applyPaper(root, 'note.md', null)
+	assert.equal(res.removed, true)
+	assert.equal(fs.existsSync(path.join(root, 'note.canvas.json')), false, 'reverting deletes the bare companion')
+	// A second revert is a harmless no-op (nothing to remove).
+	assert.doesNotThrow(() => themestore.applyPaper(root, 'note.md', null))
+})
+
+test('paper revert: a companion with a THEME keeps its file — only paper is spliced out', () => {
+	const root = tmpRoot()
+	write(root, 'doc.md', '# Doc\n\nText.')
+	write(root, 'doc.canvas.json', {
+		instantcanvas: 1, createdWith: '0.1.0', enhances: 'doc.md', title: 'Doc',
+		document: { theme: { accent: '#0054fe' } }, blocks: [{ type: 'markdown', src: 'doc.md' }],
+	})
+	themestore.applyPaper(root, 'doc.md', { columns: 1, font: 'serif' })
+	assert.ok(JSON.parse(read(root, 'doc.canvas.json')).document.paper, 'paper spliced beside the theme')
+	themestore.applyPaper(root, 'doc.md', null)
+	const after = JSON.parse(read(root, 'doc.canvas.json'))
+	assert.ok(fs.existsSync(path.join(root, 'doc.canvas.json')), 'the themed companion is NOT deleted')
+	assert.equal(after.document.paper, undefined, 'paper is gone')
+	assert.deepEqual(after.document.theme, { accent: '#0054fe' }, 'the theme survives')
+})
+
+test('paper revert: a display canvas the button converted loses its whole document object', () => {
+	const root = tmpRoot()
+	write(root, 'dash.canvas.json', { instantcanvas: 1, createdWith: '0.1.0', title: 'Dash',
+		blocks: [{ type: 'markdown', text: '# Hi\n\n## S\n\nText.' }] })
+	themestore.applyPaper(root, 'dash.canvas.json', { columns: 1 })
+	assert.ok(JSON.parse(read(root, 'dash.canvas.json')).document, 'a document was created')
+	themestore.applyPaper(root, 'dash.canvas.json', null)
+	assert.equal(JSON.parse(read(root, 'dash.canvas.json')).document, undefined, 'reverting removes the document entirely')
+	assert.equal(validate(read(root, 'dash.canvas.json'), { root }).ok, true, 'and leaves a valid display canvas')
+})
+
+test('paper revert: removeDocumentPaper is byte-preserving and diff-verified', () => {
+	// paper spliced FIRST, a theme after — reverting must leave the theme byte-identical.
+	const raw = '{\n  "instantcanvas": 1,\n  "document": {\n    "paper": { "columns": 1 },\n    "theme": { "accent": "#0054fe" }\n  },\n  "blocks": []\n}\n'
+	const out = removeDocumentPaper(raw, JSON.parse(raw))
+	assert.ok(out !== null, 'the splice is proven')
+	assert.match(out, /"theme": \{ "accent": "#0054fe" \}/, 'the theme line survives byte for byte')
+	assert.equal(JSON.parse(out).document.paper, undefined)
+	// A candidate that disagrees with the parsed canvas is rejected (returns null → re-serialize).
+	assert.equal(removeDocumentPaper(raw, { ...JSON.parse(raw), blocks: [{ type: 'markdown', text: 'x' }] }), null)
+	// No document.paper at all → nothing to splice.
+	assert.equal(removeDocumentPaper('{"instantcanvas":1,"blocks":[]}', { instantcanvas: 1, blocks: [] }), null)
+})

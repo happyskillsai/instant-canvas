@@ -1222,18 +1222,36 @@ function closePalette() {
 $('paletteBtn').addEventListener('click', () => openPalette(false))
 
 /**
- * Convert the open document to a white paper — the #paperBtn.
+ * Toggle white-paper mode on the open document — the #paperBtn.
  *
- * It ANNOUNCES the file it is about to create (a markdown file's companion) BEFORE the
- * write, because a colour-click that makes a file appear is only a good trade if nobody
- * discovers it afterwards — the same rule the palette Save follows. It is a persistent
- * write (POST /api/paper), not a per-tab toggle, so the paper reaches `print`; the deck
- * re-renders from the broadcast. The button seeds no authors/abstract — the human adds
- * those by editing the companion, which the success toast points at.
+ * ON: turns a plain document into a paper. It ANNOUNCES the file it is about to create (a
+ * markdown file's companion) BEFORE the write, because a click that makes a file appear is
+ * only a good trade if nobody discovers it afterwards — the same rule the palette Save
+ * follows. It seeds no authors/abstract; the human adds those by editing the companion.
+ * OFF: reverts to a normal document — deleting the bare companion the button created, or
+ * splicing `document.paper` back out. Either way it is a persistent write (POST /api/paper),
+ * not a per-tab toggle, so the choice reaches `print`; the document re-renders from the
+ * broadcast.
  */
-async function convertToPaper() {
+async function togglePaper() {
 	if (!state.activeId)
 		return
+	const docObj = state.canvasDoc && state.canvasDoc.document
+	const isPaper = !!(docObj && typeof docObj === 'object' && docObj.paper)
+
+	if (isPaper) {
+		const { status, json } = await api('/api/paper', {
+			method: 'POST',
+			body: JSON.stringify({ path: state.activeId, paper: null }),
+		})
+		if (status !== 200) {
+			toast('Could not revert white-paper mode' + (json && json.error ? ': ' + json.error.message : '') + '.', 5000)
+			return
+		}
+		toast('Reverted to a normal document.', 3500)
+		return
+	}
+
 	const { json: plan } = await api('/api/paper/plan?path=' + encodeURIComponent(state.activeId))
 	if (plan && Array.isArray(plan.blocked)) {
 		toast('This canvas cannot become a white paper: it holds a ' + plan.blocked.join('/') + '.', 5000)
@@ -1250,11 +1268,11 @@ async function convertToPaper() {
 		return
 	}
 	toast(json.created
-		? 'Created ' + json.created + ' and turned on white-paper mode. Add authors and an abstract by editing it.'
-		: 'White-paper mode on — serif, numbered sections and front matter.', json.created ? 6000 : 3500)
+		? 'Created ' + json.created + ' and turned on white-paper mode. Add authors and an abstract by editing it. Click the button again to revert.'
+		: 'White-paper mode on — serif, numbered sections and front matter. Click again to revert.', json.created ? 6000 : 4000)
 }
 
-$('paperBtn').addEventListener('click', convertToPaper)
+$('paperBtn').addEventListener('click', togglePaper)
 
 // Close on an outside click — and decide what "outside" means in the CAPTURE phase,
 // which is the whole point. The panel's own handlers re-render it (a preset chip
@@ -4022,18 +4040,19 @@ function syncViewToggle() {
 		label: 'Document colors — preset and tokens',
 		reason: '',
 	})
-	// The white-paper convert button is an OFFER, not a stateful toggle: it turns a plain
-	// document into a paper (a persistent write, so the styling reaches `print`), and it is
-	// shown+enabled EXACTLY when it can do that — a display/markdown canvas that is not
-	// already a paper, has no cover, and holds no form/confirm/sweep. Otherwise it hides, so
-	// there is never a disabled orphan the reader has to puzzle over. A canvas already in
-	// paper mode simply looks like one; nothing further to convert.
-	const canConvertToPaper = loaded && !blocked && !isPaper && !hasCover
+	// The white-paper button is an on/off TOGGLE, and a persistent write (so the styling
+	// reaches `print`). It shows on any document/markdown canvas that can hold a paper — off
+	// when the document is plain (click to convert), lit when it is a paper (click to revert
+	// to a normal document). It hides only where paper is impossible either way: a cover (a
+	// paper has none), or a form/confirm/sweep (cannot carry a "document" at all).
+	const canTogglePaper = loaded && !blocked && (isPaper || !hasCover)
 	paperControl('paperBtn', {
-		loaded: canConvertToPaper,
-		enabled: canConvertToPaper,
-		on: false,
-		label: 'Convert to a white paper — serif, numbered sections, front matter',
+		loaded: canTogglePaper,
+		enabled: canTogglePaper,
+		on: isPaper,
+		label: isPaper
+			? 'White-paper mode is ON — click to revert to a normal document'
+			: 'Convert to a white paper — serif, numbered sections, front matter',
 		reason: '',
 	})
 	if (!loaded)

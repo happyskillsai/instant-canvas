@@ -212,6 +212,105 @@ const setDocumentTheme = (raw, canvas, theme) => setMember(raw, canvas, 'documen
 const setPresentationTheme = (raw, canvas, theme) => setMember(raw, canvas, 'presentation', 'theme', theme)
 const setDocumentPaper = (raw, canvas, paper) => setMember(raw, canvas, 'document', 'paper', paper)
 
+/** How many direct members the object whose `{` is at `objStart` has. */
+function countMembers(s, objStart) {
+	let i = skipWs(s, objStart + 1)
+	if (s[i] === '}')
+		return 0
+	let n = 0
+	while (i < s.length && s[i] !== '}') {
+		const keyEnd = scanString(s, i)
+		const j = skipWs(s, keyEnd)
+		const valueEnd = scanValue(s, skipWs(s, j + 1))
+		n++
+		let k = skipWs(s, valueEnd)
+		if (s[k] === ',')
+			k = skipWs(s, k + 1)
+		i = k
+	}
+	return n
+}
+
+/**
+ * Remove `key` from the object at `objStart`, as TEXT, keeping the file's formatting.
+ * Handles the three positions cleanly: a member with a trailing comma (drop its whole line
+ * when it sits on its own, else the inline `"k":v,`), a last member (drop the preceding
+ * comma), and a sole member (leave an empty object). Returns the new string, or the object
+ * emptied when `key` was the only member.
+ */
+function cutMember(s, objStart, key) {
+	const m = findMember(s, objStart, key)
+	if (!m.found)
+		return null
+	const start = m.keyStart
+	const end = m.valueEnd
+	const after = skipWs(s, end)
+	if (s[after] === ',') {
+		// A member with something after it. Drop its own line when it has one to itself,
+		// so the next member keeps its indentation; otherwise drop the inline `"k": v,`.
+		const lineStart = s.lastIndexOf('\n', start - 1) + 1
+		if (/^[ \t]*$/.test(s.slice(lineStart, start))) {
+			let nl = after + 1
+			if (s[nl] === '\r') nl++
+			if (s[nl] === '\n') nl++
+			return s.slice(0, lineStart) + s.slice(nl)
+		}
+		return s.slice(0, start) + s.slice(skipWs(s, after + 1))
+	}
+	// No comma after → it is the last (or only) member. Drop a preceding comma if there is one.
+	let b = start - 1
+	while (b >= 0 && WS.has(s[b]))
+		b--
+	if (s[b] === ',')
+		return s.slice(0, b) + s.slice(end)
+	// Sole member: the object becomes empty.
+	return s.slice(0, start) + s.slice(end)
+}
+
+/**
+ * Remove `document.paper` as TEXT — the inverse of `setDocumentPaper`, used when the reader
+ * toggles paper mode OFF. If `paper` was `document`'s only member, the whole `document`
+ * object goes with it (so the canvas returns to its pre-conversion default view). Verified
+ * by re-parse-and-diff exactly like the setters: a removal that changed anything but
+ * `document.paper` (and an emptied `document`) is discarded, and the caller re-serializes.
+ */
+function removeDocumentPaper(raw, canvas) {
+	let candidate
+	try {
+		const objStart = skipWs(raw, 0)
+		if (raw[objStart] !== '{')
+			return null
+		const doc = findMember(raw, objStart, 'document')
+		if (!doc.found || raw[doc.valueStart] !== '{')
+			return null
+		if (!findMember(raw, doc.valueStart, 'paper').found)
+			return null
+		candidate = countMembers(raw, doc.valueStart) === 1
+			? cutMember(raw, objStart, 'document') // paper is the only thing in document — drop it all
+			: cutMember(raw, doc.valueStart, 'paper')
+		if (candidate === null)
+			return null
+	} catch {
+		return null
+	}
+
+	let after
+	try {
+		after = JSON.parse(candidate)
+	} catch {
+		return null
+	}
+	const before = JSON.parse(JSON.stringify(canvas))
+	if (before.document) {
+		delete before.document.paper
+		if (Object.keys(before.document).length === 0)
+			delete before.document
+	}
+	if (JSON.stringify(after) !== JSON.stringify(before))
+		return null
+	return candidate
+}
+
 /**
  * Create a whole outer member (`document` above blocks/pages, or `presentation` above
  * slides) on a canvas that has none, as TEXT, landing just before its anchor — where the
@@ -272,4 +371,4 @@ function createMember(raw, canvas, member, value, anchors) {
 const createDocument = (raw, canvas, document) => createMember(raw, canvas, 'document', document, ['blocks', 'pages'])
 const createPresentation = (raw, canvas, presentation) => createMember(raw, canvas, 'presentation', presentation, ['slides'])
 
-module.exports = { setDocumentTheme, setPresentationTheme, setDocumentPaper, createDocument, createPresentation, detectIndent }
+module.exports = { setDocumentTheme, setPresentationTheme, setDocumentPaper, removeDocumentPaper, createDocument, createPresentation, detectIndent }

@@ -4,7 +4,7 @@ const fs = require('node:fs')
 const path = require('node:path')
 const themeLib = require('./theme')
 const skillsconfig = require('./skillsconfig')
-const { setDocumentTheme, setPresentationTheme, setDocumentPaper, createDocument, createPresentation } = require('./jsonedit')
+const { setDocumentTheme, setPresentationTheme, setDocumentPaper, removeDocumentPaper, createDocument, createPresentation } = require('./jsonedit')
 const { writeAtomic } = require('./fsatomic')
 const { PKG_VERSION } = require('./pkgmeta')
 const { VERSION: SCHEMA_VERSION } = require('./schema')
@@ -340,12 +340,18 @@ function paperCanvasPlan(root, rel, plan) {
  * mode (PAPER_ON_PRESENTATION). Returns { wrote, target, created? }.
  */
 function applyPaper(root, rel, paper) {
-	if (!isObj(paper))
+	const remove = paper === null
+	if (!remove && !isObj(paper))
 		throw new ThemeError('INVALID_PAPER', 'A paper object is required.')
 
-	// ---- a markdown file: its companion, created if it has none ----------------
+	// ---- a markdown file: its companion ----------------------------------------
 	if (hasMarkdownExtension(rel)) {
 		const found = companionFor(root, rel)
+		if (remove) {
+			if (!found)
+				return { wrote: path.resolve(root, rel), target: 'companion' } // nothing to revert
+			return { ...removeCanvasPaper(root, found.canvas), target: 'companion' }
+		}
 		if (!found) {
 			const created = companionPathFor(rel)
 			const abs = path.resolve(root, created)
@@ -356,7 +362,58 @@ function applyPaper(root, rel, paper) {
 	}
 
 	// ---- a canvas -------------------------------------------------------------
-	return writeCanvasPaper(root, rel, paper)
+	return remove ? removeCanvasPaper(root, rel) : writeCanvasPaper(root, rel, paper)
+}
+
+/** True when a paper object carries any authored front-matter content (as opposed to the
+ *  button's bare `{columns, font}`), so a revert can decide whether it is undoing its own
+ *  conversion or discarding someone's authored title/authors/abstract. */
+function paperHasFrontmatter(paper) {
+	const fm = paper && paper.frontmatter
+	if (!isObj(fm))
+		return false
+	return ['title', 'abstract'].some((k) => typeof fm[k] === 'string' && fm[k].trim())
+		|| ['authors', 'affiliations', 'keywords'].some((k) => Array.isArray(fm[k]) && fm[k].length)
+}
+
+/**
+ * Turn paper mode OFF — the inverse of writeCanvasPaper.
+ *
+ * A companion that exists ONLY to carry paper (the bare one the button wrote — `document`
+ * has just `paper`, and no authored front matter) is DELETED outright: a clean undo back to
+ * the plain markdown file. Anything richer keeps its file and only loses `document.paper`,
+ * spliced out as text so the rest survives byte for byte (an emptied `document` goes too, so
+ * the canvas returns to its pre-conversion default). A splice that cannot be proven correct
+ * falls back to a re-serialize, never a guess.
+ */
+function removeCanvasPaper(root, rel) {
+	const abs = path.resolve(root, rel)
+	const raw = fs.readFileSync(abs, 'utf8')
+	const canvas = JSON.parse(raw)
+	if (!isObj(canvas.document) || !canvas.document.paper)
+		return { wrote: abs, target: 'canvas' } // nothing to revert
+
+	const doc = canvas.document
+	const bareCompanion = typeof canvas.enhances === 'string'
+		&& Object.keys(doc).length === 1
+		&& !paperHasFrontmatter(doc.paper)
+	if (bareCompanion) {
+		fs.rmSync(abs)
+		return { wrote: abs, target: 'companion', removed: true }
+	}
+
+	const spliced = removeDocumentPaper(raw, canvas)
+	if (spliced !== null) {
+		writeAtomic(abs, spliced)
+		return { wrote: abs, target: 'canvas', removed: true }
+	}
+	// Could not prove the splice — re-serialize with paper (and an emptied document) gone.
+	const next = { ...canvas, document: { ...doc } }
+	delete next.document.paper
+	if (Object.keys(next.document).length === 0)
+		delete next.document
+	writeAtomic(abs, reserialize(next, detectEol(raw)))
+	return { wrote: abs, target: 'canvas', removed: true }
 }
 
 /** Put `paper` inside a canvas — splicing beside an existing `document`, or creating one. */

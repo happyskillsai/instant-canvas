@@ -464,7 +464,15 @@ test('kernel: POST /api/paper on a .md creates its companion; a form is refused 
 	assert.equal(formSave.status, 409)
 	assert.equal(formSave.json.error.code, 'PAPER_NEEDS_DOCUMENT')
 
-	fs.rmSync(path.join(K.root, 'guide.canvas.json'))
+	// paper: null REVERTS — the toggle's off direction. The bare companion the convert wrote
+	// is deleted outright, a clean undo back to the plain .md.
+	const revert = await httpReq({
+		port: K.port, method: 'POST', path: '/api/paper', headers: K.auth,
+		body: { path: 'guide.md', paper: null },
+	})
+	assert.equal(revert.status, 200)
+	assert.equal(revert.json.removed, true)
+	assert.equal(fs.existsSync(path.join(K.root, 'guide.canvas.json')), false, 'reverting deleted the companion')
 })
 
 test('kernel: a workspace keeps its own palettes, offered beside the built-in presets', async () => {

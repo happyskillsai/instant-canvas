@@ -12,9 +12,10 @@
   margin, a `## References` list is styled with a hanging indent, and the footer is a lean centered
   page number with no running header. All numbers are runtime-derived, never authored — the
   `createdWith`/`figureMap` rule. Turn it on by hand (`document.paper`), from `catalog paper`, or
-  with a **one-click topbar button** that writes the setting (creating a markdown file's companion
-  if needed) so it persists and reaches `print`. Two-column layout, footnotes, and citation
-  management are deliberately out of this first phase.
+  with a **topbar toggle** that turns paper mode on and off — converting a plain document (creating
+  a markdown file's companion if needed) and reverting it back (deleting that companion, or
+  splicing `document.paper` back out) so the choice persists and reaches `print`. Two-column
+  layout, footnotes, and citation management are deliberately out of this first phase.
 
 ### Added
 - **`print` and `snapshot` now find Chrome on Windows.** Chrome discovery only probed macOS and

@@ -344,10 +344,12 @@ function savePaper(res, rel, body) {
 	if (load.status !== 200)
 		return sendJson(res, load.status, load.body)
 
-	let wrote, target, created
+	// `paper: null` REVERTS paper mode (the toggle's off direction); an object turns it on.
+	const revert = body.paper === null
+	let wrote, target, created, removed
 	try {
-		const paper = body.paper && typeof body.paper === 'object' && !Array.isArray(body.paper) ? body.paper : {}
-		;({ wrote, target, created } = themestore.applyPaper(ROOT, rel, paper))
+		const paper = revert ? null : (body.paper && typeof body.paper === 'object' && !Array.isArray(body.paper) ? body.paper : {})
+		;({ wrote, target, created, removed } = themestore.applyPaper(ROOT, rel, paper))
 	} catch (err) {
 		if (err instanceof themestore.ThemeError) {
 			const status = err.code === 'PAPER_NEEDS_DOCUMENT' ? 409 : 400
@@ -357,7 +359,7 @@ function savePaper(res, rel, body) {
 	}
 
 	const wroteRel = path.relative(ROOT, wrote).split(path.sep).join('/')
-	klog('paper', 'on', '→', wroteRel, `(${rel})`)
+	klog('paper', revert ? 'off' : 'on', '→', wroteRel, `(${rel})`)
 	// Same two broadcasts as a theme write: a canvas change rides fs.watch, but a NEW
 	// companion also changes the tree (the document's row gains its badge).
 	broadcast({ type: 'canvas', path: rel })
@@ -369,6 +371,7 @@ function savePaper(res, rel, body) {
 	return sendJson(res, 200, {
 		ok: true, wrote: wroteRel, target,
 		...(created ? { created } : {}),
+		...(removed ? { removed: true } : {}),
 		paper: state.canvas && state.canvas.document ? state.canvas.document.paper : undefined,
 	})
 }
