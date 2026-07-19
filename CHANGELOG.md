@@ -12,7 +12,8 @@
   digit (`$5`, `\$10`) stays a literal price, `$x$` inside a code fence stays literal, and invalid
   LaTeX (`$\notacommand$`) degrades to a visible error showing the source — never a broken page.
   Holds the strict CSP with zero violations and **no new runtime dependencies** (MathJax is
-  vendored as a pre-built Node bundle, the Plotly pattern).
+  vendored as a pre-built Node bundle, the Plotly pattern). Agents discover it from the
+  contract — `catalog markdown` and SKILL.md now teach the delimiters and the guards.
 
 ## [0.14.0] - 2026-07-18
 
