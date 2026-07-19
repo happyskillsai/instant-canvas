@@ -4649,6 +4649,52 @@ function renderMeta(panel, m, p) {
 	}
 }
 
+/**
+ * Render a CANVAS or DOCUMENT's metadata into `panel` for the info drawer, reusing the
+ * shared click-to-copy rows (metaRow/metaVline/metaCopyBtn). Universal rows come from
+ * `stat` (the /api/meta result); the kind extras — Created with, Theme, Blocks,
+ * Enhanced by — are BEST-EFFORT (§A/§6): each row is skipped cleanly when its source is
+ * absent (a cold deep-link may carry no browse `item`; a display canvas may declare no
+ * `createdWith`). Media kinds do NOT come here — their panel is filled by renderMeta
+ * from the stage (§4.3). The Path row keeps the absolute path, mono, like renderMeta.
+ *
+ *   ctx = { stat, canvas, themeSource, item }
+ */
+function renderItemMeta(panel, ctx) {
+	const { stat, canvas, themeSource, item } = ctx || {}
+	panel.textContent = ''
+	const m = stat || {}
+	const kind = m.kind === 'document' ? 'document' : 'canvas'
+	const title = document.createElement('div'); title.className = 'g-mtitle'
+	title.append(metaVline(m.name || '', m.name || '', 'Name'))
+	panel.append(title)
+	panel.append(metaRow('Folder', m.dir || '(top level)', m.dir || '(top level)'))
+	const pathStr = m.abspath || m.path || '' // Path keeps the absolute path, displayed and copied
+	if (pathStr) panel.append(metaRow('Path', pathStr, pathStr, true))
+	const kindLabel = kind === 'document' ? 'Document' : 'Canvas'
+	panel.append(metaRow('Kind', kindLabel, kindLabel))
+	const sizeStr = galleryHumanBytes(m.size) + ' (' + (m.size || 0).toLocaleString() + ' bytes)'
+	panel.append(metaRow('Size', sizeStr, sizeStr))
+	const createdStr = galleryDate(m.created), modifiedStr = galleryDate(m.modified)
+	panel.append(metaRow('Created', createdStr, createdStr))
+	panel.append(metaRow('Modified', modifiedStr, modifiedStr))
+	// --- best-effort extras — omit a row cleanly when its source is absent (§6) ---
+	const createdWith = canvas && canvas.createdWith
+	if (createdWith) panel.append(metaRow('Created with', String(createdWith), String(createdWith)))
+	const ts = themeSource || (canvas && canvas.themeSource)
+	if (ts) { const tsl = String(ts).charAt(0).toUpperCase() + String(ts).slice(1); panel.append(metaRow('Theme', tsl, tsl)) }
+	if (kind === 'canvas' && canvas && Array.isArray(canvas.blocks)) {
+		const n = canvas.blocks.length
+		const bstr = n + (n === 1 ? ' block' : ' blocks')
+		panel.append(metaRow('Blocks', bstr, bstr))
+	}
+	// "Enhanced by": a markdown document's companion canvas — the original-file
+	// relationship. Shown only when the browse item carries `enhanced` (§6: a cold
+	// deep-link may not know it), omitted silently otherwise.
+	if (kind === 'document' && item && item.enhanced)
+		panel.append(metaRow('Enhanced by', item.enhanced, item.enhanced, true))
+}
+
 /** Value-sync one keyed row (Duration / Dimensions) to `text`, adding its copy button. */
 function syncMetaRow(panel, key, text) {
 	const row = panel.querySelector('[data-mrow="' + key + '"]')
