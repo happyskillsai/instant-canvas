@@ -696,6 +696,36 @@ test('kernel: /api/gallery/meta returns dimensions; a HEIC answers here but its 
 	assert.equal(heicFile.status, 404, 'a browser cannot draw HEIC, so the file route refuses it')
 })
 
+test('kernel: GET /api/meta returns stat for every renderable kind; .env and a directory are byte-clean 404s', async () => {
+	// A canvas: kind + numeric stat, no bytes of the file.
+	const cv = await httpReq({ port: K.port, path: '/api/meta?path=report.canvas.json', headers: K.auth })
+	assert.equal(cv.status, 200)
+	assert.equal(cv.json.kind, 'canvas')
+	assert.equal(typeof cv.json.size, 'number')
+	assert.equal(typeof cv.json.created, 'number')
+	assert.equal(typeof cv.json.modified, 'number')
+	assert.equal(typeof cv.json.abspath, 'string')
+
+	// A markdown document, and an image with pixel dimensions (like /api/gallery/meta).
+	assert.equal((await httpReq({ port: K.port, path: '/api/meta?path=guide.md', headers: K.auth })).json.kind, 'document')
+	const img = await httpReq({ port: K.port, path: '/api/meta?path=photos/a.png', headers: K.auth })
+	assert.equal(img.json.kind, 'image')
+	assert.equal(img.json.width, 1)
+	assert.equal(img.json.height, 1)
+
+	// Token-gated like every other route.
+	assert.equal((await httpReq({ port: K.port, path: '/api/meta?path=report.canvas.json' })).status, 403, 'no token → 403')
+
+	// The .env-leak rule: a non-renderable path, a directory, and traversal are 404s
+	// whose body carries none of the target's bytes.
+	for (const p of ['/api/meta?path=.env', '/api/meta?path=secrets.txt', '/api/meta?path=photos', '/api/meta?path=../', '/api/meta?path=nope']) {
+		const r = await httpReq({ port: K.port, path: p, headers: K.auth })
+		assert.equal(r.status, 404, p)
+		assert.ok(!r.text.includes('sk-live-topsecret'), `${p} leaked file bytes`)
+		assert.ok(!r.text.includes('API_KEY'), `${p} leaked file bytes`)
+	}
+})
+
 test('kernel: /api/gallery/file streams image bytes with the right Content-Type and an immutable cache', async () => {
 	const png = await httpReq({ port: K.port, path: '/api/gallery/file?path=photos/a.png', headers: K.auth })
 	assert.equal(png.status, 200)

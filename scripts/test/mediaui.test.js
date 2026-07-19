@@ -163,7 +163,7 @@ test.before(async () => {
 			await evaluate('location.hash = "#/c/broken.mp4"')
 			out.errorCard = await until(evaluate, '!!document.querySelector(".media-stage .m-err") && !document.querySelector(".media-stage .m-err[hidden]")', 8000)
 			out.noLiveVideoSrc = await evaluate('(function(){ var v = ' + V + '; return !v || v.hidden || !v.getAttribute("src") })()')
-			out.errorHasMeta = await evaluate('!!document.querySelector(".media-stage .g-meta .g-mtitle")')
+			out.errorHasMeta = await evaluate('!!document.querySelector("#docInfoPanel .g-mtitle")') // the meta panel is the shared info drawer now
 
 			// ============ (7) COPY: Size row → real clipboard, image AND video ============
 			await send('Browser.grantPermissions', { origin: new URL(url).origin, permissions: ['clipboardReadWrite', 'clipboardSanitizedWrite'] }).catch(() => {})
@@ -181,9 +181,9 @@ test.before(async () => {
 				'var clip; try { clip = await navigator.clipboard.readText() } catch (e) { clip = "READ_FAIL" }' +
 				'return { ok: clip === shown, shown: shown, clip: clip, rest: rest, flashed: btn.classList.contains("copied") };' +
 			'})()'
-			await evaluate('location.hash = "#/c/m%2Ftiny.mp4"'); await until(evaluate, '!!document.querySelector(".media-stage .g-meta .g-mrow")', 8000); await sleep(200)
+			await evaluate('location.hash = "#/c/m%2Ftiny.mp4"'); await until(evaluate, '!!document.querySelector("#docInfoPanel .g-mrow")', 8000); await sleep(200)
 			out.copyVideo = await evaluate(copyProbe)
-			await evaluate('location.hash = "#/c/m%2Fone.png"'); await until(evaluate, '!!document.querySelector(".img-stage .g-meta .g-mrow")', 8000); await sleep(200)
+			await evaluate('location.hash = "#/c/m%2Fone.png"'); await until(evaluate, '!!document.querySelector("#docInfoPanel .g-mrow")', 8000); await sleep(200)
 			out.copyImage = await evaluate(copyProbe)
 
 			// ============ (8) DISPOSE REGRESSION: Esc leaves a paused, src-less element ============

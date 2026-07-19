@@ -11,7 +11,7 @@ const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
 
-const { listDir } = require('../lib/browse')
+const { listDir, itemMeta } = require('../lib/browse')
 
 // 1x1 transparent PNG.
 const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64')
@@ -228,4 +228,56 @@ test('browse: an unknown or empty type filter behaves like no filter', () => {
 
 	const emptyArr = listDir(root, '', { types: [] })
 	assert.deepEqual(relsOf(emptyArr.items), relsOf(listDir(root, '').items))
+})
+
+// ---------------------------------------------------------------------------
+// itemMeta — the info drawer's single source: a unified, STAT-ONLY shape for any
+// renderable path, or null (→ 404) for anything else. Same lstat/extension
+// discipline as mediaStat, extended to canvas & document. Never opens the file.
+
+test('itemMeta: a canvas returns the unified stat shape (kind canvas, numeric stat, abspath)', () => {
+	const root = fixture()
+	const m = itemMeta(root, 'report.canvas.json')
+	assert.equal(m.kind, 'canvas')
+	assert.equal(m.name, 'report.canvas.json')
+	assert.equal(m.dir, '')
+	assert.equal(m.path, 'report.canvas.json')
+	assert.equal(m.abspath, path.join(root, 'report.canvas.json'))
+	assert.equal(m.format, 'json')
+	assert.equal(typeof m.size, 'number')
+	assert.equal(typeof m.created, 'number')
+	assert.equal(typeof m.modified, 'number')
+})
+
+test('itemMeta: a markdown document and each media kind classify from the extension', () => {
+	const root = fixture()
+	assert.equal(itemMeta(root, 'notes.md').kind, 'document')
+	assert.equal(itemMeta(root, 'guide.md').kind, 'document') // an ENHANCED doc is still a document (stat only, no companion logic)
+	assert.equal(itemMeta(root, 'a.png').kind, 'image')
+	assert.equal(itemMeta(root, 'shot.heic').kind, 'image') // metadata-only image still answers
+	// A .json without the canvas marker still classifies as `canvas` — the route is pure
+	// stat and NEVER opens the file to read a marker (the .env/JSON.parse-leak rule).
+	assert.equal(itemMeta(root, 'package.json').kind, 'canvas')
+	// A doc in a subfolder carries its folder in `dir`.
+	const sub = itemMeta(root, path.join('sub', 'x.md'))
+	assert.equal(sub, null, 'a non-existent path is null')
+})
+
+test('itemMeta: a non-renderable extension and a directory are null (→ 404)', () => {
+	const root = fixture()
+	assert.equal(itemMeta(root, 'data.csv'), null, 'a non-renderable extension is refused')
+	assert.equal(itemMeta(root, '.env'), null, 'a dot-file with no renderable extension is refused')
+	assert.equal(itemMeta(root, 'sub'), null, 'a directory is refused (lstat: not a file)')
+	assert.equal(itemMeta(root, ''), null, 'an empty path is refused')
+	assert.equal(itemMeta(root, '../..'), null, 'traversal escapes the root')
+})
+
+test('itemMeta: a symlink is refused on every branch (extension gate reads the LINK name)', () => {
+	const root = fixture()
+	// a canvas symlinked at a canvas name — the .json branch must lstat, not stat
+	fs.symlinkSync(path.join(root, 'report.canvas.json'), path.join(root, 'link.canvas.json'))
+	assert.equal(itemMeta(root, 'link.canvas.json'), null, 'a symlinked .json is refused (lstat, not stat)')
+	// a .png symlinked at .env — the media branch (mediaStat) already lstat-refuses it
+	fs.symlinkSync(path.join(root, '.env'), path.join(root, 'evil.png'))
+	assert.equal(itemMeta(root, 'evil.png'), null, 'a photo.png symlinked at .env is refused')
 })

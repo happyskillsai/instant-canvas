@@ -21,6 +21,7 @@ const path = require('node:path')
 process.env.INSTANTCANVAS_STATE_DIR = process.env.INSTANTCANVAS_STATE_DIR || fs.mkdtempSync(path.join(os.tmpdir(), 'ic-state-'))
 const { withChrome, findChrome, sleep } = require('./helpers/cdp')
 const { PKG_VERSION } = require('../lib/pkgmeta')
+const { FIXTURES } = require('./helpers/mediafixtures') // a real, browser-playable mp4 for the video-drawer check
 
 const CLI = path.join(__dirname, '..', 'instantcanvas.js')
 const CHROME = findChrome()
@@ -55,14 +56,16 @@ test.before(async () => {
 	// Images: a renderable PNG and a metadata-only HEIC (never a broken <img>).
 	fs.writeFileSync(path.join(root, 'pic.png'), PNG)
 	fs.writeFileSync(path.join(root, 'photo.heic'), Buffer.alloc(64, 9))
-	// A subfolder for the breadcrumb.
+	// A subfolder for the breadcrumb — and a real mp4 there (kept OUT of the root so the
+	// root-order boundary tests above are undisturbed) for the video-drawer Duration check.
 	fs.mkdirSync(path.join(root, 'sub'))
 	fs.writeFileSync(path.join(root, 'sub', 'inner.md'), '# Inner\n\nInside sub.\n')
+	fs.writeFileSync(path.join(root, 'sub', 'tiny.mp4'), Buffer.from(FIXTURES['tiny.mp4'], 'base64'))
 
 	const out = execFileSync(process.execPath, [CLI, 'open', '.', '--workspace', root, '--no-open'], { cwd: root, encoding: 'utf8' })
 	const url = JSON.parse(out).url
 
-	R = await withChrome(CHROME, url, {}, async ({ evaluate }) => {
+	R = await withChrome(CHROME, url, {}, async ({ evaluate, send }) => {
 		const out = { steps: {} }
 		const q = (sel) => 'document.querySelectorAll(' + JSON.stringify(sel) + ').length'
 		const openC = async (rel) => {
@@ -145,7 +148,7 @@ test.before(async () => {
 			out.steps.imageStage = await until(evaluate, '!!document.querySelector("#docModalView .img-stage .g-full")', 6000)
 			await sleep(400)
 			out.imageImgVisible = await evaluate('(function(){ var i=document.querySelector(".img-stage .g-full"); return !!(i && !i.hidden && i.getAttribute("src")) })()')
-			out.imageDims = await evaluate('(function(){ var rows=[].slice.call(document.querySelectorAll(".img-stage .g-meta .g-mrow")); var r=rows.filter(function(x){return /Dimensions/.test(x.textContent)})[0]; return r?r.textContent.replace(/\\s+/g," ").trim():"" })()')
+			out.imageDims = await evaluate('(function(){ var rows=[].slice.call(document.querySelectorAll("#docInfoPanel .g-mrow")); var r=rows.filter(function(x){return /Dimensions/.test(x.textContent)})[0]; return r?r.textContent.replace(/\\s+/g," ").trim():"" })()')
 			out.imageLand = await evaluate('window.ic.state.imageLand === true')
 			out.imageViewToggleHidden = await evaluate('document.getElementById("viewToggle").hidden')
 			out.imagePaletteDisabled = await evaluate('document.getElementById("paletteBtn").disabled')
@@ -156,7 +159,7 @@ test.before(async () => {
 			out.steps.heicShown = await until(evaluate, '!!document.querySelector("#docModalView .img-stage")', 6000)
 			await sleep(400)
 			out.heicPlaceholder = await evaluate('(function(){ var i=document.querySelector(".img-stage .g-full"); var p=document.querySelector(".img-stage .g-full-ph"); return !!(i && i.hidden && p && !p.hidden) })()')
-			out.heicNote = await evaluate('!!document.querySelector(".img-stage .g-meta .g-mnote")')
+			out.heicNote = await evaluate('!!document.querySelector("#docInfoPanel .g-mnote")')
 
 			// ---- cross-kind prev/next: a document steps to the neighbouring image and back ----
 			await openC('notes.md')
@@ -173,6 +176,88 @@ test.before(async () => {
 			await evaluate('var i = document.querySelector("#docModalView form [data-field=\\"x\\"]"); i && i.focus(); document.activeElement && document.activeElement.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))')
 			await sleep(300)
 			out.formEscInert = await evaluate('window.ic.state.activeId === "form.canvas.json" && !document.getElementById("docModal").hidden')
+
+			// ====================== the item info drawer (§4) ======================
+			// (No backticks in here: every evaluate() arg is a normal single-quoted string.)
+			// -- §3.1 button present & LAST child of .oc-actions, with aria-controls --
+			await openC('report.canvas.json') // a canvas: createdWith stamped + one markdown block
+			await sleep(250)
+			out.infoBtnLast = await evaluate('(function(){ var a=document.querySelector(".oc-actions"); return !!(a && a.lastElementChild && a.lastElementChild.id === "ocInfo") })()')
+			out.infoBtnControls = await evaluate('document.getElementById("ocInfo").getAttribute("aria-controls") === "docInfoDrawer"')
+			out.infoBtnVisible = await evaluate('!document.getElementById("ocInfo").hidden')
+
+			// -- §3.2 collapsed by default: hidden attr + COMPUTED display:none + aria-expanded=false --
+			out.drawerHiddenAttr = await evaluate('document.getElementById("docInfoDrawer").hasAttribute("hidden")')
+			out.drawerDisplayNone = await evaluate('getComputedStyle(document.getElementById("docInfoDrawer")).display === "none"')
+			out.infoAriaCollapsed = await evaluate('document.getElementById("ocInfo").getAttribute("aria-expanded") === "false"')
+
+			// -- §3.4 canvas rows (§A): labels + the file name (in the title) + the Kind value --
+			out.canvasLabels = await evaluate('Array.from(document.querySelectorAll("#docInfoPanel .g-mrow .g-mlabel")).map(function(l){ return l.textContent.trim() })')
+			out.canvasTitleText = await evaluate('(document.querySelector("#docInfoPanel .g-mtitle")||{}).textContent || ""')
+			out.canvasKindVal = await evaluate('(function(){ var rows=[].slice.call(document.querySelectorAll("#docInfoPanel .g-mrow")); var r=rows.filter(function(x){ return ((x.querySelector(".g-mlabel")||{}).textContent||"").trim()==="Kind" })[0]; return r ? ((r.querySelector(".g-vtext")||{}).textContent||"").trim() : "" })()')
+
+			// -- §3.3 open via click reveals; §3.5 copy buttons resting-visible; §3.6 no inline styles --
+			await evaluate('document.getElementById("ocInfo").click()')
+			await sleep(150)
+			out.drawerOpenDisplay = await evaluate('getComputedStyle(document.getElementById("docInfoDrawer")).display !== "none"')
+			out.infoAriaExpanded = await evaluate('document.getElementById("ocInfo").getAttribute("aria-expanded") === "true"')
+			out.drawerInlineStyles = await evaluate(q('#docInfoDrawer [style]'))
+			out.drawerCopyCount = await evaluate(q('#docInfoPanel .g-copy'))
+			out.drawerCopyResting = await evaluate('(function(){ var b=[].slice.call(document.querySelectorAll("#docInfoPanel .g-copy")); return b.length>0 && b.every(function(x){ var s=getComputedStyle(x); return s.display!=="none" && s.visibility!=="hidden" && parseFloat(s.opacity)>0.1 }) })()')
+			// §3.5 the Path row copies the ABSOLUTE path
+			out.pathIsAbsolute = await evaluate('(function(){ var rows=[].slice.call(document.querySelectorAll("#docInfoPanel .g-mrow")); var r=rows.filter(function(x){ return ((x.querySelector(".g-mlabel")||{}).textContent||"").trim()==="Path" })[0]; if(!r) return false; var v=(r.querySelector(".g-vtext")||{}).textContent||""; return v.charAt(0)==="/" || /^[A-Za-z]:/.test(v) })()')
+			// a copy click toasts (reuses metaCopyBtn → copyText → toast)
+			await send('Browser.grantPermissions', { origin: new URL(url).origin, permissions: ['clipboardReadWrite', 'clipboardSanitizedWrite'] }).catch(() => {})
+			await evaluate('var cb=document.querySelector("#docInfoPanel .g-copy"); cb && cb.click()')
+			out.steps.drawerCopyToast = await until(evaluate, '!!document.querySelector(".toast")', 3000)
+
+			// -- §3.3 close via #infoClose: collapses, NO navigation (hash + modal unchanged) --
+			await evaluate('document.getElementById("infoClose").click()')
+			await sleep(150)
+			out.closeBtnCollapsed = await evaluate('getComputedStyle(document.getElementById("docInfoDrawer")).display === "none"')
+			out.closeHashSame = await evaluate('location.hash === "#/c/" + encodeURIComponent("report.canvas.json")')
+			out.closeModalOpen = await evaluate('!document.getElementById("docModal").hidden')
+
+			// -- §3.3 Esc collapses the drawer FIRST, and does not navigate away --
+			await evaluate('document.getElementById("ocInfo").click()')
+			await sleep(120)
+			await evaluate('document.body.focus(); document.dispatchEvent(new KeyboardEvent("keydown",{key:"Escape",bubbles:true}))')
+			await sleep(150)
+			out.escCollapsedDrawer = await evaluate('getComputedStyle(document.getElementById("docInfoDrawer")).display === "none" && window.ic.state.activeId === "report.canvas.json" && !document.getElementById("docModal").hidden')
+
+			// -- §3.2 collapsed AGAIN after prev/next (no stickiness): open, step, assert collapsed --
+			await evaluate('document.getElementById("ocInfo").click()')
+			await sleep(120)
+			out.reopenBeforeStep = await evaluate('getComputedStyle(document.getElementById("docInfoDrawer")).display !== "none"')
+			await evaluate('document.getElementById("ocNext").click()') // report.canvas.json → guide.md
+			out.steps.drawerStepped = await until(evaluate, 'window.ic.state.activeId === "guide.md"', 4000)
+			await sleep(200)
+			out.collapsedAfterStep = await evaluate('document.getElementById("docInfoDrawer").hasAttribute("hidden") && getComputedStyle(document.getElementById("docInfoDrawer")).display === "none" && document.getElementById("ocInfo").getAttribute("aria-expanded") === "false"')
+
+			// -- §3.4/§3.7 image: Dimensions row present; the STAGE holds no .g-meta; the drawer holds one --
+			await openC('pic.png')
+			out.steps.imgDrawer = await until(evaluate, '!!document.querySelector("#docInfoPanel .g-mrow")', 6000)
+			await sleep(300)
+			out.imgStageMetaCount = await evaluate(q('#docModalView .img-stage .g-meta'))
+			out.imgDrawerMetaCount = await evaluate(q('#docInfoDrawer .g-meta'))
+			out.imgHasDimensions = await evaluate('Array.from(document.querySelectorAll("#docInfoPanel .g-mlabel")).some(function(l){ return /Dimensions/.test(l.textContent) })')
+
+			// -- §3.4/§3.7 video: Duration value-synced NON-EMPTY into the drawer while it is COLLAPSED first --
+			await openC('sub/tiny.mp4')
+			out.steps.vidLand = await until(evaluate, 'window.ic.state.mediaLand === "video"', 6000)
+			out.vidStageMetaCount = await evaluate(q('#docModalView .media-stage .g-meta'))
+			out.vidDrawerCollapsedFirst = await evaluate('getComputedStyle(document.getElementById("docInfoDrawer")).display === "none"')
+			out.steps.vidDuration = await until(evaluate, '(function(){ var r=document.querySelector("#docInfoPanel [data-mrow=\\"duration\\"]"); if(!r) return false; var v=(r.querySelector(".g-vtext")||{}).textContent||""; return /[0-9]/.test(v) })()', 8000)
+			await evaluate('document.getElementById("ocInfo").click()')
+			await sleep(150)
+			out.vidDurationVisible = await evaluate('(function(){ var r=document.querySelector("#docInfoPanel [data-mrow=\\"duration\\"]"); var v=(r&&r.querySelector(".g-vtext")||{}).textContent||""; return getComputedStyle(document.getElementById("docInfoDrawer")).display !== "none" && /[0-9]/.test(v) })()')
+
+			// -- §3.9 responsive: at <=600px the drawer computes to a near-full-width sheet (measure, do
+			// not read the source). Measured while OPEN so the width is a used value, not display:none. --
+			await send('Emulation.setDeviceMetricsOverride', { width: 390, height: 800, deviceScaleFactor: 1, mobile: false })
+			await sleep(250)
+			out.drawerNarrowWidth = await evaluate('parseFloat(getComputedStyle(document.getElementById("docInfoDrawer")).width)')
+			await send('Emulation.clearDeviceMetricsOverride', {}).catch(() => {})
 		} catch (e) {
 			out.error = String(e && e.message || e)
 		}
@@ -259,4 +344,72 @@ test('overlay: prev/next crosses between a document and a neighbouring image and
 test('overlay: Esc is inert while focus is in a form field — a session is never cancelled', { skip }, () => {
 	assert.equal(R.steps.formRendered, true, 'the interactive canvas rendered inside the overlay')
 	assert.equal(R.formEscInert, true, 'Esc with focus in the form did not navigate away from the canvas')
+})
+
+// ============================ info drawer (§4) ============================
+
+test('drawer: the info button is present, LAST in .oc-actions, and controls the drawer (§3.1)', { skip }, () => {
+	assert.equal(R.infoBtnLast, true, '#ocInfo is the last element child of .oc-actions')
+	assert.equal(R.infoBtnControls, true, '#ocInfo carries aria-controls="docInfoDrawer"')
+	assert.equal(R.infoBtnVisible, true, 'the info button is revealed for a canvas')
+})
+
+test('drawer: collapsed by default — hidden, computed display:none, aria-expanded=false (§3.2)', { skip }, () => {
+	assert.equal(R.drawerHiddenAttr, true, 'the drawer carries the hidden attribute on open')
+	assert.equal(R.drawerDisplayNone, true, 'the drawer COMPUTES display:none (its own [hidden] rule beats the base display)')
+	assert.equal(R.infoAriaCollapsed, true, '#ocInfo reports aria-expanded="false"')
+})
+
+test('drawer: a canvas shows Path/Kind/Size/Created/Modified rows, the name, and the Kind value (§3.4/§A)', { skip }, () => {
+	for (const label of ['Path', 'Kind', 'Size', 'Created', 'Modified'])
+		assert.ok(R.canvasLabels.includes(label), 'the canvas drawer has a ' + label + ' row (got ' + JSON.stringify(R.canvasLabels) + ')')
+	assert.match(R.canvasTitleText, /report\.canvas\.json/, 'the drawer title carries the file name')
+	assert.equal(R.canvasKindVal, 'Canvas', 'the Kind row reads Canvas')
+	// createdWith is stamped on the fixture, so its best-effort row renders (§A)
+	assert.ok(R.canvasLabels.includes('Created with'), 'a stamped canvas shows its Created with row')
+})
+
+test('drawer: opens on click, closes via ×/Esc, and never navigates (§3.3)', { skip }, () => {
+	assert.equal(R.drawerOpenDisplay, true, 'clicking #ocInfo reveals the drawer (display !== none)')
+	assert.equal(R.infoAriaExpanded, true, '#ocInfo reports aria-expanded="true" when open')
+	assert.equal(R.closeBtnCollapsed, true, '#infoClose collapses the drawer')
+	assert.equal(R.closeHashSame, true, 'closing the drawer left location.hash unchanged')
+	assert.equal(R.closeModalOpen, true, 'the item modal stayed open when the drawer closed')
+	assert.equal(R.escCollapsedDrawer, true, 'Esc collapsed the drawer without navigating away')
+})
+
+test('drawer: collapses again on every item open, including after prev/next (§3.2)', { skip }, () => {
+	assert.equal(R.reopenBeforeStep, true, 'the drawer was open before stepping')
+	assert.equal(R.steps.drawerStepped, true, 'Next reached the sibling document')
+	assert.equal(R.collapsedAfterStep, true, 'the drawer reset to collapsed on the next item (no stickiness)')
+})
+
+test('drawer: copy buttons are resting-visible, the Path is absolute, and a copy toasts (§3.5)', { skip }, () => {
+	assert.ok(R.drawerCopyCount > 0, 'the drawer renders click-to-copy buttons')
+	assert.equal(R.drawerCopyResting, true, 'every copy button is visible at rest (never hover-gated)')
+	assert.equal(R.pathIsAbsolute, true, 'the Path row copies the absolute path')
+	assert.equal(R.steps.drawerCopyToast, true, 'clicking a copy button toasts')
+})
+
+test('drawer: zero inline styles under the drawer (CSP discipline, §3.6)', { skip }, () => {
+	assert.equal(R.drawerInlineStyles, 0, '#docInfoDrawer carries zero [style] attributes')
+})
+
+test('drawer: the media panel MOVED — the stage holds none, the drawer holds exactly one (§3.7)', { skip }, () => {
+	assert.equal(R.steps.imgDrawer, true, 'the image drawer populated')
+	assert.equal(R.imgStageMetaCount, 0, 'the image stage no longer contains a .g-meta panel')
+	assert.equal(R.imgDrawerMetaCount, 1, 'the drawer contains exactly one .g-meta panel')
+	assert.equal(R.imgHasDimensions, true, 'an image additionally shows a Dimensions row')
+	assert.equal(R.vidStageMetaCount, 0, 'the media stage no longer contains a .g-meta panel')
+})
+
+test('drawer: a video Duration value-syncs into the drawer while collapsed, then shows when opened (§3.4)', { skip }, () => {
+	assert.equal(R.steps.vidLand, true, 'the video opened the bespoke player')
+	assert.equal(R.vidDrawerCollapsedFirst, true, 'the drawer was collapsed when the video opened')
+	assert.equal(R.steps.vidDuration, true, 'Duration value-synced non-empty into the drawer while it was collapsed')
+	assert.equal(R.vidDurationVisible, true, 'opening the drawer shows the synced Duration')
+})
+
+test('drawer: at ≤600px the drawer computes to a near-full-width sheet (§3.9)', { skip }, () => {
+	assert.ok(R.drawerNarrowWidth >= 360, 'the drawer computes a near-full-width sheet at 390px (got ' + R.drawerNarrowWidth + 'px — the desktop cap is 340)')
 })
