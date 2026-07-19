@@ -2,7 +2,19 @@
 
 ## [Unreleased]
 
-## [0.17.0] - 2026-07-19
+### Added
+- **White-paper / academic document mode (`document.paper`).** A new envelope object renders any
+  document canvas — or a markdown file via its companion — as a single-column academic paper: serif
+  justified body, ~25mm margins, and a centered **front matter** block (title, authors,
+  affiliations, abstract, keywords) that IS the top of page 1, so a paper has no separate cover
+  (declaring both is refused, `DOCUMENT_PAPER_AND_COVER`). Sections auto-number `1` / `1.1` /
+  `1.1.1` in both the heading and the contents, display equations auto-number `(1)…(N)` in the
+  margin, a `## References` list is styled with a hanging indent, and the footer is a lean centered
+  page number with no running header. All numbers are runtime-derived, never authored — the
+  `createdWith`/`figureMap` rule. Turn it on by hand (`document.paper`), from `catalog paper`, or
+  with a **one-click topbar button** that writes the setting (creating a markdown file's companion
+  if needed) so it persists and reaches `print`. Two-column layout, footnotes, and citation
+  management are deliberately out of this first phase.
 
 ### Added
 - **`print` and `snapshot` now find Chrome on Windows.** Chrome discovery only probed macOS and
