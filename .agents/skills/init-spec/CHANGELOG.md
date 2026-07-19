@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.3.0] - 2026-07-19
+
+### Added
+
+- **Configuration mode** — a third mode alongside authoring and lifecycle. Auto-invokes on phrases like "add custom rules for init-spec" and "set the spec rules for this project", and configures an optional per-project spec-rules file. Offers two paths via AskUserQuestion — point at an existing rules file, or define rules ad hoc (the skill writes the file, default `specs/.spec-rules.md`). The pointer is stored the HappySkills way: in the project-root `skills-config.json` under key `nicolasdao/init-spec`, field `rulesFile` (declared in `skill.json` `config` with `prompt: false`, so install never prompts and default behavior is unchanged), written via `npx happyskills skills-config set` — never inside the skill folder, which `update` would wipe.
+- **Authoring Step 5a** — authoring mode now resolves `rulesFile` (CLI-preferred `skills-config get`, file-fallback) before writing a SPEC.md. When set and the file exists, the rules both shape how the spec is authored and are embedded into it (a §0 source note plus §3/§5/§7/§8) so the fresh implementer session honors them too. Absent config → behavior unchanged; configured-but-missing file, or a `skills-config.json` that exists but won't parse → stop and ask (absent ≠ corrupt).
+- Self-audit rubric extended to 13 checks (row 13 verifies configured project rules were applied).
+
+### Changed
+
+- Description advertises the third mode while staying under the soft cap; added `config` and `project-rules` keywords.
+- Constraints reorganized into "apply to all modes / authoring / lifecycle / configuration". The "no publishing" rule is clarified to permit `skills-config get/set` (consumer config I/O) while still forbidding publish, release, version bumps, and CHANGELOG edits.
+
 ## [0.2.0] - 2026-05-28
 
 ### Added

@@ -1,6 +1,6 @@
 ---
 name: init-spec
-description: SpecKit — Generate a SPEC.md from session context, or move existing specs to specs/-DONE or specs/-ARCHIVED. Use when asked to create, archive, or mark a spec as done. Not for code docs (init-doc) or session loading (init-context).
+description: SpecKit — Generate a SPEC.md, move a spec to specs/-DONE or specs/-ARCHIVED, or set per-project spec rules. Use when asked to create, archive, mark done, or add custom spec rules. Not for code docs (init-doc) or session loading (init-context).
 arguments: goal
 argument-hint: goal
 allowed-tools: Read, Write, Edit, Bash, Glob, Grep, AskUserQuestion
@@ -10,12 +10,17 @@ allowed-tools: Read, Write, Edit, Bash, Glob, Grep, AskUserQuestion
 
 ## Purpose
 
-This skill has **two modes**:
+This skill has **three modes**:
 
 1. **Authoring** (default) — capture everything the **current session** has produced (research, decisions, file:line findings, complaints, constraints) into a single self-contained `SPEC.md` under `specs/YYMMDD-NN-<slug>/` that a **fresh, context-free LLM session** can execute reliably without re-doing discovery work. See [The 8-step authoring workflow](#the-8-step-authoring-workflow).
 2. **Lifecycle** — move an existing spec folder into `specs/-DONE` (mark as done) or `specs/-ARCHIVED` (archive). See [Lifecycle workflow](#lifecycle-workflow-archive--mark-done).
+3. **Configuration** — set (or point at) a **per-project spec-rules file** whose rules every future `SPEC.md` must obey. Optional and opt-in: absent config means the skill behaves exactly as it always has. See [Configuration workflow](#configuration-workflow-set-per-project-spec-rules).
 
-The skill's argument `$goal` is a short statement of what the spec is for in authoring mode. In lifecycle mode it can be empty — the user's message provides the target spec and destination.
+The skill's argument `$goal` is a short statement of what the spec is for in authoring mode. In lifecycle and configuration modes it can be empty — the user's message provides the target (spec + destination, or the rules to set).
+
+### Per-project rules — how the optional configuration works
+
+The rules that govern how a `SPEC.md` is written are intentionally generic in this skill so it drops into any project unchanged. A project that needs **extra, project-specific authoring rules** (e.g. "every spec must include a PDF-verification criterion", "never touch `vendor/**`", a house commit convention) declares a pointer to an external markdown **rules file**. The pointer is stored the HappySkills way — in the project-root `skills-config.json` under key `nicolasdao/init-spec`, field `rulesFile` (declared in `skill.json` `config`) — **never inside the skill folder**, which the next `update` would wipe. The rules file itself is an ordinary project file (default `specs/.spec-rules.md`). When set and present, authoring mode reads it and folds its rules into the SPEC (both shaping how the spec is written and embedding the load-bearing rules into the spec so the fresh implementer honors them too). When unset, nothing changes.
 
 ## When the skill fires
 
@@ -43,6 +48,20 @@ The skill's argument `$goal` is a short statement of what the spec is for in aut
 - Speculative phrasing: "should we archive that old spec?" — reply with a confirmation question first.
 - Verbs without a spec object: "archive this branch" / "mark this PR done" / "we're done with this issue" — these aren't about specs.
 - Code documentation lifecycle — route appropriately.
+
+### Configuration mode
+
+**Auto-invoke** when the user asks any of (imperative, present-tense intent to configure how specs are written — not to write one):
+- "add custom rules for init-spec" / "add custom spec rules" / "configure init-spec's rules"
+- "set the spec rules for this project" / "set project-specific spec rules"
+- "point init-spec at our spec rules file" / "use `<path>` as the spec rules"
+- "change the spec rules" / "update the project spec rules" (edit an existing rules file)
+
+The tell is that the user wants to shape **how specs are authored going forward**, not produce a spec now. If a single message asks to *both* set rules and write a spec, do Configuration mode first, then continue into Authoring.
+
+**Do NOT auto-invoke** on:
+- Speculative phrasing: "should we have custom spec rules?" — reply with a confirmation question first.
+- Requests to add a rule *inside one specific spec being written* — that's Authoring content, not project configuration.
 
 ### Never auto-invoke for
 
@@ -117,6 +136,20 @@ If you create `BACKGROUND.md`, the SPEC.md must explicitly say "Read BACKGROUND.
 
 ### Step 5 — Write the SPEC.md
 
+**Step 5a — Resolve project rules first (do this before writing a line).** A project may have configured extra spec-authoring rules. Resolve them — CLI-preferred, file-fallback — before touching the template:
+
+1. **Prefer the CLI:** run `npx -y happyskills skills-config get nicolasdao/init-spec --json`. Read `config.rulesFile` from the result.
+2. **CLI unavailable → resolve by hand, same order:** find the project root (search upward for the nearest `skills-config.json` or `skills-lock.json`, stopping at a `.git` boundary), then read that root's `skills-config.json` under key `nicolasdao/init-spec` → `rulesFile`. Fall back to the global `~/.agents/skills-config.json`. Unset → this skill's default (empty).
+3. **ABSENT ≠ CORRUPT.** A *missing* `skills-config.json` means "nothing configured" → proceed with no extra rules, exactly as today. A `skills-config.json` that *exists but does not parse* is a broken consumer file → **STOP**, name the file, and tell the user to run `npx -y happyskills skills-config validate --json` and repair it in place (never delete it — it holds every skill's settings).
+
+Then act on `rulesFile`:
+
+- **Empty / unset** → default behavior. Skip the rest of Step 5a.
+- **Set and the file exists** → read it. Fold its rules into the SPEC two ways: (a) let them **shape** how you write every section (they may add acceptance criteria, non-goals, guardrails, or verification steps), and (b) **embed** the load-bearing rules into the SPEC itself — the natural homes are §5 Non-goals, §7 Anti-hallucination guardrails, §3 Acceptance criteria, and §8 Verification — so the fresh implementer session obeys them without needing the rules file. Add a one-line note in §0 that this spec was authored under project rules from `<path>`.
+- **Set but the file is MISSING** → configured-but-broken. **STOP and tell the user** the `rulesFile` points at `<path>` which does not exist; ask them to fix the path (Configuration mode) or create the file. Do not silently proceed as if unconfigured.
+
+Do not let project rules override the skill's own non-negotiable constraints (no code changes, no commits, no publishing). If a project rule conflicts with those, surface the conflict to the user rather than following it.
+
 Use the template in [references/spec-template.md](references/spec-template.md). The template is canonical — match its section order and headings unless a section is genuinely not applicable (e.g. no domain vocabulary → omit the glossary section, but state that you omitted it and why).
 
 **Hard constraints on what you write:**
@@ -155,6 +188,7 @@ Before reporting back, internally check the SPEC.md against this rubric. Fix any
 | 10 | "Do not push/commit without confirmation" | Stated in §0 or DON'Ts |
 | 11 | Length under 700 lines | Or background split into sibling file |
 | 12 | References section lists prior artifacts | Audits, chat logs, related specs |
+| 13 | Project rules applied (if configured) | If `rulesFile` was set, every load-bearing rule is embedded in the SPEC and §0 notes the source; N/A if unconfigured |
 
 If any check fails, **fix the SPEC before reporting**, not in a follow-up turn.
 
@@ -251,6 +285,69 @@ The skill's job ends at the one-line "Moved" report.
 
 ---
 
+## Configuration workflow (set per-project spec rules)
+
+Use this path when the user wants to configure the extra rules that authoring mode obeys — not to write a spec. The workflow reads/writes the HappySkills config; it never edits source code and never runs the 8-step authoring workflow.
+
+### Step C1 — Read the current config, then offer the two paths
+
+First resolve the current `rulesFile` (Step 5a, method 1): `npx -y happyskills skills-config get nicolasdao/init-spec --json`. Then use **one** `AskUserQuestion` call to find out what the user wants:
+
+- If `rulesFile` is **already set**, lead with that: "This project's spec rules live at `<path>`." Offer: **edit those rules** / **point at a different file** / **define a fresh set**.
+- If `rulesFile` is **unset**, offer the two core paths:
+  - **Point at an existing file** — the user already has a rules markdown file somewhere; capture its path.
+  - **Define the rules now** — the user dictates rules in chat; the skill writes the file for them.
+
+### Step C2 — Obtain the rules file
+
+- **Existing-file path:** confirm the path exists (`ls <path>`). If it does not, tell the user and stop — do not point the config at a missing file. If it exists, go to Step C3.
+- **Define-now path:** collect the rules from the conversation. Write them to the rules file. Default location is `specs/.spec-rules.md` (co-located with the specs the skill manages); if the user named a different path, honor it. Use this shape:
+
+  ```markdown
+  # Project spec rules — <project name>
+
+  These rules are applied by init-spec on top of its generic spec-authoring rules.
+  Every SPEC.md authored in this project must obey them.
+
+  - <rule 1 — concrete and checkable, e.g. "Every spec includes a PDF-verification acceptance criterion.">
+  - <rule 2 — e.g. "Never instruct the implementer to touch scripts/web/vendor/**.">
+  - <rule 3 — e.g. "Commits: conventional format, one fix per commit, land on master.">
+  ```
+
+  Keep rules concrete and checkable (same discipline as the SPEC itself). Do not paste large background — rules, not prose.
+
+### Step C3 — Wire the pointer through HappySkills (never hand-edit the JSON)
+
+Write the path into `skills-config.json` via the CLI — atomic and key-scoped, so no other skill's config is disturbed:
+
+```bash
+npx -y happyskills skills-config set nicolasdao/init-spec rulesFile --value <path> --json
+```
+
+`--value` takes the path relative to the project root (e.g. `specs/.spec-rules.md`). If the CLI is unavailable, fall back to a read-modify-write of the project-root `skills-config.json`: read it (or start `{}`), set `["nicolasdao/init-spec"].rulesFile`, write it back atomically. Never put the rules *content* in `skills-config.json` — only the path.
+
+### Step C4 — Confirm and stop
+
+Report back in two lines: the rules file path and the config key that now points at it. Example:
+
+```
+Spec rules set: specs/.spec-rules.md (3 rules)
+Configured: skills-config.json → nicolasdao/init-spec.rulesFile → specs/.spec-rules.md
+Every future `create a spec` in this project will apply these rules.
+```
+
+Do not then write a spec, edit source, or commit. If the user asked to set rules *and* write a spec in one breath, transition into the 8-step authoring workflow now (Step 5a will pick up the rules you just wrote).
+
+### Step C5 — Don't drift
+
+Do not:
+- Store the rules inside the skill folder (`.agents/skills/init-spec/**`) — `update` wipes it; the rules file is a project file.
+- Put rule *content* into `skills-config.json` — only the path pointer.
+- Bump the skill version or edit its CHANGELOG — releasing is owned by `happyskills-publish`.
+- Commit, push, or open PRs — the user commits when ready.
+
+---
+
 ## Anti-patterns this skill exists to prevent
 
 These are the failure modes the SPEC must defend against. The skill itself must avoid them too.
@@ -266,18 +363,19 @@ These are the failure modes the SPEC must defend against. The skill itself must 
 
 ## Constraints (non-negotiable)
 
-### Apply to both modes
+### Apply to all modes
 
-- **No code changes.** This skill writes/moves markdown files. It does not touch source code.
+- **No code changes.** This skill writes/moves markdown files (and, in Configuration mode, the `skills-config.json` pointer). It does not touch source code.
 - **No commits.** The skill never runs `git commit` or `git push`. The user commits when ready.
-- **No publishing.** The skill never invokes `npx happyskills`, `npm`, or any deployment command.
+- **No publishing.** The skill never publishes, releases, converts, or deploys — no `npx happyskills publish/release/convert`, no `npm`, no deploy command, no version bump, no CHANGELOG edit. (Configuration mode may call `npx happyskills skills-config get/set` — that is config I/O for the *consumer's* `skills-config.json`, not publishing the skill.)
 
 ### Authoring mode
 
 - **One argument.** The skill takes exactly `$goal` (the user's intent). All other context comes from the session.
 - **One SPEC.md.** Single file by default. Sibling `BACKGROUND.md` allowed only under the conditions in Step 4.
 - **Under `specs/YYMMDD-NN-<slug>/`.** Match the existing naming convention (chronologically sortable). Do not invent variations.
-- **Self-audit before reporting.** The 12-point rubric in Step 6 is non-optional.
+- **Resolve project rules first.** Step 5a runs before writing. Configured-but-missing `rulesFile` → stop and ask; a `skills-config.json` that exists but won't parse → stop and route to `skills-config validate`. Absent config → behave exactly as before.
+- **Self-audit before reporting.** The 13-point rubric in Step 6 is non-optional.
 
 ### Lifecycle mode
 
@@ -285,6 +383,13 @@ These are the failure modes the SPEC must defend against. The skill itself must 
 - **Never edit spec contents.** Lifecycle is a folder move — SPEC.md / BACKGROUND.md are read-only.
 - **Only ask on genuine ambiguity.** If the user's message names the spec and the destination unambiguously, proceed silently. The AskUserQuestion call exists for ambiguity resolution, not as a confirmation gate.
 - **Never move more than one spec per invocation.** If the user asks to move several, do them one at a time and confirm each.
+
+### Configuration mode
+
+- **The pointer lives in `skills-config.json`, keyed `nicolasdao/init-spec`, field `rulesFile`.** Never store config inside the skill folder — `update` wipes it.
+- **`skills-config.json` holds the path, never the rules.** The rules content lives in the rules file (default `specs/.spec-rules.md`), an ordinary project file.
+- **Never point the config at a missing file.** Verify the path exists before writing the pointer.
+- **Project rules never override the skill's non-negotiables.** No project rule can authorize code changes, commits, or publishing. On conflict, surface it to the user.
 
 ## Reference
 

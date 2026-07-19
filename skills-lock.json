@@ -1,6 +1,6 @@
 {
 	"lockVersion": 2,
-	"generatedAt": "2026-07-18T05:29:24.851Z",
+	"generatedAt": "2026-07-19T04:56:51.490Z",
 	"skills": {
 		"happyskillsai/happyskills": {
 			"version": "2.7.0",
@@ -180,12 +180,12 @@
 			"dependencies": {}
 		},
 		"nicolasdao/init-spec": {
-			"version": "0.2.0",
-			"ref": "refs/tags/v0.2.0",
-			"commit": "e58449f25b2b5c96d0d8156e98072ac1ffbe67ccce872138d86583a6b44380d3",
-			"integrity": "sha256-c2d79496153b0b0466aef5659c2811e1b0f53c7299b430b445338e094da2db37",
-			"base_commit": "e58449f25b2b5c96d0d8156e98072ac1ffbe67ccce872138d86583a6b44380d3",
-			"base_integrity": "sha256-c2d79496153b0b0466aef5659c2811e1b0f53c7299b430b445338e094da2db37",
+			"version": "0.3.0",
+			"ref": "refs/tags/v0.3.0",
+			"commit": "933aa27ecfa65e3d84a4d17ebe0b2b59cbd7e9b0832dce216d3403e3d565ac78",
+			"integrity": "sha256-9bbec31a9e62766e82c2ace6277b8fdf026d2f637986c9c3927c805c30358a18",
+			"base_commit": "933aa27ecfa65e3d84a4d17ebe0b2b59cbd7e9b0832dce216d3403e3d565ac78",
+			"base_integrity": "sha256-9bbec31a9e62766e82c2ace6277b8fdf026d2f637986c9c3927c805c30358a18",
 			"requested_by": [
 				"nicolasdao/_kit-essentials"
 			],
