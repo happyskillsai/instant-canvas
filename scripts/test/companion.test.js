@@ -395,3 +395,98 @@ test('themestore: precedence is three levels — the document outranks the works
 	assert.equal(own.themeSource, 'canvas')
 	assert.equal(own.theme.accent, '#15803d')
 })
+
+// ------------------------------------------------------ paper mode (Tier 2 write path)
+
+const { setDocumentPaper } = require('../lib/jsonedit')
+
+test('paper: applyPaper on a bare .md CREATES its companion with document.paper', () => {
+	const root = tmpRoot()
+	write(root, 'report.md', '# Report\n\n## Intro\n\nText.')
+	const plan = themestore.planPaper(root, 'report.md')
+	assert.equal(plan.target, 'companion')
+	assert.equal(plan.creates, 'report.canvas.json', 'the plan announces the file it will create')
+
+	const res = themestore.applyPaper(root, 'report.md', { columns: 1, font: 'serif' })
+	assert.equal(res.target, 'companion')
+	assert.equal(res.created, 'report.canvas.json')
+	const comp = JSON.parse(read(root, 'report.canvas.json'))
+	assert.equal(comp.enhances, 'report.md', 'the companion enhances the document')
+	assert.deepEqual(comp.document.paper, { columns: 1, font: 'serif' })
+	assert.equal(comp.blocks[0].src, 'report.md', 'and renders it')
+	// It is a valid canvas that renders its own document.
+	assert.equal(validate(read(root, 'report.canvas.json'), { root }).ok, true)
+	// Applying again now targets the existing companion, not a second file.
+	assert.equal(themestore.planPaper(root, 'report.md').creates, null)
+})
+
+test('paper: applyPaper on a canvas WITH a document splices paper and leaves the theme byte-identical', () => {
+	const root = tmpRoot()
+	const raw = '{\n  "instantcanvas": 1,\n  "createdWith": "0.1.0",\n  "title": "R",\n  "document": {\n    "theme": { "accent": "#0054fe" }\n  },\n  "blocks": [ { "type": "markdown", "text": "# Hi" } ]\n}\n'
+	write(root, 'r.canvas.json', raw)
+	const res = themestore.applyPaper(root, 'r.canvas.json', { columns: 1, font: 'serif' })
+	assert.equal(res.target, 'canvas')
+	const after = read(root, 'r.canvas.json')
+	assert.match(after, /"theme": \{ "accent": "#0054fe" \}/, 'the theme line survives byte for byte')
+	const parsed = JSON.parse(after)
+	assert.deepEqual(parsed.document.paper, { columns: 1, font: 'serif' })
+	assert.deepEqual(parsed.document.theme, { accent: '#0054fe' })
+	assert.equal(validate(after, { root }).ok, true)
+})
+
+test('paper: a DISPLAY canvas with no document gains one (declares), spliced not reformatted', () => {
+	const root = tmpRoot()
+	write(root, 'dash.canvas.json', { instantcanvas: 1, createdWith: '0.1.0', title: 'Dash',
+		blocks: [{ type: 'markdown', text: '# Hi\n\n## Section\n\nText.' }] })
+	const plan = themestore.planPaper(root, 'dash.canvas.json')
+	assert.equal(plan.declares, true, 'a document object will be created')
+	assert.equal(plan.blocked, null)
+	const res = themestore.applyPaper(root, 'dash.canvas.json', { columns: 1, font: 'serif' })
+	assert.equal(res.declaredDocument, true)
+	const parsed = JSON.parse(read(root, 'dash.canvas.json'))
+	assert.deepEqual(parsed.document.paper, { columns: 1, font: 'serif' })
+	assert.equal(validate(read(root, 'dash.canvas.json'), { root }).ok, true)
+})
+
+test('paper: a FORM canvas REFUSES paper (PAPER_NEEDS_DOCUMENT) rather than becoming invalid', () => {
+	const root = tmpRoot()
+	write(root, 'form.canvas.json', { instantcanvas: 1, createdWith: '0.1.0', title: 'F',
+		blocks: [{ type: 'form', destination: { kind: 'none' }, fields: [{ name: 'a', label: 'A', type: 'text' }] }] })
+	assert.deepEqual(themestore.planPaper(root, 'form.canvas.json').blocked, ['form'])
+	assert.throws(
+		() => themestore.applyPaper(root, 'form.canvas.json', {}),
+		(e) => e instanceof themestore.ThemeError && e.code === 'PAPER_NEEDS_DOCUMENT')
+})
+
+test('paper: a canvas with a COVER refuses paper (DOCUMENT_PAPER_AND_COVER)', () => {
+	const root = tmpRoot()
+	write(root, 'cov.canvas.json', { instantcanvas: 1, createdWith: '0.1.0', title: 'C',
+		document: { cover: { title: 'C' } }, blocks: [{ type: 'markdown', text: '# Hi' }] })
+	assert.deepEqual(themestore.planPaper(root, 'cov.canvas.json').blocked, ['cover'])
+	assert.throws(
+		() => themestore.applyPaper(root, 'cov.canvas.json', {}),
+		(e) => e instanceof themestore.ThemeError && e.code === 'DOCUMENT_PAPER_AND_COVER')
+})
+
+test('paper: a PRESENTATION has no paper mode (PAPER_ON_PRESENTATION)', () => {
+	const root = tmpRoot()
+	write(root, 'deck.canvas.json', { instantcanvas: 1, createdWith: '0.1.0', title: 'D',
+		slides: [{ layout: 'title', title: 'Hi' }] })
+	assert.deepEqual(themestore.planPaper(root, 'deck.canvas.json').blocked, ['presentation'])
+	assert.throws(
+		() => themestore.applyPaper(root, 'deck.canvas.json', {}),
+		(e) => e instanceof themestore.ThemeError && e.code === 'PAPER_ON_PRESENTATION')
+})
+
+test('paper: the splice diff-verify REJECTS a candidate that does not match the parsed canvas', () => {
+	// setDocumentPaper proves it changed only document.paper by diffing against the passed
+	// canvas object. Hand it a canvas that disagrees with the raw text and it must return
+	// null (the caller then re-serializes) rather than trust an unprovable splice.
+	const raw = '{\n  "instantcanvas": 1,\n  "title": "R",\n  "document": { "theme": { "accent": "#0054fe" } },\n  "blocks": []\n}\n'
+	const truthful = JSON.parse(raw)
+	assert.notEqual(setDocumentPaper(raw, truthful, { columns: 1 }), null, 'a truthful splice is trusted')
+	const tampered = { ...truthful, blocks: [{ type: 'markdown', text: 'injected' }] }
+	assert.equal(setDocumentPaper(raw, tampered, { columns: 1 }), null, 'a candidate that changed more than paper is rejected')
+	// A canvas with no document object has nowhere to splice into.
+	assert.equal(setDocumentPaper('{"instantcanvas":1,"blocks":[]}', { instantcanvas: 1, blocks: [] }, { columns: 1 }), null)
+})

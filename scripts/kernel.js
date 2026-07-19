@@ -330,6 +330,65 @@ function themePlan(res, rel, scope) {
 	})
 }
 
+/**
+ * Persist white-paper / academic mode the reader turned on with the #paperBtn.
+ *
+ * The mirror of saveTheme: paper lives on the SAME `document` envelope, so the routing,
+ * the re-read-from-disk, and the two broadcasts are identical — only the themestore call
+ * and the ThemeError codes differ. PAPER_NEEDS_DOCUMENT is a 409 for the same reason
+ * THEME_NEEDS_DOCUMENT is (the request is fine; the file just cannot hold the answer);
+ * everything else that refuses (a cover, a presentation) is a 400.
+ */
+function savePaper(res, rel, body) {
+	const load = loadCanvas(rel)
+	if (load.status !== 200)
+		return sendJson(res, load.status, load.body)
+
+	let wrote, target, created
+	try {
+		const paper = body.paper && typeof body.paper === 'object' && !Array.isArray(body.paper) ? body.paper : {}
+		;({ wrote, target, created } = themestore.applyPaper(ROOT, rel, paper))
+	} catch (err) {
+		if (err instanceof themestore.ThemeError) {
+			const status = err.code === 'PAPER_NEEDS_DOCUMENT' ? 409 : 400
+			return sendJson(res, status, { ok: false, error: { code: err.code, message: err.message, ...(err.errors ? { errors: err.errors } : {}) } })
+		}
+		return sendJson(res, 500, { ok: false, error: { code: 'WRITE_FAILED', message: err.message } })
+	}
+
+	const wroteRel = path.relative(ROOT, wrote).split(path.sep).join('/')
+	klog('paper', 'on', '→', wroteRel, `(${rel})`)
+	// Same two broadcasts as a theme write: a canvas change rides fs.watch, but a NEW
+	// companion also changes the tree (the document's row gains its badge).
+	broadcast({ type: 'canvas', path: rel })
+	broadcast({ type: 'workspace' })
+
+	// Report what is now ON DISK — a splice can fall back to a re-serialize.
+	const after = loadCanvas(rel)
+	const state = after.status === 200 ? after.body : {}
+	return sendJson(res, 200, {
+		ok: true, wrote: wroteRel, target,
+		...(created ? { created } : {}),
+		paper: state.canvas && state.canvas.document ? state.canvas.document.paper : undefined,
+	})
+}
+
+/** What turning paper mode on WOULD do, without doing it — the mirror of themePlan. */
+function paperPlan(res, rel) {
+	const load = loadCanvas(rel)
+	if (load.status !== 200)
+		return sendJson(res, load.status, load.body)
+	const plan = themestore.planPaper(ROOT, rel)
+	return sendJson(res, 200, {
+		ok: true,
+		target: plan.target,
+		wrote: plan.wrote ? path.relative(ROOT, plan.wrote).split(path.sep).join('/') : null,
+		creates: plan.creates,
+		declares: plan.declares,
+		blocked: plan.blocked,
+	})
+}
+
 /** The workspace's saved palettes, resolved for the picker exactly like a preset. */
 const customPaletteList = () => themestore.paletteList(ROOT)
 
@@ -906,6 +965,16 @@ async function route(req, res, url) {
 		const body = await readBody(req)
 		return savePalette(res, body)
 	}
+
+	// White-paper / academic mode — a sibling pair of the theme routes, because paper
+	// lives on the same `document` envelope and rides the same write funnel.
+	if (method === 'POST' && p === '/api/paper') {
+		const body = await readBody(req)
+		return savePaper(res, relCanvasPath(String(body.path || '')), body)
+	}
+
+	if (method === 'GET' && p === '/api/paper/plan')
+		return paperPlan(res, relCanvasPath(url.searchParams.get('path') || ''))
 
 	// Repaint. The CLI writes theme files directly (no kernel required), and most of what
 	// it writes now rides fs.watch — a companion is an ordinary `*.canvas.json`, not the

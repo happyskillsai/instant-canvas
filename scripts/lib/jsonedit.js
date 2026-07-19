@@ -135,11 +135,14 @@ function serializeAt(value, indentUnit, base, multiline, eol) {
 }
 
 /**
- * Splice `<member>.theme` into an existing outer object (`document` or `presentation`) as
- * TEXT. `document.theme` and `presentation.theme` carry the identical contract — one color
- * system, two sinks — so they share one implementation parameterised by the member name.
+ * Splice one KEY into an existing outer object (`document` or `presentation`) as TEXT,
+ * leaving the rest of the file byte for byte. Generic over both the outer member and the
+ * inner key: `document.theme` and `presentation.theme` carry the identical color contract,
+ * and `document.paper` rides the very same splice — a nested value found by scanning the
+ * grammar, its neighbourhood matched, its result re-parsed and diff-verified to have
+ * changed only `<member>.<key>` before it is trusted.
  */
-function setMemberTheme(raw, canvas, member, theme) {
+function setMember(raw, canvas, member, key, value) {
 	let candidate
 	try {
 		const objStart = skipWs(raw, 0)
@@ -153,60 +156,61 @@ function setMemberTheme(raw, canvas, member, theme) {
 		const indentUnit = detectIndent(raw)
 		const eol = detectEol(raw)
 		const outerText = raw.slice(outer.valueStart, outer.valueEnd)
-		const themeMember = findMember(raw, outer.valueStart, 'theme')
-		// A minified outer object gets a minified theme; a pretty-printed one gets the
+		const keyMember = findMember(raw, outer.valueStart, key)
+		// A minified outer object gets a minified value; a pretty-printed one gets the
 		// file's own indentation. Matching the neighbourhood is the whole point of splicing
 		// rather than re-serializing. An EMPTY `{}` has no neighbourhood to match, so it
 		// follows the file instead.
-		const multiline = outerText.includes('\n') || (themeMember.empty && raw.includes('\n'))
+		const multiline = outerText.includes('\n') || (keyMember.empty && raw.includes('\n'))
 		const colon = multiline ? '": ' : '":'
 
-		if (themeMember.found) {
-			const base = multiline ? indentOf(raw, themeMember.keyStart) : ''
-			const text = serializeAt(theme, indentUnit, base, multiline, eol)
-			candidate = raw.slice(0, themeMember.valueStart) + text + raw.slice(themeMember.valueEnd)
-		} else if (themeMember.empty) {
-			// e.g. `"presentation": {}` — the canvas is printable but unfurnished.
+		if (keyMember.found) {
+			const base = multiline ? indentOf(raw, keyMember.keyStart) : ''
+			const text = serializeAt(value, indentUnit, base, multiline, eol)
+			candidate = raw.slice(0, keyMember.valueStart) + text + raw.slice(keyMember.valueEnd)
+		} else if (keyMember.empty) {
+			// e.g. `"document": {}` — the canvas is printable but unfurnished.
 			const outerIndent = indentOf(raw, outer.valueStart)
 			const base = multiline ? outerIndent + indentUnit : ''
-			const text = serializeAt(theme, indentUnit, base, multiline, eol)
-			const body = multiline ? `${eol}${base}"theme${colon}${text}${eol}${outerIndent}` : `"theme${colon}${text}`
+			const text = serializeAt(value, indentUnit, base, multiline, eol)
+			const body = multiline ? `${eol}${base}"${key}${colon}${text}${eol}${outerIndent}` : `"${key}${colon}${text}`
 			candidate = raw.slice(0, outer.valueStart + 1) + body + raw.slice(outer.valueEnd - 1)
 		} else {
 			// Insert as the FIRST member, mirroring the indentation of the member that is
 			// currently first.
-			const at = themeMember.firstMemberAt
+			const at = keyMember.firstMemberAt
 			const base = multiline ? indentOf(raw, at) : ''
-			const text = serializeAt(theme, indentUnit, base, multiline, eol)
+			const text = serializeAt(value, indentUnit, base, multiline, eol)
 			const sep = multiline ? `${eol}${base}` : ''
-			candidate = raw.slice(0, at) + `"theme${colon}${text},${sep}` + raw.slice(at)
+			candidate = raw.slice(0, at) + `"${key}${colon}${text},${sep}` + raw.slice(at)
 		}
 	} catch {
 		return null
 	}
 
-	// Trust nothing: prove the splice set the theme and touched nothing else.
+	// Trust nothing: prove the splice set exactly `<member>.<key>` and touched nothing else.
 	let after
 	try {
 		after = JSON.parse(candidate)
 	} catch {
 		return null
 	}
-	if (!after[member] || JSON.stringify(after[member].theme) !== JSON.stringify(theme))
+	if (!after[member] || JSON.stringify(after[member][key]) !== JSON.stringify(value))
 		return null
 
 	const before = JSON.parse(JSON.stringify(canvas))
-	delete after[member].theme
+	delete after[member][key]
 	if (before[member])
-		delete before[member].theme
+		delete before[member][key]
 	if (JSON.stringify(after) !== JSON.stringify(before))
 		return null
 
 	return candidate
 }
 
-const setDocumentTheme = (raw, canvas, theme) => setMemberTheme(raw, canvas, 'document', theme)
-const setPresentationTheme = (raw, canvas, theme) => setMemberTheme(raw, canvas, 'presentation', theme)
+const setDocumentTheme = (raw, canvas, theme) => setMember(raw, canvas, 'document', 'theme', theme)
+const setPresentationTheme = (raw, canvas, theme) => setMember(raw, canvas, 'presentation', 'theme', theme)
+const setDocumentPaper = (raw, canvas, paper) => setMember(raw, canvas, 'document', 'paper', paper)
 
 /**
  * Create a whole outer member (`document` above blocks/pages, or `presentation` above
@@ -268,4 +272,4 @@ function createMember(raw, canvas, member, value, anchors) {
 const createDocument = (raw, canvas, document) => createMember(raw, canvas, 'document', document, ['blocks', 'pages'])
 const createPresentation = (raw, canvas, presentation) => createMember(raw, canvas, 'presentation', presentation, ['slides'])
 
-module.exports = { setDocumentTheme, setPresentationTheme, createDocument, createPresentation, detectIndent }
+module.exports = { setDocumentTheme, setPresentationTheme, setDocumentPaper, createDocument, createPresentation, detectIndent }

@@ -4,7 +4,7 @@ const fs = require('node:fs')
 const path = require('node:path')
 const themeLib = require('./theme')
 const skillsconfig = require('./skillsconfig')
-const { setDocumentTheme, setPresentationTheme, createDocument, createPresentation } = require('./jsonedit')
+const { setDocumentTheme, setPresentationTheme, setDocumentPaper, createDocument, createPresentation } = require('./jsonedit')
 const { writeAtomic } = require('./fsatomic')
 const { PKG_VERSION } = require('./pkgmeta')
 const { VERSION: SCHEMA_VERSION } = require('./schema')
@@ -93,13 +93,13 @@ function deckBlockers(canvas) {
  * because a companion that does not is a companion to nothing (the validator warns about
  * precisely that).
  */
-function newCompanion(mdRel, theme) {
+function newCompanion(mdRel, document) {
 	return {
 		instantcanvas: SCHEMA_VERSION,
 		createdWith: PKG_VERSION,
 		enhances: mdRel,
 		title: path.posix.basename(mdRel).replace(/\.(md|mdx|markdown)$/i, ''),
-		document: { theme },
+		document,
 		blocks: [{ type: 'markdown', src: mdRel }],
 	}
 }
@@ -183,7 +183,7 @@ function applyTheme(root, rel, theme, { scope = 'document' } = {}) {
 				return { wrote: path.resolve(root, rel), target: 'companion', created: null }
 			const created = companionPathFor(rel)
 			const abs = path.resolve(root, created)
-			writeAtomic(abs, JSON.stringify(newCompanion(rel, theme), null, 2) + '\n')
+			writeAtomic(abs, JSON.stringify(newCompanion(rel, { theme }), null, 2) + '\n')
 			return { wrote: abs, target: 'companion', created }
 		}
 		return { ...writeCanvasTheme(root, found.canvas, theme, reset), target: 'companion' }
@@ -287,6 +287,121 @@ function writePresentationTheme(root, rel, raw, canvas, theme, reset) {
 	return { wrote: abs, target: 'canvas' }
 }
 
+/**
+ * What an "apply paper mode" write is ABOUT to do, without doing it — the mirror of
+ * planTheme, for the #paperBtn. Paper lives on the SAME `document` envelope as the theme,
+ * so it shares the routing; `blocked` gains two reasons a theme never had, both of which
+ * would make the file INVALID: a `cover` (a paper has none) and a presentation (no paper
+ * mode). Returns { target, wrote, creates, declares, blocked }.
+ */
+function planPaper(root, rel) {
+	const plan = { target: 'canvas', wrote: null, creates: null, declares: false, blocked: null }
+
+	if (hasMarkdownExtension(rel)) {
+		const found = companionFor(root, rel)
+		if (!found) {
+			const creates = companionPathFor(rel)
+			return { ...plan, target: 'companion', wrote: path.resolve(root, creates), creates }
+		}
+		return paperCanvasPlan(root, found.canvas, { ...plan, target: 'companion' })
+	}
+	return paperCanvasPlan(root, rel, plan)
+}
+
+/** The plan for a concrete canvas file (a companion, or a canvas named directly). */
+function paperCanvasPlan(root, rel, plan) {
+	const abs = path.resolve(root, rel)
+	let canvas = null
+	try {
+		canvas = JSON.parse(fs.readFileSync(abs, 'utf8'))
+	} catch {
+		return { ...plan, wrote: abs }
+	}
+	if (Array.isArray(canvas.slides))
+		return { ...plan, wrote: abs, blocked: ['presentation'] }
+	if (isObj(canvas.document)) {
+		if (isObj(canvas.document.cover))
+			return { ...plan, wrote: abs, blocked: ['cover'] }
+		return { ...plan, wrote: abs }
+	}
+	const blockers = deckBlockers(canvas)
+	return blockers.length ? { ...plan, wrote: abs, blocked: blockers } : { ...plan, wrote: abs, declares: true }
+}
+
+/**
+ * Write a document's PAPER mode object (white-paper / academic layout).
+ *
+ * Paper lives on the SAME `document` envelope as the theme, so it reuses applyTheme's exact
+ * routing (companion for a `.md`, splice into an existing `document`, create one on a
+ * display canvas, refuse on interactive). The only differences: the inner key is `paper`
+ * (jsonedit.setDocumentPaper, so an existing `theme` beside it survives byte for byte), and
+ * two extra refusals a theme never faces — a paper cannot sit beside a `cover`
+ * (DOCUMENT_PAPER_AND_COVER — the front matter IS page 1) and a presentation has no paper
+ * mode (PAPER_ON_PRESENTATION). Returns { wrote, target, created? }.
+ */
+function applyPaper(root, rel, paper) {
+	if (!isObj(paper))
+		throw new ThemeError('INVALID_PAPER', 'A paper object is required.')
+
+	// ---- a markdown file: its companion, created if it has none ----------------
+	if (hasMarkdownExtension(rel)) {
+		const found = companionFor(root, rel)
+		if (!found) {
+			const created = companionPathFor(rel)
+			const abs = path.resolve(root, created)
+			writeAtomic(abs, JSON.stringify(newCompanion(rel, { paper }), null, 2) + '\n')
+			return { wrote: abs, target: 'companion', created }
+		}
+		return { ...writeCanvasPaper(root, found.canvas, paper), target: 'companion' }
+	}
+
+	// ---- a canvas -------------------------------------------------------------
+	return writeCanvasPaper(root, rel, paper)
+}
+
+/** Put `paper` inside a canvas — splicing beside an existing `document`, or creating one. */
+function writeCanvasPaper(root, rel, paper) {
+	const abs = path.resolve(root, rel)
+	const raw = fs.readFileSync(abs, 'utf8')
+	const canvas = JSON.parse(raw)
+
+	// A presentation has no paper mode — its layout is fixed slides, not flowing pages.
+	if (Array.isArray(canvas.slides))
+		throw new ThemeError('PAPER_ON_PRESENTATION',
+			`${rel} is a presentation (it has "slides"), which has no paper/academic mode.`)
+
+	const hasDocument = isObj(canvas.document)
+
+	if (!hasDocument) {
+		// The same refusal as a theme's: creating `document` on a form/confirm/sweep would
+		// make it INVALID (DOCUMENT_INTERACTIVE_BLOCK), so paper has nowhere to live.
+		const blockers = deckBlockers(canvas)
+		if (blockers.length)
+			throw new ThemeError('PAPER_NEEDS_DOCUMENT',
+				`${rel} holds a ${blockers.join(' and a ')}, so it cannot carry a "document" — and paper mode has nowhere in a canvas to live.`)
+	} else if (isObj(canvas.document.cover)) {
+		// A paper's front matter IS the top of page 1: it cannot also carry a cover, so
+		// adding paper here would make the canvas stop validating (DOCUMENT_PAPER_AND_COVER).
+		throw new ThemeError('DOCUMENT_PAPER_AND_COVER',
+			`${rel} declares "document.cover". A paper/academic document has no separate cover — remove the cover first, or drop paper mode.`)
+	}
+
+	// An existing `document` gets `paper` spliced BESIDE its theme (setDocumentPaper); a
+	// display canvas without one gets the whole `document` created with paper inside.
+	const spliced = hasDocument
+		? setDocumentPaper(raw, canvas, paper)
+		: createDocument(raw, canvas, { paper })
+	if (spliced !== null) {
+		writeAtomic(abs, spliced)
+		return { wrote: abs, target: 'canvas', ...(hasDocument ? {} : { declaredDocument: true }) }
+	}
+
+	// The splice could not be PROVEN correct. Re-serialize rather than guess.
+	const next = { ...canvas, document: { ...(isObj(canvas.document) ? canvas.document : {}), paper } }
+	writeAtomic(abs, reserialize(next, detectEol(raw)))
+	return { wrote: abs, target: 'canvas', ...(hasDocument ? {} : { declaredDocument: true }) }
+}
+
 const MAX_PALETTES = 24
 const MAX_PALETTE_NAME = 40
 
@@ -344,6 +459,6 @@ function paletteList(root) {
 }
 
 module.exports = {
-	applyTheme, applyPalette, planTheme, themeFor, paletteList, deckBlockers,
+	applyTheme, applyPalette, planTheme, applyPaper, planPaper, themeFor, paletteList, deckBlockers,
 	ThemeError, MAX_PALETTES, MAX_PALETTE_NAME,
 }

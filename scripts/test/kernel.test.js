@@ -431,6 +431,42 @@ test('kernel: a presentation resolves and writes presentation.theme, never a doc
 	assert.equal(reset.json.error.code, 'THEME_DECLARED_IN_CANVAS')
 })
 
+test('kernel: POST /api/paper on a .md creates its companion; a form is refused 409', async () => {
+	// The plan announces the companion BEFORE the write, like /api/theme/plan does.
+	const plan = await httpReq({ port: K.port, path: '/api/paper/plan?path=guide.md', headers: K.auth })
+	assert.equal(plan.status, 200)
+	assert.equal(plan.json.target, 'companion')
+	assert.equal(plan.json.creates, 'guide.canvas.json')
+
+	const save = await httpReq({
+		port: K.port, method: 'POST', path: '/api/paper', headers: K.auth,
+		body: { path: 'guide.md', paper: { columns: 1, font: 'serif' } },
+	})
+	assert.equal(save.status, 200)
+	assert.equal(save.json.target, 'companion')
+	assert.equal(save.json.wrote, 'guide.canvas.json')
+	assert.equal(save.json.created, 'guide.canvas.json', 'the response names the file that appeared')
+	assert.deepEqual(save.json.paper, { columns: 1, font: 'serif' }, 'the resolved paper is echoed back from disk')
+
+	// The companion on disk enhances the document and declares paper mode; the .md is untouched.
+	const comp = JSON.parse(fs.readFileSync(path.join(K.root, 'guide.canvas.json'), 'utf8'))
+	assert.equal(comp.enhances, 'guide.md')
+	assert.deepEqual(comp.document.paper, { columns: 1, font: 'serif' })
+
+	// A form canvas cannot carry a document at all, so paper mode is refused (409), with the
+	// reason surfaced to the plan so the button can disable itself.
+	const formPlan = await httpReq({ port: K.port, path: '/api/paper/plan?path=marketing/setup.canvas.json', headers: K.auth })
+	assert.deepEqual(formPlan.json.blocked, ['form'])
+	const formSave = await httpReq({
+		port: K.port, method: 'POST', path: '/api/paper', headers: K.auth,
+		body: { path: 'marketing/setup.canvas.json', paper: {} },
+	})
+	assert.equal(formSave.status, 409)
+	assert.equal(formSave.json.error.code, 'PAPER_NEEDS_DOCUMENT')
+
+	fs.rmSync(path.join(K.root, 'guide.canvas.json'))
+})
+
 test('kernel: a workspace keeps its own palettes, offered beside the built-in presets', async () => {
 	const theme = { accent: '#0054fe', palette: ['#0054fe', '#00b4d8', '#ff8800'] }
 	const save = await httpReq({ port: K.port, method: 'POST', path: '/api/theme/palette', headers: K.auth, body: { name: 'My brand', theme } })
