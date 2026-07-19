@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.18.0] - 2026-07-19
+
 ### Added
 - **White-paper / academic document mode (`document.paper`).** A new envelope object renders any
   document canvas — or a markdown file via its companion — as a single-column academic paper: serif
