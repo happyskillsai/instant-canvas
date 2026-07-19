@@ -67,7 +67,7 @@
         "Hot reload",
         "Version handshake"
       ],
-      "line_count": 191,
+      "line_count": 192,
       "links_to": [
         "docs/canvas-schema.md",
         "docs/cli.md",
@@ -242,7 +242,7 @@
         "CSP shim",
         "Icons and vendored assets"
       ],
-      "line_count": 132,
+      "line_count": 133,
       "links_to": [
         "docs/architecture.md",
         "docs/canvas-schema.md",
@@ -611,7 +611,7 @@
         "Network perimeter",
         "What this does NOT protect against"
       ],
-      "line_count": 67,
+      "line_count": 68,
       "links_to": [
         "docs/architecture.md"
       ],
