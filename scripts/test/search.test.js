@@ -81,6 +81,8 @@ const docKey = (k, opts = {}) => `document.body.dispatchEvent(
 
 const isOpen = `!document.getElementById('searchModal').hidden`
 const apiRequests = `performance.getEntriesByType('resource').filter((e) => e.name.indexOf('/api/') !== -1).length`
+// The /api/ endpoint paths seen so far — only for a useful failure message (which endpoint leaked).
+const apiNamesList = `JSON.stringify(performance.getEntriesByType('resource').filter((e) => e.name.indexOf('/api/') !== -1).map((e) => e.name.replace(/^https?:\\/\\/[^/]+/, '').split('?')[0]))`
 
 let root = null
 let snapshot = null
@@ -104,12 +106,30 @@ test.before(async () => {
 		if (!await until(evaluate, `!!(window.ic && window.ic.state && window.ic.state.tree)`))
 			throw new Error('the app never booted')
 
-		// Zero-fetch posture: opening search must not hit the network at all.
-		const before = await evaluate(apiRequests)
+		// Zero-fetch posture: opening search must not hit the network at all — the index is
+		// `state.tree`, already in memory. But boot requests (/api/dir, /api/theme/presets, …)
+		// can still be completing when the app first reports ready, so SETTLE the network
+		// before snapshotting: poll until the /api/ count stops rising, THEN measure the
+		// action. Without this, a boot request landing after `before` but before `after`
+		// inflated the count with traffic that had nothing to do with search — a flake that
+		// only surfaced under full-suite load (docs/gotchas/testing.md: poll the observable
+		// outcome, never a fixed sleep).
+		const settleRequests = async () => {
+			let prev = -1, stable = 0
+			for (let i = 0; i < 50 && stable < 3; i++) {   // 3 consecutive equal reads = quiescent
+				const n = await evaluate(apiRequests)
+				stable = n === prev ? stable + 1 : 0
+				prev = n
+				await sleep(100)
+			}
+			return prev
+		}
+		const before = await settleRequests()
 		await evaluate(`document.getElementById('openSearch').click()`)
 		const openedByClick = await evaluate(isOpen)
 		await sleep(400)
 		const after = await evaluate(apiRequests)
+		const apiNames = JSON.parse(await evaluate(apiNamesList))
 
 		const hint = await evaluate(`({ text: document.getElementById('csmStatus').textContent })`)
 		const byTitle = await evaluate(typeQuery('report'))     // title + folder both match
@@ -195,7 +215,7 @@ test.before(async () => {
 		const closedAfterEnter = !await evaluate(isOpen)
 
 		return {
-			requests: { before, after },
+			requests: { before, after, names: apiNames },
 			openedByClick,
 			hint,
 			byTitle,
@@ -235,7 +255,8 @@ test.after(() => {
 
 test('opening search fetches nothing — the index is the tree already in memory', { skip, timeout: 120_000 }, () => {
 	assert.equal(snapshot.openedByClick, true, 'the magnifier button opens the modal')
-	assert.equal(snapshot.requests.after, snapshot.requests.before, 'opening search issued zero HTTP requests')
+	assert.equal(snapshot.requests.after, snapshot.requests.before,
+		`opening search issued zero HTTP requests (the index is state.tree already in memory). /api/ calls observed: ${JSON.stringify(snapshot.requests.names)}`)
 	assert.match(snapshot.hint.text, /Search canvases/, 'the empty state explains what is searchable')
 })
 
