@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.15.0] - 2026-07-19
+
 ### Added
 - **A dead kernel now says so — and helps you back.** The sidebar footer's status distinguishes a
   dropped WebSocket (`reconnecting` — the page heals itself) from a kernel that is actually gone
