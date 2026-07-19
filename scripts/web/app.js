@@ -8129,6 +8129,16 @@ function closeSearch() {
 		searchLastFocus.focus() // never strand a keyboard user at the top of the document
 }
 
+// The ⌘ hints in index.html are the mac default; on every other platform the
+// shortcut is Ctrl (the handlers already accept `ctrlKey`), so relabel there.
+// Nothing else keys off the OS — this is the only platform branch in the UI.
+if (!/Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent || '')) {
+	for (const id of ['openSearch', 'printBtn']) {
+		const el = $(id)
+		if (el && el.title) el.title = el.title.replace('⌘', 'Ctrl+')
+	}
+}
+
 $('openSearch').addEventListener('click', openSearch)
 $('csmInput').addEventListener('input', () => renderSearch($('csmInput').value))
 $('searchModal').querySelectorAll('[data-csm-close]').forEach((el) => el.addEventListener('click', closeSearch))

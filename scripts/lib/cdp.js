@@ -210,8 +210,23 @@ function findChrome() {
 		'/usr/bin/google-chrome-stable',
 		'/usr/bin/chromium',
 		'/usr/bin/chromium-browser',
-	].filter(Boolean)
-	return candidates.find((c) => { try { return fs.statSync(c).isFile() } catch { return false } }) || null
+	]
+	// Windows keeps its browsers under Program Files / LocalAppData, never the
+	// POSIX paths above; without these, discovery returns null even when Chrome
+	// (or Chromium-based Edge, a fine fallback for headless print) is installed.
+	if (process.platform === 'win32') {
+		const pf = process.env.PROGRAMFILES || 'C:\\Program Files'
+		const pf86 = process.env['PROGRAMFILES(X86)'] || 'C:\\Program Files (x86)'
+		const local = process.env.LOCALAPPDATA
+		candidates.push(
+			pf + '\\Google\\Chrome\\Application\\chrome.exe',
+			pf86 + '\\Google\\Chrome\\Application\\chrome.exe',
+			local && local + '\\Google\\Chrome\\Application\\chrome.exe',
+			pf + '\\Microsoft\\Edge\\Application\\msedge.exe',
+			pf86 + '\\Microsoft\\Edge\\Application\\msedge.exe',
+		)
+	}
+	return candidates.filter(Boolean).find((c) => { try { return fs.statSync(c).isFile() } catch { return false } }) || null
 }
 
 module.exports = { withChrome, findChrome, sleep }

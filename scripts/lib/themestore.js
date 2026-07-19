@@ -12,6 +12,12 @@ const { collectBlocks, isInteractiveBlock } = require('./validate')
 const { companionFor, companionPathFor } = require('./companion')
 const { hasMarkdownExtension } = require('./markdownsrc')
 
+// When a splice cannot be proven and we fall back to re-serializing a canvas the
+// user owns, keep its line ending so a CRLF file is not silently rewritten to LF.
+// LF for a file that has none. Mirrors the same guard in jsonedit.js/instantcanvas.js.
+const detectEol = (raw) => (/\r\n/.test(raw) ? '\r\n' : '\n')
+const reserialize = (value, eol) => JSON.stringify(value, null, 2).split('\n').join(eol) + eol
+
 /**
  * The ONE place a theme is written to disk.
  *
@@ -243,7 +249,7 @@ function writeCanvasTheme(root, rel, theme, reset) {
 	const next = { ...canvas, document: { ...(isObj(canvas.document) ? canvas.document : {}), theme } }
 	if (reset)
 		delete next.document.theme
-	writeAtomic(abs, JSON.stringify(next, null, 2) + '\n')
+	writeAtomic(abs, reserialize(next, detectEol(raw)))
 	return { wrote: abs, target: 'canvas', ...(hasDocument ? {} : { declaredDocument: true }) }
 }
 
@@ -277,7 +283,7 @@ function writePresentationTheme(root, rel, raw, canvas, theme, reset) {
 
 	// The splice could not be PROVEN correct. Re-serialize — but NEVER add a `document`.
 	const next = { ...canvas, presentation: { ...(hasPresentation ? canvas.presentation : {}), theme } }
-	writeAtomic(abs, JSON.stringify(next, null, 2) + '\n')
+	writeAtomic(abs, reserialize(next, detectEol(raw)))
 	return { wrote: abs, target: 'canvas' }
 }
 

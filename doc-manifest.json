@@ -353,9 +353,10 @@
         "`captureScreenshot` with `captureBeyondViewport` misses a below-the-fold deck sheet — the deck scrolls inside `.main`, not the page",
         "A detached media element keeps playing",
         "A pane that waits for three misses is OUTRUN by a fast restart",
-        "Chrome plays from a 200-only server, so a playback test cannot prove Range works"
+        "Chrome plays from a 200-only server, so a playback test cannot prove Range works",
+        "The ⌘ in a keyboard hint is the wrong glyph off macOS"
       ],
-      "line_count": 336,
+      "line_count": 342,
       "links_to": [
         "docs/architecture.md",
         "docs/security.md"
@@ -440,6 +441,7 @@
         "Background `open` outliving its shell",
         "Adding one field by re-serializing rewrites the whole file",
         "A NESTED property cannot be spliced with a regex",
+        "A splice preserves the file's bytes, but not its LINE ENDING",
         "A companion turns the forgiving markdown path into the strict one, and that would break every README",
         "Setting a color must not change what a canvas IS",
         "Three forgiving layers composed into a feature that did not exist — and the fix was to delete the file",
@@ -450,7 +452,7 @@
         "Deleting collections is not `rm -rf`",
         "A route that serves the user's files by extension must refuse a symlink"
       ],
-      "line_count": 132,
+      "line_count": 140,
       "links_to": [
         "docs/architecture.md"
       ],

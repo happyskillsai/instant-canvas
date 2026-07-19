@@ -63,7 +63,7 @@ Commands:
   validate <canvas.json |      Validate a canvas file, print JSON verdict. Also checks the
            skills-config.json>  colors inside skills-config.json (theme + palettes).
   theme <canvas.json|file.md>  Show the document's resolved colors and which file
-      [--set '<json>']         decides them. --set writes a theme into the document's
+      [--set <json>]           decides them. --set writes a theme into the document's
       [--clear] [--all]        own envelope: a canvas's "document.theme", or — for a
                                markdown file, which has no envelope — its COMPANION
                                canvas (<base>.canvas.json, CREATED if absent, and
@@ -71,7 +71,7 @@ Commands:
                                makes it the workspace default for every document, in
                                skills-config.json.
   theme --save <name>          Save a reusable named palette into skills-config.json
-      --set '<json>'           — it appears in the browser's picker. --clear deletes it.
+      --set <json>             — it appears in the browser's picker. --clear deletes it.
   theme --list                 Every preset and every saved palette, as JSON.
   catalog [name] [--full]      Lean index; <name> = block | chart kind | field
                                type | fieldset | sweep | document | theme |
@@ -803,6 +803,9 @@ function detectIndent(raw) {
 	return m ? m[1] : '\t'
 }
 
+// The file's own line ending, so a CRLF canvas is not silently converted to LF.
+const detectEol = (raw) => (/\r\n/.test(raw) ? '\r\n' : '\n')
+
 /**
  * Splice the stamp in as text, right after the marker line, so the rest of the
  * file survives byte for byte. Re-serializing the parsed object instead would
@@ -820,10 +823,10 @@ function spliceStamp(raw, canvas, createdWith) {
 	const at = m.index + m[0].length
 	const after = raw.slice(at)
 
-	// Mirror the file's own style: its colon spacing, and whether keys sit on
-	// their own indented line (pretty-printed) or run together (minified).
+	// Mirror the file's own style: its colon spacing, its line ending, and whether
+	// keys sit on their own indented line (pretty-printed) or run together (minified).
 	const onNewLine = /^[ \t]*\r?\n([ \t]*)/.exec(after)
-	const lead = onNewLine ? `\n${onNewLine[1]}` : after.startsWith(' ') ? ' ' : ''
+	const lead = onNewLine ? `${detectEol(raw)}${onNewLine[1]}` : after.startsWith(' ') ? ' ' : ''
 	const candidate = raw.slice(0, at) + `${lead}"createdWith"${m[1]}:${m[2]}${JSON.stringify(createdWith)},` + after
 
 	// Trust nothing: re-parse and prove the splice added the stamp and touched
@@ -896,7 +899,8 @@ function cmdStamp(args) {
 			if (key === 'instantcanvas')
 				stamped.createdWith = createdWith
 		}
-		next = JSON.stringify(stamped, null, detectIndent(raw)) + '\n'
+		const eol = detectEol(raw)
+		next = JSON.stringify(stamped, null, detectIndent(raw)).split('\n').join(eol) + eol
 	}
 	writeAtomic(abs, next)
 	log(`${rel} stamped createdWith=${createdWith}`)
@@ -1045,7 +1049,7 @@ async function cmdTheme(args) {
 			theme = JSON.parse(args.set)
 		} catch (err) {
 			specError('INVALID_JSON', `--set is not valid JSON: ${err.message}`, {
-				hint: 'Pass a theme object, e.g. --set \'{"preset":"forest","accent":"#0054fe"}\'. Quote it for the shell.',
+				hint: 'Pass a JSON theme object to --set, quoted for your shell — bash/zsh: --set \'{"preset":"forest","accent":"#0054fe"}\'; Windows cmd.exe: --set "{\\"preset\\":\\"forest\\",\\"accent\\":\\"#0054fe\\"}".',
 			})
 		}
 	}

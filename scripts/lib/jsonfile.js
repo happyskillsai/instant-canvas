@@ -14,8 +14,10 @@ function merge(file, entries, opts = {}) {
 	const names = Object.keys(entries)
 	let existing = {}
 	let hadFile = false
+	let raw = null
 	try {
-		const parsed = JSON.parse(fs.readFileSync(file, 'utf8'))
+		raw = fs.readFileSync(file, 'utf8')
+		const parsed = JSON.parse(raw)
 		if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
 			existing = parsed
 			hadFile = true
@@ -25,8 +27,10 @@ function merge(file, entries, opts = {}) {
 	const overwritten = hadFile ? names.filter((n) => Object.prototype.hasOwnProperty.call(existing, n)) : []
 	const result = mode === 'replace' ? { ...entries } : { ...existing, ...entries }
 
+	// Preserve the file's own line ending (CRLF on Windows); LF for a new file.
+	const eol = raw && /\r\n/.test(raw) ? '\r\n' : '\n'
 	if (!opts.dryRun)
-		writeAtomic(file, JSON.stringify(result, null, 2) + '\n', { mode: 0o600 })
+		writeAtomic(file, JSON.stringify(result, null, 2).split('\n').join(eol) + eol, { mode: 0o600 })
 	return { written: names, overwritten }
 }
 

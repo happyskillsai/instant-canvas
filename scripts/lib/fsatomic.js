@@ -20,10 +20,33 @@ function writeAtomic(file, data, opts = {}) {
 		// set it explicitly; enforce the requested mode on the temp file instead.
 		if (opts.mode !== undefined && process.platform !== 'win32')
 			fs.chmodSync(tmp, opts.mode)
-		fs.renameSync(tmp, file)
+		renameWithRetry(tmp, file)
 	} catch (err) {
 		try { fs.unlinkSync(tmp) } catch { /* best effort */ }
 		throw err
+	}
+}
+
+// POSIX renames over an open file; Windows can fail with EPERM/EACCES/EBUSY when
+// a virus scanner, the Search Indexer, or an editor briefly holds the target. A
+// few short retries clear that transient lock. On non-Windows this is a single
+// call with no delay, so the POSIX path keeps its exact previous behavior.
+function renameWithRetry(tmp, file) {
+	if (process.platform !== 'win32') {
+		fs.renameSync(tmp, file)
+		return
+	}
+	const retryable = new Set(['EPERM', 'EACCES', 'EBUSY'])
+	for (let attempt = 0; ; attempt++) {
+		try {
+			fs.renameSync(tmp, file)
+			return
+		} catch (err) {
+			if (attempt >= 5 || !retryable.has(err.code))
+				throw err
+			// Block briefly without a busy loop; writes are rare and human-paced.
+			Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 20 * (attempt + 1))
+		}
 	}
 }
 

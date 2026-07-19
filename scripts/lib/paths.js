@@ -22,7 +22,10 @@ function stateDir() {
 /** Canonical form of a workspace root: absolute, no trailing separator, case-folded on darwin/win32. */
 function normalizeRoot(p) {
 	let r = path.resolve(p)
-	while (r.length > 1 && (r.endsWith(path.sep) || r.endsWith('/')))
+	// Strip trailing separators, but never off a Windows drive root: `C:\` means
+	// the root of C:, while a bare `C:` is drive-RELATIVE (the cwd on C:). The
+	// guard regex cannot match a POSIX path, so `/` and `/foo/` are unaffected.
+	while (r.length > 1 && (r.endsWith(path.sep) || r.endsWith('/')) && !/^[A-Za-z]:[\\/]$/.test(r))
 		r = r.slice(0, -1)
 	if (CASE_INSENSITIVE)
 		r = r.toLowerCase()

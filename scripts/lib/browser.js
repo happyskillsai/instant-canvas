@@ -22,7 +22,9 @@ function openUrl(url) {
 		args = [url]
 	}
 	try {
-		const child = spawn(cmd, args, { stdio: 'ignore', detached: true })
+		// windowsHide keeps the `cmd /c start` opener from flashing a console window
+		// on Windows; it is ignored on macOS/Linux, so the POSIX path is unchanged.
+		const child = spawn(cmd, args, { stdio: 'ignore', detached: true, windowsHide: true })
 		child.on('error', () => { /* swallowed — caller already has the URL */ })
 		child.unref()
 		return true

@@ -17,6 +17,11 @@ function quote(value) {
 
 const LINE_RE = /^(\s*(?:export\s+)?)([A-Za-z_][A-Za-z0-9_]*)(\s*=)/
 
+// A file authored on Windows uses CRLF; emitting bare LF into it would leave a
+// mixed-ending file and churn the user's diff. Match what is already there (and
+// LF for a brand-new file, the conventional default).
+const detectEol = (raw) => (/\r\n/.test(raw) ? '\r\n' : '\n')
+
 /**
  * Parse-preserving .env writer.
  * entries: {KEY: value}. mode "merge" keeps every existing line verbatim,
@@ -33,8 +38,9 @@ function merge(file, entries, opts = {}) {
 		existing = fs.readFileSync(file, 'utf8')
 	} catch { /* new file */ }
 
+	const nl = existing === null ? '\n' : detectEol(existing)
 	const existingKeys = new Set()
-	const lines = existing === null ? [] : existing.split('\n')
+	const lines = existing === null ? [] : existing.split(/\r?\n/)
 	for (const line of lines) {
 		const m = LINE_RE.exec(line)
 		if (m)
@@ -44,7 +50,7 @@ function merge(file, entries, opts = {}) {
 
 	let content
 	if (mode === 'replace' || existing === null) {
-		content = names.map((n) => `${n}=${quote(entries[n])}`).join('\n') + (names.length ? '\n' : '')
+		content = names.map((n) => `${n}=${quote(entries[n])}`).join(nl) + (names.length ? nl : '')
 	} else {
 		const done = new Set()
 		const out = lines.map((line) => {
@@ -62,9 +68,9 @@ function merge(file, entries, opts = {}) {
 				out.pop()
 			out.push(...additions)
 		}
-		content = out.join('\n')
+		content = out.join(nl)
 		if (!content.endsWith('\n'))
-			content += '\n'
+			content += nl
 	}
 
 	if (!opts.dryRun)

@@ -258,7 +258,9 @@ test('cli: an unwritable --result file warns on stderr but never corrupts the st
 	assert.match(r.stderr, /could not write --result/)
 })
 
-test('cli: without --no-open the opener is spawned; headless Linux warns with the URL instead', async () => {
+// POSIX-only: it shims a `#!/bin/sh` opener and realpaths `/tmp`, neither of
+// which exists on Windows. The Windows opener path is covered elsewhere.
+test('cli: without --no-open the opener is spawned; headless Linux warns with the URL instead', { skip: process.platform === 'win32' }, async () => {
 	const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'ic-cliopen-')))
 	fs.copyFileSync(path.join(FIXTURES, 'valid-display.canvas.json'), path.join(root, 'a.canvas.json'))
 

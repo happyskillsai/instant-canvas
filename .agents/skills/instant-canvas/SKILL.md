@@ -8,7 +8,7 @@ allowed-tools: Bash, Read, Write, Edit
 
 Render data visually and collect user input safely, in the user's own browser. You only wrangle data into a strict JSON schema — the runtime owns all rendering. A per-workspace localhost kernel serves the canvases with hot reload; form values (including secrets) are written **directly to local files** and you receive redacted metadata only.
 
-All commands run via `npx` from any directory — the current directory is the workspace unless `--workspace` says otherwise. `IC="npx -y @happyskillsai/instant-canvas"` (Node ≥ 20; npx fetches the CLI on first use, and it has zero npm dependencies).
+All commands run via `npx` from any directory — the current directory is the workspace unless `--workspace` says otherwise. Define a shorthand for your shell — **bash/zsh**: `IC="npx -y @happyskillsai/instant-canvas"` (use `$IC`); **cmd.exe**: `set IC=npx -y @happyskillsai/instant-canvas` (use `%IC%`); **PowerShell**: `function IC { npx -y @happyskillsai/instant-canvas @args }` (use `IC`). The examples below write it `$IC` (the bash/zsh form). One quoting gotcha follows from the shell, not the tool: a `--set` JSON argument uses **single quotes** in bash/zsh (`--set '{"preset":"forest"}'`) but on **Windows cmd.exe** needs double quotes with the inner ones escaped (`--set "{\"preset\":\"forest\"}"`). (Node ≥ 20; npx fetches the CLI on first use, and it has zero npm dependencies.)
 
 ## When to use
 
@@ -22,7 +22,7 @@ All commands run via `npx` from any directory — the current directory is the w
 
 The workspace is the folder the kernel serves, and the folders-only sidebar makes a wrong choice obvious. Decide it before opening:
 
-1. **A named target** (the user points at a folder or file) — the workspace is that target's **project root** if it sits inside a project, else the named folder itself (e.g. `~/Downloads`).
+1. **A named target** (the user points at a folder or file) — the workspace is that target's **project root** if it sits inside a project, else the named folder itself (e.g. a `Downloads` folder).
 2. **Otherwise, inside a project** — the workspace is the **project root**: walk up from the current directory to the nearest marker (a `.git` directory, else `.agents/`, `.claude/`, or `skills-config.json`).
 3. Never the global skill-install folder.
 4. **Ambiguous?** Confirm the folder with the user before opening.
@@ -96,7 +96,7 @@ Same rule as a markdown file: **do not write a canvas to show a folder you could
 
 Never ask the user to paste API keys, tokens, passwords, database URLs, or credentials into the chat. Create a form canvas with `secret` fields and a local destination instead. Never read the written secret files back into context unless the user explicitly asks.
 
-Honest framing: this keeps secrets out of the conversation **during capture**. Nothing technically stops a later `cat .env` — the rule above is what protects the user. Follow it.
+Honest framing: this keeps secrets out of the conversation **during capture**. Nothing technically stops a later read of `.env` — the rule above is what protects the user. Follow it.
 
 ## The agentic loop (progressive disclosure — pull only what you need)
 
@@ -130,7 +130,7 @@ stop [--workspace <dir>]
 
 - `open` and `print` take a canvas **or** a markdown file. `print` needs an envelope-level `document` object on a canvas (see [Printing](#printing-a-canvas-the-document-object)), but nothing at all on a `.md` — it derives its own paper defaults.
 - Anything that is neither a canvas (`*.json`) nor a markdown file is refused unread — do not point these commands at `.env` or other data files.
-- Workspace root = `--workspace` else the current directory. The canvas must live inside it, **and so must `--out`** (`PATH_OUTSIDE_WORKSPACE`, exit 1) — you cannot print to `/tmp` or `~/Desktop`. Pass `--workspace` to widen the root; there is no confirmation prompt to fall back on.
+- Workspace root = `--workspace` else the current directory. The canvas must live inside it, **and so must `--out`** (`PATH_OUTSIDE_WORKSPACE`, exit 1) — you cannot print outside the workspace (a temp or Desktop folder, say). Pass `--workspace` to widen the root; there is no confirmation prompt to fall back on.
 - `validate` also takes `--workspace`. Without it, a `markdown` block's `src` is resolved against the current directory — validating a canvas from elsewhere then invents `MISSING_SOURCE` errors that are artifacts of where you stood.
 - `--no-open` skips launching the browser. `--timeout <s>` overrides the interactive session expiry (default 600). `--result <file>` mirrors the stdout JSON to a file.
 - `--retrofit` (on `stamp`) writes the literal `"unknown"` instead of the real version. It is **only** for a canvas that predates stamping. Never reach for it on a canvas you just wrote: a stamp is never rewritten, so you would permanently destroy that file's provenance.
@@ -410,4 +410,4 @@ You pick the right chart for the data and can still ship unreadable pixels, beca
 
 Secret values appear in **no** result variant — you get field names, never values. `"return": {"includeValues": true}` (only with `"kind": "none"`) returns non-secret values.
 
-Platform note: macOS and Linux are exercised; Windows paths/spawn are implemented per spec but not yet verified on a Windows machine.
+Platform note: macOS and Linux are exercised in CI. Windows support — paths, process spawn, Chrome/Edge discovery, and CRLF-preserving writes — is implemented and unit-tested, but not yet verified end-to-end on a Windows machine.

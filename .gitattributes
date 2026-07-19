@@ -1,0 +1,15 @@
+# Normalize line endings to LF in the repo regardless of contributor OS. This
+# keeps byte-exact test fixtures/snapshots stable and stops a Windows checkout
+# (core.autocrlf=true) from turning committed canvases/.env fixtures into the
+# CRLF the writers now preserve but tests assert against as LF.
+* text=auto eol=lf
+
+# Binary assets must never be touched by EOL normalization.
+*.png    binary
+*.jpg    binary
+*.jpeg   binary
+*.gif    binary
+*.ico    binary
+*.pdf    binary
+*.woff   binary
+*.woff2  binary

@@ -122,11 +122,16 @@ function detectIndent(raw) {
 	return m ? m[1] : '\t'
 }
 
+// The file's own line ending. Splicing bare LF into a CRLF canvas would leave a
+// mixed-ending file and churn the user's diff — the very reformatting this whole
+// module exists to avoid. LF for a file that has none.
+const detectEol = (raw) => (/\r\n/.test(raw) ? '\r\n' : '\n')
+
 /** JSON for `value`, pretty-printed in the file's style and re-indented to sit at `base`. */
-function serializeAt(value, indentUnit, base, multiline) {
+function serializeAt(value, indentUnit, base, multiline, eol) {
 	if (!multiline)
 		return JSON.stringify(value)
-	return JSON.stringify(value, null, indentUnit).split('\n').join('\n' + base)
+	return JSON.stringify(value, null, indentUnit).split('\n').join((eol || '\n') + base)
 }
 
 /**
@@ -146,6 +151,7 @@ function setMemberTheme(raw, canvas, member, theme) {
 			return null
 
 		const indentUnit = detectIndent(raw)
+		const eol = detectEol(raw)
 		const outerText = raw.slice(outer.valueStart, outer.valueEnd)
 		const themeMember = findMember(raw, outer.valueStart, 'theme')
 		// A minified outer object gets a minified theme; a pretty-printed one gets the
@@ -157,22 +163,22 @@ function setMemberTheme(raw, canvas, member, theme) {
 
 		if (themeMember.found) {
 			const base = multiline ? indentOf(raw, themeMember.keyStart) : ''
-			const text = serializeAt(theme, indentUnit, base, multiline)
+			const text = serializeAt(theme, indentUnit, base, multiline, eol)
 			candidate = raw.slice(0, themeMember.valueStart) + text + raw.slice(themeMember.valueEnd)
 		} else if (themeMember.empty) {
 			// e.g. `"presentation": {}` — the canvas is printable but unfurnished.
 			const outerIndent = indentOf(raw, outer.valueStart)
 			const base = multiline ? outerIndent + indentUnit : ''
-			const text = serializeAt(theme, indentUnit, base, multiline)
-			const body = multiline ? `\n${base}"theme${colon}${text}\n${outerIndent}` : `"theme${colon}${text}`
+			const text = serializeAt(theme, indentUnit, base, multiline, eol)
+			const body = multiline ? `${eol}${base}"theme${colon}${text}${eol}${outerIndent}` : `"theme${colon}${text}`
 			candidate = raw.slice(0, outer.valueStart + 1) + body + raw.slice(outer.valueEnd - 1)
 		} else {
 			// Insert as the FIRST member, mirroring the indentation of the member that is
 			// currently first.
 			const at = themeMember.firstMemberAt
 			const base = multiline ? indentOf(raw, at) : ''
-			const text = serializeAt(theme, indentUnit, base, multiline)
-			const sep = multiline ? `\n${base}` : ''
+			const text = serializeAt(theme, indentUnit, base, multiline, eol)
+			const sep = multiline ? `${eol}${base}` : ''
 			candidate = raw.slice(0, at) + `"theme${colon}${text},${sep}` + raw.slice(at)
 		}
 	} catch {
@@ -223,6 +229,7 @@ function createMember(raw, canvas, member, value, anchors) {
 			return null // not ours to create — setMemberTheme owns an existing one
 
 		const indentUnit = detectIndent(raw)
+		const eol = detectEol(raw)
 		const multiline = raw.includes('\n')
 
 		// Sit above the content, like the schema and like a human would write it.
@@ -230,8 +237,8 @@ function createMember(raw, canvas, member, value, anchors) {
 		const at = anchor ? anchor.keyStart : findMember(raw, objStart, member).firstMemberAt
 		const base = multiline ? indentOf(raw, at) : ''
 		const colon = multiline ? '": ' : '":'
-		const text = serializeAt(value, indentUnit, base, multiline)
-		const sep = multiline ? `\n${base}` : ''
+		const text = serializeAt(value, indentUnit, base, multiline, eol)
+		const sep = multiline ? `${eol}${base}` : ''
 		candidate = raw.slice(0, at) + `"${member}${colon}${text},${sep}` + raw.slice(at)
 	} catch {
 		return null

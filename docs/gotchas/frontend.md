@@ -334,3 +334,9 @@ file route with `Range: bytes=a-b` and checks the **206**, the `Content-Range`, 
 malformed one. The browser test proves the element *plays*; only the HTTP test proves it plays
 the way Safari needs. When a feature exists for a client your harness does not run, assert it at
 the layer that client depends on.
+
+## The ⌘ in a keyboard hint is the wrong glyph off macOS
+
+Two shortcut hints ship in the static `index.html`: `⌘K` on the search button and `⌘P` on the print FAB. Those are the macOS labels, and they are also what every browser test sees, because the test machine is a Mac. On Windows and Linux the shortcut still fires — the handlers accept `e.ctrlKey` as well as `e.metaKey` — but the *label* lies, and `⌘` (U+2318) renders as tofu in some fonts there.
+
+`app.js` rewrites both `title`s from `⌘` to `Ctrl+` at boot on any non-Apple `navigator.platform`. That one line is the **only OS branch in the browser code**, so it is easy to forget: any new shortcut hint must route its label through the same relabel (or avoid the glyph) rather than hardcoding `⌘`, or it will mislead the majority of users the moment it ships. The relabel is invisible to the suite (the Mac branch never runs), so a test that asserts the *behavior* (`ctrlKey` opens search) is what actually guards the shortcut — never one that pins the label text.

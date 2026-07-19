@@ -249,7 +249,13 @@ function writeDirect(root, key, value) {
 	else
 		delete next[SKILL_KEY]
 
-	writeAtomic(file, JSON.stringify(next, null, 2) + '\n')
+	// Preserve the file's line ending. This is the write path taken on Windows — the
+	// `npx happyskills` CLI cannot be spawned there (bare `npx` ENOENTs), so writeViaCli
+	// returns null and every theme/palette save lands here — so a CRLF skills-config.json
+	// must not be churned to LF. LF for a new or unreadable file.
+	let eol = '\n'
+	try { eol = /\r\n/.test(fs.readFileSync(file, 'utf8')) ? '\r\n' : '\n' } catch { /* new file → LF */ }
+	writeAtomic(file, JSON.stringify(next, null, 2).split('\n').join(eol) + eol)
 	return file
 }
 

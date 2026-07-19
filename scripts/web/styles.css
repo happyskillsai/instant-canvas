@@ -154,7 +154,7 @@ button{font:inherit;cursor:pointer}
    reachable by scrolling left. A clickable segment (an in-home ancestor) re-roots up. */
 .rootpath{flex:1;min-width:0;display:flex;align-items:center;
 	overflow-x:auto;scrollbar-width:none;white-space:nowrap;
-	font-size:12.5px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+	font-size:12.5px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
 .rootpath::-webkit-scrollbar{display:none}
 .rp-seg{flex:0 0 auto;color:rgba(255,255,255,.72);padding:3px 4px;border:none;background:none;font:inherit;white-space:nowrap}
 .rp-sep{flex:0 0 auto;color:rgba(255,255,255,.3);user-select:none}
@@ -251,7 +251,7 @@ button{font:inherit;cursor:pointer}
 .side-foot .watch{display:flex;align-items:center;gap:6px;margin-top:4px;min-width:0}
 .side-foot .watch #watchState{flex:0 0 auto}
 .side-foot .watch #watchPath{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
-	font-family:ui-monospace,SFMono-Regular,Menlo,monospace;cursor:default}
+	font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;cursor:default}
 .side-foot .ver{margin-top:8px;padding-top:8px;border-top:1px solid var(--border);opacity:.75;font-size:11px;
 	white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:default}
 .pulse{width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 0 0 var(--green);
@@ -352,7 +352,7 @@ body.modal-open .doc-modal-view{overflow:hidden}
    Tune --gutter, not the max-width; there deliberately isn't one. */
 .canvas{max-width:none;margin:0;padding:28px var(--gutter) 80px}
 .canvas-head h1{margin:0 0 4px;font-size:22px;letter-spacing:-.02em}
-.canvas-head .sub{color:var(--muted);font-size:12.5px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+.canvas-head .sub{color:var(--muted);font-size:12.5px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
 /* A markdown file titles itself, so its head is only the breadcrumb — and the
    document's own H1 follows immediately, which needs the room the title left. */
 .canvas-head.head-doc{margin-bottom:-8px}
@@ -382,7 +382,7 @@ body.modal-open .doc-modal-view{overflow:hidden}
 .md hr{height:1px;border:0;background:var(--border);margin:28px 0}
 .md img{display:block;max-width:100%;height:auto;margin:16px 0;border-radius:8px}
 .md code{background:var(--panel-2);border:1px solid var(--border-2);border-radius:4px;padding:1px 5px;
-	font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px}
+	font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px}
 .md pre{background:var(--panel-2);border:1px solid var(--border-2);border-radius:8px;padding:14px 16px;
 	margin:16px 0;overflow:auto;line-height:1.55}
 .md pre code{background:none;border:none;padding:0;font-size:12.5px}
@@ -537,7 +537,7 @@ table.tbl td.num,table.tbl th.num{text-align:right;font-variant-numeric:tabular-
 .secbanner{display:flex;gap:10px;align-items:flex-start;background:var(--accent-soft);border:1px solid var(--border);
 	border-radius:10px;padding:12px 14px;margin:8px 0 18px;font-size:13px}
 .secbanner b{color:var(--accent)}
-.dest{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;color:var(--muted);margin-bottom:6px}
+.dest{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px;color:var(--muted);margin-bottom:6px}
 .dest code{color:var(--accent)}
 .field{margin:16px 0}
 .field label{display:block;font-weight:600;font-size:13px;margin-bottom:6px}
@@ -727,10 +727,10 @@ select.inp{appearance:auto}
 	color:var(--green);display:flex;align-items:center;justify-content:center;font-size:26px;margin:6px auto 14px}
 .center{text-align:center}
 .fieldlist{list-style:none;padding:0;margin:12px auto;max-width:300px;text-align:left}
-.fieldlist li{padding:6px 0;border-bottom:1px solid var(--border-2);font-family:ui-monospace,Menlo,monospace;font-size:12.5px}
+.fieldlist li{padding:6px 0;border-bottom:1px solid var(--border-2);font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12.5px}
 .agentbox{margin-top:16px;background:var(--panel-2);border:1px dashed var(--border);border-radius:10px;padding:12px 14px}
 .agentbox .cap{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px}
-.agentbox pre{margin:0;font-family:ui-monospace,Menlo,monospace;font-size:11.5px;color:var(--text);white-space:pre-wrap;text-align:left}
+.agentbox pre{margin:0;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11.5px;color:var(--text);white-space:pre-wrap;text-align:left}
 .agentbox .note{color:var(--muted);font-size:11.5px;margin-top:8px}
 
 .divider{display:flex;align-items:center;gap:10px;color:var(--muted);font-size:11px;margin:14px 0}
@@ -745,8 +745,8 @@ select.inp{appearance:auto}
 .errcard .errhead{padding:12px 16px;font-weight:650;background:color-mix(in srgb,var(--red) 10%,var(--panel))}
 .errcard .errbody{padding:8px 16px 14px}
 .errline{font-size:13px;margin:8px 0}
-.errline .code{font-family:ui-monospace,Menlo,monospace;font-size:11px;color:var(--red);font-weight:700}
-.errline .path{font-family:ui-monospace,Menlo,monospace;font-size:12px;color:var(--muted)}
+.errline .code{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px;color:var(--red);font-weight:700}
+.errline .path{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;color:var(--muted)}
 .errline .hint{color:var(--muted)}
 
 .toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:var(--panel);color:var(--text);
@@ -787,7 +787,7 @@ select.inp{appearance:auto}
 .csm-row[aria-selected="true"]{background:var(--accent-soft)}
 .csm-row-title{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:600;line-height:1.35;letter-spacing:-.005em}
 .csm-row-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.csm-row-path{display:block;margin-top:3px;font-family:ui-monospace,Menlo,monospace;font-size:11.5px;
+.csm-row-path{display:block;margin-top:3px;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11.5px;
 	line-height:1.5;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .csm-row mark{background:transparent;color:var(--accent);font-weight:700}
 .csm-row-tag{flex-shrink:0;font-size:10px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;
@@ -1100,7 +1100,7 @@ body.modal-open .main{overflow:hidden}
 
 .pal-head{display:flex;align-items:center;gap:8px;margin-bottom:12px}
 .pal-title{flex:1;min-width:0;font-size:13px;font-weight:650;letter-spacing:-.005em}
-.pal-src{font-size:11px;color:var(--muted);font-family:ui-monospace,Menlo,monospace;white-space:nowrap}
+.pal-src{font-size:11px;color:var(--muted);font-family:ui-monospace,Menlo,Consolas,monospace;white-space:nowrap}
 .pal-src.dirty{color:var(--amber);font-weight:600}
 
 /* The ONE way to make a palette, and it looks like one: a filled round + in the header,
@@ -1453,7 +1453,7 @@ body.presenting.cursor-hidden .stage{cursor:none}
 .gallery.g-list .gt-ph .lucide{width:20px;height:20px}
 .gallery.g-list .gt-ph .gt-fmt{display:none}
 .gt-name{font-size:13px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.gt-dir{font-size:12px;color:var(--muted);font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+.gt-dir{font-size:12px;color:var(--muted);font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
 .gt-size,.gt-date{font-size:12px;color:var(--muted);white-space:nowrap}
 .gt-badge{font-size:10px;letter-spacing:.05em;color:var(--muted);border:1px solid var(--border);
 	border-radius:5px;padding:2px 5px}
@@ -1498,7 +1498,7 @@ body.media-overlay .doc-modal-view{display:flex;overflow:hidden}
    at the end of the line (D6 — never hover-gated, which a touch screen cannot reach). */
 .g-vline{display:flex;align-items:flex-start;gap:6px;justify-content:space-between}
 .g-vtext{flex:1;min-width:0;word-break:break-word}
-.g-vline.g-mono .g-vtext{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;word-break:break-all}
+.g-vline.g-mono .g-vtext{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px;word-break:break-all}
 .g-copy{flex:none;border:none;background:transparent;color:var(--muted);cursor:pointer;padding:2px}
 .g-copy:hover{color:var(--accent)}
 .g-copy .lucide{width:14px;height:14px}
@@ -1590,7 +1590,7 @@ audio.m-el{display:none} /* the audio element is never shown — the art card st
 	width:min(440px,94vw);max-height:80vh;display:flex;flex-direction:column;padding:22px}
 .g-cbox h2{margin:0 0 12px;font-size:17px;color:var(--text)}
 .g-clist{overflow:auto;border:1px solid var(--border);border-radius:8px;padding:6px;margin-bottom:12px;max-height:200px}
-.g-cli{font-size:12.5px;color:var(--text);padding:3px 6px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
+.g-cli{font-size:12.5px;color:var(--text);padding:3px 6px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
 	overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .g-cwarn{font-size:13px;color:var(--muted);margin:0 0 16px}
 .g-cactions{display:flex;justify-content:flex-end;gap:8px}
@@ -1631,7 +1631,7 @@ audio.m-el{display:none} /* the audio element is never shown — the art card st
 /* The file name uses up to TWO lines and then ellipsizes — the card has the room. */
 .bt-file{width:100%;font-size:11px;line-height:1.35;color:var(--muted);overflow-wrap:anywhere;
 	display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;
-	font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+	font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
 .bt-enh{flex:0 0 6px;width:6px;height:6px}
 /* A subfolder tile: the folder glyph in a WARM accent chip (folders are navigation — the
    one warm element in the grid), and no file name. Hidden dot-folders look the same. */
@@ -1719,7 +1719,7 @@ button.rr-row:hover{border-color:var(--accent);background:var(--tint)}
 .rr-ic .lucide{width:17px;height:17px}
 .rr-txt{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:1px}
 .rr-name{font-size:13.5px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.rr-path{font-size:11px;color:var(--muted);font-family:ui-monospace,SFMono-Regular,Menlo,monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rr-path{font-size:11px;color:var(--muted);font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .rr-chev{flex:0 0 auto;color:var(--muted)}
 .rr-chev .lucide{width:16px;height:16px}
 .rr-uplabel{margin-top:2px}
@@ -1737,7 +1737,7 @@ button.rr-row:hover{border-color:var(--accent);background:var(--tint)}
    normal) because the Windows form is deliberately two lines; `anywhere` (not
    break-word) because a long path segment offers no break opportunity. */
 .rc-cmd code{flex:1 1 auto;min-width:0;padding:13px 48px 13px 14px;
-	font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;line-height:1.5;color:var(--text);
+	font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px;line-height:1.5;color:var(--text);
 	white-space:pre-wrap;overflow-wrap:anywhere}
 .rc-cmd .rc-copy{top:8px;right:8px}
 .rc-wait{display:flex;align-items:center;gap:9px;margin-top:14px}
@@ -1755,7 +1755,7 @@ button.rr-row:hover{border-color:var(--accent);background:var(--tint)}
 	border:1px solid var(--border);background:var(--panel);color:var(--muted);font-size:11px;line-height:1.4;
 	cursor:pointer;overflow:hidden;transition:color .12s,border-color .12s}
 .bt-path .lucide{width:12px;height:12px;flex:0 0 auto}
-.bt-path>span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+.bt-path>span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
 .bt-path:hover{color:var(--accent);border-color:var(--accent)}
 .gt:not(.bt-card) .bt-path{position:absolute;left:6px;bottom:6px;z-index:2;max-width:calc(100% - 12px)}
 .bt-card .bt-path{margin-top:8px}
