@@ -17,6 +17,8 @@
   splicing `document.paper` back out) so the choice persists and reaches `print`. Two-column
   layout, footnotes, and citation management are deliberately out of this first phase.
 
+## [0.17.0] - 2026-07-19
+
 ### Added
 - **`print` and `snapshot` now find Chrome on Windows.** Chrome discovery only probed macOS and
   Linux install paths, so on a default Windows box these commands reported `CHROME_REQUIRED` even
