@@ -4050,19 +4050,21 @@ function syncViewToggle() {
 		reason: '',
 	})
 	// The white-paper button is an on/off TOGGLE, and a persistent write (so the styling
-	// reaches `print`). It shows on any document/markdown canvas that can hold a paper — off
-	// when the document is plain (click to convert), lit when it is a paper (click to revert
-	// to a normal document). It hides only where paper is impossible either way: a cover (a
-	// paper has none), or a form/confirm/sweep (cannot carry a "document" at all).
+	// reaches `print`). Like the TOC and the running strips, it is a property of PAPER: it
+	// shows on any document/markdown canvas that can hold one, but is only ENABLED in
+	// Document view — off the deck there is no paper to be on or off. It hides entirely only
+	// where paper is impossible either way: a cover (a paper has none), or a form/confirm/
+	// sweep (cannot carry a "document" at all). On the deck it is lit when the document is a
+	// paper (click to revert) and unlit otherwise (click to convert).
 	const canTogglePaper = loaded && !blocked && (isPaper || !hasCover)
 	paperControl('paperBtn', {
 		loaded: canTogglePaper,
-		enabled: canTogglePaper,
+		enabled: canTogglePaper && onPaper,
 		on: isPaper,
 		label: isPaper
 			? 'White-paper mode is ON — click to revert to a normal document'
 			: 'Convert to a white paper — serif, numbered sections, front matter',
-		reason: '',
+		reason: `White paper — ${notPaper}`,
 	})
 	if (!loaded)
 		closePalette()

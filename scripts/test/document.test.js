@@ -1695,8 +1695,10 @@ async function drivePaperButtonState(canvasFile) {
 	})
 }
 
-// Open a native .md (no companion), confirm the button is enabled, click it, and watch the
-// document become a paper — the companion is written and the deck re-renders.
+// Open a native .md (no companion). In the CONTINUOUS view the paper button is visible but
+// DISABLED (paper is a document-view control, like the TOC and strips). Switch to the deck,
+// where it enables, click it, and watch the document become a paper — the companion is
+// written and the deck re-renders.
 async function drivePaperButtonClick(mdFile) {
 	const url = `http://127.0.0.1:${K.port}/?token=${encodeURIComponent(K.token)}#/c/${encodeURIComponent(mdFile)}`
 	return withChrome(CHROME, url, { onNewDocument: PROBE }, async ({ evaluate }) => {
@@ -1710,6 +1712,19 @@ async function drivePaperButtonClick(mdFile) {
 			await cdpSleep(250)
 		}
 		await cdpSleep(400)
+		// A native .md opens CONTINUOUS: the paper button shows but is disabled here.
+		const continuous = await evaluate(BTN_STATE_JS)
+		// Switch to Document view — now the button enables.
+		await evaluate(`(() => { document.getElementById('viewDeck').click(); return true })()`)
+		deadline = Date.now() + 30_000
+		for (;;) {
+			const ready = await evaluate(`(() => document.querySelectorAll('.deck .sheet').length >= 1
+				&& !document.getElementById('paperBtn').disabled)()`).catch(() => false)
+			if (ready || Date.now() > deadline)
+				break
+			await cdpSleep(200)
+		}
+		await cdpSleep(300)
 		const before = await evaluate(BTN_STATE_JS)
 		await evaluate(`(() => { document.getElementById('paperBtn').click(); return true })()`)
 		// Wait for the write + broadcast + re-render: the loaded canvas now declares paper.
@@ -1731,7 +1746,7 @@ async function drivePaperButtonClick(mdFile) {
 				toasts: [...document.querySelectorAll('.toast')].map((t) => t.textContent).join(' | '),
 			};
 		})()`)
-		return { before, after }
+		return { continuous, before, after }
 	})
 }
 
@@ -1808,9 +1823,15 @@ test('paperBtn: HIDDEN on a form canvas — the offer is shown only where it con
 	assert.equal(paperFormDrive.hidden, true, 'the convert button is hidden on a form canvas')
 })
 
-test('paperBtn: clicking on a .md writes its companion and turns the document into a paper', { skip: browserSkip, timeout: 120_000 }, () => {
-	assert.equal(paperBtnClick.before.hidden, false, 'the button shows on a plain markdown document')
-	assert.equal(paperBtnClick.before.disabled, false, 'and is enabled — a plain .md can become a paper')
+test('paperBtn: disabled in the CONTINUOUS view — it is a document-view control like the TOC', { skip: browserSkip, timeout: 120_000 }, () => {
+	assert.equal(paperBtnClick.continuous.hidden, false, 'the button shows on a markdown document')
+	assert.equal(paperBtnClick.continuous.disabled, true, 'but is disabled off the deck')
+	assert.match(paperBtnClick.continuous.title, /Document view/, 'its tooltip says to switch to Document view')
+})
+
+test('paperBtn: clicking in Document view writes its companion and turns the document into a paper', { skip: browserSkip, timeout: 120_000 }, () => {
+	assert.equal(paperBtnClick.before.hidden, false, 'the button shows in Document view')
+	assert.equal(paperBtnClick.before.disabled, false, 'and enables there — a plain .md can become a paper')
 	assert.equal(paperBtnClick.after.docHasPaper, true, 'after the click the loaded canvas declares document.paper')
 	assert.equal(paperBtnClick.after.btnHidden, false, 'the button STAYS visible — it is a toggle, not a one-way trip')
 	assert.equal(paperBtnClick.after.btnActive, true, 'and lights up to show paper mode is on')
