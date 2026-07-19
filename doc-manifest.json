@@ -67,7 +67,7 @@
         "Hot reload",
         "Version handshake"
       ],
-      "line_count": 192,
+      "line_count": 196,
       "links_to": [
         "docs/canvas-schema.md",
         "docs/cli.md",
@@ -129,6 +129,7 @@
         "Chart kinds (26)",
         "Sweeps: a slider over precomputed frames",
         "Document mode",
+        "White-paper mode: a single-column academic variant",
         "A cover is a sheet, so it can carry a background image",
         "Presentation mode",
         "The theme: one color system, two sinks",
@@ -138,7 +139,7 @@
         "Validator behavior",
         "Catalog: progressive disclosure"
       ],
-      "line_count": 373,
+      "line_count": 401,
       "links_to": [
         "docs/architecture.md",
         "docs/cli.md",
@@ -242,7 +243,7 @@
         "CSP shim",
         "Icons and vendored assets"
       ],
-      "line_count": 133,
+      "line_count": 134,
       "links_to": [
         "docs/architecture.md",
         "docs/canvas-schema.md",
@@ -343,6 +344,7 @@
         "A clipped table loses COLUMNS, and `max-width` will not save it",
         "Rounded table corners need `border-collapse: separate`, and the paper override must stay `overflow: visible`",
         "`overflow:auto` is a scrollbar on screen and a guillotine in print",
+        "A `position: fixed` toast repeats on EVERY printed page",
         "A sheet 3 px too tall prints a silent sliver page",
         "Constraint API quirks around custom widgets",
         "A CSS `url()` cannot carry the per-request token, so a tokened asset gate 403s `@font-face` SILENTLY",
@@ -356,7 +358,7 @@
         "Chrome plays from a 200-only server, so a playback test cannot prove Range works",
         "The ⌘ in a keyboard hint is the wrong glyph off macOS"
       ],
-      "line_count": 342,
+      "line_count": 346,
       "links_to": [
         "docs/architecture.md",
         "docs/security.md"

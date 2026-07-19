@@ -1,0 +1,18 @@
+{
+  "instantcanvas": 1,
+  "createdWith": "0.17.0",
+  "enhances": "docs/releasing.md",
+  "title": "releasing",
+  "document": {
+    "paper": {
+      "columns": 1,
+      "font": "serif"
+    }
+  },
+  "blocks": [
+    {
+      "type": "markdown",
+      "src": "docs/releasing.md"
+    }
+  ]
+}
