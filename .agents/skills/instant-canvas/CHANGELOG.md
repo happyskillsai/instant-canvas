@@ -5,6 +5,17 @@ The agent-facing contract for InstantCanvas. The runtime ships as the
 and LICENSE, and agents drive the CLI through `npx`. Versions track the runtime
 package they were authored alongside.
 
+## [0.14.0] - 2026-07-19
+
+### Added
+- **Math in markdown.** LaTeX now typesets in any markdown you render — inline as `$…$` or
+  `\(…\)`, display as `$$…$$` or `\[…\]`, in a `markdown` block, an inline `text`, or a native
+  `.md` — and appears in the browser, the printed PDF, and slides. You ship only the LaTeX; the
+  standard TeX set works (fractions, sums, integrals, matrices, aligned systems, cases). Guards
+  now spelled out in the contract and in `catalog markdown`: a `$` next to a digit is a literal
+  price (`$5`; write `\$` for a literal dollar), a `$` inside a code fence stays literal, and
+  invalid LaTeX shows a visible error rather than breaking the page.
+
 ## [0.13.0] - 2026-07-18
 
 ### Added
