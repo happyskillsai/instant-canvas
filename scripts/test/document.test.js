@@ -356,6 +356,60 @@ test.before(async () => {
 			{ type: 'form', destination: { kind: 'none' }, fields: [{ name: 'token', label: 'Token', type: 'text' }] },
 		],
 	}))
+	// A WHITE-PAPER canvas: front matter, numbered sections (## / ###), two display
+	// equations, and a References list. The body is long enough to span the page, so
+	// section numbering, equation numbering and references all have real content to check.
+	fs.writeFileSync(path.join(root, 'paper.canvas.json'), JSON.stringify({
+		instantcanvas: 1,
+		createdWith: '0.1.0',
+		title: 'Understanding Diffusion Models',
+		document: { paper: { font: 'serif', frontmatter: {
+			authors: ['Jane Smith', 'John Doe'],
+			affiliations: ['MIT', 'Stanford'],
+			abstract: 'A short abstract set apart from the body, indented on both sides. It restates the contribution in one paragraph.',
+			keywords: ['diffusion', 'generative models'],
+		} } },
+		blocks: [{ type: 'markdown', text: [
+			'# Understanding Diffusion Models',
+			'',
+			'## Introduction',
+			'Body text that should render serif and justified. ' + 'More prose to wrap across the full measure of the page. '.repeat(6),
+			'',
+			'### Background',
+			'Nested subsection body that should number 1.1 in both the heading and the contents.',
+			'',
+			'## Method',
+			'Method prose describing the approach in enough words to wrap onto a second line.',
+			'',
+			'$$ \\sum_{n=1}^{\\infty} \\frac{1}{n^2} = \\frac{\\pi^2}{6} $$',
+			'',
+			'A second display equation follows, and it must be numbered (2):',
+			'',
+			'$$ e^{i\\pi} + 1 = 0 $$',
+			'',
+			'## References',
+			'1. Smith, J. A rather long reference title that wraps onto a second line to show the hanging indent. 2024.',
+			'2. Doe, A. Another paper. 2025.',
+		].join('\n') }],
+	}))
+	// The HARD case (fixture-that-contains-the-hard-case gotcha): a front-matter block big
+	// enough that, with the body, the deck spans >= 2 sheets — otherwise the sliver-page
+	// guard is unfailable. A long abstract plus long body forces the page break.
+	fs.writeFileSync(path.join(root, 'paper-tall.canvas.json'), JSON.stringify({
+		instantcanvas: 1,
+		createdWith: '0.1.0',
+		title: 'A Long Paper',
+		document: { paper: { frontmatter: {
+			authors: ['A. Author', 'B. Coauthor'],
+			affiliations: ['Institute of Things'],
+			abstract: 'This abstract is deliberately long so the front matter alone consumes much of page one and helps push the body onto sheet two, making the sliver-page guard failable. '.repeat(8),
+		} } },
+		blocks: [{ type: 'markdown', text:
+			'# A Long Paper\n\n## Section One\n\n'
+			+ 'Body paragraph that wraps and fills the page across several sheets. '.repeat(45)
+			+ '\n\n## Section Two\n\n'
+			+ 'More body content to guarantee the deck spans at least two sheets. '.repeat(45) }],
+	}))
 	K.root = root
 	K.child = spawn(process.execPath, [KERNEL, root], {
 		env: { ...process.env, INSTANTCANVAS_STATE_DIR: STATE_DIR },
@@ -393,6 +447,8 @@ test.before(async () => {
 		handbookDrive = await driveDeck('handbook.canvas.json', 3, 0)
 		uniDrive = await driveUniversalToggle()
 		stripsDrive = await driveHandbookStrips()
+		paperDrive = await drivePaper('paper.canvas.json', 1)
+		paperTallDrive = await drivePaper('paper-tall.canvas.json', 2)
 	}
 })
 
@@ -1427,4 +1483,150 @@ test('a code block taller than a page splits across sheets with no lost or dupli
 	assert.equal(s.pres.map((p) => p.text).join(''), fence, 'no lost, duplicated or reordered lines')
 	assert.ok(s.pres.every((p) => p.spans > 0), 'every fragment keeps its syntax highlighting (split spans survive)')
 	assert.ok(s.outroSheet >= s.pres[s.pres.length - 1].sheet, 'prose after the fence continues on the last fragment sheet or later')
+})
+
+// ---------------------------------------------------------------- browser: white-paper mode
+//
+// (No backticks in the evaluate() blocks below: they are template literals, so a stray
+//  backtick would detonate the whole file — the documented testing gotcha.)
+
+const PAPER_SNAPSHOT_JS = `
+	(() => {
+		const q = (s) => document.querySelector(s);
+		const qa = (s) => [...document.querySelectorAll(s)];
+		const deckSheets = qa('.deck .sheet');
+		const bodyP = q('.deck .sheet .md p');
+		const fm = q('.deck .sheet:first-child .paper-frontmatter');
+		const refs = q('.deck .sheet .paper-refs');
+		const refsLi = refs ? refs.querySelector('li') : null;
+		const ftr = qa('.deck .sheet-ftr');
+		return {
+			deckPresent: !!q('.deck'),
+			paperMode: !!q('.doc-mode.paper-mode'),
+			sheetCount: deckSheets.length,
+			overflowing: deckSheets.map((s, i) => ({ i, over: s.scrollHeight - s.clientHeight }))
+				.filter((s) => s.over > 0),
+			bodyFontFamily: bodyP ? getComputedStyle(bodyP).fontFamily : null,
+			bodyTextAlign: bodyP ? getComputedStyle(bodyP).textAlign : null,
+			fmOnSheet1: !!fm,
+			fmTitle: fm ? ((fm.querySelector('.paper-title') || {}).textContent || '') : null,
+			fmAuthors: fm ? ((fm.querySelector('.paper-authors') || {}).textContent || '') : null,
+			fmAffils: fm ? ((fm.querySelector('.paper-affils') || {}).textContent || '') : null,
+			hasAbstract: !!(fm && fm.querySelector('.paper-abstract')),
+			h2s: qa('.deck .sheet .md h2').map((h) => h.textContent.trim()),
+			h3s: qa('.deck .sheet .md h3').map((h) => h.textContent.trim()),
+			hasRefs: !!refs,
+			refsTextIndent: refsLi ? getComputedStyle(refsLi).textIndent : null,
+			refsPadLeft: refsLi ? getComputedStyle(refsLi).paddingLeft : null,
+			eqnos: qa('.deck .sheet .eqno').map((e) => e.textContent),
+			mathBlocks: qa('.deck .sheet .math-block').length,
+			hdrCount: qa('.deck .sheet-hdr').length,
+			ftrCount: ftr.length,
+			ftrCenter: ftr.length ? ((ftr[0].querySelector('.strip-center') || {}).textContent || '') : null,
+			ftrLeft: ftr.length ? ((ftr[0].querySelector('.strip-left') || {}).textContent || '') : null,
+			ftrRight: ftr.length ? ((ftr[0].querySelector('.strip-right') || {}).textContent || '') : null,
+			tocRows: qa('.deck .toc-entry').map((r) => (r.querySelector('.toc-label') || {}).textContent || ''),
+			csp: window.__csp || [],
+			styleEls: document.querySelectorAll('style').length,
+			offenders: qa('.deck [style]')
+				.filter((el) => !el.closest('.chart-box') && !el.matches('.sheet,.deck,.deck-scale,.cover-scrim,.kpis'))
+				.map((el) => el.className).slice(0, 6),
+		};
+	})()
+`
+
+let paperDrive = null
+let paperTallDrive = null
+
+async function drivePaper(canvasFile, minSheets) {
+	const url = `http://127.0.0.1:${K.port}/?token=${encodeURIComponent(K.token)}#/c/${encodeURIComponent(canvasFile)}`
+	return withChrome(CHROME, url, { onNewDocument: PROBE }, async ({ evaluate, send }) => {
+		const deadline = Date.now() + 30_000
+		for (;;) {
+			const ready = await evaluate(`(() => !!(window.ic && window.ic.state.tree
+				&& document.querySelectorAll('.deck .sheet').length >= ${minSheets}
+				&& document.querySelector('.deck .sheet:first-child .paper-frontmatter')))()`).catch(() => false)
+			if (ready || Date.now() > deadline)
+				break
+			await cdpSleep(250)
+		}
+		await cdpSleep(800)
+		const snap = await evaluate(PAPER_SNAPSHOT_JS)
+		const pdf = await send('Page.printToPDF', {
+			printBackground: true, preferCSSPageSize: true, displayHeaderFooter: false,
+			marginTop: 0, marginBottom: 0, marginLeft: 0, marginRight: 0,
+		})
+		return { snap, pdf: Buffer.from(pdf.data, 'base64') }
+	})
+}
+
+test('paper: body renders serif and justified, in paper-mode, with zero CSP violations', { skip: browserSkip, timeout: 120_000 }, () => {
+	const s = paperDrive.snap
+	assert.equal(s.deckPresent, true, 'the paper deck rendered at all')
+	assert.equal(s.paperMode, true, 'the deck root carries paper-mode')
+	assert.match(s.bodyFontFamily || '', /serif|Georgia|Times|Cambria/i, 'body paragraphs are serif')
+	assert.equal(s.bodyTextAlign, 'justify', 'body paragraphs are justified')
+	assert.deepEqual(s.csp, [], 'no CSP violations in paper mode')
+	assert.equal(s.styleEls, 0, 'no <style> element reached the document')
+	assert.deepEqual(s.offenders, [], 'paper mode added no inline style="" markup')
+})
+
+test('paper: the front matter is the top of sheet 1 (title, authors, affiliations, abstract)', { skip: browserSkip, timeout: 120_000 }, () => {
+	const s = paperDrive.snap
+	assert.equal(s.fmOnSheet1, true, 'front matter is on the first sheet — the front matter IS page 1')
+	assert.match(s.fmTitle, /Understanding Diffusion Models/, 'the title renders in the front matter')
+	assert.match(s.fmAuthors, /Jane Smith/, 'authors render as a flat line')
+	assert.match(s.fmAuthors, /John Doe/)
+	assert.match(s.fmAffils, /MIT/, 'affiliations render as a flat line')
+	assert.match(s.fmAffils, /Stanford/)
+	assert.equal(s.hasAbstract, true, 'the abstract block renders')
+})
+
+test('paper: sections auto-number in the heading AND the TOC; front-matter headings do not', { skip: browserSkip, timeout: 120_000 }, () => {
+	const s = paperDrive.snap
+	// The body H1 is consumed into the front matter, so it is not repeated as a heading.
+	assert.ok(!s.h2s.some((h) => /Understanding Diffusion Models/.test(h)), 'the title is not repeated as a body heading')
+	assert.ok(/^1\s+Introduction/.test(s.h2s[0]), `first section numbers as "1 Introduction", got ${JSON.stringify(s.h2s[0])}`)
+	assert.ok(s.h2s.some((h) => /^2\s+Method/.test(h)), 'the third section numbers as "2 Method"')
+	assert.ok(/^1\.1\s+/.test(s.h3s[0]), `the nested subsection numbers as "1.1 …", got ${JSON.stringify(s.h3s[0])}`)
+	// References is front/back matter — never numbered.
+	assert.ok(s.h2s.some((h) => h === 'References'), 'the References heading is NOT numbered')
+	assert.ok(!s.h2s.some((h) => /^\d.*References/.test(h)), 'no number prefixes References')
+	// The TOC shows the same numbers as the headings (they derive from one source).
+	assert.ok(s.tocRows.some((r) => /^1\s+Introduction/.test(r)), 'the TOC row is numbered too')
+	assert.ok(s.tocRows.some((r) => r === 'References'), 'the References TOC row is unnumbered')
+})
+
+test('paper: display equations auto-number (1), (2) in document order', { skip: browserSkip, timeout: 120_000 }, () => {
+	const s = paperDrive.snap
+	assert.ok(s.mathBlocks >= 2, `the fixture has two display equations (${s.mathBlocks} math blocks)`)
+	assert.deepEqual(s.eqnos, ['(1)', '(2)'], 'equations number sequentially in document order')
+})
+
+test('paper: the references list gets a hanging indent (.paper-refs)', { skip: browserSkip, timeout: 120_000 }, () => {
+	const s = paperDrive.snap
+	assert.equal(s.hasRefs, true, 'the list after "References" is tagged .paper-refs')
+	const indent = parseFloat(s.refsTextIndent)
+	const pad = parseFloat(s.refsPadLeft)
+	assert.ok(indent < 0, `hanging indent: negative text-indent, got ${s.refsTextIndent}`)
+	assert.ok(pad > 0, `hanging indent: positive padding-left, got ${s.refsPadLeft}`)
+})
+
+test('paper: the footer is a centered page number and there is NO running header', { skip: browserSkip, timeout: 120_000 }, () => {
+	const s = paperDrive.snap
+	assert.equal(s.hdrCount, 0, 'no running header in paper mode (querySelectorAll(.sheet-hdr).length === 0)')
+	assert.ok(s.ftrCount >= 1, 'a footer strip is present')
+	assert.equal(s.ftrCenter, '1', 'the first page footer is a centered page number')
+	assert.equal(s.ftrLeft, '', 'nothing in the left slot')
+	assert.equal(s.ftrRight, '', 'nothing in the right slot')
+})
+
+test('paper: the packer invariant holds and the PDF page count equals the sheet count', { skip: browserSkip, timeout: 120_000 }, () => {
+	assert.equal(paperDrive.snap.deckPresent, true, 'the paper deck rendered')
+	assert.deepEqual(paperDrive.snap.overflowing, [], 'no paper sheet overflows its page box')
+	// The hard case: front matter + body forced a page break, so the guard is failable.
+	assert.ok(paperTallDrive.snap.sheetCount >= 2, `the tall paper spans >= 2 sheets (${paperTallDrive.snap.sheetCount})`)
+	assert.deepEqual(paperTallDrive.snap.overflowing, [], 'no tall-paper sheet overflows — the front matter was measured into the budget')
+	assert.equal(pdfPageCount(paperTallDrive.pdf), paperTallDrive.snap.sheetCount,
+		'the printed PDF /Count equals the deck sheet count — no sliver page from the front matter')
 })
