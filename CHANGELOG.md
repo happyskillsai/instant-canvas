@@ -2,6 +2,33 @@
 
 ## [Unreleased]
 
+## [0.16.0] - 2026-07-19
+
+### Added
+- **A file-info drawer on every item the modal opens.** A new **ⓘ info button** sits at the right
+  of the item modal's chrome bar; clicking it slides open a right-side drawer — **collapsed by
+  default and reset on every item open** (no stickiness) — that shows the file's metadata for
+  **every** kind the modal displays: a canvas, a markdown document, an image, a video, or audio.
+  Canvases and documents had no metadata surface at all before this; they now show
+  Name/Folder/Path/Kind/Size/Created/Modified plus **best-effort provenance** — what created the
+  canvas, its theme source, its block count, and, for a markdown document with a companion, the
+  canvas that *enhances* it. Every row is **click-to-copy** (the Path row copies the absolute
+  path), reusing the same always-visible copy affordance — never hover-gated, so a touch screen
+  can reach it. Press **`i`** to toggle it, **Esc** to collapse it (it never navigates away from
+  the item), and on a phone it becomes a **full-width sheet**.
+- **`GET /api/meta`** — one **stat-only** metadata endpoint for every renderable kind, the drawer's
+  single source both for a file you navigated to and one you deep-linked cold. It decides the kind
+  from the **extension** and **never opens the file** (pure `fs` stat, `lstat`-refusing a symlink or
+  a directory), so a non-renderable path, a directory, or `.env` is a **byte-clean 404** that leaks
+  nothing of the file.
+
+### Changed
+- **The media metadata panel moved into the shared drawer.** Image, video and audio used to carry
+  an *always-on* metadata panel inside their stage; that panel is now the collapsible info drawer,
+  collapsed by default. The media players are otherwise untouched — Duration and video Dimensions
+  still **value-sync from the element** on `loadedmetadata` (into the drawer, even while it is
+  collapsed). The gallery block's own detail modal keeps its in-stage panel, unchanged.
+
 ## [0.15.0] - 2026-07-19
 
 ### Added
