@@ -1534,6 +1534,9 @@ const PAPER_SNAPSHOT_JS = `
 			ftrLeft: ftr.length ? ((ftr[0].querySelector('.strip-left') || {}).textContent || '') : null,
 			ftrRight: ftr.length ? ((ftr[0].querySelector('.strip-right') || {}).textContent || '') : null,
 			tocRows: qa('.deck .toc-entry').map((r) => (r.querySelector('.toc-label') || {}).textContent || ''),
+			tocBtnDisabled: document.getElementById('tocBtn').disabled,
+			tocBtnTitle: document.getElementById('tocBtn').title,
+			paperBtnHidden: document.getElementById('paperBtn').hidden,
 			csp: window.__csp || [],
 			styleEls: document.querySelectorAll('style').length,
 			offenders: qa('.deck [style]')
@@ -1590,7 +1593,7 @@ test('paper: the front matter is the top of sheet 1 (title, authors, affiliation
 	assert.equal(s.hasAbstract, true, 'the abstract block renders')
 })
 
-test('paper: sections auto-number in the heading AND the TOC; front-matter headings do not', { skip: browserSkip, timeout: 120_000 }, () => {
+test('paper: sections auto-number in the heading; front-matter headings do not', { skip: browserSkip, timeout: 120_000 }, () => {
 	const s = paperDrive.snap
 	// The body H1 is consumed into the front matter, so it is not repeated as a heading.
 	assert.ok(!s.h2s.some((h) => /Understanding Diffusion Models/.test(h)), 'the title is not repeated as a body heading')
@@ -1600,9 +1603,17 @@ test('paper: sections auto-number in the heading AND the TOC; front-matter headi
 	// References is front/back matter — never numbered.
 	assert.ok(s.h2s.some((h) => h === 'References'), 'the References heading is NOT numbered')
 	assert.ok(!s.h2s.some((h) => /^\d.*References/.test(h)), 'no number prefixes References')
-	// The TOC shows the same numbers as the headings (they derive from one source).
-	assert.ok(s.tocRows.some((r) => /^1\s+Introduction/.test(r)), 'the TOC row is numbered too')
-	assert.ok(s.tocRows.some((r) => r === 'References'), 'the References TOC row is unnumbered')
+})
+
+test('paper: has NO table of contents, and the TOC button disables with that reason', { skip: browserSkip, timeout: 120_000 }, () => {
+	const s = paperDrive.snap
+	// A "Contents" page between the abstract and the first section reads wrong — a white
+	// paper's front matter is its opening.
+	assert.deepEqual(s.tocRows, [], 'no Contents page is generated in paper mode')
+	assert.equal(s.tocBtnDisabled, true, 'the TOC toggle is disabled')
+	assert.match(s.tocBtnTitle, /white paper has no table of contents/, 'and says why')
+	// The document IS a paper, so the convert button has nothing to do — it hides.
+	assert.equal(s.paperBtnHidden, true, 'the convert button hides once the document is already a paper')
 })
 
 test('paper: display equations auto-number (1), (2) in document order', { skip: browserSkip, timeout: 120_000 }, () => {
@@ -1660,9 +1671,9 @@ async function drivePaperButtonState(canvasFile) {
 	return withChrome(CHROME, url, { onNewDocument: PROBE }, async ({ evaluate }) => {
 		const deadline = Date.now() + 30_000
 		for (;;) {
+			// Wait for the canvas to LOAD (not for the button to show — on a form it never does).
 			const ready = await evaluate(`(() => !!(window.ic && window.ic.state.tree
-				&& window.ic.state.activeId === '${canvasFile}'
-				&& !document.getElementById('paperBtn').hidden))()`).catch(() => false)
+				&& window.ic.state.activeId === '${canvasFile}' && window.ic.state.canvasDoc))()`).catch(() => false)
 			if (ready || Date.now() > deadline)
 				break
 			await cdpSleep(250)
@@ -1702,8 +1713,7 @@ async function drivePaperButtonClick(mdFile) {
 		const after = await evaluate(`(() => {
 			const b = document.getElementById('paperBtn');
 			return {
-				btnDisabled: b.disabled,
-				btnTitle: b.title,
+				btnHidden: b.hidden,
 				docHasPaper: !!(window.ic.state.canvasDoc && window.ic.state.canvasDoc.document && window.ic.state.canvasDoc.document.paper),
 				toasts: [...document.querySelectorAll('.toast')].map((t) => t.textContent).join(' | '),
 			};
@@ -1740,18 +1750,17 @@ async function drivePaperReload(mdFile) {
 	})
 }
 
-test('paperBtn: disabled with a reason on a form canvas (it cannot carry a document)', { skip: browserSkip, timeout: 120_000 }, () => {
-	assert.equal(paperFormDrive.hidden, false, 'the button shows but is disabled — a hidden control teaches nothing')
-	assert.equal(paperFormDrive.disabled, true, 'a form canvas cannot become a paper')
-	assert.match(paperFormDrive.title, /cannot become a paper/, 'the reason is on the tooltip')
+test('paperBtn: HIDDEN on a form canvas — the offer is shown only where it converts', { skip: browserSkip, timeout: 120_000 }, () => {
+	// A form cannot carry a document, so it can never become a paper — the button is not a
+	// disabled orphan, it is simply absent (the "offer only when it does something" rule).
+	assert.equal(paperFormDrive.hidden, true, 'the convert button is hidden on a form canvas')
 })
 
 test('paperBtn: clicking on a .md writes its companion and turns the document into a paper', { skip: browserSkip, timeout: 120_000 }, () => {
-	assert.equal(paperBtnClick.before.hidden, false, 'the button shows on a markdown document')
+	assert.equal(paperBtnClick.before.hidden, false, 'the button shows on a plain markdown document')
 	assert.equal(paperBtnClick.before.disabled, false, 'and is enabled — a plain .md can become a paper')
 	assert.equal(paperBtnClick.after.docHasPaper, true, 'after the click the loaded canvas declares document.paper')
-	assert.equal(paperBtnClick.after.btnDisabled, true, 'the button now reports the document is already a paper')
-	assert.match(paperBtnClick.after.btnTitle, /already a white paper/)
+	assert.equal(paperBtnClick.after.btnHidden, true, 'the button then HIDES — the document is a paper now, nothing left to convert')
 	assert.match(paperBtnClick.after.toasts, /paperless\.canvas\.json/, 'a toast announces the companion that was created')
 
 	// The companion is real on disk, declares paper mode, enhances the document, and validates.

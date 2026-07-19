@@ -3937,7 +3937,8 @@ function syncViewToggle() {
 		paperControl('tocBtn', { loaded: true, enabled: false, on: false, label: '', reason: 'This is an image — a table of contents is a document feature' })
 		paperControl('stripsBtn', { loaded: true, enabled: false, on: false, label: '', reason: 'This is an image — a running header is a document feature' })
 		paperControl('paletteBtn', { loaded: true, enabled: false, on: false, label: '', reason: 'This is an image — it carries no document theme' })
-		paperControl('paperBtn', { loaded: true, enabled: false, on: false, label: '', reason: 'This is an image — it cannot become a paper' })
+		// The convert button is an OFFER, shown only where it does something — never on an image.
+		paperControl('paperBtn', { loaded: false, enabled: false, on: false, label: '', reason: '' })
 		closePalette()
 		return
 	}
@@ -3951,7 +3952,7 @@ function syncViewToggle() {
 		paperControl('tocBtn', { loaded: true, enabled: false, on: false, label: '', reason: 'This is a ' + noun + ' — a table of contents is a document feature' })
 		paperControl('stripsBtn', { loaded: true, enabled: false, on: false, label: '', reason: 'This is a ' + noun + ' — a running header is a document feature' })
 		paperControl('paletteBtn', { loaded: true, enabled: false, on: false, label: '', reason: 'This is a ' + noun + ' — it carries no document theme' })
-		paperControl('paperBtn', { loaded: true, enabled: false, on: false, label: '', reason: 'This is a ' + noun + ' — it cannot become a paper' })
+		paperControl('paperBtn', { loaded: false, enabled: false, on: false, label: '', reason: '' })
 		closePalette()
 		return
 	}
@@ -3965,7 +3966,7 @@ function syncViewToggle() {
 		paperControl('tocBtn', { loaded: true, enabled: false, on: false, label: '', reason: 'A presentation has no table of contents — its structure is its slides' })
 		paperControl('stripsBtn', { loaded: true, enabled: false, on: false, label: '', reason: 'A presentation\'s footer is declared in its JSON ("presentation.footer"), not toggled here' })
 		paperControl('paletteBtn', { loaded: true, enabled: true, on: !$('palettePanel').hidden, label: 'Deck colors — preset and tokens', reason: '' })
-		paperControl('paperBtn', { loaded: true, enabled: false, on: false, label: '', reason: 'A presentation cannot become a paper — its layout is fixed slides' })
+		paperControl('paperBtn', { loaded: false, enabled: false, on: false, label: '', reason: '' })
 		return
 	}
 
@@ -3989,14 +3990,23 @@ function syncViewToggle() {
 	// black on black in a dark app). So the palette stays live wherever a canvas is.
 	const onPaper = state.docLand && state.docView === 'deck'
 	const notPaper = 'switch to Document view to use this'
+	// Is the loaded canvas a white paper? (Its front matter is its opening — no TOC, and the
+	// convert button has nothing left to do.)
+	const docObj = loaded && state.canvasDoc.document && typeof state.canvasDoc.document === 'object' ? state.canvasDoc.document : null
+	const isPaper = !!(docObj && docObj.paper)
+	const hasCover = !!(docObj && docObj.cover)
 
 	paperControl('tocBtn', {
 		loaded,
-		enabled: onPaper && state.docEntries > 0,
+		// A white paper has no table of contents (the front matter is its opening), so the
+		// button disables with that reason rather than offering a Contents page that reads wrong.
+		enabled: onPaper && state.docEntries > 0 && !isPaper,
 		on: state.docTocOn,
 		label: 'Table of contents on/off',
-		// Two different reasons it cannot be pressed, and the reader deserves the right one.
-		reason: onPaper ? 'Table of contents — this document has no headings to list' : `Table of contents — ${notPaper}`,
+		// Three reasons it cannot be pressed, and the reader deserves the right one.
+		reason: isPaper
+			? 'A white paper has no table of contents — its front matter is its opening'
+			: onPaper ? 'Table of contents — this document has no headings to list' : `Table of contents — ${notPaper}`,
 	})
 	paperControl('stripsBtn', {
 		loaded,
@@ -4012,24 +4022,19 @@ function syncViewToggle() {
 		label: 'Document colors — preset and tokens',
 		reason: '',
 	})
-	// The white-paper convert button: enabled on a document/markdown canvas that is not
-	// already a paper, and can hold one. A form/confirm/sweep cannot become a paper (it
-	// cannot carry a "document"), and a canvas already in paper mode says so. It is a
-	// persistent WRITE (like theme Save), not a per-tab view toggle — which is what makes
-	// the paper reach `print`.
-	const docObj = loaded && state.canvasDoc.document && typeof state.canvasDoc.document === 'object' ? state.canvasDoc.document : null
-	const isPaper = !!(docObj && docObj.paper)
-	const hasCover = !!(docObj && docObj.cover)
+	// The white-paper convert button is an OFFER, not a stateful toggle: it turns a plain
+	// document into a paper (a persistent write, so the styling reaches `print`), and it is
+	// shown+enabled EXACTLY when it can do that — a display/markdown canvas that is not
+	// already a paper, has no cover, and holds no form/confirm/sweep. Otherwise it hides, so
+	// there is never a disabled orphan the reader has to puzzle over. A canvas already in
+	// paper mode simply looks like one; nothing further to convert.
+	const canConvertToPaper = loaded && !blocked && !isPaper && !hasCover
 	paperControl('paperBtn', {
-		loaded,
-		enabled: loaded && !blocked && !isPaper && !hasCover,
-		on: isPaper,
+		loaded: canConvertToPaper,
+		enabled: canConvertToPaper,
+		on: false,
 		label: 'Convert to a white paper — serif, numbered sections, front matter',
-		reason: blocked
-			? 'A ' + deckBlockers(state.canvasDoc).join('/') + ' canvas cannot become a paper — paper cannot submit or drag'
-			: hasCover
-				? 'This document has a cover — a paper has none (the front matter is page 1). Remove the cover first'
-				: isPaper ? 'This document is already a white paper' : '',
+		reason: '',
 	})
 	if (!loaded)
 		closePalette()
@@ -4143,7 +4148,9 @@ async function renderDocumentView(main, canvas) {
 	// The TOC belongs to the renderer: generated automatically whenever there
 	// is anything to list, declared or not. The JSON `toc` key only customizes
 	// it (title, depth), and the reader can toggle it off/on from the topbar.
-	const wantToc = entries.length > 0 && (state.docToc !== null ? state.docToc : true)
+	// A WHITE PAPER never gets one: its front matter is its opening, and a
+	// "Contents" page wedged between the abstract and the first section reads wrong.
+	const wantToc = !paper && entries.length > 0 && (state.docToc !== null ? state.docToc : true)
 	state.docTocOn = wantToc
 	state.docEntries = entries.length
 	// Paper mode: the front matter LEADS the deck — it is the top of sheet 1 (§4.3), so it
