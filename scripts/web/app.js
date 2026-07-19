@@ -5050,6 +5050,50 @@ function pdfDocTitle(canvas) {
 	return `${ts}-instant-canvas`
 }
 
+// ---- item info drawer: collapsed-by-default file metadata for every kind the modal opens ----
+// The drawer is a chrome affordance, not a route — opening or closing it never touches
+// location.hash. It resets to COLLAPSED on every item open (no stickiness) and reveals
+// #ocInfo; the panel is filled by renderMeta (image/media, from the stage) or renderItemMeta
+// (canvas/document). A presentation stage gets no drawer.
+function infoDrawerOpen() { return !$('docInfoDrawer').hidden }
+function openInfoDrawer() {
+	const d = $('docInfoDrawer'), b = $('ocInfo')
+	d.hidden = false; d.classList.add('open')
+	b.setAttribute('aria-expanded', 'true'); b.classList.add('active')
+}
+function closeInfoDrawer() {
+	const d = $('docInfoDrawer'), b = $('ocInfo')
+	d.hidden = true; d.classList.remove('open')
+	b.setAttribute('aria-expanded', 'false'); b.classList.remove('active')
+}
+function toggleInfoDrawer() { if (infoDrawerOpen()) closeInfoDrawer(); else openInfoDrawer() }
+
+// Reveal the info button and FORCE the drawer collapsed — runs on every open, incl. prev/next,
+// so there is no stickiness. The panel is filled separately (renderMeta / renderItemMeta).
+function showItemInfo(title) {
+	$('docInfoTitle').textContent = title || 'Info'
+	$('ocInfo').hidden = false
+	closeInfoDrawer()
+}
+// No drawer for this state (a presentation, or no item routed) — hide the button, collapse.
+function hideItemInfo() {
+	$('ocInfo').hidden = true
+	closeInfoDrawer()
+}
+
+// Populate the drawer for a canvas or document: reveal + collapse SYNCHRONOUSLY (so the drawer
+// is collapsed the instant the item opens — §3.2), then fetch /api/meta and render the rows.
+// The activeId guard drops a stale fill when the reader flipped prev/next mid-fetch. The browse
+// `item` (for a document's "Enhanced by" companion) is best-effort — null on a cold deep-link.
+async function populateItemInfoDrawer(rel, canvas) {
+	const item = browseInstance && browseInstance.itemFor ? browseInstance.itemFor(rel) : null
+	showItemInfo((canvas && canvas.title) || (rel.split('/').pop() || rel))
+	const { json } = await api('/api/meta?path=' + encodeURIComponent(rel))
+	if (state.activeId !== rel) return // navigated away mid-fetch
+	const stat = json && json.ok ? json : null
+	renderItemMeta($('docInfoPanel'), { stat, canvas, themeSource: state.themeSource, item })
+}
+
 async function renderCanvas() {
 	disposeCharts()
 	disposeGalleries()
@@ -5079,6 +5123,7 @@ async function renderCanvas() {
 		main.innerHTML = ''
 		modal.hidden = true
 		document.body.classList.remove('doc-modal-open')
+		hideItemInfo()
 		syncViewToggle()
 		return
 	}
@@ -5100,6 +5145,7 @@ async function renderCanvas() {
 		overlayStage = stage
 		main.replaceChildren(stage.el)
 		stage.load(state.activeId, {}) // renderable/mtime unknown on a cold deep-link → derived from meta
+		showItemInfo(state.activeId.split('/').pop() || state.activeId) // stage.load fills the panel; reveal + collapse now
 		syncViewToggle()
 		return
 	}
@@ -5117,6 +5163,7 @@ async function renderCanvas() {
 		overlayStage = stage
 		main.replaceChildren(stage.el)
 		stage.load(state.activeId)
+		showItemInfo(state.activeId.split('/').pop() || state.activeId) // stage.load fills the panel; reveal + collapse now
 		syncViewToggle()
 		return
 	}
@@ -5130,6 +5177,7 @@ async function renderCanvas() {
 			<div class="canvas-head"><h1>${esc(state.activeId)}</h1><div class="sub">${esc(state.activeId)}</div></div>
 			${errors ? renderErrors(state.activeId, errors) : `<div class="placeholder">Could not load this canvas (HTTP ${status}).</div>`}
 		</div>`
+		hideItemInfo() // a canvas that failed to load has no metadata to show
 		syncViewToggle()
 		return
 	}
@@ -5156,10 +5204,15 @@ async function renderCanvas() {
 	// A slides canvas is a presentation — a sibling of the document deck, not a variant of
 	// it. It routes to the filmstrip before any of the deck/continuous machinery below.
 	if (Array.isArray(canvas.slides)) {
+		hideItemInfo() // a presentation stage carries no info drawer
 		await renderPresentationView(main, canvas)
 		return
 	}
 	state.presLand = false
+	// Every non-presentation kind the modal displays gets the drawer — a display canvas,
+	// a declared document, and an interactive form/confirm/sweep alike (it shows only file
+	// metadata, never a field value). Fire-and-forget: the panel is independent of the deck.
+	populateItemInfoDrawer(state.activeId, canvas).catch(() => {}) // a dead kernel mid-fetch is not the deck's problem
 
 	// The view is presentation: any display canvas can render as paper. A declared
 	// `document` opens as the deck and everything else opens continuous — but only
@@ -6700,6 +6753,7 @@ async function renderBrowse(main, rel) {
 
 	browseInstance = {
 		refresh,
+		itemFor, // the drawer's "Enhanced by" row reads a document's companion from the browse item
 		dispose() { cancelPress() },
 	}
 
@@ -7582,6 +7636,10 @@ for (const id of ['viewToggle', 'presentBtn', 'tocBtn', 'stripsBtn', 'paletteBtn
 $('ocClose').addEventListener('click', ocClose)
 $('ocPrev').addEventListener('click', () => ocStep(-1))
 $('ocNext').addEventListener('click', () => ocStep(1))
+// The info drawer toggles from its button, and closes from its own × — a chrome
+// affordance that never navigates (location.hash is untouched by either).
+$('ocInfo').addEventListener('click', () => toggleInfoDrawer())
+$('infoClose').addEventListener('click', () => closeInfoDrawer())
 
 // Overlay keyboard: Esc leaves to the folder, ←/→ flip siblings. Inert whenever another
 // surface owns the keyboard — the presenting stage (its capture-phase handler already
@@ -7598,6 +7656,10 @@ document.addEventListener('keydown', (e) => {
 	const ae = document.activeElement
 	const inField = !!(ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.tagName === 'SELECT' || ae.isContentEditable || ae.closest('form')))
 	if (e.key === 'Escape') {
+		// The info drawer, when open, takes Esc FIRST — collapse it and stay in the overlay
+		// (never navigate to the folder). Only when it is open, so a closed drawer leaves the
+		// media popover / fullscreen / ocClose escapes below exactly as they were.
+		if (infoDrawerOpen()) { e.preventDefault(); closeInfoDrawer(); return }
 		if (inField)
 			return
 		// A media stage's speed popover eats Esc first (close it, stay in the overlay); and
@@ -7612,6 +7674,8 @@ document.addEventListener('keydown', (e) => {
 	}
 	if (inField)
 		return
+	// `i` toggles the info drawer (nice-to-have), whenever the info button is available.
+	if ((e.key === 'i' || e.key === 'I') && !$('ocInfo').hidden) { e.preventDefault(); toggleInfoDrawer(); return }
 	// §4.11 (D8): the media overlay owns these keys, player-style — ←/→ SEEK ±5s (prev/next
 	// stays on the visible ‹ › buttons), Space play/pause, m mute, f fullscreen (video only).
 	if (state.mediaLand && overlayStage) {
