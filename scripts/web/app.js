@@ -4660,7 +4660,7 @@ function syncMetaRow(panel, key, text) {
 	v.append(metaVline(text, text, label))
 }
 
-function createImageStage() {
+function createImageStage(metaPanel) {
 	const wrap = document.createElement('div')
 	wrap.className = 'img-stage'
 	const stage = document.createElement('div')
@@ -4672,8 +4672,13 @@ function createImageStage() {
 	ph.hidden = true
 	ph.innerHTML = icon('image') + '<div class="g-noprev">Preview not supported by browsers</div>'
 	stage.append(img, ph)
-	const panel = document.createElement('div')
-	panel.className = 'g-meta'
+	// The metadata panel is caller-provided: the item modal hands its shared drawer
+	// panel (#docInfoPanel), so the meta lives in the drawer, not the stage. When no
+	// panel is supplied — the gallery block's OWN detail modal — the stage owns an
+	// in-stage .g-meta exactly as before (§5 keeps that surface untouched). renderMeta
+	// and syncMetaRow target this `panel` either way.
+	const panel = metaPanel || document.createElement('div')
+	if (!metaPanel) panel.className = 'g-meta'
 	const zoomBar = document.createElement('div')
 	zoomBar.className = 'g-zoombar'
 	const zbtn = (html, onClick, title) => {
@@ -4691,7 +4696,8 @@ function createImageStage() {
 		zbtn('Fit', () => setFit(), 'Fit'),
 		zbtn('100%', () => setNatural(), 'Actual size'),
 	)
-	wrap.append(stage, zoomBar, panel)
+	wrap.append(stage, zoomBar)
+	if (!metaPanel) wrap.append(panel) // a drawer-provided panel already lives in the drawer
 
 	// Zoom via one CSSOM transform. transform-origin is center (set in CSS).
 	const st = { path: null, z: 1, tx: 0, ty: 0 }
@@ -4785,12 +4791,16 @@ function createImageStage() {
  * so closing the overlay (or stepping prev/next) without it leaves sound running with no
  * UI to stop it. renderCanvas disposes the outgoing stage before mounting the next.
  */
-function createMediaStage(kind) {
+function createMediaStage(kind, metaPanel) {
 	const wrap = document.createElement('div')
 	wrap.className = 'img-stage media-stage'
 	const col = document.createElement('div'); col.className = 'm-col'
 	const stage = document.createElement('div'); stage.className = 'g-stage m-stage'
-	const panel = document.createElement('div'); panel.className = 'g-meta'
+	// Caller-provided panel — the item modal's shared drawer panel (#docInfoPanel), so
+	// value-sync (Duration/Dimensions on loadedmetadata) writes into the drawer even
+	// while it is collapsed. Falls back to an in-stage panel when none is supplied.
+	const panel = metaPanel || document.createElement('div')
+	if (!metaPanel) panel.className = 'g-meta'
 
 	// The media element: a <video> shown on the stage, or a bare <audio> that is never
 	// displayed (an audio file shows an art card instead). No `controls`, ever.
@@ -4831,7 +4841,8 @@ function createMediaStage(kind) {
 	if (kind === 'video') bar.append(mbtn('maximize', () => fullscreen(), 'Fullscreen'))
 
 	col.append(stage, bar)
-	wrap.append(col, panel)
+	wrap.append(col)
+	if (!metaPanel) wrap.append(panel) // a drawer-provided panel already lives in the drawer
 
 	const stt = { path: null }
 	let scrubbing = false
@@ -5039,7 +5050,7 @@ async function renderCanvas() {
 		state.presLand = false
 		state.imageLand = true
 		document.body.classList.add('image-overlay')
-		const stage = createImageStage()
+		const stage = createImageStage($('docInfoPanel')) // meta renders into the shared drawer, not the stage
 		overlayStage = stage
 		main.replaceChildren(stage.el)
 		stage.load(state.activeId, {}) // renderable/mtime unknown on a cold deep-link → derived from meta
@@ -5056,7 +5067,7 @@ async function renderCanvas() {
 		state.presLand = false
 		state.mediaLand = mk
 		document.body.classList.add('media-overlay')
-		const stage = createMediaStage(mk)
+		const stage = createMediaStage(mk, $('docInfoPanel')) // meta renders into the shared drawer, not the stage
 		overlayStage = stage
 		main.replaceChildren(stage.el)
 		stage.load(state.activeId)
