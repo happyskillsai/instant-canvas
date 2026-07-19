@@ -229,8 +229,19 @@ test.before(async () => {
 		// Saving a palette now writes `skills-config.json` through `npx happyskills
 		// skills-config set`, which is a subprocess: budget for it. (A Save is rare and
 		// human-initiated, so one subprocess is affordable — but it is not instant, and a
-		// 900 ms wait here silently asserted an empty chip list.)
-		await sleep(6000)
+		// 900 ms wait here silently asserted an empty chip list.) A FIXED 6 s budget then
+		// broke when the suite got heavier (reconnect.test.js added kernels and a Chrome
+		// — the same lesson as mediaui's Space toggle): poll for the chip, the save's
+		// observable outcome, with a deadline load cannot beat, then let the list settle.
+		{
+			const deadline = Date.now() + 30_000
+			while (Date.now() < deadline) {
+				if (await evaluate(`document.querySelectorAll('#palCustom .pal-chip').length`).catch(() => 0))
+					break
+				await sleep(250)
+			}
+		}
+		await sleep(500)
 		const saved = await evaluate(`({
 			chips: document.querySelectorAll('#palCustom .pal-chip').length,
 			activeByValue: !!document.querySelector('#palCustom .pal-chip.active'),

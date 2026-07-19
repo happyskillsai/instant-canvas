@@ -43,7 +43,13 @@
 			<div class="tree" id="tree"></div>
 			<div class="side-foot">
 				<div id="wsStats">— canvases</div>
-				<div class="watch"><span class="pulse" id="pulse"></span> <span id="watchState">connecting</span> <span id="watchPath"></span></div>
+				<!-- The footer pulse is WebSocket health. When the kernel itself is confirmed
+				     gone (three straight /healthz misses — one blip is not a death), the state
+				     reads "disconnected" and the Reconnect call-to-action appears: the page
+				     cannot restart its own server, but it can say exactly how to, and it
+				     reloads itself the moment the kernel is back (same port + token, from the
+				     workspace identity file). -->
+				<div class="watch"><span class="pulse" id="pulse"></span> <span id="watchState">connecting</span> <span id="watchPath"></span><button class="rc-btn" id="reconnectBtn" hidden type="button" title="The kernel has stopped — see how to restart it">Reconnect</button></div>
 				<div class="ver" title="InstantCanvas skill version">InstantCanvas v__IC_VERSION__</div>
 			</div>
 		</aside>

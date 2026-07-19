@@ -3,6 +3,23 @@
 ## [Unreleased]
 
 ### Added
+- **A dead kernel now says so — and helps you back.** The sidebar footer's status distinguishes a
+  dropped WebSocket (`reconnecting` — the page heals itself) from a kernel that is actually gone
+  (`disconnected`, confirmed by three straight `/healthz` misses, never one blip). When it is gone,
+  a clearly visible **Reconnect** button appears beside the status; it opens a dialog that explains
+  the one honest truth (a browser page cannot restart its own local server) and hands over the exact
+  terminal command — `cd` into the workspace, then `npx … open .` — with a one-click **copy** button.
+  The page keeps watching, and **reloads itself the moment the kernel is back**: kernels now persist
+  a per-workspace **identity** (port + token, `0o600` in the state dir) and respawn with the same
+  address and the same token, so a hard-refreshed or orphaned tab is valid again the instant anyone
+  restarts the kernel. If the old port was taken meanwhile, the kernel falls back to an ephemeral
+  one and rewrites the identity for next time. The command is **workspace-exact and OS-aware** —
+  `cd` into this workspace then `npx …@latest open .` (`@latest`, so a stale npx cache can never pin
+  an old version), shaped for the kernel's own OS: a drive-letter workspace gets the two-line
+  Windows form that both cmd and PowerShell accept. It **wraps** instead of scrolling, so a long
+  workspace path never hides its own tail. The **stop button's** "kernel stopped" pane now shows the
+  same copy-ready command instead of a generic hint — and it, too, reloads itself the moment a
+  kernel is back.
 - **Math in markdown.** Write LaTeX between `$…$` / `\(…\)` (inline) or `$$…$$` / `\[…\]`
   (display) in any markdown — a `markdown` block, an inline `text`, or a native `.md`/`.mdx` —
   and the reader sees typeset math in the continuous view, the printed PDF, and slides. It

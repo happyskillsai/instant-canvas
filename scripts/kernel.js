@@ -58,7 +58,11 @@ if (!rootArg || !fs.existsSync(rootArg) || !fs.statSync(rootArg).isDirectory()) 
 }
 const ROOT = fs.realpathSync(path.resolve(rootArg))
 const NORM_ROOT = normalizeRoot(ROOT)
-const TOKEN = crypto.randomBytes(32).toString('base64url')
+// A respawned kernel keeps its workspace's identity (port + token) so a browser
+// tab orphaned by the previous kernel's death can find it again and reload with
+// a token that is valid once more — see the reconnect flow in scripts/web/app.js.
+const IDENTITY = registry.readIdentity(ROOT)
+const TOKEN = (IDENTITY && IDENTITY.token) || crypto.randomBytes(32).toString('base64url')
 
 const sessions = new Sessions()
 const wsClients = new Set()
@@ -1408,7 +1412,11 @@ function boot() {
 	})
 	server.on('upgrade', handleUpgrade)
 
-	server.listen(0, '127.0.0.1', () => {
+	// Prefer the workspace's previous port so an orphaned tab can reconnect;
+	// best-effort only — if another process took it, fall back to an ephemeral
+	// one (that tab stays orphaned, and the rewritten identity serves next time).
+	const preferredPort = IDENTITY ? IDENTITY.port : 0
+	server.on('listening', () => {
 		PORT = server.address().port
 		registry.write(ROOT, {
 			root: NORM_ROOT,
@@ -1417,9 +1425,19 @@ function boot() {
 			token: TOKEN,
 			startedAt: new Date().toISOString(),
 		})
+		registry.writeIdentity(ROOT, { port: PORT, token: TOKEN })
 		klog(`kernel v${VERSION} listening on 127.0.0.1:${PORT} for`, ROOT)
 		startWatcher()
 	})
+	server.on('error', (err) => {
+		if (preferredPort && PORT === 0 && err && err.code === 'EADDRINUSE') {
+			klog(`preferred port ${preferredPort} is taken — falling back to an ephemeral one`)
+			server.listen(0, '127.0.0.1')
+			return
+		}
+		throw err
+	})
+	server.listen(preferredPort, '127.0.0.1')
 
 	// Expired-session push + idle shutdown.
 	setInterval(() => {

@@ -28,7 +28,7 @@ The CLI's version handshake only restarts a kernel whose `/healthz` version diff
 
 ## Liveness must be health-ping, never PID
 
-A PID can be recycled, and a live PID says nothing about *which* server owns the port. `readAlive()` requires a 200 from `/healthz` **and** `name: "instantcanvas"` **and** a matching normalized workspace; anything less deletes the registry entry. This is also what makes `kill -9` recovery work — do not "optimize" it to `process.kill(pid, 0)`.
+A PID can be recycled, and a live PID says nothing about *which* server owns the port. `readAlive()` requires a 200 from `/healthz` **and** `name: "instantcanvas"` **and** a matching normalized workspace; anything less deletes the registry entry. This is also what makes `kill -9` recovery work — do not "optimize" it to `process.kill(pid, 0)`. Note the cleanup deletes the registry **entry** only, never the identity file (`<key>.id.json`): that file is what lets the respawned kernel come back on the same port with the same token, so an orphaned browser tab can find it again (see [architecture.md](../architecture.md)).
 
 ## macOS `/tmp` is a symlink
 

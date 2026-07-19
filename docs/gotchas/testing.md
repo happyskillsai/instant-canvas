@@ -156,3 +156,10 @@ Replace it with a **bounded poll** (`until(evaluate, V + '.paused === false', 40
 the file already uses) — which cannot turn a real no-toggle green (a stuck player still times out)
 but absorbs load. When a browser test starts flaking right after you add unrelated load, suspect
 a fixed-time wait before the code under test.
+
+It struck again from the other side when `reconnect.test.js` was added: `palette.test.js`
+budgeted its palette-save subprocess (the ~2 s `npx happyskills skills-config set`) with a fixed
+`sleep(6000)` — generous, until the new file's kernel spawns and extra Chrome pushed the save
+past it, and three palette tests went red with no change to the code they cover. Same fix: poll
+for the save's **observable outcome** (the saved chip appearing) under a 30 s deadline, then a
+short settle. A fixed wait that "has margin" is a countdown to the suite outgrowing it.

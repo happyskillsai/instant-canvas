@@ -39,6 +39,36 @@ function remove(root) {
 	try { fs.unlinkSync(entryFile(root)) } catch { /* already gone */ }
 }
 
+function identityFile(root) {
+	return path.join(stateDir(), workspaceKey(root) + '.id.json')
+}
+
+// A kernel's token is 32 random bytes base64url-encoded: exactly 43 url-safe chars.
+const TOKEN_SHAPE = /^[A-Za-z0-9_-]{43}$/
+
+/**
+ * The persisted kernel identity ({port, token}) for a workspace, or null.
+ * Unlike the registry entry — which liveness cleanup deletes the moment the
+ * kernel dies — the identity file OUTLIVES the process, so a respawned kernel
+ * can come back on the same port with the same token. That is what lets a
+ * browser tab orphaned by a kernel death poll /healthz on the old port and
+ * reload itself with a token that is valid again.
+ */
+function readIdentity(root) {
+	try {
+		const id = JSON.parse(fs.readFileSync(identityFile(root), 'utf8'))
+		if (id && Number.isInteger(id.port) && id.port > 0 && id.port < 65536
+			&& typeof id.token === 'string' && TOKEN_SHAPE.test(id.token))
+			return { port: id.port, token: id.token }
+	} catch { /* absent or unreadable — the kernel mints a fresh identity */ }
+	return null
+}
+
+function writeIdentity(root, { port, token }) {
+	const data = JSON.stringify({ version: ENTRY_VERSION, port, token }, null, 2)
+	writeAtomic(identityFile(root), data, { mode: 0o600 })
+}
+
 /** GET /healthz on 127.0.0.1:<port> with a 500 ms timeout. Resolves to parsed body or null. */
 function pingHealth(port, timeoutMs = 500) {
 	return new Promise((resolve) => {
@@ -132,4 +162,4 @@ async function acquireSpawnLock(root) {
 	}
 }
 
-module.exports = { entryFile, lockFile, logFile, read, write, remove, readAlive, acquireSpawnLock, pingHealth }
+module.exports = { entryFile, lockFile, logFile, identityFile, read, write, remove, readIdentity, writeIdentity, readAlive, acquireSpawnLock, pingHealth }

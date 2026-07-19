@@ -257,6 +257,17 @@ button{font:inherit;cursor:pointer}
 .pulse{width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 0 0 var(--green);
 	animation:pulse 2s infinite}
 .pulse.off{background:var(--red);animation:none}
+/* The footer's Reconnect call-to-action. Hidden until the kernel is CONFIRMED gone
+   (three straight /healthz misses — a blip is not a death); then it must be
+   unmissable: the one accent-filled control in a muted footer. The explicit [hidden]
+   rule is load-bearing — an author display rule outranks the UA's [hidden]
+   (docs/gotchas/frontend.md). */
+.rc-btn{display:inline-flex;align-items:center;flex:0 0 auto;margin-left:auto;padding:3px 10px;border:none;
+	border-radius:999px;background:var(--accent);color:#fff;font-size:11px;font-weight:600;letter-spacing:.02em;
+	cursor:pointer;animation:rc-pop .18s ease-out}
+.rc-btn:hover{filter:brightness(1.08)}
+.rc-btn[hidden]{display:none}
+@keyframes rc-pop{from{transform:scale(.85);opacity:0}to{transform:scale(1);opacity:1}}
 @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(16,185,129,.5)}70%{box-shadow:0 0 0 7px rgba(16,185,129,0)}100%{box-shadow:0 0 0 0 rgba(16,185,129,0)}}
 
 /* main */
@@ -1684,6 +1695,29 @@ button.rr-row:hover{border-color:var(--accent);background:var(--tint)}
 .rr-chev{flex:0 0 auto;color:var(--muted)}
 .rr-chev .lucide{width:16px;height:16px}
 .rr-uplabel{margin-top:2px}
+
+/* The Reconnect dialog (reuses .filter-card): why the page cannot restart its own
+   server, the restart command as a copy-ready code row, then the watching line —
+   the page reloads itself when the kernel answers again, and the dialog promises
+   exactly that and nothing more. */
+.rc-modal .filter-body{padding-bottom:18px}
+.rc-why{margin-top:0}
+.rc-cmd{position:relative;display:flex;align-items:center;min-height:48px;margin:12px 0 0;
+	border:1px solid var(--border-2);border-radius:10px;background:var(--panel-2)}
+/* The command WRAPS instead of scrolling: a long workspace path pushed its tail
+   out of sight behind an overflow-x scroller nobody notices. pre-wrap (not
+   normal) because the Windows form is deliberately two lines; `anywhere` (not
+   break-word) because a long path segment offers no break opportunity. */
+.rc-cmd code{flex:1 1 auto;min-width:0;padding:13px 48px 13px 14px;
+	font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;line-height:1.5;color:var(--text);
+	white-space:pre-wrap;overflow-wrap:anywhere}
+.rc-cmd .rc-copy{top:8px;right:8px}
+.rc-wait{display:flex;align-items:center;gap:9px;margin-top:14px}
+.rc-wait .pulse{flex:0 0 auto}
+/* The stopped-kernel pane: the same command row, centered in the empty state.
+   Left-aligned text inside a centered pane — a command is read, not admired. */
+.stop-note{max-width:520px}
+.rc-cmd.stop-cmd{width:min(640px,calc(100% - 16px));margin:14px auto 0;text-align:left}
 
 /* The path caption (subtree scope): WHERE a tile lives — click it to jump to that folder.
    Over a media thumbnail it is an absolute chip bottom-left (like the duration chip); on a

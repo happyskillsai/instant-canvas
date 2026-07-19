@@ -67,7 +67,7 @@
         "Hot reload",
         "Version handshake"
       ],
-      "line_count": 190,
+      "line_count": 191,
       "links_to": [
         "docs/canvas-schema.md",
         "docs/cli.md",
@@ -248,6 +248,7 @@
         "docs/canvas-schema.md",
         "docs/cli.md",
         "docs/gotchas/frontend.md",
+        "docs/gotchas/runtime.md",
         "docs/security.md"
       ],
       "over_size": false,
@@ -351,9 +352,10 @@
         "A document-level Esc/arrow handler must yield to EVERY open sub-surface",
         "`captureScreenshot` with `captureBeyondViewport` misses a below-the-fold deck sheet — the deck scrolls inside `.main`, not the page",
         "A detached media element keeps playing",
+        "A pane that waits for three misses is OUTRUN by a fast restart",
         "Chrome plays from a 200-only server, so a playback test cannot prove Range works"
       ],
-      "line_count": 317,
+      "line_count": 336,
       "links_to": [
         "docs/architecture.md",
         "docs/security.md"
@@ -398,9 +400,10 @@
         "Never scaffold a skill by hand",
         "The skill loads from a mirror path",
         "Stamping the skill CHANGELOG means RENAMING `## [Unreleased]`, not adding a section under it",
+        "`npx` with a bare spec runs the LOCAL project inside this repo — and pins everyone else to its cache",
         "DO NOT hand-write the skill bundle's CHANGELOG — the publish step owns it"
       ],
-      "line_count": 86,
+      "line_count": 106,
       "links_to": [],
       "over_size": false,
       "parse_error": null,
@@ -448,7 +451,9 @@
         "A route that serves the user's files by extension must refuse a symlink"
       ],
       "line_count": 132,
-      "links_to": [],
+      "links_to": [
+        "docs/architecture.md"
+      ],
       "over_size": false,
       "parse_error": null,
       "path": "docs/gotchas/runtime.md",
@@ -505,7 +510,7 @@
         "A piped `npm test` reports the PIPE's exit code, not the suite's",
         "A timing-fragile browser assertion breaks when the suite gets HEAVIER, not just when the code does"
       ],
-      "line_count": 158,
+      "line_count": 165,
       "links_to": [
         "docs/gotchas/frontend.md"
       ],
@@ -606,7 +611,7 @@
         "Network perimeter",
         "What this does NOT protect against"
       ],
-      "line_count": 66,
+      "line_count": 67,
       "links_to": [
         "docs/architecture.md"
       ],
@@ -655,7 +660,7 @@
         "Security regressions",
         "Browser verification"
       ],
-      "line_count": 115,
+      "line_count": 116,
       "links_to": [
         "docs/gotchas/frontend.md",
         "docs/gotchas/testing.md",

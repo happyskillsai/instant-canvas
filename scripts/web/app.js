@@ -7573,14 +7573,111 @@ document.addEventListener('keydown', (e) => {
 
 // ---------------------------------------------------------------- hot reload (WebSocket)
 
+// The footer pulse is WebSocket health, and the WebSocket can die two very
+// different deaths. A dropped socket against a LIVE kernel heals itself — the
+// backoff reconnect below. A dead KERNEL cannot: the kernel is the server this
+// page came from, and a browser page cannot start a local process, so the only
+// honest move is to say so, hand over the restart command (the Reconnect
+// dialog), and keep watching /healthz — which is tokenless by design, precisely
+// so a page that has lost everything else can still ask the old port whether
+// anyone is home. When a kernel comes back it comes back with the SAME port and
+// token (the workspace identity file the kernel persists), so recovery is one
+// self-inflicted reload away.
+
 let wsBackoff = 500
+let kernelProbing = false
+let kernelProbeTimer = null
+let kernelMisses = 0
+let kernelDead = false // three straight /healthz misses — the kernel process is gone
+let stoppedPane = false // the reader stopped the kernel; the body IS the stopped pane
+
+// The stopped-kernel pane replaces the whole body, so the footer nodes may be
+// gone while these handlers still run — and they MUST still run: the probe is
+// what reloads that pane when the kernel comes back. Hence the guards.
+const setWatch = (txt) => { const el = $('watchState'); if (el) el.textContent = txt }
+const setPulse = (off) => { const el = $('pulse'); if (el) el.classList.toggle('off', off) }
+const setReconnectCta = (shown) => { const el = $('reconnectBtn'); if (el) el.hidden = !shown }
+
+/** One tokenless liveness ping, aborted at 1.5 s so a probe can never pile up. */
+async function kernelAnswers() {
+	const ctl = new AbortController()
+	const t = setTimeout(() => ctl.abort(), 1500)
+	try {
+		const res = await fetch('/healthz', { signal: ctl.signal })
+		const j = await res.json()
+		return !!(j && j.ok === true && j.name === 'instantcanvas')
+	} catch {
+		return false
+	} finally {
+		clearTimeout(t)
+	}
+}
+
+function startKernelProbe() {
+	if (kernelProbing)
+		return
+	kernelProbing = true
+	kernelProbeTimer = setTimeout(probeKernel, 800)
+}
+
+function stopKernelProbe() {
+	kernelProbing = false
+	clearTimeout(kernelProbeTimer)
+	kernelProbeTimer = null
+	kernelMisses = 0
+	kernelDead = false
+}
+
+async function probeKernel() {
+	if (!kernelProbing)
+		return
+	const alive = await kernelAnswers()
+	if (!kernelProbing)
+		return // the WebSocket reconnected while the ping was in flight
+	if (alive) {
+		kernelMisses = 0
+		// The stopped pane is a terminal state: it never waits for three misses,
+		// because ANY kernel answering after a deliberate stop is a restart — and
+		// a quick restart would otherwise reconnect the WebSocket underneath the
+		// pane and leave it up forever over a healthy kernel.
+		if (kernelDead || stoppedPane) {
+			// The kernel is back — but /healthz answers for ANY kernel on this port,
+			// so confirm it is OURS (same token) with a light tokened call before
+			// reloading. A reload, not a resume: a new kernel process may be a new
+			// version with none of the old one's state.
+			const { status } = await api('/api/dir?path=&dirs=1')
+			if (status === 200) {
+				location.reload()
+				return
+			}
+		}
+	} else if (!kernelDead && ++kernelMisses >= 3) {
+		// One failed ping is a blip, not a death — the same tolerance the CLI's
+		// session poll learned (docs/gotchas/runtime.md). Three in a row is real.
+		kernelDead = true
+		setWatch('disconnected')
+		setReconnectCta(true)
+	}
+	kernelProbeTimer = setTimeout(probeKernel, kernelDead ? 2000 : 1000)
+}
+
 function connectWs() {
 	const ws = new WebSocket(`ws://${location.host}/ws?token=${encodeURIComponent(TOKEN)}`)
 	ws.onopen = () => {
+		// Reconnecting into a kernel we had declared dead — or into any kernel
+		// while the stopped pane is up — means a NEW kernel process answered with
+		// the old identity. Reload rather than resume, for the same reason the
+		// probe path does.
+		if (kernelDead || stoppedPane) {
+			location.reload()
+			return
+		}
+		stopKernelProbe()
 		wsBackoff = 500
 		state.wsAlive = true
-		$('pulse').classList.remove('off')
-		$('watchState').textContent = 'watching'
+		setPulse(false)
+		setWatch('watching')
+		setReconnectCta(false)
 	}
 	ws.onmessage = async (ev) => {
 		let msg
@@ -7633,13 +7730,106 @@ function connectWs() {
 	}
 	ws.onclose = () => {
 		state.wsAlive = false
-		$('pulse').classList.add('off')
-		$('watchState').textContent = 'reconnecting'
+		setPulse(true)
+		if (!kernelDead)
+			setWatch('reconnecting')
 		setTimeout(connectWs, wsBackoff)
 		wsBackoff = Math.min(wsBackoff * 2, 10000)
+		startKernelProbe()
 	}
 	ws.onerror = () => ws.close()
 }
+
+/**
+ * The terminal command that restarts this workspace's kernel, shaped for the OS
+ * the kernel runs on. The OS is read off the workspace path itself — a
+ * drive-letter root means Windows — never off navigator: the terminal that
+ * matters is the kernel's machine, and the path is the kernel's own testimony.
+ * Windows gets TWO lines (a plain cd, then npx) because no one-line joiner
+ * works in both of its shells — cmd takes `&&` but not `;`, PowerShell 5 takes
+ * `;` but not `&&` — while a two-line paste runs in either. POSIX keeps the
+ * idiomatic one-liner. The cd is not decoration: the CLI's workspace is the
+ * cwd, so running npx elsewhere would spawn a kernel for the wrong workspace.
+ * @latest is load-bearing twice over: a bare spec pins npx to whatever version
+ * its cache holds (a reader on a stale 0.x would never get a fixed kernel),
+ * and inside a workspace whose package.json IS this package (this repo), npm
+ * short-circuits a bare spec to the local project and dies on its empty
+ * node_modules — @latest forces registry resolution past both.
+ */
+function restartCommand() {
+	const root = state.tree && state.tree.root ? state.tree.root : ''
+	const npx = 'npx -y @happyskillsai/instant-canvas@latest open .'
+	return /^[A-Za-z]:[\\/]/.test(root)
+		? `cd "${root}"\n${npx}`
+		: `cd "${root}" && ${npx}`
+}
+
+/** A copy-ready command row (the .rc-cmd block): the command text beside an
+ * always-visible copy button — never hover-gated. Shared by the Reconnect
+ * dialog and the stopped-kernel pane. */
+function commandRow(cmd) {
+	const row = document.createElement('div'); row.className = 'rc-cmd'
+	const code = document.createElement('code'); code.textContent = cmd
+	const copyBtn = document.createElement('button'); copyBtn.type = 'button'; copyBtn.className = 'code-copy rc-copy'
+	copyBtn.title = 'Copy to clipboard'
+	copyBtn.setAttribute('aria-label', 'Copy command')
+	copyBtn.dataset.copyLabel = 'Copy command'
+	copyBtn.innerHTML = icon('copy')
+	copyBtn.addEventListener('click', async () => {
+		const ok = await copyText(cmd)
+		flashCopied(copyBtn, ok)
+		toast(ok ? 'Command copied — paste it in a terminal' : 'Copy failed — select the command and copy it manually')
+	})
+	row.append(code, copyBtn)
+	return row
+}
+
+/**
+ * The Reconnect dialog. The honest part comes first: this page is SERVED BY the
+ * kernel, so once the kernel is gone there is nothing left to ask for a restart —
+ * only a terminal can bring it back. What the page CAN do is hand over the exact
+ * command, copy-ready, and keep watching: the respawned kernel reuses this
+ * workspace's port and token, so the moment it answers, the page reloads itself.
+ */
+function openReconnectDialog() {
+	const cmd = restartCommand()
+
+	document.body.classList.add('modal-open')
+	const overlay = document.createElement('div'); overlay.className = 'g-modal filter-modal rc-modal'
+	const card = document.createElement('div'); card.className = 'filter-card'
+	const head = document.createElement('div'); head.className = 'filter-head'
+	const h = document.createElement('h2'); h.textContent = 'Kernel disconnected'
+	const xBtn = document.createElement('button'); xBtn.type = 'button'; xBtn.className = 'filter-x'; xBtn.title = 'Close'; xBtn.innerHTML = icon('x')
+	xBtn.addEventListener('click', () => teardown())
+	head.append(h, xBtn)
+
+	const body = document.createElement('div'); body.className = 'filter-body'
+	const why = document.createElement('p'); why.className = 'filter-help rc-why'
+	why.textContent = 'This page is served by a small local server — the kernel — and that kernel has stopped. A browser page cannot start a local process, so it cannot be restarted from here. Run this in a terminal instead:'
+	const cmdRow = commandRow(cmd)
+	const wait = document.createElement('p'); wait.className = 'filter-help rc-wait'
+	const waitPulse = document.createElement('span'); waitPulse.className = 'pulse'
+	const waitTxt = document.createElement('span')
+	waitTxt.textContent = 'Watching for the kernel — this page reloads by itself the moment it is back.'
+	wait.append(waitPulse, waitTxt)
+	body.append(why, cmdRow, wait)
+
+	card.append(head, body)
+	overlay.append(card)
+	document.body.append(overlay)
+	xBtn.focus()
+
+	function onKey(e) { if (e.key === 'Escape') { e.stopPropagation(); teardown() } }
+	function teardown() {
+		document.removeEventListener('keydown', onKey, true)
+		overlay.remove()
+		document.body.classList.remove('modal-open')
+	}
+	overlay.addEventListener('click', (e) => { if (e.target === overlay) teardown() })
+	document.addEventListener('keydown', onKey, true)
+}
+
+$('reconnectBtn').addEventListener('click', openReconnectDialog)
 
 // The last path segment: the search modal labels a canvas by its file name and
 // the workspace by its folder name.
@@ -7853,11 +8043,27 @@ document.addEventListener('keydown', (e) => {
 
 // ---------------------------------------------------------------- stop kernel
 
+// The stopped pane replaces the whole body, which is why every footer touch in
+// the WebSocket/probe handlers is guarded: the probe keeps running here on
+// purpose, so restarting the kernel reloads this pane exactly like it reloads
+// a disconnected tab. The restart command is the same OS-aware, workspace-exact
+// one the Reconnect dialog shows, with the same copy button.
 $('stopBtn').addEventListener('click', async () => {
 	if (!window.confirm('Stop the InstantCanvas kernel for this workspace?'))
 		return
-	await api('/api/shutdown', { method: 'POST', body: '{}' })
-	document.body.innerHTML = '<div class="empty full"><div class="big"></div><b>Kernel stopped</b><div>Run <code>npx -y @happyskillsai/instant-canvas open</code> again to restart it.</div></div>'
+	const cmd = restartCommand() // read state BEFORE the body is replaced
+	// A failed shutdown call means the kernel is ALREADY gone — the pane is
+	// still the right answer, so a network error must not abort the handler.
+	try { await api('/api/shutdown', { method: 'POST', body: '{}' }) } catch { /* already dead */ }
+	const pane = document.createElement('div'); pane.className = 'empty full'
+	const title = document.createElement('b'); title.textContent = 'Kernel stopped'
+	const note = document.createElement('div'); note.className = 'stop-note'
+	note.textContent = 'Run this in a terminal to restart it — the page reloads by itself the moment the kernel is back:'
+	const row = commandRow(cmd)
+	row.classList.add('stop-cmd')
+	pane.append(title, note, row)
+	document.body.replaceChildren(pane)
+	stoppedPane = true
 })
 
 // ---------------------------------------------------------------- boot

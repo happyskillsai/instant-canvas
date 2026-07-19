@@ -300,6 +300,25 @@ src plus `load()` releases the resource so a decoder is not held. `renderCanvas`
 by holding a reference to the `<video>` across an Esc and asserting `paused === true` and no
 `src` attribute — the one place a leaked element is visible after it has left the tree.
 
+## A pane that waits for three misses is OUTRUN by a fast restart
+
+The stopped-kernel pane replaces the body and waits for a kernel to come back, reusing the
+disconnected flow — which declares death only after **three straight `/healthz` misses**,
+because one blip is not a death. The trap: after a *deliberate* stop, a quick restart (stop,
+then `open` seconds later) never accrues three misses. The probe's first pings find the NEW
+kernel already answering, `kernelDead` stays false, the WebSocket quietly reconnects with the
+same identity — and the "kernel stopped" pane sits forever over a perfectly healthy app. It
+was caught only because the browser test respawned the kernel *fast*; a human tester waiting
+politely for the pane to settle would never have seen it.
+
+The fix distinguishes the two states by what they **mean**, not what they show. `disconnected`
+is a *diagnosis*, and a diagnosis needs the three-miss proof. The stopped pane is a *terminal
+state* — the reader killed the kernel on purpose, so ANY kernel answering afterwards is a
+restart — and `stoppedPane` therefore reloads on the first answer, no quorum. The rule: **a
+recovery gate tuned to detect death is the wrong gate for a state that is already certain** —
+certainty needs no quorum, and reusing the cautious gate turns fast recovery into a permanent
+hang. `reconnect.test.js` pins it by restarting the kernel immediately after the stop.
+
 ## Chrome plays from a 200-only server, so a playback test cannot prove Range works
 
 The gallery file route serves media with HTTP Range/206 because browsers seek with a `Range`

@@ -77,6 +77,26 @@ So the sequence is three steps, and the middle one is the one that gets skipped:
 2. **Publish.**
 3. **Restore** an empty `## [Unreleased]` above the released version, for the next cycle.
 
+## `npx` with a bare spec runs the LOCAL project inside this repo — and pins everyone else to its cache
+
+`npx -y @happyskillsai/instant-canvas open .` died with `sh: instant-canvas: command not
+found` — but only when run **from this repo**. `npm exec` first checks whether the requested
+package *is* the current project; this repo's own `package.json` is `@happyskillsai/instant-canvas`,
+so npm skips the registry entirely and looks for the bin in the local `node_modules/.bin` —
+which does not exist, because a zero-dependency project never runs `npm install`. From any
+other folder the identical command works. The failure reads like a broken publish and is
+really a cwd effect, which makes it maddening to reproduce.
+
+The second trap is quieter: a bare spec **reuses whatever version npx cached and never checks
+for updates**, so a reader who ran 0.10.0 once is pinned to 0.10.0 indefinitely — they would
+never receive a fixed kernel (a cache dig on the machine that hit this found coexisting pinned
+installs from 0.3.1 through 0.14.0). Both traps are solved by the same seven characters:
+**`@latest` forces registry resolution**, past the local-project short-circuit and past the
+sticky cache. Every restart command the app hands a human (the Reconnect dialog, the stopped
+pane) says `@latest` for this reason, and `reconnect.test.js` pins the string. Open question
+this bug raises: SKILL.md's agent-facing commands still teach the bare spec — an agent's
+long-lived npx cache pins the CLI version just the same.
+
 ## DO NOT hand-write the skill bundle's CHANGELOG — the publish step owns it
 
 **`.agents/skills/instant-canvas/CHANGELOG.md` is not yours to edit during a feature session.** It is produced and stamped by the HappySkills publish flow, from the release it is cutting. A working session writes the **repo's** `CHANGELOG.md` (the product changelog, at the root) and stops there.
