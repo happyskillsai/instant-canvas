@@ -2,6 +2,42 @@
 
 ## [Unreleased]
 
+## [0.17.0] - 2026-07-19
+
+### Added
+- **`print` and `snapshot` now find Chrome on Windows.** Chrome discovery only probed macOS and
+  Linux install paths, so on a default Windows box these commands reported `CHROME_REQUIRED` even
+  with Chrome installed — `CHROME_PATH` was the only workaround. Discovery now also checks the
+  standard Windows locations under `%ProgramFiles%`, `%ProgramFiles(x86)%`, and `%LOCALAPPDATA%`,
+  and falls back to Chromium-based **Edge**; `CHROME_PATH` still overrides on every platform. This
+  was the last functional break keeping the CLI off Windows — the state directory, workspace
+  identity, path confinement, file watching, and process spawn were already OS-branched.
+
+### Changed
+- **Messaging is shell-aware, not bash-only.** The agent contract (SKILL.md) documented every
+  command as a bash alias (`$IC`) with single-quoted `--set '{…}'` JSON — both of which fail in
+  Windows `cmd.exe`/PowerShell. It now gives the alias for all three shells (with a **working**
+  PowerShell form, since `& $IC` on a spaced string does not word-split) and the `--set` quoting
+  rule (`cmd.exe` needs `"{\"…\"}"`); the CLI's `INVALID_JSON` hint and `--set` usage lost their
+  bash-only quoting. The browser's ⌘K/⌘P labels **relabel to Ctrl+** off macOS (the shortcuts
+  always accepted Ctrl; only the glyph was Mac-only), and monospace font stacks gained
+  **Consolas** so Windows renders code and paths in a real mono face rather than Courier New.
+
+### Fixed
+- **Editing a file no longer churns its line endings on Windows.** Every writer that touches a
+  user's file — the `createdWith` stamp, the theme splice, `themestore`'s re-serialize fallbacks,
+  the `.env` merge, the `json` form destination, and `skills-config.json` (the last being *the*
+  skills-config writer on Windows, since `npx` cannot be spawned there) — hardcoded `\n`, so
+  touching a CRLF file left mixed endings and a churned git diff from the one tool whose promise is
+  not to reformat what it touches. Each now detects and preserves the file's own line ending; an LF
+  file is byte-identical to before, so nothing changes on macOS/Linux. A root `.gitattributes`
+  keeps the repo itself on LF.
+- **A workspace opened at a Windows drive root stayed stable, and writes are steadier.**
+  `normalizeRoot` had stripped `C:\` down to a drive-relative `C:` (a different location); it now
+  preserves the root. The browser-opener spawn gained `windowsHide` (no console flash), and atomic
+  writes retry briefly on the transient `EPERM`/`EBUSY` Windows raises when a scanner momentarily
+  holds a file.
+
 ## [0.16.0] - 2026-07-19
 
 ### Added
