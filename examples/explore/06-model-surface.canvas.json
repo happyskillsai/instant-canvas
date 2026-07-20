@@ -1,0 +1,2283 @@
+{
+  "instantcanvas": 1,
+  "createdWith": "0.20.0",
+  "title": "Bike Sharing — Demand surface",
+  "description": "A fitted response surface and its contour map — the two 3D/scalar-field chart kinds over one model.",
+  "blocks": [
+    {
+      "type": "chart",
+      "kind": "surface",
+      "title": "Fitted demand surface: rides ~ f(temp, humidity)",
+      "description": "A quadratic OLS fit over the two-year daily record. Demand rises steeply with temperature, crests around a mild 25–27 °C, and collapses toward the cold end (clamped at zero — the model would otherwise extrapolate negative).",
+      "data": [
+        {
+          "temp": 2.4,
+          "humidity": 0,
+          "rides": 0
+        },
+        {
+          "temp": 2.4,
+          "humidity": 6.9,
+          "rides": 0
+        },
+        {
+          "temp": 2.4,
+          "humidity": 13.9,
+          "rides": 0
+        },
+        {
+          "temp": 2.4,
+          "humidity": 20.8,
+          "rides": 0
+        },
+        {
+          "temp": 2.4,
+          "humidity": 27.8,
+          "rides": 0
+        },
+        {
+          "temp": 2.4,
+          "humidity": 34.7,
+          "rides": 0
+        },
+        {
+          "temp": 2.4,
+          "humidity": 41.7,
+          "rides": 0
+        },
+        {
+          "temp": 2.4,
+          "humidity": 48.6,
+          "rides": 0
+        },
+        {
+          "temp": 2.4,
+          "humidity": 55.6,
+          "rides": 0
+        },
+        {
+          "temp": 2.4,
+          "humidity": 62.5,
+          "rides": 0
+        },
+        {
+          "temp": 2.4,
+          "humidity": 69.5,
+          "rides": 0
+        },
+        {
+          "temp": 2.4,
+          "humidity": 76.4,
+          "rides": 0
+        },
+        {
+          "temp": 2.4,
+          "humidity": 83.4,
+          "rides": 0
+        },
+        {
+          "temp": 2.4,
+          "humidity": 90.3,
+          "rides": 0
+        },
+        {
+          "temp": 2.4,
+          "humidity": 97.3,
+          "rides": 0
+        },
+        {
+          "temp": 4.8,
+          "humidity": 0,
+          "rides": 0
+        },
+        {
+          "temp": 4.8,
+          "humidity": 6.9,
+          "rides": 0
+        },
+        {
+          "temp": 4.8,
+          "humidity": 13.9,
+          "rides": 0
+        },
+        {
+          "temp": 4.8,
+          "humidity": 20.8,
+          "rides": 0
+        },
+        {
+          "temp": 4.8,
+          "humidity": 27.8,
+          "rides": 0
+        },
+        {
+          "temp": 4.8,
+          "humidity": 34.7,
+          "rides": 34
+        },
+        {
+          "temp": 4.8,
+          "humidity": 41.7,
+          "rides": 265
+        },
+        {
+          "temp": 4.8,
+          "humidity": 48.6,
+          "rides": 360
+        },
+        {
+          "temp": 4.8,
+          "humidity": 55.6,
+          "rides": 318
+        },
+        {
+          "temp": 4.8,
+          "humidity": 62.5,
+          "rides": 140
+        },
+        {
+          "temp": 4.8,
+          "humidity": 69.5,
+          "rides": 0
+        },
+        {
+          "temp": 4.8,
+          "humidity": 76.4,
+          "rides": 0
+        },
+        {
+          "temp": 4.8,
+          "humidity": 83.4,
+          "rides": 0
+        },
+        {
+          "temp": 4.8,
+          "humidity": 90.3,
+          "rides": 0
+        },
+        {
+          "temp": 4.8,
+          "humidity": 97.3,
+          "rides": 0
+        },
+        {
+          "temp": 7.1,
+          "humidity": 0,
+          "rides": 0
+        },
+        {
+          "temp": 7.1,
+          "humidity": 6.9,
+          "rides": 0
+        },
+        {
+          "temp": 7.1,
+          "humidity": 13.9,
+          "rides": 0
+        },
+        {
+          "temp": 7.1,
+          "humidity": 20.8,
+          "rides": 337
+        },
+        {
+          "temp": 7.1,
+          "humidity": 27.8,
+          "rides": 841
+        },
+        {
+          "temp": 7.1,
+          "humidity": 34.7,
+          "rides": 1209
+        },
+        {
+          "temp": 7.1,
+          "humidity": 41.7,
+          "rides": 1441
+        },
+        {
+          "temp": 7.1,
+          "humidity": 48.6,
+          "rides": 1536
+        },
+        {
+          "temp": 7.1,
+          "humidity": 55.6,
+          "rides": 1494
+        },
+        {
+          "temp": 7.1,
+          "humidity": 62.5,
+          "rides": 1316
+        },
+        {
+          "temp": 7.1,
+          "humidity": 69.5,
+          "rides": 1001
+        },
+        {
+          "temp": 7.1,
+          "humidity": 76.4,
+          "rides": 550
+        },
+        {
+          "temp": 7.1,
+          "humidity": 83.4,
+          "rides": 0
+        },
+        {
+          "temp": 7.1,
+          "humidity": 90.3,
+          "rides": 0
+        },
+        {
+          "temp": 7.1,
+          "humidity": 97.3,
+          "rides": 0
+        },
+        {
+          "temp": 9.5,
+          "humidity": 0,
+          "rides": 0
+        },
+        {
+          "temp": 9.5,
+          "humidity": 6.9,
+          "rides": 0
+        },
+        {
+          "temp": 9.5,
+          "humidity": 13.9,
+          "rides": 739
+        },
+        {
+          "temp": 9.5,
+          "humidity": 20.8,
+          "rides": 1380
+        },
+        {
+          "temp": 9.5,
+          "humidity": 27.8,
+          "rides": 1885
+        },
+        {
+          "temp": 9.5,
+          "humidity": 34.7,
+          "rides": 2253
+        },
+        {
+          "temp": 9.5,
+          "humidity": 41.7,
+          "rides": 2485
+        },
+        {
+          "temp": 9.5,
+          "humidity": 48.6,
+          "rides": 2580
+        },
+        {
+          "temp": 9.5,
+          "humidity": 55.6,
+          "rides": 2538
+        },
+        {
+          "temp": 9.5,
+          "humidity": 62.5,
+          "rides": 2360
+        },
+        {
+          "temp": 9.5,
+          "humidity": 69.5,
+          "rides": 2045
+        },
+        {
+          "temp": 9.5,
+          "humidity": 76.4,
+          "rides": 1594
+        },
+        {
+          "temp": 9.5,
+          "humidity": 83.4,
+          "rides": 1007
+        },
+        {
+          "temp": 9.5,
+          "humidity": 90.3,
+          "rides": 283
+        },
+        {
+          "temp": 9.5,
+          "humidity": 97.3,
+          "rides": 0
+        },
+        {
+          "temp": 11.8,
+          "humidity": 0,
+          "rides": 0
+        },
+        {
+          "temp": 11.8,
+          "humidity": 6.9,
+          "rides": 873
+        },
+        {
+          "temp": 11.8,
+          "humidity": 13.9,
+          "rides": 1651
+        },
+        {
+          "temp": 11.8,
+          "humidity": 20.8,
+          "rides": 2292
+        },
+        {
+          "temp": 11.8,
+          "humidity": 27.8,
+          "rides": 2797
+        },
+        {
+          "temp": 11.8,
+          "humidity": 34.7,
+          "rides": 3165
+        },
+        {
+          "temp": 11.8,
+          "humidity": 41.7,
+          "rides": 3397
+        },
+        {
+          "temp": 11.8,
+          "humidity": 48.6,
+          "rides": 3492
+        },
+        {
+          "temp": 11.8,
+          "humidity": 55.6,
+          "rides": 3450
+        },
+        {
+          "temp": 11.8,
+          "humidity": 62.5,
+          "rides": 3272
+        },
+        {
+          "temp": 11.8,
+          "humidity": 69.5,
+          "rides": 2958
+        },
+        {
+          "temp": 11.8,
+          "humidity": 76.4,
+          "rides": 2507
+        },
+        {
+          "temp": 11.8,
+          "humidity": 83.4,
+          "rides": 1919
+        },
+        {
+          "temp": 11.8,
+          "humidity": 90.3,
+          "rides": 1195
+        },
+        {
+          "temp": 11.8,
+          "humidity": 97.3,
+          "rides": 335
+        },
+        {
+          "temp": 14.2,
+          "humidity": 0,
+          "rides": 739
+        },
+        {
+          "temp": 14.2,
+          "humidity": 6.9,
+          "rides": 1653
+        },
+        {
+          "temp": 14.2,
+          "humidity": 13.9,
+          "rides": 2431
+        },
+        {
+          "temp": 14.2,
+          "humidity": 20.8,
+          "rides": 3072
+        },
+        {
+          "temp": 14.2,
+          "humidity": 27.8,
+          "rides": 3577
+        },
+        {
+          "temp": 14.2,
+          "humidity": 34.7,
+          "rides": 3945
+        },
+        {
+          "temp": 14.2,
+          "humidity": 41.7,
+          "rides": 4177
+        },
+        {
+          "temp": 14.2,
+          "humidity": 48.6,
+          "rides": 4272
+        },
+        {
+          "temp": 14.2,
+          "humidity": 55.6,
+          "rides": 4231
+        },
+        {
+          "temp": 14.2,
+          "humidity": 62.5,
+          "rides": 4053
+        },
+        {
+          "temp": 14.2,
+          "humidity": 69.5,
+          "rides": 3739
+        },
+        {
+          "temp": 14.2,
+          "humidity": 76.4,
+          "rides": 3288
+        },
+        {
+          "temp": 14.2,
+          "humidity": 83.4,
+          "rides": 2700
+        },
+        {
+          "temp": 14.2,
+          "humidity": 90.3,
+          "rides": 1976
+        },
+        {
+          "temp": 14.2,
+          "humidity": 97.3,
+          "rides": 1116
+        },
+        {
+          "temp": 16.5,
+          "humidity": 0,
+          "rides": 1387
+        },
+        {
+          "temp": 16.5,
+          "humidity": 6.9,
+          "rides": 2301
+        },
+        {
+          "temp": 16.5,
+          "humidity": 13.9,
+          "rides": 3079
+        },
+        {
+          "temp": 16.5,
+          "humidity": 20.8,
+          "rides": 3721
+        },
+        {
+          "temp": 16.5,
+          "humidity": 27.8,
+          "rides": 4226
+        },
+        {
+          "temp": 16.5,
+          "humidity": 34.7,
+          "rides": 4594
+        },
+        {
+          "temp": 16.5,
+          "humidity": 41.7,
+          "rides": 4826
+        },
+        {
+          "temp": 16.5,
+          "humidity": 48.6,
+          "rides": 4921
+        },
+        {
+          "temp": 16.5,
+          "humidity": 55.6,
+          "rides": 4880
+        },
+        {
+          "temp": 16.5,
+          "humidity": 62.5,
+          "rides": 4702
+        },
+        {
+          "temp": 16.5,
+          "humidity": 69.5,
+          "rides": 4388
+        },
+        {
+          "temp": 16.5,
+          "humidity": 76.4,
+          "rides": 3937
+        },
+        {
+          "temp": 16.5,
+          "humidity": 83.4,
+          "rides": 3350
+        },
+        {
+          "temp": 16.5,
+          "humidity": 90.3,
+          "rides": 2626
+        },
+        {
+          "temp": 16.5,
+          "humidity": 97.3,
+          "rides": 1765
+        },
+        {
+          "temp": 18.9,
+          "humidity": 0,
+          "rides": 1904
+        },
+        {
+          "temp": 18.9,
+          "humidity": 6.9,
+          "rides": 2818
+        },
+        {
+          "temp": 18.9,
+          "humidity": 13.9,
+          "rides": 3596
+        },
+        {
+          "temp": 18.9,
+          "humidity": 20.8,
+          "rides": 4238
+        },
+        {
+          "temp": 18.9,
+          "humidity": 27.8,
+          "rides": 4743
+        },
+        {
+          "temp": 18.9,
+          "humidity": 34.7,
+          "rides": 5111
+        },
+        {
+          "temp": 18.9,
+          "humidity": 41.7,
+          "rides": 5343
+        },
+        {
+          "temp": 18.9,
+          "humidity": 48.6,
+          "rides": 5439
+        },
+        {
+          "temp": 18.9,
+          "humidity": 55.6,
+          "rides": 5397
+        },
+        {
+          "temp": 18.9,
+          "humidity": 62.5,
+          "rides": 5220
+        },
+        {
+          "temp": 18.9,
+          "humidity": 69.5,
+          "rides": 4906
+        },
+        {
+          "temp": 18.9,
+          "humidity": 76.4,
+          "rides": 4455
+        },
+        {
+          "temp": 18.9,
+          "humidity": 83.4,
+          "rides": 3868
+        },
+        {
+          "temp": 18.9,
+          "humidity": 90.3,
+          "rides": 3144
+        },
+        {
+          "temp": 18.9,
+          "humidity": 97.3,
+          "rides": 2283
+        },
+        {
+          "temp": 21.2,
+          "humidity": 0,
+          "rides": 2289
+        },
+        {
+          "temp": 21.2,
+          "humidity": 6.9,
+          "rides": 3203
+        },
+        {
+          "temp": 21.2,
+          "humidity": 13.9,
+          "rides": 3981
+        },
+        {
+          "temp": 21.2,
+          "humidity": 20.8,
+          "rides": 4623
+        },
+        {
+          "temp": 21.2,
+          "humidity": 27.8,
+          "rides": 5128
+        },
+        {
+          "temp": 21.2,
+          "humidity": 34.7,
+          "rides": 5497
+        },
+        {
+          "temp": 21.2,
+          "humidity": 41.7,
+          "rides": 5729
+        },
+        {
+          "temp": 21.2,
+          "humidity": 48.6,
+          "rides": 5824
+        },
+        {
+          "temp": 21.2,
+          "humidity": 55.6,
+          "rides": 5783
+        },
+        {
+          "temp": 21.2,
+          "humidity": 62.5,
+          "rides": 5606
+        },
+        {
+          "temp": 21.2,
+          "humidity": 69.5,
+          "rides": 5291
+        },
+        {
+          "temp": 21.2,
+          "humidity": 76.4,
+          "rides": 4841
+        },
+        {
+          "temp": 21.2,
+          "humidity": 83.4,
+          "rides": 4254
+        },
+        {
+          "temp": 21.2,
+          "humidity": 90.3,
+          "rides": 3530
+        },
+        {
+          "temp": 21.2,
+          "humidity": 97.3,
+          "rides": 2670
+        },
+        {
+          "temp": 23.6,
+          "humidity": 0,
+          "rides": 2542
+        },
+        {
+          "temp": 23.6,
+          "humidity": 6.9,
+          "rides": 3457
+        },
+        {
+          "temp": 23.6,
+          "humidity": 13.9,
+          "rides": 4235
+        },
+        {
+          "temp": 23.6,
+          "humidity": 20.8,
+          "rides": 4877
+        },
+        {
+          "temp": 23.6,
+          "humidity": 27.8,
+          "rides": 5382
+        },
+        {
+          "temp": 23.6,
+          "humidity": 34.7,
+          "rides": 5751
+        },
+        {
+          "temp": 23.6,
+          "humidity": 41.7,
+          "rides": 5983
+        },
+        {
+          "temp": 23.6,
+          "humidity": 48.6,
+          "rides": 6078
+        },
+        {
+          "temp": 23.6,
+          "humidity": 55.6,
+          "rides": 6037
+        },
+        {
+          "temp": 23.6,
+          "humidity": 62.5,
+          "rides": 5860
+        },
+        {
+          "temp": 23.6,
+          "humidity": 69.5,
+          "rides": 5546
+        },
+        {
+          "temp": 23.6,
+          "humidity": 76.4,
+          "rides": 5095
+        },
+        {
+          "temp": 23.6,
+          "humidity": 83.4,
+          "rides": 4508
+        },
+        {
+          "temp": 23.6,
+          "humidity": 90.3,
+          "rides": 3784
+        },
+        {
+          "temp": 23.6,
+          "humidity": 97.3,
+          "rides": 2924
+        },
+        {
+          "temp": 25.9,
+          "humidity": 0,
+          "rides": 2664
+        },
+        {
+          "temp": 25.9,
+          "humidity": 6.9,
+          "rides": 3579
+        },
+        {
+          "temp": 25.9,
+          "humidity": 13.9,
+          "rides": 4357
+        },
+        {
+          "temp": 25.9,
+          "humidity": 20.8,
+          "rides": 4999
+        },
+        {
+          "temp": 25.9,
+          "humidity": 27.8,
+          "rides": 5504
+        },
+        {
+          "temp": 25.9,
+          "humidity": 34.7,
+          "rides": 5873
+        },
+        {
+          "temp": 25.9,
+          "humidity": 41.7,
+          "rides": 6105
+        },
+        {
+          "temp": 25.9,
+          "humidity": 48.6,
+          "rides": 6201
+        },
+        {
+          "temp": 25.9,
+          "humidity": 55.6,
+          "rides": 6160
+        },
+        {
+          "temp": 25.9,
+          "humidity": 62.5,
+          "rides": 5982
+        },
+        {
+          "temp": 25.9,
+          "humidity": 69.5,
+          "rides": 5668
+        },
+        {
+          "temp": 25.9,
+          "humidity": 76.4,
+          "rides": 5218
+        },
+        {
+          "temp": 25.9,
+          "humidity": 83.4,
+          "rides": 4631
+        },
+        {
+          "temp": 25.9,
+          "humidity": 90.3,
+          "rides": 3907
+        },
+        {
+          "temp": 25.9,
+          "humidity": 97.3,
+          "rides": 3047
+        },
+        {
+          "temp": 28.3,
+          "humidity": 0,
+          "rides": 2654
+        },
+        {
+          "temp": 28.3,
+          "humidity": 6.9,
+          "rides": 3569
+        },
+        {
+          "temp": 28.3,
+          "humidity": 13.9,
+          "rides": 4347
+        },
+        {
+          "temp": 28.3,
+          "humidity": 20.8,
+          "rides": 4989
+        },
+        {
+          "temp": 28.3,
+          "humidity": 27.8,
+          "rides": 5494
+        },
+        {
+          "temp": 28.3,
+          "humidity": 34.7,
+          "rides": 5863
+        },
+        {
+          "temp": 28.3,
+          "humidity": 41.7,
+          "rides": 6095
+        },
+        {
+          "temp": 28.3,
+          "humidity": 48.6,
+          "rides": 6191
+        },
+        {
+          "temp": 28.3,
+          "humidity": 55.6,
+          "rides": 6150
+        },
+        {
+          "temp": 28.3,
+          "humidity": 62.5,
+          "rides": 5973
+        },
+        {
+          "temp": 28.3,
+          "humidity": 69.5,
+          "rides": 5659
+        },
+        {
+          "temp": 28.3,
+          "humidity": 76.4,
+          "rides": 5209
+        },
+        {
+          "temp": 28.3,
+          "humidity": 83.4,
+          "rides": 4622
+        },
+        {
+          "temp": 28.3,
+          "humidity": 90.3,
+          "rides": 3898
+        },
+        {
+          "temp": 28.3,
+          "humidity": 97.3,
+          "rides": 3038
+        },
+        {
+          "temp": 30.6,
+          "humidity": 0,
+          "rides": 2512
+        },
+        {
+          "temp": 30.6,
+          "humidity": 6.9,
+          "rides": 3427
+        },
+        {
+          "temp": 30.6,
+          "humidity": 13.9,
+          "rides": 4206
+        },
+        {
+          "temp": 30.6,
+          "humidity": 20.8,
+          "rides": 4848
+        },
+        {
+          "temp": 30.6,
+          "humidity": 27.8,
+          "rides": 5353
+        },
+        {
+          "temp": 30.6,
+          "humidity": 34.7,
+          "rides": 5722
+        },
+        {
+          "temp": 30.6,
+          "humidity": 41.7,
+          "rides": 5954
+        },
+        {
+          "temp": 30.6,
+          "humidity": 48.6,
+          "rides": 6050
+        },
+        {
+          "temp": 30.6,
+          "humidity": 55.6,
+          "rides": 6010
+        },
+        {
+          "temp": 30.6,
+          "humidity": 62.5,
+          "rides": 5832
+        },
+        {
+          "temp": 30.6,
+          "humidity": 69.5,
+          "rides": 5519
+        },
+        {
+          "temp": 30.6,
+          "humidity": 76.4,
+          "rides": 5068
+        },
+        {
+          "temp": 30.6,
+          "humidity": 83.4,
+          "rides": 4481
+        },
+        {
+          "temp": 30.6,
+          "humidity": 90.3,
+          "rides": 3758
+        },
+        {
+          "temp": 30.6,
+          "humidity": 97.3,
+          "rides": 2898
+        },
+        {
+          "temp": 33,
+          "humidity": 0,
+          "rides": 2239
+        },
+        {
+          "temp": 33,
+          "humidity": 6.9,
+          "rides": 3154
+        },
+        {
+          "temp": 33,
+          "humidity": 13.9,
+          "rides": 3933
+        },
+        {
+          "temp": 33,
+          "humidity": 20.8,
+          "rides": 4575
+        },
+        {
+          "temp": 33,
+          "humidity": 27.8,
+          "rides": 5080
+        },
+        {
+          "temp": 33,
+          "humidity": 34.7,
+          "rides": 5449
+        },
+        {
+          "temp": 33,
+          "humidity": 41.7,
+          "rides": 5682
+        },
+        {
+          "temp": 33,
+          "humidity": 48.6,
+          "rides": 5778
+        },
+        {
+          "temp": 33,
+          "humidity": 55.6,
+          "rides": 5737
+        },
+        {
+          "temp": 33,
+          "humidity": 62.5,
+          "rides": 5560
+        },
+        {
+          "temp": 33,
+          "humidity": 69.5,
+          "rides": 5246
+        },
+        {
+          "temp": 33,
+          "humidity": 76.4,
+          "rides": 4796
+        },
+        {
+          "temp": 33,
+          "humidity": 83.4,
+          "rides": 4209
+        },
+        {
+          "temp": 33,
+          "humidity": 90.3,
+          "rides": 3486
+        },
+        {
+          "temp": 33,
+          "humidity": 97.3,
+          "rides": 2626
+        },
+        {
+          "temp": 35.3,
+          "humidity": 0,
+          "rides": 1834
+        },
+        {
+          "temp": 35.3,
+          "humidity": 6.9,
+          "rides": 2749
+        },
+        {
+          "temp": 35.3,
+          "humidity": 13.9,
+          "rides": 3528
+        },
+        {
+          "temp": 35.3,
+          "humidity": 20.8,
+          "rides": 4170
+        },
+        {
+          "temp": 35.3,
+          "humidity": 27.8,
+          "rides": 4676
+        },
+        {
+          "temp": 35.3,
+          "humidity": 34.7,
+          "rides": 5045
+        },
+        {
+          "temp": 35.3,
+          "humidity": 41.7,
+          "rides": 5277
+        },
+        {
+          "temp": 35.3,
+          "humidity": 48.6,
+          "rides": 5373
+        },
+        {
+          "temp": 35.3,
+          "humidity": 55.6,
+          "rides": 5333
+        },
+        {
+          "temp": 35.3,
+          "humidity": 62.5,
+          "rides": 5156
+        },
+        {
+          "temp": 35.3,
+          "humidity": 69.5,
+          "rides": 4842
+        },
+        {
+          "temp": 35.3,
+          "humidity": 76.4,
+          "rides": 4392
+        },
+        {
+          "temp": 35.3,
+          "humidity": 83.4,
+          "rides": 3805
+        },
+        {
+          "temp": 35.3,
+          "humidity": 90.3,
+          "rides": 3082
+        },
+        {
+          "temp": 35.3,
+          "humidity": 97.3,
+          "rides": 2223
+        }
+      ],
+      "encoding": {
+        "x": "temp",
+        "y": "humidity",
+        "z": "rides"
+      }
+    },
+    {
+      "type": "chart",
+      "kind": "contour",
+      "title": "Iso-contours of the same fitted surface",
+      "data": [
+        {
+          "temp": 2.4,
+          "humidity": 0,
+          "rides": 0
+        },
+        {
+          "temp": 2.4,
+          "humidity": 6.9,
+          "rides": 0
+        },
+        {
+          "temp": 2.4,
+          "humidity": 13.9,
+          "rides": 0
+        },
+        {
+          "temp": 2.4,
+          "humidity": 20.8,
+          "rides": 0
+        },
+        {
+          "temp": 2.4,
+          "humidity": 27.8,
+          "rides": 0
+        },
+        {
+          "temp": 2.4,
+          "humidity": 34.7,
+          "rides": 0
+        },
+        {
+          "temp": 2.4,
+          "humidity": 41.7,
+          "rides": 0
+        },
+        {
+          "temp": 2.4,
+          "humidity": 48.6,
+          "rides": 0
+        },
+        {
+          "temp": 2.4,
+          "humidity": 55.6,
+          "rides": 0
+        },
+        {
+          "temp": 2.4,
+          "humidity": 62.5,
+          "rides": 0
+        },
+        {
+          "temp": 2.4,
+          "humidity": 69.5,
+          "rides": 0
+        },
+        {
+          "temp": 2.4,
+          "humidity": 76.4,
+          "rides": 0
+        },
+        {
+          "temp": 2.4,
+          "humidity": 83.4,
+          "rides": 0
+        },
+        {
+          "temp": 2.4,
+          "humidity": 90.3,
+          "rides": 0
+        },
+        {
+          "temp": 2.4,
+          "humidity": 97.3,
+          "rides": 0
+        },
+        {
+          "temp": 4.8,
+          "humidity": 0,
+          "rides": 0
+        },
+        {
+          "temp": 4.8,
+          "humidity": 6.9,
+          "rides": 0
+        },
+        {
+          "temp": 4.8,
+          "humidity": 13.9,
+          "rides": 0
+        },
+        {
+          "temp": 4.8,
+          "humidity": 20.8,
+          "rides": 0
+        },
+        {
+          "temp": 4.8,
+          "humidity": 27.8,
+          "rides": 0
+        },
+        {
+          "temp": 4.8,
+          "humidity": 34.7,
+          "rides": 34
+        },
+        {
+          "temp": 4.8,
+          "humidity": 41.7,
+          "rides": 265
+        },
+        {
+          "temp": 4.8,
+          "humidity": 48.6,
+          "rides": 360
+        },
+        {
+          "temp": 4.8,
+          "humidity": 55.6,
+          "rides": 318
+        },
+        {
+          "temp": 4.8,
+          "humidity": 62.5,
+          "rides": 140
+        },
+        {
+          "temp": 4.8,
+          "humidity": 69.5,
+          "rides": 0
+        },
+        {
+          "temp": 4.8,
+          "humidity": 76.4,
+          "rides": 0
+        },
+        {
+          "temp": 4.8,
+          "humidity": 83.4,
+          "rides": 0
+        },
+        {
+          "temp": 4.8,
+          "humidity": 90.3,
+          "rides": 0
+        },
+        {
+          "temp": 4.8,
+          "humidity": 97.3,
+          "rides": 0
+        },
+        {
+          "temp": 7.1,
+          "humidity": 0,
+          "rides": 0
+        },
+        {
+          "temp": 7.1,
+          "humidity": 6.9,
+          "rides": 0
+        },
+        {
+          "temp": 7.1,
+          "humidity": 13.9,
+          "rides": 0
+        },
+        {
+          "temp": 7.1,
+          "humidity": 20.8,
+          "rides": 337
+        },
+        {
+          "temp": 7.1,
+          "humidity": 27.8,
+          "rides": 841
+        },
+        {
+          "temp": 7.1,
+          "humidity": 34.7,
+          "rides": 1209
+        },
+        {
+          "temp": 7.1,
+          "humidity": 41.7,
+          "rides": 1441
+        },
+        {
+          "temp": 7.1,
+          "humidity": 48.6,
+          "rides": 1536
+        },
+        {
+          "temp": 7.1,
+          "humidity": 55.6,
+          "rides": 1494
+        },
+        {
+          "temp": 7.1,
+          "humidity": 62.5,
+          "rides": 1316
+        },
+        {
+          "temp": 7.1,
+          "humidity": 69.5,
+          "rides": 1001
+        },
+        {
+          "temp": 7.1,
+          "humidity": 76.4,
+          "rides": 550
+        },
+        {
+          "temp": 7.1,
+          "humidity": 83.4,
+          "rides": 0
+        },
+        {
+          "temp": 7.1,
+          "humidity": 90.3,
+          "rides": 0
+        },
+        {
+          "temp": 7.1,
+          "humidity": 97.3,
+          "rides": 0
+        },
+        {
+          "temp": 9.5,
+          "humidity": 0,
+          "rides": 0
+        },
+        {
+          "temp": 9.5,
+          "humidity": 6.9,
+          "rides": 0
+        },
+        {
+          "temp": 9.5,
+          "humidity": 13.9,
+          "rides": 739
+        },
+        {
+          "temp": 9.5,
+          "humidity": 20.8,
+          "rides": 1380
+        },
+        {
+          "temp": 9.5,
+          "humidity": 27.8,
+          "rides": 1885
+        },
+        {
+          "temp": 9.5,
+          "humidity": 34.7,
+          "rides": 2253
+        },
+        {
+          "temp": 9.5,
+          "humidity": 41.7,
+          "rides": 2485
+        },
+        {
+          "temp": 9.5,
+          "humidity": 48.6,
+          "rides": 2580
+        },
+        {
+          "temp": 9.5,
+          "humidity": 55.6,
+          "rides": 2538
+        },
+        {
+          "temp": 9.5,
+          "humidity": 62.5,
+          "rides": 2360
+        },
+        {
+          "temp": 9.5,
+          "humidity": 69.5,
+          "rides": 2045
+        },
+        {
+          "temp": 9.5,
+          "humidity": 76.4,
+          "rides": 1594
+        },
+        {
+          "temp": 9.5,
+          "humidity": 83.4,
+          "rides": 1007
+        },
+        {
+          "temp": 9.5,
+          "humidity": 90.3,
+          "rides": 283
+        },
+        {
+          "temp": 9.5,
+          "humidity": 97.3,
+          "rides": 0
+        },
+        {
+          "temp": 11.8,
+          "humidity": 0,
+          "rides": 0
+        },
+        {
+          "temp": 11.8,
+          "humidity": 6.9,
+          "rides": 873
+        },
+        {
+          "temp": 11.8,
+          "humidity": 13.9,
+          "rides": 1651
+        },
+        {
+          "temp": 11.8,
+          "humidity": 20.8,
+          "rides": 2292
+        },
+        {
+          "temp": 11.8,
+          "humidity": 27.8,
+          "rides": 2797
+        },
+        {
+          "temp": 11.8,
+          "humidity": 34.7,
+          "rides": 3165
+        },
+        {
+          "temp": 11.8,
+          "humidity": 41.7,
+          "rides": 3397
+        },
+        {
+          "temp": 11.8,
+          "humidity": 48.6,
+          "rides": 3492
+        },
+        {
+          "temp": 11.8,
+          "humidity": 55.6,
+          "rides": 3450
+        },
+        {
+          "temp": 11.8,
+          "humidity": 62.5,
+          "rides": 3272
+        },
+        {
+          "temp": 11.8,
+          "humidity": 69.5,
+          "rides": 2958
+        },
+        {
+          "temp": 11.8,
+          "humidity": 76.4,
+          "rides": 2507
+        },
+        {
+          "temp": 11.8,
+          "humidity": 83.4,
+          "rides": 1919
+        },
+        {
+          "temp": 11.8,
+          "humidity": 90.3,
+          "rides": 1195
+        },
+        {
+          "temp": 11.8,
+          "humidity": 97.3,
+          "rides": 335
+        },
+        {
+          "temp": 14.2,
+          "humidity": 0,
+          "rides": 739
+        },
+        {
+          "temp": 14.2,
+          "humidity": 6.9,
+          "rides": 1653
+        },
+        {
+          "temp": 14.2,
+          "humidity": 13.9,
+          "rides": 2431
+        },
+        {
+          "temp": 14.2,
+          "humidity": 20.8,
+          "rides": 3072
+        },
+        {
+          "temp": 14.2,
+          "humidity": 27.8,
+          "rides": 3577
+        },
+        {
+          "temp": 14.2,
+          "humidity": 34.7,
+          "rides": 3945
+        },
+        {
+          "temp": 14.2,
+          "humidity": 41.7,
+          "rides": 4177
+        },
+        {
+          "temp": 14.2,
+          "humidity": 48.6,
+          "rides": 4272
+        },
+        {
+          "temp": 14.2,
+          "humidity": 55.6,
+          "rides": 4231
+        },
+        {
+          "temp": 14.2,
+          "humidity": 62.5,
+          "rides": 4053
+        },
+        {
+          "temp": 14.2,
+          "humidity": 69.5,
+          "rides": 3739
+        },
+        {
+          "temp": 14.2,
+          "humidity": 76.4,
+          "rides": 3288
+        },
+        {
+          "temp": 14.2,
+          "humidity": 83.4,
+          "rides": 2700
+        },
+        {
+          "temp": 14.2,
+          "humidity": 90.3,
+          "rides": 1976
+        },
+        {
+          "temp": 14.2,
+          "humidity": 97.3,
+          "rides": 1116
+        },
+        {
+          "temp": 16.5,
+          "humidity": 0,
+          "rides": 1387
+        },
+        {
+          "temp": 16.5,
+          "humidity": 6.9,
+          "rides": 2301
+        },
+        {
+          "temp": 16.5,
+          "humidity": 13.9,
+          "rides": 3079
+        },
+        {
+          "temp": 16.5,
+          "humidity": 20.8,
+          "rides": 3721
+        },
+        {
+          "temp": 16.5,
+          "humidity": 27.8,
+          "rides": 4226
+        },
+        {
+          "temp": 16.5,
+          "humidity": 34.7,
+          "rides": 4594
+        },
+        {
+          "temp": 16.5,
+          "humidity": 41.7,
+          "rides": 4826
+        },
+        {
+          "temp": 16.5,
+          "humidity": 48.6,
+          "rides": 4921
+        },
+        {
+          "temp": 16.5,
+          "humidity": 55.6,
+          "rides": 4880
+        },
+        {
+          "temp": 16.5,
+          "humidity": 62.5,
+          "rides": 4702
+        },
+        {
+          "temp": 16.5,
+          "humidity": 69.5,
+          "rides": 4388
+        },
+        {
+          "temp": 16.5,
+          "humidity": 76.4,
+          "rides": 3937
+        },
+        {
+          "temp": 16.5,
+          "humidity": 83.4,
+          "rides": 3350
+        },
+        {
+          "temp": 16.5,
+          "humidity": 90.3,
+          "rides": 2626
+        },
+        {
+          "temp": 16.5,
+          "humidity": 97.3,
+          "rides": 1765
+        },
+        {
+          "temp": 18.9,
+          "humidity": 0,
+          "rides": 1904
+        },
+        {
+          "temp": 18.9,
+          "humidity": 6.9,
+          "rides": 2818
+        },
+        {
+          "temp": 18.9,
+          "humidity": 13.9,
+          "rides": 3596
+        },
+        {
+          "temp": 18.9,
+          "humidity": 20.8,
+          "rides": 4238
+        },
+        {
+          "temp": 18.9,
+          "humidity": 27.8,
+          "rides": 4743
+        },
+        {
+          "temp": 18.9,
+          "humidity": 34.7,
+          "rides": 5111
+        },
+        {
+          "temp": 18.9,
+          "humidity": 41.7,
+          "rides": 5343
+        },
+        {
+          "temp": 18.9,
+          "humidity": 48.6,
+          "rides": 5439
+        },
+        {
+          "temp": 18.9,
+          "humidity": 55.6,
+          "rides": 5397
+        },
+        {
+          "temp": 18.9,
+          "humidity": 62.5,
+          "rides": 5220
+        },
+        {
+          "temp": 18.9,
+          "humidity": 69.5,
+          "rides": 4906
+        },
+        {
+          "temp": 18.9,
+          "humidity": 76.4,
+          "rides": 4455
+        },
+        {
+          "temp": 18.9,
+          "humidity": 83.4,
+          "rides": 3868
+        },
+        {
+          "temp": 18.9,
+          "humidity": 90.3,
+          "rides": 3144
+        },
+        {
+          "temp": 18.9,
+          "humidity": 97.3,
+          "rides": 2283
+        },
+        {
+          "temp": 21.2,
+          "humidity": 0,
+          "rides": 2289
+        },
+        {
+          "temp": 21.2,
+          "humidity": 6.9,
+          "rides": 3203
+        },
+        {
+          "temp": 21.2,
+          "humidity": 13.9,
+          "rides": 3981
+        },
+        {
+          "temp": 21.2,
+          "humidity": 20.8,
+          "rides": 4623
+        },
+        {
+          "temp": 21.2,
+          "humidity": 27.8,
+          "rides": 5128
+        },
+        {
+          "temp": 21.2,
+          "humidity": 34.7,
+          "rides": 5497
+        },
+        {
+          "temp": 21.2,
+          "humidity": 41.7,
+          "rides": 5729
+        },
+        {
+          "temp": 21.2,
+          "humidity": 48.6,
+          "rides": 5824
+        },
+        {
+          "temp": 21.2,
+          "humidity": 55.6,
+          "rides": 5783
+        },
+        {
+          "temp": 21.2,
+          "humidity": 62.5,
+          "rides": 5606
+        },
+        {
+          "temp": 21.2,
+          "humidity": 69.5,
+          "rides": 5291
+        },
+        {
+          "temp": 21.2,
+          "humidity": 76.4,
+          "rides": 4841
+        },
+        {
+          "temp": 21.2,
+          "humidity": 83.4,
+          "rides": 4254
+        },
+        {
+          "temp": 21.2,
+          "humidity": 90.3,
+          "rides": 3530
+        },
+        {
+          "temp": 21.2,
+          "humidity": 97.3,
+          "rides": 2670
+        },
+        {
+          "temp": 23.6,
+          "humidity": 0,
+          "rides": 2542
+        },
+        {
+          "temp": 23.6,
+          "humidity": 6.9,
+          "rides": 3457
+        },
+        {
+          "temp": 23.6,
+          "humidity": 13.9,
+          "rides": 4235
+        },
+        {
+          "temp": 23.6,
+          "humidity": 20.8,
+          "rides": 4877
+        },
+        {
+          "temp": 23.6,
+          "humidity": 27.8,
+          "rides": 5382
+        },
+        {
+          "temp": 23.6,
+          "humidity": 34.7,
+          "rides": 5751
+        },
+        {
+          "temp": 23.6,
+          "humidity": 41.7,
+          "rides": 5983
+        },
+        {
+          "temp": 23.6,
+          "humidity": 48.6,
+          "rides": 6078
+        },
+        {
+          "temp": 23.6,
+          "humidity": 55.6,
+          "rides": 6037
+        },
+        {
+          "temp": 23.6,
+          "humidity": 62.5,
+          "rides": 5860
+        },
+        {
+          "temp": 23.6,
+          "humidity": 69.5,
+          "rides": 5546
+        },
+        {
+          "temp": 23.6,
+          "humidity": 76.4,
+          "rides": 5095
+        },
+        {
+          "temp": 23.6,
+          "humidity": 83.4,
+          "rides": 4508
+        },
+        {
+          "temp": 23.6,
+          "humidity": 90.3,
+          "rides": 3784
+        },
+        {
+          "temp": 23.6,
+          "humidity": 97.3,
+          "rides": 2924
+        },
+        {
+          "temp": 25.9,
+          "humidity": 0,
+          "rides": 2664
+        },
+        {
+          "temp": 25.9,
+          "humidity": 6.9,
+          "rides": 3579
+        },
+        {
+          "temp": 25.9,
+          "humidity": 13.9,
+          "rides": 4357
+        },
+        {
+          "temp": 25.9,
+          "humidity": 20.8,
+          "rides": 4999
+        },
+        {
+          "temp": 25.9,
+          "humidity": 27.8,
+          "rides": 5504
+        },
+        {
+          "temp": 25.9,
+          "humidity": 34.7,
+          "rides": 5873
+        },
+        {
+          "temp": 25.9,
+          "humidity": 41.7,
+          "rides": 6105
+        },
+        {
+          "temp": 25.9,
+          "humidity": 48.6,
+          "rides": 6201
+        },
+        {
+          "temp": 25.9,
+          "humidity": 55.6,
+          "rides": 6160
+        },
+        {
+          "temp": 25.9,
+          "humidity": 62.5,
+          "rides": 5982
+        },
+        {
+          "temp": 25.9,
+          "humidity": 69.5,
+          "rides": 5668
+        },
+        {
+          "temp": 25.9,
+          "humidity": 76.4,
+          "rides": 5218
+        },
+        {
+          "temp": 25.9,
+          "humidity": 83.4,
+          "rides": 4631
+        },
+        {
+          "temp": 25.9,
+          "humidity": 90.3,
+          "rides": 3907
+        },
+        {
+          "temp": 25.9,
+          "humidity": 97.3,
+          "rides": 3047
+        },
+        {
+          "temp": 28.3,
+          "humidity": 0,
+          "rides": 2654
+        },
+        {
+          "temp": 28.3,
+          "humidity": 6.9,
+          "rides": 3569
+        },
+        {
+          "temp": 28.3,
+          "humidity": 13.9,
+          "rides": 4347
+        },
+        {
+          "temp": 28.3,
+          "humidity": 20.8,
+          "rides": 4989
+        },
+        {
+          "temp": 28.3,
+          "humidity": 27.8,
+          "rides": 5494
+        },
+        {
+          "temp": 28.3,
+          "humidity": 34.7,
+          "rides": 5863
+        },
+        {
+          "temp": 28.3,
+          "humidity": 41.7,
+          "rides": 6095
+        },
+        {
+          "temp": 28.3,
+          "humidity": 48.6,
+          "rides": 6191
+        },
+        {
+          "temp": 28.3,
+          "humidity": 55.6,
+          "rides": 6150
+        },
+        {
+          "temp": 28.3,
+          "humidity": 62.5,
+          "rides": 5973
+        },
+        {
+          "temp": 28.3,
+          "humidity": 69.5,
+          "rides": 5659
+        },
+        {
+          "temp": 28.3,
+          "humidity": 76.4,
+          "rides": 5209
+        },
+        {
+          "temp": 28.3,
+          "humidity": 83.4,
+          "rides": 4622
+        },
+        {
+          "temp": 28.3,
+          "humidity": 90.3,
+          "rides": 3898
+        },
+        {
+          "temp": 28.3,
+          "humidity": 97.3,
+          "rides": 3038
+        },
+        {
+          "temp": 30.6,
+          "humidity": 0,
+          "rides": 2512
+        },
+        {
+          "temp": 30.6,
+          "humidity": 6.9,
+          "rides": 3427
+        },
+        {
+          "temp": 30.6,
+          "humidity": 13.9,
+          "rides": 4206
+        },
+        {
+          "temp": 30.6,
+          "humidity": 20.8,
+          "rides": 4848
+        },
+        {
+          "temp": 30.6,
+          "humidity": 27.8,
+          "rides": 5353
+        },
+        {
+          "temp": 30.6,
+          "humidity": 34.7,
+          "rides": 5722
+        },
+        {
+          "temp": 30.6,
+          "humidity": 41.7,
+          "rides": 5954
+        },
+        {
+          "temp": 30.6,
+          "humidity": 48.6,
+          "rides": 6050
+        },
+        {
+          "temp": 30.6,
+          "humidity": 55.6,
+          "rides": 6010
+        },
+        {
+          "temp": 30.6,
+          "humidity": 62.5,
+          "rides": 5832
+        },
+        {
+          "temp": 30.6,
+          "humidity": 69.5,
+          "rides": 5519
+        },
+        {
+          "temp": 30.6,
+          "humidity": 76.4,
+          "rides": 5068
+        },
+        {
+          "temp": 30.6,
+          "humidity": 83.4,
+          "rides": 4481
+        },
+        {
+          "temp": 30.6,
+          "humidity": 90.3,
+          "rides": 3758
+        },
+        {
+          "temp": 30.6,
+          "humidity": 97.3,
+          "rides": 2898
+        },
+        {
+          "temp": 33,
+          "humidity": 0,
+          "rides": 2239
+        },
+        {
+          "temp": 33,
+          "humidity": 6.9,
+          "rides": 3154
+        },
+        {
+          "temp": 33,
+          "humidity": 13.9,
+          "rides": 3933
+        },
+        {
+          "temp": 33,
+          "humidity": 20.8,
+          "rides": 4575
+        },
+        {
+          "temp": 33,
+          "humidity": 27.8,
+          "rides": 5080
+        },
+        {
+          "temp": 33,
+          "humidity": 34.7,
+          "rides": 5449
+        },
+        {
+          "temp": 33,
+          "humidity": 41.7,
+          "rides": 5682
+        },
+        {
+          "temp": 33,
+          "humidity": 48.6,
+          "rides": 5778
+        },
+        {
+          "temp": 33,
+          "humidity": 55.6,
+          "rides": 5737
+        },
+        {
+          "temp": 33,
+          "humidity": 62.5,
+          "rides": 5560
+        },
+        {
+          "temp": 33,
+          "humidity": 69.5,
+          "rides": 5246
+        },
+        {
+          "temp": 33,
+          "humidity": 76.4,
+          "rides": 4796
+        },
+        {
+          "temp": 33,
+          "humidity": 83.4,
+          "rides": 4209
+        },
+        {
+          "temp": 33,
+          "humidity": 90.3,
+          "rides": 3486
+        },
+        {
+          "temp": 33,
+          "humidity": 97.3,
+          "rides": 2626
+        },
+        {
+          "temp": 35.3,
+          "humidity": 0,
+          "rides": 1834
+        },
+        {
+          "temp": 35.3,
+          "humidity": 6.9,
+          "rides": 2749
+        },
+        {
+          "temp": 35.3,
+          "humidity": 13.9,
+          "rides": 3528
+        },
+        {
+          "temp": 35.3,
+          "humidity": 20.8,
+          "rides": 4170
+        },
+        {
+          "temp": 35.3,
+          "humidity": 27.8,
+          "rides": 4676
+        },
+        {
+          "temp": 35.3,
+          "humidity": 34.7,
+          "rides": 5045
+        },
+        {
+          "temp": 35.3,
+          "humidity": 41.7,
+          "rides": 5277
+        },
+        {
+          "temp": 35.3,
+          "humidity": 48.6,
+          "rides": 5373
+        },
+        {
+          "temp": 35.3,
+          "humidity": 55.6,
+          "rides": 5333
+        },
+        {
+          "temp": 35.3,
+          "humidity": 62.5,
+          "rides": 5156
+        },
+        {
+          "temp": 35.3,
+          "humidity": 69.5,
+          "rides": 4842
+        },
+        {
+          "temp": 35.3,
+          "humidity": 76.4,
+          "rides": 4392
+        },
+        {
+          "temp": 35.3,
+          "humidity": 83.4,
+          "rides": 3805
+        },
+        {
+          "temp": 35.3,
+          "humidity": 90.3,
+          "rides": 3082
+        },
+        {
+          "temp": 35.3,
+          "humidity": 97.3,
+          "rides": 2223
+        }
+      ],
+      "encoding": {
+        "x": "temp",
+        "y": "humidity",
+        "z": "rides"
+      }
+    }
+  ]
+}

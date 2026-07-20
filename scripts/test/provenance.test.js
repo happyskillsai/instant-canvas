@@ -242,18 +242,28 @@ test('the package version has exactly one source: package.json, read by lib/pkgm
 	}
 })
 
+// Every *.canvas.json anywhere under examples/ (the tree is organized into
+// subfolders: explore/, papers/, deck/, forms/, markdown/, gallery/).
+function walkCanvases(dir) {
+	if (!fs.existsSync(dir)) return []
+	const out = []
+	for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+		const p = path.join(dir, e.name)
+		if (e.isDirectory()) out.push(...walkCanvases(p))
+		else if (e.name.endsWith('.canvas.json')) out.push(p)
+	}
+	return out
+}
+
 test('every example canvas carries a stamp and validates', () => {
-	// The examples/ corpus was cleared to be rebuilt from scratch. Whatever canvases
-	// live there must still be stamped and valid — an absent or empty dir is allowed,
-	// and the gate re-engages automatically once the curated set is dropped back in.
-	const dir = path.join(PKG_ROOT, 'examples')
-	const files = fs.existsSync(dir)
-		? fs.readdirSync(dir).filter((f) => f.endsWith('.canvas.json'))
-		: []
+	// Walk the whole examples/ tree — an absent or empty dir is allowed, and the
+	// gate re-engages automatically as canvases are added to any subfolder.
+	const files = walkCanvases(path.join(PKG_ROOT, 'examples'))
 	for (const f of files) {
-		const raw = fs.readFileSync(path.join(dir, f), 'utf8')
+		const rel = path.relative(PKG_ROOT, f)
+		const raw = fs.readFileSync(f, 'utf8')
 		const r = validate(raw, { root: PKG_ROOT })
-		assert.equal(r.ok, true, `${f} must validate: ${JSON.stringify(r.errors)}`)
-		assert.ok(JSON.parse(raw).createdWith, `${f} must carry a stamp`)
+		assert.equal(r.ok, true, `${rel} must validate: ${JSON.stringify(r.errors)}`)
+		assert.ok(JSON.parse(raw).createdWith, `${rel} must carry a stamp`)
 	}
 })

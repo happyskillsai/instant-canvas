@@ -1,0 +1,77 @@
+{
+  "instantcanvas": 1,
+  "createdWith": "0.20.0",
+  "title": "Project configuration",
+  "description": "One form exercising all 16 field types, fieldset grids (columns + span), the two ui variants (buttons, pills), and validation rules. Submitting writes a JSON file.",
+  "blocks": [
+    {
+      "type": "form",
+      "title": "Deploy a new service",
+      "description": "Fill this in and submit — values are written to examples/forms/out/config.json.",
+      "destination": { "kind": "json", "path": "examples/forms/out/config.json", "mode": "merge" },
+      "submitLabel": "Save configuration",
+      "cancelLabel": "Discard",
+      "fields": [
+        {
+          "type": "fieldset",
+          "legend": "Project",
+          "columns": 2,
+          "fields": [
+            { "name": "project_name", "label": "Project name", "type": "text", "required": true, "placeholder": "bike-share-api", "validation": { "pattern": "^[a-z][a-z0-9-]{2,}$", "patternMessage": "Lowercase letters, digits and dashes; at least 3 characters." } },
+            { "name": "environment", "label": "Environment", "type": "select", "options": ["development", "staging", "production"], "default": "staging", "ui": "buttons" },
+            { "name": "description", "label": "Description", "type": "textarea", "span": 2, "placeholder": "What does this service do?" }
+          ]
+        },
+        {
+          "type": "fieldset",
+          "legend": "Deployment",
+          "columns": 3,
+          "fields": [
+            { "name": "region", "label": "Region", "type": "radio", "options": ["us-east", "us-west", "eu-west"], "default": "us-east", "ui": "buttons" },
+            { "name": "replicas", "label": "Replicas", "type": "number", "default": 3, "validation": { "min": 1, "max": 20, "step": 1 } },
+            { "name": "cpu_limit", "label": "CPU limit (%)", "type": "range", "default": 50, "validation": { "min": 0, "max": 100, "step": 5 } }
+          ]
+        },
+        {
+          "type": "fieldset",
+          "legend": "Schedule",
+          "columns": 2,
+          "fields": [
+            { "name": "launch_date", "label": "Launch date", "type": "date" },
+            { "name": "maintenance_window", "label": "Maintenance window", "type": "datetime" }
+          ]
+        },
+        {
+          "type": "fieldset",
+          "legend": "Contact & integration",
+          "columns": 2,
+          "fields": [
+            { "name": "owner_email", "label": "Owner email", "type": "email", "required": true, "placeholder": "you@example.com" },
+            { "name": "on_call_phone", "label": "On-call phone", "type": "tel", "placeholder": "+1 555 0100" },
+            { "name": "webhook_url", "label": "Deploy webhook (https only)", "type": "url", "span": 2, "validation": { "protocols": ["https"] }, "help": "Called after each deploy. Must be https." }
+          ]
+        },
+        {
+          "type": "fieldset",
+          "legend": "Security",
+          "columns": 2,
+          "fields": [
+            { "name": "admin_token", "label": "Admin token", "type": "secret", "validation": { "minLength": 8 }, "help": "Masked, and never returned to the agent." }
+          ]
+        },
+        {
+          "type": "fieldset",
+          "legend": "Features",
+          "columns": 1,
+          "fields": [
+            { "name": "features", "label": "Enabled features", "type": "checkboxGroup", "options": ["Auth", "Billing", "Analytics", "Email", "Webhooks"], "default": ["Auth"], "ui": "pills" },
+            { "name": "enable_backups", "label": "Nightly backups", "type": "checkbox", "default": true },
+            { "name": "log_level", "label": "Log level", "type": "select", "options": ["debug", "info", "warn", "error"], "default": "info" }
+          ]
+        },
+        { "name": "config_version", "type": "hidden", "default": "2" },
+        { "name": "created_by", "label": "Created by", "type": "readonly", "default": "InstantCanvas" }
+      ]
+    }
+  ]
+}

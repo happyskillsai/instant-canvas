@@ -1,0 +1,6013 @@
+{
+  "instantcanvas": 1,
+  "createdWith": "0.20.0",
+  "title": "Bike Sharing — Distributions",
+  "description": "How ridership is distributed: five-number summaries, full densities, a 2D point cloud, a histogram, and a nested funnel.",
+  "blocks": [
+    {
+      "type": "chart",
+      "kind": "boxplot",
+      "title": "Daily ridership distribution by season",
+      "data": [
+        {
+          "season": "Spring",
+          "min": 431,
+          "q1": 1538,
+          "median": 2209,
+          "q3": 3456,
+          "max": 7836
+        },
+        {
+          "season": "Summer",
+          "min": 795,
+          "q1": 4003,
+          "median": 4942,
+          "q3": 6377,
+          "max": 8362
+        },
+        {
+          "season": "Fall",
+          "min": 1115,
+          "q1": 4587,
+          "median": 5354,
+          "q3": 6929,
+          "max": 8714
+        },
+        {
+          "season": "Winter",
+          "min": 22,
+          "q1": 3616,
+          "median": 4635,
+          "q3": 5625,
+          "max": 8555
+        }
+      ],
+      "encoding": {
+        "x": "season",
+        "min": "min",
+        "q1": "q1",
+        "median": "median",
+        "q3": "q3",
+        "max": "max"
+      }
+    },
+    {
+      "type": "chart",
+      "kind": "violin",
+      "title": "Ridership density by season (raw observations)",
+      "description": "The full per-day distribution — bimodal in spring, tight and high in fall.",
+      "data": [
+        {
+          "season": "Spring",
+          "rides": 985
+        },
+        {
+          "season": "Spring",
+          "rides": 801
+        },
+        {
+          "season": "Spring",
+          "rides": 1349
+        },
+        {
+          "season": "Spring",
+          "rides": 1562
+        },
+        {
+          "season": "Spring",
+          "rides": 1600
+        },
+        {
+          "season": "Spring",
+          "rides": 1606
+        },
+        {
+          "season": "Spring",
+          "rides": 1510
+        },
+        {
+          "season": "Spring",
+          "rides": 959
+        },
+        {
+          "season": "Spring",
+          "rides": 822
+        },
+        {
+          "season": "Spring",
+          "rides": 1321
+        },
+        {
+          "season": "Spring",
+          "rides": 1263
+        },
+        {
+          "season": "Spring",
+          "rides": 1162
+        },
+        {
+          "season": "Spring",
+          "rides": 1406
+        },
+        {
+          "season": "Spring",
+          "rides": 1421
+        },
+        {
+          "season": "Spring",
+          "rides": 1248
+        },
+        {
+          "season": "Spring",
+          "rides": 1204
+        },
+        {
+          "season": "Spring",
+          "rides": 1000
+        },
+        {
+          "season": "Spring",
+          "rides": 683
+        },
+        {
+          "season": "Spring",
+          "rides": 1650
+        },
+        {
+          "season": "Spring",
+          "rides": 1927
+        },
+        {
+          "season": "Spring",
+          "rides": 1543
+        },
+        {
+          "season": "Spring",
+          "rides": 981
+        },
+        {
+          "season": "Spring",
+          "rides": 986
+        },
+        {
+          "season": "Spring",
+          "rides": 1416
+        },
+        {
+          "season": "Spring",
+          "rides": 1985
+        },
+        {
+          "season": "Spring",
+          "rides": 506
+        },
+        {
+          "season": "Spring",
+          "rides": 431
+        },
+        {
+          "season": "Spring",
+          "rides": 1167
+        },
+        {
+          "season": "Spring",
+          "rides": 1098
+        },
+        {
+          "season": "Spring",
+          "rides": 1096
+        },
+        {
+          "season": "Spring",
+          "rides": 1501
+        },
+        {
+          "season": "Spring",
+          "rides": 1360
+        },
+        {
+          "season": "Spring",
+          "rides": 1526
+        },
+        {
+          "season": "Spring",
+          "rides": 1550
+        },
+        {
+          "season": "Spring",
+          "rides": 1708
+        },
+        {
+          "season": "Spring",
+          "rides": 1005
+        },
+        {
+          "season": "Spring",
+          "rides": 1623
+        },
+        {
+          "season": "Spring",
+          "rides": 1712
+        },
+        {
+          "season": "Spring",
+          "rides": 1530
+        },
+        {
+          "season": "Spring",
+          "rides": 1605
+        },
+        {
+          "season": "Spring",
+          "rides": 1538
+        },
+        {
+          "season": "Spring",
+          "rides": 1746
+        },
+        {
+          "season": "Spring",
+          "rides": 1472
+        },
+        {
+          "season": "Spring",
+          "rides": 1589
+        },
+        {
+          "season": "Spring",
+          "rides": 1913
+        },
+        {
+          "season": "Spring",
+          "rides": 1815
+        },
+        {
+          "season": "Spring",
+          "rides": 2115
+        },
+        {
+          "season": "Spring",
+          "rides": 2475
+        },
+        {
+          "season": "Spring",
+          "rides": 2927
+        },
+        {
+          "season": "Spring",
+          "rides": 1635
+        },
+        {
+          "season": "Spring",
+          "rides": 1812
+        },
+        {
+          "season": "Spring",
+          "rides": 1107
+        },
+        {
+          "season": "Spring",
+          "rides": 1450
+        },
+        {
+          "season": "Spring",
+          "rides": 1917
+        },
+        {
+          "season": "Spring",
+          "rides": 1807
+        },
+        {
+          "season": "Spring",
+          "rides": 1461
+        },
+        {
+          "season": "Spring",
+          "rides": 1969
+        },
+        {
+          "season": "Spring",
+          "rides": 2402
+        },
+        {
+          "season": "Spring",
+          "rides": 1446
+        },
+        {
+          "season": "Spring",
+          "rides": 1851
+        },
+        {
+          "season": "Spring",
+          "rides": 2134
+        },
+        {
+          "season": "Spring",
+          "rides": 1685
+        },
+        {
+          "season": "Spring",
+          "rides": 1944
+        },
+        {
+          "season": "Spring",
+          "rides": 2077
+        },
+        {
+          "season": "Spring",
+          "rides": 605
+        },
+        {
+          "season": "Spring",
+          "rides": 1872
+        },
+        {
+          "season": "Spring",
+          "rides": 2133
+        },
+        {
+          "season": "Spring",
+          "rides": 1891
+        },
+        {
+          "season": "Spring",
+          "rides": 623
+        },
+        {
+          "season": "Spring",
+          "rides": 1977
+        },
+        {
+          "season": "Spring",
+          "rides": 2132
+        },
+        {
+          "season": "Spring",
+          "rides": 2417
+        },
+        {
+          "season": "Spring",
+          "rides": 2046
+        },
+        {
+          "season": "Spring",
+          "rides": 2056
+        },
+        {
+          "season": "Spring",
+          "rides": 2192
+        },
+        {
+          "season": "Spring",
+          "rides": 2744
+        },
+        {
+          "season": "Spring",
+          "rides": 3239
+        },
+        {
+          "season": "Spring",
+          "rides": 3117
+        },
+        {
+          "season": "Spring",
+          "rides": 2471
+        },
+        {
+          "season": "Summer",
+          "rides": 2077
+        },
+        {
+          "season": "Summer",
+          "rides": 2703
+        },
+        {
+          "season": "Summer",
+          "rides": 2121
+        },
+        {
+          "season": "Summer",
+          "rides": 1865
+        },
+        {
+          "season": "Summer",
+          "rides": 2210
+        },
+        {
+          "season": "Summer",
+          "rides": 2496
+        },
+        {
+          "season": "Summer",
+          "rides": 1693
+        },
+        {
+          "season": "Summer",
+          "rides": 2028
+        },
+        {
+          "season": "Summer",
+          "rides": 2425
+        },
+        {
+          "season": "Summer",
+          "rides": 1536
+        },
+        {
+          "season": "Summer",
+          "rides": 1685
+        },
+        {
+          "season": "Summer",
+          "rides": 2227
+        },
+        {
+          "season": "Summer",
+          "rides": 2252
+        },
+        {
+          "season": "Summer",
+          "rides": 3249
+        },
+        {
+          "season": "Summer",
+          "rides": 3115
+        },
+        {
+          "season": "Summer",
+          "rides": 1795
+        },
+        {
+          "season": "Summer",
+          "rides": 2808
+        },
+        {
+          "season": "Summer",
+          "rides": 3141
+        },
+        {
+          "season": "Summer",
+          "rides": 1471
+        },
+        {
+          "season": "Summer",
+          "rides": 2455
+        },
+        {
+          "season": "Summer",
+          "rides": 2895
+        },
+        {
+          "season": "Summer",
+          "rides": 3348
+        },
+        {
+          "season": "Summer",
+          "rides": 2034
+        },
+        {
+          "season": "Summer",
+          "rides": 2162
+        },
+        {
+          "season": "Summer",
+          "rides": 3267
+        },
+        {
+          "season": "Summer",
+          "rides": 3126
+        },
+        {
+          "season": "Summer",
+          "rides": 795
+        },
+        {
+          "season": "Summer",
+          "rides": 3744
+        },
+        {
+          "season": "Summer",
+          "rides": 3429
+        },
+        {
+          "season": "Summer",
+          "rides": 3204
+        },
+        {
+          "season": "Summer",
+          "rides": 3944
+        },
+        {
+          "season": "Summer",
+          "rides": 4189
+        },
+        {
+          "season": "Summer",
+          "rides": 1683
+        },
+        {
+          "season": "Summer",
+          "rides": 4036
+        },
+        {
+          "season": "Summer",
+          "rides": 4191
+        },
+        {
+          "season": "Summer",
+          "rides": 4073
+        },
+        {
+          "season": "Summer",
+          "rides": 4400
+        },
+        {
+          "season": "Summer",
+          "rides": 3872
+        },
+        {
+          "season": "Summer",
+          "rides": 4058
+        },
+        {
+          "season": "Summer",
+          "rides": 4595
+        },
+        {
+          "season": "Summer",
+          "rides": 5312
+        },
+        {
+          "season": "Summer",
+          "rides": 3351
+        },
+        {
+          "season": "Summer",
+          "rides": 4401
+        },
+        {
+          "season": "Summer",
+          "rides": 4451
+        },
+        {
+          "season": "Summer",
+          "rides": 2633
+        },
+        {
+          "season": "Summer",
+          "rides": 4433
+        },
+        {
+          "season": "Summer",
+          "rides": 4608
+        },
+        {
+          "season": "Summer",
+          "rides": 4714
+        },
+        {
+          "season": "Summer",
+          "rides": 4333
+        },
+        {
+          "season": "Summer",
+          "rides": 4362
+        },
+        {
+          "season": "Summer",
+          "rides": 4803
+        },
+        {
+          "season": "Summer",
+          "rides": 4182
+        },
+        {
+          "season": "Summer",
+          "rides": 4864
+        },
+        {
+          "season": "Summer",
+          "rides": 4105
+        },
+        {
+          "season": "Summer",
+          "rides": 3409
+        },
+        {
+          "season": "Summer",
+          "rides": 4553
+        },
+        {
+          "season": "Summer",
+          "rides": 3958
+        },
+        {
+          "season": "Summer",
+          "rides": 4123
+        },
+        {
+          "season": "Summer",
+          "rides": 3855
+        },
+        {
+          "season": "Summer",
+          "rides": 4575
+        },
+        {
+          "season": "Summer",
+          "rides": 4917
+        },
+        {
+          "season": "Summer",
+          "rides": 5805
+        },
+        {
+          "season": "Summer",
+          "rides": 4660
+        },
+        {
+          "season": "Summer",
+          "rides": 4274
+        },
+        {
+          "season": "Summer",
+          "rides": 4492
+        },
+        {
+          "season": "Summer",
+          "rides": 4978
+        },
+        {
+          "season": "Summer",
+          "rides": 4677
+        },
+        {
+          "season": "Summer",
+          "rides": 4679
+        },
+        {
+          "season": "Summer",
+          "rides": 4758
+        },
+        {
+          "season": "Summer",
+          "rides": 4788
+        },
+        {
+          "season": "Summer",
+          "rides": 4098
+        },
+        {
+          "season": "Summer",
+          "rides": 3982
+        },
+        {
+          "season": "Summer",
+          "rides": 3974
+        },
+        {
+          "season": "Summer",
+          "rides": 4968
+        },
+        {
+          "season": "Summer",
+          "rides": 5312
+        },
+        {
+          "season": "Summer",
+          "rides": 5342
+        },
+        {
+          "season": "Summer",
+          "rides": 4906
+        },
+        {
+          "season": "Summer",
+          "rides": 4548
+        },
+        {
+          "season": "Summer",
+          "rides": 4833
+        },
+        {
+          "season": "Summer",
+          "rides": 4401
+        },
+        {
+          "season": "Summer",
+          "rides": 3915
+        },
+        {
+          "season": "Summer",
+          "rides": 4586
+        },
+        {
+          "season": "Summer",
+          "rides": 4966
+        },
+        {
+          "season": "Summer",
+          "rides": 4460
+        },
+        {
+          "season": "Summer",
+          "rides": 5020
+        },
+        {
+          "season": "Summer",
+          "rides": 4891
+        },
+        {
+          "season": "Summer",
+          "rides": 5180
+        },
+        {
+          "season": "Summer",
+          "rides": 3767
+        },
+        {
+          "season": "Summer",
+          "rides": 4844
+        },
+        {
+          "season": "Summer",
+          "rides": 5119
+        },
+        {
+          "season": "Summer",
+          "rides": 4744
+        },
+        {
+          "season": "Summer",
+          "rides": 4010
+        },
+        {
+          "season": "Fall",
+          "rides": 4835
+        },
+        {
+          "season": "Fall",
+          "rides": 4507
+        },
+        {
+          "season": "Fall",
+          "rides": 4790
+        },
+        {
+          "season": "Fall",
+          "rides": 4991
+        },
+        {
+          "season": "Fall",
+          "rides": 5202
+        },
+        {
+          "season": "Fall",
+          "rides": 5305
+        },
+        {
+          "season": "Fall",
+          "rides": 4708
+        },
+        {
+          "season": "Fall",
+          "rides": 4648
+        },
+        {
+          "season": "Fall",
+          "rides": 5225
+        },
+        {
+          "season": "Fall",
+          "rides": 5515
+        },
+        {
+          "season": "Fall",
+          "rides": 5362
+        },
+        {
+          "season": "Fall",
+          "rides": 5119
+        },
+        {
+          "season": "Fall",
+          "rides": 4649
+        },
+        {
+          "season": "Fall",
+          "rides": 6043
+        },
+        {
+          "season": "Fall",
+          "rides": 4665
+        },
+        {
+          "season": "Fall",
+          "rides": 4629
+        },
+        {
+          "season": "Fall",
+          "rides": 4592
+        },
+        {
+          "season": "Fall",
+          "rides": 4040
+        },
+        {
+          "season": "Fall",
+          "rides": 5336
+        },
+        {
+          "season": "Fall",
+          "rides": 4881
+        },
+        {
+          "season": "Fall",
+          "rides": 4086
+        },
+        {
+          "season": "Fall",
+          "rides": 4258
+        },
+        {
+          "season": "Fall",
+          "rides": 4342
+        },
+        {
+          "season": "Fall",
+          "rides": 5084
+        },
+        {
+          "season": "Fall",
+          "rides": 5538
+        },
+        {
+          "season": "Fall",
+          "rides": 5923
+        },
+        {
+          "season": "Fall",
+          "rides": 5302
+        },
+        {
+          "season": "Fall",
+          "rides": 4458
+        },
+        {
+          "season": "Fall",
+          "rides": 4541
+        },
+        {
+          "season": "Fall",
+          "rides": 4332
+        },
+        {
+          "season": "Fall",
+          "rides": 3784
+        },
+        {
+          "season": "Fall",
+          "rides": 3387
+        },
+        {
+          "season": "Fall",
+          "rides": 3285
+        },
+        {
+          "season": "Fall",
+          "rides": 3606
+        },
+        {
+          "season": "Fall",
+          "rides": 3840
+        },
+        {
+          "season": "Fall",
+          "rides": 4590
+        },
+        {
+          "season": "Fall",
+          "rides": 4656
+        },
+        {
+          "season": "Fall",
+          "rides": 4390
+        },
+        {
+          "season": "Fall",
+          "rides": 3846
+        },
+        {
+          "season": "Fall",
+          "rides": 4475
+        },
+        {
+          "season": "Fall",
+          "rides": 4302
+        },
+        {
+          "season": "Fall",
+          "rides": 4266
+        },
+        {
+          "season": "Fall",
+          "rides": 4845
+        },
+        {
+          "season": "Fall",
+          "rides": 3574
+        },
+        {
+          "season": "Fall",
+          "rides": 4576
+        },
+        {
+          "season": "Fall",
+          "rides": 4866
+        },
+        {
+          "season": "Fall",
+          "rides": 4294
+        },
+        {
+          "season": "Fall",
+          "rides": 3785
+        },
+        {
+          "season": "Fall",
+          "rides": 4326
+        },
+        {
+          "season": "Fall",
+          "rides": 4602
+        },
+        {
+          "season": "Fall",
+          "rides": 4780
+        },
+        {
+          "season": "Fall",
+          "rides": 4792
+        },
+        {
+          "season": "Fall",
+          "rides": 4905
+        },
+        {
+          "season": "Fall",
+          "rides": 4150
+        },
+        {
+          "season": "Fall",
+          "rides": 3820
+        },
+        {
+          "season": "Fall",
+          "rides": 4338
+        },
+        {
+          "season": "Fall",
+          "rides": 4725
+        },
+        {
+          "season": "Fall",
+          "rides": 4694
+        },
+        {
+          "season": "Fall",
+          "rides": 3805
+        },
+        {
+          "season": "Fall",
+          "rides": 4153
+        },
+        {
+          "season": "Fall",
+          "rides": 5191
+        },
+        {
+          "season": "Fall",
+          "rides": 3873
+        },
+        {
+          "season": "Fall",
+          "rides": 4758
+        },
+        {
+          "season": "Fall",
+          "rides": 5895
+        },
+        {
+          "season": "Fall",
+          "rides": 5130
+        },
+        {
+          "season": "Fall",
+          "rides": 3542
+        },
+        {
+          "season": "Fall",
+          "rides": 4661
+        },
+        {
+          "season": "Fall",
+          "rides": 1115
+        },
+        {
+          "season": "Fall",
+          "rides": 4334
+        },
+        {
+          "season": "Fall",
+          "rides": 4634
+        },
+        {
+          "season": "Fall",
+          "rides": 5204
+        },
+        {
+          "season": "Fall",
+          "rides": 5058
+        },
+        {
+          "season": "Fall",
+          "rides": 5115
+        },
+        {
+          "season": "Fall",
+          "rides": 4727
+        },
+        {
+          "season": "Fall",
+          "rides": 4484
+        },
+        {
+          "season": "Fall",
+          "rides": 4940
+        },
+        {
+          "season": "Fall",
+          "rides": 3351
+        },
+        {
+          "season": "Fall",
+          "rides": 2710
+        },
+        {
+          "season": "Fall",
+          "rides": 1996
+        },
+        {
+          "season": "Fall",
+          "rides": 1842
+        },
+        {
+          "season": "Fall",
+          "rides": 3544
+        },
+        {
+          "season": "Fall",
+          "rides": 5345
+        },
+        {
+          "season": "Fall",
+          "rides": 5046
+        },
+        {
+          "season": "Fall",
+          "rides": 4713
+        },
+        {
+          "season": "Fall",
+          "rides": 4763
+        },
+        {
+          "season": "Fall",
+          "rides": 4785
+        },
+        {
+          "season": "Fall",
+          "rides": 3659
+        },
+        {
+          "season": "Fall",
+          "rides": 4760
+        },
+        {
+          "season": "Fall",
+          "rides": 4511
+        },
+        {
+          "season": "Fall",
+          "rides": 4274
+        },
+        {
+          "season": "Fall",
+          "rides": 4539
+        },
+        {
+          "season": "Fall",
+          "rides": 3641
+        },
+        {
+          "season": "Fall",
+          "rides": 4352
+        },
+        {
+          "season": "Fall",
+          "rides": 4795
+        },
+        {
+          "season": "Winter",
+          "rides": 2395
+        },
+        {
+          "season": "Winter",
+          "rides": 5423
+        },
+        {
+          "season": "Winter",
+          "rides": 5010
+        },
+        {
+          "season": "Winter",
+          "rides": 4630
+        },
+        {
+          "season": "Winter",
+          "rides": 4120
+        },
+        {
+          "season": "Winter",
+          "rides": 3907
+        },
+        {
+          "season": "Winter",
+          "rides": 4839
+        },
+        {
+          "season": "Winter",
+          "rides": 5202
+        },
+        {
+          "season": "Winter",
+          "rides": 2429
+        },
+        {
+          "season": "Winter",
+          "rides": 2918
+        },
+        {
+          "season": "Winter",
+          "rides": 3570
+        },
+        {
+          "season": "Winter",
+          "rides": 4456
+        },
+        {
+          "season": "Winter",
+          "rides": 4826
+        },
+        {
+          "season": "Winter",
+          "rides": 4765
+        },
+        {
+          "season": "Winter",
+          "rides": 4985
+        },
+        {
+          "season": "Winter",
+          "rides": 5409
+        },
+        {
+          "season": "Winter",
+          "rides": 5511
+        },
+        {
+          "season": "Winter",
+          "rides": 5117
+        },
+        {
+          "season": "Winter",
+          "rides": 4563
+        },
+        {
+          "season": "Winter",
+          "rides": 2416
+        },
+        {
+          "season": "Winter",
+          "rides": 2913
+        },
+        {
+          "season": "Winter",
+          "rides": 3644
+        },
+        {
+          "season": "Winter",
+          "rides": 5217
+        },
+        {
+          "season": "Winter",
+          "rides": 5041
+        },
+        {
+          "season": "Winter",
+          "rides": 4570
+        },
+        {
+          "season": "Winter",
+          "rides": 4748
+        },
+        {
+          "season": "Winter",
+          "rides": 2424
+        },
+        {
+          "season": "Winter",
+          "rides": 4195
+        },
+        {
+          "season": "Winter",
+          "rides": 4304
+        },
+        {
+          "season": "Winter",
+          "rides": 4308
+        },
+        {
+          "season": "Winter",
+          "rides": 4381
+        },
+        {
+          "season": "Winter",
+          "rides": 4187
+        },
+        {
+          "season": "Winter",
+          "rides": 4687
+        },
+        {
+          "season": "Winter",
+          "rides": 3894
+        },
+        {
+          "season": "Winter",
+          "rides": 2659
+        },
+        {
+          "season": "Winter",
+          "rides": 3747
+        },
+        {
+          "season": "Winter",
+          "rides": 627
+        },
+        {
+          "season": "Winter",
+          "rides": 3331
+        },
+        {
+          "season": "Winter",
+          "rides": 3669
+        },
+        {
+          "season": "Winter",
+          "rides": 4068
+        },
+        {
+          "season": "Winter",
+          "rides": 4186
+        },
+        {
+          "season": "Winter",
+          "rides": 3974
+        },
+        {
+          "season": "Winter",
+          "rides": 4046
+        },
+        {
+          "season": "Winter",
+          "rides": 3926
+        },
+        {
+          "season": "Winter",
+          "rides": 3649
+        },
+        {
+          "season": "Winter",
+          "rides": 4035
+        },
+        {
+          "season": "Winter",
+          "rides": 4205
+        },
+        {
+          "season": "Winter",
+          "rides": 4109
+        },
+        {
+          "season": "Winter",
+          "rides": 2933
+        },
+        {
+          "season": "Winter",
+          "rides": 3368
+        },
+        {
+          "season": "Winter",
+          "rides": 4067
+        },
+        {
+          "season": "Winter",
+          "rides": 3717
+        },
+        {
+          "season": "Winter",
+          "rides": 4486
+        },
+        {
+          "season": "Winter",
+          "rides": 4195
+        },
+        {
+          "season": "Winter",
+          "rides": 1817
+        },
+        {
+          "season": "Winter",
+          "rides": 3053
+        },
+        {
+          "season": "Winter",
+          "rides": 3392
+        },
+        {
+          "season": "Winter",
+          "rides": 3663
+        },
+        {
+          "season": "Winter",
+          "rides": 3520
+        },
+        {
+          "season": "Winter",
+          "rides": 2765
+        },
+        {
+          "season": "Winter",
+          "rides": 1607
+        },
+        {
+          "season": "Winter",
+          "rides": 2566
+        },
+        {
+          "season": "Winter",
+          "rides": 1495
+        },
+        {
+          "season": "Winter",
+          "rides": 2792
+        },
+        {
+          "season": "Winter",
+          "rides": 3068
+        },
+        {
+          "season": "Winter",
+          "rides": 3071
+        },
+        {
+          "season": "Winter",
+          "rides": 3867
+        },
+        {
+          "season": "Winter",
+          "rides": 2914
+        },
+        {
+          "season": "Winter",
+          "rides": 3613
+        },
+        {
+          "season": "Winter",
+          "rides": 3727
+        },
+        {
+          "season": "Winter",
+          "rides": 3940
+        },
+        {
+          "season": "Winter",
+          "rides": 3614
+        },
+        {
+          "season": "Winter",
+          "rides": 3485
+        },
+        {
+          "season": "Winter",
+          "rides": 3811
+        },
+        {
+          "season": "Winter",
+          "rides": 2594
+        },
+        {
+          "season": "Winter",
+          "rides": 705
+        },
+        {
+          "season": "Winter",
+          "rides": 3322
+        },
+        {
+          "season": "Winter",
+          "rides": 3620
+        },
+        {
+          "season": "Winter",
+          "rides": 3190
+        },
+        {
+          "season": "Winter",
+          "rides": 2743
+        },
+        {
+          "season": "Winter",
+          "rides": 3310
+        },
+        {
+          "season": "Winter",
+          "rides": 3523
+        },
+        {
+          "season": "Winter",
+          "rides": 3740
+        },
+        {
+          "season": "Winter",
+          "rides": 3709
+        },
+        {
+          "season": "Winter",
+          "rides": 3577
+        },
+        {
+          "season": "Winter",
+          "rides": 2739
+        },
+        {
+          "season": "Winter",
+          "rides": 2431
+        },
+        {
+          "season": "Winter",
+          "rides": 3403
+        },
+        {
+          "season": "Winter",
+          "rides": 3750
+        },
+        {
+          "season": "Spring",
+          "rides": 2660
+        },
+        {
+          "season": "Spring",
+          "rides": 3068
+        },
+        {
+          "season": "Spring",
+          "rides": 2209
+        },
+        {
+          "season": "Spring",
+          "rides": 1011
+        },
+        {
+          "season": "Spring",
+          "rides": 754
+        },
+        {
+          "season": "Spring",
+          "rides": 1317
+        },
+        {
+          "season": "Spring",
+          "rides": 1162
+        },
+        {
+          "season": "Spring",
+          "rides": 2302
+        },
+        {
+          "season": "Spring",
+          "rides": 2423
+        },
+        {
+          "season": "Spring",
+          "rides": 2999
+        },
+        {
+          "season": "Spring",
+          "rides": 2485
+        },
+        {
+          "season": "Spring",
+          "rides": 2294
+        },
+        {
+          "season": "Spring",
+          "rides": 1951
+        },
+        {
+          "season": "Spring",
+          "rides": 2236
+        },
+        {
+          "season": "Spring",
+          "rides": 2368
+        },
+        {
+          "season": "Spring",
+          "rides": 3272
+        },
+        {
+          "season": "Spring",
+          "rides": 4098
+        },
+        {
+          "season": "Spring",
+          "rides": 4521
+        },
+        {
+          "season": "Spring",
+          "rides": 3425
+        },
+        {
+          "season": "Spring",
+          "rides": 2376
+        },
+        {
+          "season": "Spring",
+          "rides": 3598
+        },
+        {
+          "season": "Spring",
+          "rides": 2177
+        },
+        {
+          "season": "Spring",
+          "rides": 4097
+        },
+        {
+          "season": "Spring",
+          "rides": 3214
+        },
+        {
+          "season": "Spring",
+          "rides": 2493
+        },
+        {
+          "season": "Spring",
+          "rides": 2311
+        },
+        {
+          "season": "Spring",
+          "rides": 2298
+        },
+        {
+          "season": "Spring",
+          "rides": 2935
+        },
+        {
+          "season": "Spring",
+          "rides": 3376
+        },
+        {
+          "season": "Spring",
+          "rides": 3292
+        },
+        {
+          "season": "Spring",
+          "rides": 3163
+        },
+        {
+          "season": "Spring",
+          "rides": 1301
+        },
+        {
+          "season": "Spring",
+          "rides": 1977
+        },
+        {
+          "season": "Spring",
+          "rides": 2432
+        },
+        {
+          "season": "Spring",
+          "rides": 4339
+        },
+        {
+          "season": "Spring",
+          "rides": 4270
+        },
+        {
+          "season": "Spring",
+          "rides": 4075
+        },
+        {
+          "season": "Spring",
+          "rides": 3456
+        },
+        {
+          "season": "Spring",
+          "rides": 4023
+        },
+        {
+          "season": "Spring",
+          "rides": 3243
+        },
+        {
+          "season": "Spring",
+          "rides": 3624
+        },
+        {
+          "season": "Spring",
+          "rides": 4509
+        },
+        {
+          "season": "Spring",
+          "rides": 4579
+        },
+        {
+          "season": "Spring",
+          "rides": 3761
+        },
+        {
+          "season": "Spring",
+          "rides": 4151
+        },
+        {
+          "season": "Spring",
+          "rides": 2832
+        },
+        {
+          "season": "Spring",
+          "rides": 2947
+        },
+        {
+          "season": "Spring",
+          "rides": 3784
+        },
+        {
+          "season": "Spring",
+          "rides": 4375
+        },
+        {
+          "season": "Spring",
+          "rides": 2802
+        },
+        {
+          "season": "Spring",
+          "rides": 3830
+        },
+        {
+          "season": "Spring",
+          "rides": 3831
+        },
+        {
+          "season": "Spring",
+          "rides": 2169
+        },
+        {
+          "season": "Spring",
+          "rides": 1529
+        },
+        {
+          "season": "Spring",
+          "rides": 3422
+        },
+        {
+          "season": "Spring",
+          "rides": 3922
+        },
+        {
+          "season": "Spring",
+          "rides": 4169
+        },
+        {
+          "season": "Spring",
+          "rides": 3005
+        },
+        {
+          "season": "Spring",
+          "rides": 4154
+        },
+        {
+          "season": "Spring",
+          "rides": 4318
+        },
+        {
+          "season": "Spring",
+          "rides": 2689
+        },
+        {
+          "season": "Spring",
+          "rides": 3129
+        },
+        {
+          "season": "Spring",
+          "rides": 3777
+        },
+        {
+          "season": "Spring",
+          "rides": 4773
+        },
+        {
+          "season": "Spring",
+          "rides": 5062
+        },
+        {
+          "season": "Spring",
+          "rides": 3487
+        },
+        {
+          "season": "Spring",
+          "rides": 2732
+        },
+        {
+          "season": "Spring",
+          "rides": 3389
+        },
+        {
+          "season": "Spring",
+          "rides": 4322
+        },
+        {
+          "season": "Spring",
+          "rides": 4363
+        },
+        {
+          "season": "Spring",
+          "rides": 1834
+        },
+        {
+          "season": "Spring",
+          "rides": 4990
+        },
+        {
+          "season": "Spring",
+          "rides": 3194
+        },
+        {
+          "season": "Spring",
+          "rides": 4066
+        },
+        {
+          "season": "Spring",
+          "rides": 3423
+        },
+        {
+          "season": "Spring",
+          "rides": 3333
+        },
+        {
+          "season": "Spring",
+          "rides": 3956
+        },
+        {
+          "season": "Spring",
+          "rides": 4916
+        },
+        {
+          "season": "Spring",
+          "rides": 5382
+        },
+        {
+          "season": "Spring",
+          "rides": 4569
+        },
+        {
+          "season": "Spring",
+          "rides": 4118
+        },
+        {
+          "season": "Spring",
+          "rides": 4911
+        },
+        {
+          "season": "Spring",
+          "rides": 5298
+        },
+        {
+          "season": "Spring",
+          "rides": 5847
+        },
+        {
+          "season": "Spring",
+          "rides": 6312
+        },
+        {
+          "season": "Spring",
+          "rides": 6192
+        },
+        {
+          "season": "Spring",
+          "rides": 4378
+        },
+        {
+          "season": "Spring",
+          "rides": 7836
+        },
+        {
+          "season": "Spring",
+          "rides": 5892
+        },
+        {
+          "season": "Spring",
+          "rides": 6153
+        },
+        {
+          "season": "Spring",
+          "rides": 6093
+        },
+        {
+          "season": "Summer",
+          "rides": 6230
+        },
+        {
+          "season": "Summer",
+          "rides": 6871
+        },
+        {
+          "season": "Summer",
+          "rides": 8362
+        },
+        {
+          "season": "Summer",
+          "rides": 3372
+        },
+        {
+          "season": "Summer",
+          "rides": 4996
+        },
+        {
+          "season": "Summer",
+          "rides": 5558
+        },
+        {
+          "season": "Summer",
+          "rides": 5102
+        },
+        {
+          "season": "Summer",
+          "rides": 5698
+        },
+        {
+          "season": "Summer",
+          "rides": 6133
+        },
+        {
+          "season": "Summer",
+          "rides": 5459
+        },
+        {
+          "season": "Summer",
+          "rides": 6235
+        },
+        {
+          "season": "Summer",
+          "rides": 6041
+        },
+        {
+          "season": "Summer",
+          "rides": 5936
+        },
+        {
+          "season": "Summer",
+          "rides": 6772
+        },
+        {
+          "season": "Summer",
+          "rides": 6436
+        },
+        {
+          "season": "Summer",
+          "rides": 6457
+        },
+        {
+          "season": "Summer",
+          "rides": 6460
+        },
+        {
+          "season": "Summer",
+          "rides": 6857
+        },
+        {
+          "season": "Summer",
+          "rides": 5169
+        },
+        {
+          "season": "Summer",
+          "rides": 5585
+        },
+        {
+          "season": "Summer",
+          "rides": 5918
+        },
+        {
+          "season": "Summer",
+          "rides": 4862
+        },
+        {
+          "season": "Summer",
+          "rides": 5409
+        },
+        {
+          "season": "Summer",
+          "rides": 6398
+        },
+        {
+          "season": "Summer",
+          "rides": 7460
+        },
+        {
+          "season": "Summer",
+          "rides": 7132
+        },
+        {
+          "season": "Summer",
+          "rides": 6370
+        },
+        {
+          "season": "Summer",
+          "rides": 6691
+        },
+        {
+          "season": "Summer",
+          "rides": 4367
+        },
+        {
+          "season": "Summer",
+          "rides": 6565
+        },
+        {
+          "season": "Summer",
+          "rides": 7290
+        },
+        {
+          "season": "Summer",
+          "rides": 6624
+        },
+        {
+          "season": "Summer",
+          "rides": 1027
+        },
+        {
+          "season": "Summer",
+          "rides": 3214
+        },
+        {
+          "season": "Summer",
+          "rides": 5633
+        },
+        {
+          "season": "Summer",
+          "rides": 6196
+        },
+        {
+          "season": "Summer",
+          "rides": 5026
+        },
+        {
+          "season": "Summer",
+          "rides": 6233
+        },
+        {
+          "season": "Summer",
+          "rides": 4220
+        },
+        {
+          "season": "Summer",
+          "rides": 6304
+        },
+        {
+          "season": "Summer",
+          "rides": 5572
+        },
+        {
+          "season": "Summer",
+          "rides": 5740
+        },
+        {
+          "season": "Summer",
+          "rides": 6169
+        },
+        {
+          "season": "Summer",
+          "rides": 6421
+        },
+        {
+          "season": "Summer",
+          "rides": 6296
+        },
+        {
+          "season": "Summer",
+          "rides": 6883
+        },
+        {
+          "season": "Summer",
+          "rides": 6359
+        },
+        {
+          "season": "Summer",
+          "rides": 6273
+        },
+        {
+          "season": "Summer",
+          "rides": 5728
+        },
+        {
+          "season": "Summer",
+          "rides": 4717
+        },
+        {
+          "season": "Summer",
+          "rides": 6572
+        },
+        {
+          "season": "Summer",
+          "rides": 7030
+        },
+        {
+          "season": "Summer",
+          "rides": 7429
+        },
+        {
+          "season": "Summer",
+          "rides": 6118
+        },
+        {
+          "season": "Summer",
+          "rides": 2843
+        },
+        {
+          "season": "Summer",
+          "rides": 5115
+        },
+        {
+          "season": "Summer",
+          "rides": 7424
+        },
+        {
+          "season": "Summer",
+          "rides": 7384
+        },
+        {
+          "season": "Summer",
+          "rides": 7639
+        },
+        {
+          "season": "Summer",
+          "rides": 8294
+        },
+        {
+          "season": "Summer",
+          "rides": 7129
+        },
+        {
+          "season": "Summer",
+          "rides": 4359
+        },
+        {
+          "season": "Summer",
+          "rides": 6073
+        },
+        {
+          "season": "Summer",
+          "rides": 5260
+        },
+        {
+          "season": "Summer",
+          "rides": 6770
+        },
+        {
+          "season": "Summer",
+          "rides": 6734
+        },
+        {
+          "season": "Summer",
+          "rides": 6536
+        },
+        {
+          "season": "Summer",
+          "rides": 6591
+        },
+        {
+          "season": "Summer",
+          "rides": 6043
+        },
+        {
+          "season": "Summer",
+          "rides": 5743
+        },
+        {
+          "season": "Summer",
+          "rides": 6855
+        },
+        {
+          "season": "Summer",
+          "rides": 7338
+        },
+        {
+          "season": "Summer",
+          "rides": 4127
+        },
+        {
+          "season": "Summer",
+          "rides": 8120
+        },
+        {
+          "season": "Summer",
+          "rides": 7641
+        },
+        {
+          "season": "Summer",
+          "rides": 6998
+        },
+        {
+          "season": "Summer",
+          "rides": 7001
+        },
+        {
+          "season": "Summer",
+          "rides": 7055
+        },
+        {
+          "season": "Summer",
+          "rides": 7494
+        },
+        {
+          "season": "Summer",
+          "rides": 7736
+        },
+        {
+          "season": "Summer",
+          "rides": 7498
+        },
+        {
+          "season": "Summer",
+          "rides": 6598
+        },
+        {
+          "season": "Summer",
+          "rides": 6664
+        },
+        {
+          "season": "Summer",
+          "rides": 4972
+        },
+        {
+          "season": "Summer",
+          "rides": 7421
+        },
+        {
+          "season": "Summer",
+          "rides": 7363
+        },
+        {
+          "season": "Summer",
+          "rides": 7665
+        },
+        {
+          "season": "Summer",
+          "rides": 7702
+        },
+        {
+          "season": "Summer",
+          "rides": 6978
+        },
+        {
+          "season": "Summer",
+          "rides": 5099
+        },
+        {
+          "season": "Summer",
+          "rides": 6825
+        },
+        {
+          "season": "Summer",
+          "rides": 6211
+        },
+        {
+          "season": "Fall",
+          "rides": 5905
+        },
+        {
+          "season": "Fall",
+          "rides": 5823
+        },
+        {
+          "season": "Fall",
+          "rides": 7458
+        },
+        {
+          "season": "Fall",
+          "rides": 6891
+        },
+        {
+          "season": "Fall",
+          "rides": 6779
+        },
+        {
+          "season": "Fall",
+          "rides": 7442
+        },
+        {
+          "season": "Fall",
+          "rides": 7335
+        },
+        {
+          "season": "Fall",
+          "rides": 6879
+        },
+        {
+          "season": "Fall",
+          "rides": 5463
+        },
+        {
+          "season": "Fall",
+          "rides": 5687
+        },
+        {
+          "season": "Fall",
+          "rides": 5531
+        },
+        {
+          "season": "Fall",
+          "rides": 6227
+        },
+        {
+          "season": "Fall",
+          "rides": 6660
+        },
+        {
+          "season": "Fall",
+          "rides": 7403
+        },
+        {
+          "season": "Fall",
+          "rides": 6241
+        },
+        {
+          "season": "Fall",
+          "rides": 6207
+        },
+        {
+          "season": "Fall",
+          "rides": 4840
+        },
+        {
+          "season": "Fall",
+          "rides": 4672
+        },
+        {
+          "season": "Fall",
+          "rides": 6569
+        },
+        {
+          "season": "Fall",
+          "rides": 6290
+        },
+        {
+          "season": "Fall",
+          "rides": 7264
+        },
+        {
+          "season": "Fall",
+          "rides": 7446
+        },
+        {
+          "season": "Fall",
+          "rides": 7499
+        },
+        {
+          "season": "Fall",
+          "rides": 6969
+        },
+        {
+          "season": "Fall",
+          "rides": 6031
+        },
+        {
+          "season": "Fall",
+          "rides": 6830
+        },
+        {
+          "season": "Fall",
+          "rides": 6786
+        },
+        {
+          "season": "Fall",
+          "rides": 5713
+        },
+        {
+          "season": "Fall",
+          "rides": 6591
+        },
+        {
+          "season": "Fall",
+          "rides": 5870
+        },
+        {
+          "season": "Fall",
+          "rides": 4459
+        },
+        {
+          "season": "Fall",
+          "rides": 7410
+        },
+        {
+          "season": "Fall",
+          "rides": 6966
+        },
+        {
+          "season": "Fall",
+          "rides": 7592
+        },
+        {
+          "season": "Fall",
+          "rides": 8173
+        },
+        {
+          "season": "Fall",
+          "rides": 6861
+        },
+        {
+          "season": "Fall",
+          "rides": 6904
+        },
+        {
+          "season": "Fall",
+          "rides": 6685
+        },
+        {
+          "season": "Fall",
+          "rides": 6597
+        },
+        {
+          "season": "Fall",
+          "rides": 7105
+        },
+        {
+          "season": "Fall",
+          "rides": 7216
+        },
+        {
+          "season": "Fall",
+          "rides": 7580
+        },
+        {
+          "season": "Fall",
+          "rides": 7261
+        },
+        {
+          "season": "Fall",
+          "rides": 7175
+        },
+        {
+          "season": "Fall",
+          "rides": 6824
+        },
+        {
+          "season": "Fall",
+          "rides": 5464
+        },
+        {
+          "season": "Fall",
+          "rides": 7013
+        },
+        {
+          "season": "Fall",
+          "rides": 7273
+        },
+        {
+          "season": "Fall",
+          "rides": 7534
+        },
+        {
+          "season": "Fall",
+          "rides": 7286
+        },
+        {
+          "season": "Fall",
+          "rides": 5786
+        },
+        {
+          "season": "Fall",
+          "rides": 6299
+        },
+        {
+          "season": "Fall",
+          "rides": 6544
+        },
+        {
+          "season": "Fall",
+          "rides": 6883
+        },
+        {
+          "season": "Fall",
+          "rides": 6784
+        },
+        {
+          "season": "Fall",
+          "rides": 7347
+        },
+        {
+          "season": "Fall",
+          "rides": 7605
+        },
+        {
+          "season": "Fall",
+          "rides": 7148
+        },
+        {
+          "season": "Fall",
+          "rides": 7865
+        },
+        {
+          "season": "Fall",
+          "rides": 4549
+        },
+        {
+          "season": "Fall",
+          "rides": 6530
+        },
+        {
+          "season": "Fall",
+          "rides": 7006
+        },
+        {
+          "season": "Fall",
+          "rides": 7375
+        },
+        {
+          "season": "Fall",
+          "rides": 7765
+        },
+        {
+          "season": "Fall",
+          "rides": 7582
+        },
+        {
+          "season": "Fall",
+          "rides": 6053
+        },
+        {
+          "season": "Fall",
+          "rides": 5255
+        },
+        {
+          "season": "Fall",
+          "rides": 6917
+        },
+        {
+          "season": "Fall",
+          "rides": 7040
+        },
+        {
+          "season": "Fall",
+          "rides": 7697
+        },
+        {
+          "season": "Fall",
+          "rides": 7713
+        },
+        {
+          "season": "Fall",
+          "rides": 7350
+        },
+        {
+          "season": "Fall",
+          "rides": 6140
+        },
+        {
+          "season": "Fall",
+          "rides": 5810
+        },
+        {
+          "season": "Fall",
+          "rides": 6034
+        },
+        {
+          "season": "Fall",
+          "rides": 6864
+        },
+        {
+          "season": "Fall",
+          "rides": 7112
+        },
+        {
+          "season": "Fall",
+          "rides": 6203
+        },
+        {
+          "season": "Fall",
+          "rides": 7504
+        },
+        {
+          "season": "Fall",
+          "rides": 5976
+        },
+        {
+          "season": "Fall",
+          "rides": 8227
+        },
+        {
+          "season": "Fall",
+          "rides": 7525
+        },
+        {
+          "season": "Fall",
+          "rides": 7767
+        },
+        {
+          "season": "Fall",
+          "rides": 7870
+        },
+        {
+          "season": "Fall",
+          "rides": 7804
+        },
+        {
+          "season": "Fall",
+          "rides": 8009
+        },
+        {
+          "season": "Fall",
+          "rides": 8714
+        },
+        {
+          "season": "Fall",
+          "rides": 7333
+        },
+        {
+          "season": "Fall",
+          "rides": 6869
+        },
+        {
+          "season": "Fall",
+          "rides": 4073
+        },
+        {
+          "season": "Fall",
+          "rides": 7591
+        },
+        {
+          "season": "Fall",
+          "rides": 7720
+        },
+        {
+          "season": "Fall",
+          "rides": 8167
+        },
+        {
+          "season": "Fall",
+          "rides": 8395
+        },
+        {
+          "season": "Winter",
+          "rides": 7907
+        },
+        {
+          "season": "Winter",
+          "rides": 7436
+        },
+        {
+          "season": "Winter",
+          "rides": 7538
+        },
+        {
+          "season": "Winter",
+          "rides": 7733
+        },
+        {
+          "season": "Winter",
+          "rides": 7393
+        },
+        {
+          "season": "Winter",
+          "rides": 7415
+        },
+        {
+          "season": "Winter",
+          "rides": 8555
+        },
+        {
+          "season": "Winter",
+          "rides": 6889
+        },
+        {
+          "season": "Winter",
+          "rides": 6778
+        },
+        {
+          "season": "Winter",
+          "rides": 4639
+        },
+        {
+          "season": "Winter",
+          "rides": 7572
+        },
+        {
+          "season": "Winter",
+          "rides": 7328
+        },
+        {
+          "season": "Winter",
+          "rides": 8156
+        },
+        {
+          "season": "Winter",
+          "rides": 7965
+        },
+        {
+          "season": "Winter",
+          "rides": 3510
+        },
+        {
+          "season": "Winter",
+          "rides": 5478
+        },
+        {
+          "season": "Winter",
+          "rides": 6392
+        },
+        {
+          "season": "Winter",
+          "rides": 7691
+        },
+        {
+          "season": "Winter",
+          "rides": 7570
+        },
+        {
+          "season": "Winter",
+          "rides": 7282
+        },
+        {
+          "season": "Winter",
+          "rides": 7109
+        },
+        {
+          "season": "Winter",
+          "rides": 6639
+        },
+        {
+          "season": "Winter",
+          "rides": 5875
+        },
+        {
+          "season": "Winter",
+          "rides": 7534
+        },
+        {
+          "season": "Winter",
+          "rides": 7461
+        },
+        {
+          "season": "Winter",
+          "rides": 7509
+        },
+        {
+          "season": "Winter",
+          "rides": 5424
+        },
+        {
+          "season": "Winter",
+          "rides": 8090
+        },
+        {
+          "season": "Winter",
+          "rides": 6824
+        },
+        {
+          "season": "Winter",
+          "rides": 7058
+        },
+        {
+          "season": "Winter",
+          "rides": 7466
+        },
+        {
+          "season": "Winter",
+          "rides": 7693
+        },
+        {
+          "season": "Winter",
+          "rides": 7359
+        },
+        {
+          "season": "Winter",
+          "rides": 7444
+        },
+        {
+          "season": "Winter",
+          "rides": 7852
+        },
+        {
+          "season": "Winter",
+          "rides": 4459
+        },
+        {
+          "season": "Winter",
+          "rides": 22
+        },
+        {
+          "season": "Winter",
+          "rides": 1096
+        },
+        {
+          "season": "Winter",
+          "rides": 5566
+        },
+        {
+          "season": "Winter",
+          "rides": 5986
+        },
+        {
+          "season": "Winter",
+          "rides": 5847
+        },
+        {
+          "season": "Winter",
+          "rides": 5138
+        },
+        {
+          "season": "Winter",
+          "rides": 5107
+        },
+        {
+          "season": "Winter",
+          "rides": 5259
+        },
+        {
+          "season": "Winter",
+          "rides": 5686
+        },
+        {
+          "season": "Winter",
+          "rides": 5035
+        },
+        {
+          "season": "Winter",
+          "rides": 5315
+        },
+        {
+          "season": "Winter",
+          "rides": 5992
+        },
+        {
+          "season": "Winter",
+          "rides": 6536
+        },
+        {
+          "season": "Winter",
+          "rides": 6852
+        },
+        {
+          "season": "Winter",
+          "rides": 6269
+        },
+        {
+          "season": "Winter",
+          "rides": 4094
+        },
+        {
+          "season": "Winter",
+          "rides": 5495
+        },
+        {
+          "season": "Winter",
+          "rides": 5445
+        },
+        {
+          "season": "Winter",
+          "rides": 5698
+        },
+        {
+          "season": "Winter",
+          "rides": 5629
+        },
+        {
+          "season": "Winter",
+          "rides": 4669
+        },
+        {
+          "season": "Winter",
+          "rides": 5499
+        },
+        {
+          "season": "Winter",
+          "rides": 5634
+        },
+        {
+          "season": "Winter",
+          "rides": 5146
+        },
+        {
+          "season": "Winter",
+          "rides": 2425
+        },
+        {
+          "season": "Winter",
+          "rides": 3910
+        },
+        {
+          "season": "Winter",
+          "rides": 2277
+        },
+        {
+          "season": "Winter",
+          "rides": 2424
+        },
+        {
+          "season": "Winter",
+          "rides": 5087
+        },
+        {
+          "season": "Winter",
+          "rides": 3959
+        },
+        {
+          "season": "Winter",
+          "rides": 5260
+        },
+        {
+          "season": "Winter",
+          "rides": 5323
+        },
+        {
+          "season": "Winter",
+          "rides": 5668
+        },
+        {
+          "season": "Winter",
+          "rides": 5191
+        },
+        {
+          "season": "Winter",
+          "rides": 4649
+        },
+        {
+          "season": "Winter",
+          "rides": 6234
+        },
+        {
+          "season": "Winter",
+          "rides": 6606
+        },
+        {
+          "season": "Winter",
+          "rides": 5729
+        },
+        {
+          "season": "Winter",
+          "rides": 5375
+        },
+        {
+          "season": "Winter",
+          "rides": 5008
+        },
+        {
+          "season": "Winter",
+          "rides": 5582
+        },
+        {
+          "season": "Winter",
+          "rides": 3228
+        },
+        {
+          "season": "Winter",
+          "rides": 5170
+        },
+        {
+          "season": "Winter",
+          "rides": 5501
+        },
+        {
+          "season": "Winter",
+          "rides": 5319
+        },
+        {
+          "season": "Winter",
+          "rides": 5532
+        },
+        {
+          "season": "Winter",
+          "rides": 5611
+        },
+        {
+          "season": "Winter",
+          "rides": 5047
+        },
+        {
+          "season": "Winter",
+          "rides": 3786
+        },
+        {
+          "season": "Winter",
+          "rides": 4585
+        },
+        {
+          "season": "Winter",
+          "rides": 5557
+        },
+        {
+          "season": "Winter",
+          "rides": 5267
+        },
+        {
+          "season": "Winter",
+          "rides": 4128
+        },
+        {
+          "season": "Spring",
+          "rides": 3623
+        },
+        {
+          "season": "Spring",
+          "rides": 1749
+        },
+        {
+          "season": "Spring",
+          "rides": 1787
+        },
+        {
+          "season": "Spring",
+          "rides": 920
+        },
+        {
+          "season": "Spring",
+          "rides": 1013
+        },
+        {
+          "season": "Spring",
+          "rides": 441
+        },
+        {
+          "season": "Spring",
+          "rides": 2114
+        },
+        {
+          "season": "Spring",
+          "rides": 3095
+        },
+        {
+          "season": "Spring",
+          "rides": 1341
+        },
+        {
+          "season": "Spring",
+          "rides": 1796
+        },
+        {
+          "season": "Spring",
+          "rides": 2729
+        }
+      ],
+      "encoding": {
+        "x": "season",
+        "y": "rides"
+      }
+    },
+    {
+      "type": "chart",
+      "kind": "density",
+      "title": "Temperature vs ridership (2D density)",
+      "data": [
+        {
+          "temp": 14.1,
+          "rides": 985
+        },
+        {
+          "temp": 14.9,
+          "rides": 801
+        },
+        {
+          "temp": 8.1,
+          "rides": 1349
+        },
+        {
+          "temp": 8.2,
+          "rides": 1562
+        },
+        {
+          "temp": 9.3,
+          "rides": 1600
+        },
+        {
+          "temp": 8.4,
+          "rides": 1606
+        },
+        {
+          "temp": 8.1,
+          "rides": 1510
+        },
+        {
+          "temp": 6.8,
+          "rides": 959
+        },
+        {
+          "temp": 5.7,
+          "rides": 822
+        },
+        {
+          "temp": 6.2,
+          "rides": 1321
+        },
+        {
+          "temp": 6.9,
+          "rides": 1263
+        },
+        {
+          "temp": 7.1,
+          "rides": 1162
+        },
+        {
+          "temp": 6.8,
+          "rides": 1406
+        },
+        {
+          "temp": 6.6,
+          "rides": 1421
+        },
+        {
+          "temp": 9.6,
+          "rides": 1248
+        },
+        {
+          "temp": 9.5,
+          "rides": 1204
+        },
+        {
+          "temp": 7.2,
+          "rides": 1000
+        },
+        {
+          "temp": 8.9,
+          "rides": 683
+        },
+        {
+          "temp": 12,
+          "rides": 1650
+        },
+        {
+          "temp": 10.7,
+          "rides": 1927
+        },
+        {
+          "temp": 7.3,
+          "rides": 1543
+        },
+        {
+          "temp": 2.4,
+          "rides": 981
+        },
+        {
+          "temp": 4,
+          "rides": 986
+        },
+        {
+          "temp": 4,
+          "rides": 1416
+        },
+        {
+          "temp": 9.2,
+          "rides": 1985
+        },
+        {
+          "temp": 8.9,
+          "rides": 506
+        },
+        {
+          "temp": 8,
+          "rides": 431
+        },
+        {
+          "temp": 8.3,
+          "rides": 1167
+        },
+        {
+          "temp": 8.1,
+          "rides": 1098
+        },
+        {
+          "temp": 8.9,
+          "rides": 1096
+        },
+        {
+          "temp": 7.4,
+          "rides": 1501
+        },
+        {
+          "temp": 7.9,
+          "rides": 1360
+        },
+        {
+          "temp": 10.7,
+          "rides": 1526
+        },
+        {
+          "temp": 7.7,
+          "rides": 1550
+        },
+        {
+          "temp": 8.7,
+          "rides": 1708
+        },
+        {
+          "temp": 9.6,
+          "rides": 1005
+        },
+        {
+          "temp": 11.7,
+          "rides": 1623
+        },
+        {
+          "temp": 11.1,
+          "rides": 1712
+        },
+        {
+          "temp": 9.1,
+          "rides": 1530
+        },
+        {
+          "temp": 5.5,
+          "rides": 1605
+        },
+        {
+          "temp": 5.9,
+          "rides": 1538
+        },
+        {
+          "temp": 7.8,
+          "rides": 1746
+        },
+        {
+          "temp": 9.1,
+          "rides": 1472
+        },
+        {
+          "temp": 13,
+          "rides": 1589
+        },
+        {
+          "temp": 17,
+          "rides": 1913
+        },
+        {
+          "temp": 10.9,
+          "rides": 1815
+        },
+        {
+          "temp": 13,
+          "rides": 2115
+        },
+        {
+          "temp": 17.9,
+          "rides": 2475
+        },
+        {
+          "temp": 21.4,
+          "rides": 2927
+        },
+        {
+          "temp": 16.4,
+          "rides": 1635
+        },
+        {
+          "temp": 11.7,
+          "rides": 1812
+        },
+        {
+          "temp": 12.4,
+          "rides": 1107
+        },
+        {
+          "temp": 7.5,
+          "rides": 1450
+        },
+        {
+          "temp": 9.1,
+          "rides": 1917
+        },
+        {
+          "temp": 12.1,
+          "rides": 1807
+        },
+        {
+          "temp": 14.9,
+          "rides": 1461
+        },
+        {
+          "temp": 11.6,
+          "rides": 1969
+        },
+        {
+          "temp": 14.1,
+          "rides": 2402
+        },
+        {
+          "temp": 16.7,
+          "rides": 1446
+        },
+        {
+          "temp": 10.9,
+          "rides": 1851
+        },
+        {
+          "temp": 13.7,
+          "rides": 2134
+        },
+        {
+          "temp": 8.1,
+          "rides": 1685
+        },
+        {
+          "temp": 10.7,
+          "rides": 1944
+        },
+        {
+          "temp": 15.8,
+          "rides": 2077
+        },
+        {
+          "temp": 15.4,
+          "rides": 605
+        },
+        {
+          "temp": 10.7,
+          "rides": 1872
+        },
+        {
+          "temp": 12,
+          "rides": 2133
+        },
+        {
+          "temp": 12.1,
+          "rides": 1891
+        },
+        {
+          "temp": 16,
+          "rides": 623
+        },
+        {
+          "temp": 13,
+          "rides": 1977
+        },
+        {
+          "temp": 13.5,
+          "rides": 2132
+        },
+        {
+          "temp": 15.8,
+          "rides": 2417
+        },
+        {
+          "temp": 13.3,
+          "rides": 2046
+        },
+        {
+          "temp": 13,
+          "rides": 2056
+        },
+        {
+          "temp": 15,
+          "rides": 2192
+        },
+        {
+          "temp": 17,
+          "rides": 2744
+        },
+        {
+          "temp": 22.1,
+          "rides": 3239
+        },
+        {
+          "temp": 19.4,
+          "rides": 3117
+        },
+        {
+          "temp": 13.6,
+          "rides": 2471
+        },
+        {
+          "temp": 17.6,
+          "rides": 2077
+        },
+        {
+          "temp": 18.1,
+          "rides": 2703
+        },
+        {
+          "temp": 14.2,
+          "rides": 2121
+        },
+        {
+          "temp": 11.7,
+          "rides": 1865
+        },
+        {
+          "temp": 10.8,
+          "rides": 2210
+        },
+        {
+          "temp": 10.9,
+          "rides": 2496
+        },
+        {
+          "temp": 10.4,
+          "rides": 1693
+        },
+        {
+          "temp": 10.8,
+          "rides": 2028
+        },
+        {
+          "temp": 12.4,
+          "rides": 2425
+        },
+        {
+          "temp": 12.3,
+          "rides": 1536
+        },
+        {
+          "temp": 11,
+          "rides": 1685
+        },
+        {
+          "temp": 12.3,
+          "rides": 2227
+        },
+        {
+          "temp": 12.9,
+          "rides": 2252
+        },
+        {
+          "temp": 15.5,
+          "rides": 3249
+        },
+        {
+          "temp": 23.5,
+          "rides": 3115
+        },
+        {
+          "temp": 17,
+          "rides": 1795
+        },
+        {
+          "temp": 16,
+          "rides": 2808
+        },
+        {
+          "temp": 17.9,
+          "rides": 3141
+        },
+        {
+          "temp": 13.8,
+          "rides": 1471
+        },
+        {
+          "temp": 14,
+          "rides": 2455
+        },
+        {
+          "temp": 17.5,
+          "rides": 2895
+        },
+        {
+          "temp": 24.4,
+          "rides": 3348
+        },
+        {
+          "temp": 20.6,
+          "rides": 2034
+        },
+        {
+          "temp": 16.9,
+          "rides": 2162
+        },
+        {
+          "temp": 19.2,
+          "rides": 3267
+        },
+        {
+          "temp": 18.3,
+          "rides": 3126
+        },
+        {
+          "temp": 17.7,
+          "rides": 795
+        },
+        {
+          "temp": 18.7,
+          "rides": 3744
+        },
+        {
+          "temp": 21,
+          "rides": 3429
+        },
+        {
+          "temp": 20.7,
+          "rides": 3204
+        },
+        {
+          "temp": 24.4,
+          "rides": 3944
+        },
+        {
+          "temp": 18.8,
+          "rides": 4189
+        },
+        {
+          "temp": 13.8,
+          "rides": 1683
+        },
+        {
+          "temp": 18.9,
+          "rides": 4036
+        },
+        {
+          "temp": 23.8,
+          "rides": 4191
+        },
+        {
+          "temp": 24.9,
+          "rides": 4073
+        },
+        {
+          "temp": 25.9,
+          "rides": 4400
+        },
+        {
+          "temp": 25.4,
+          "rides": 3872
+        },
+        {
+          "temp": 25.3,
+          "rides": 4058
+        },
+        {
+          "temp": 20.9,
+          "rides": 4595
+        },
+        {
+          "temp": 19.4,
+          "rides": 5312
+        },
+        {
+          "temp": 18.5,
+          "rides": 3351
+        },
+        {
+          "temp": 22.5,
+          "rides": 4401
+        },
+        {
+          "temp": 25.3,
+          "rides": 4451
+        },
+        {
+          "temp": 17,
+          "rides": 2633
+        },
+        {
+          "temp": 18.8,
+          "rides": 4433
+        },
+        {
+          "temp": 19.6,
+          "rides": 4608
+        },
+        {
+          "temp": 21.3,
+          "rides": 4714
+        },
+        {
+          "temp": 21.7,
+          "rides": 4333
+        },
+        {
+          "temp": 21.8,
+          "rides": 4362
+        },
+        {
+          "temp": 21.8,
+          "rides": 4803
+        },
+        {
+          "temp": 22.2,
+          "rides": 4182
+        },
+        {
+          "temp": 21.9,
+          "rides": 4864
+        },
+        {
+          "temp": 21,
+          "rides": 4105
+        },
+        {
+          "temp": 21.4,
+          "rides": 3409
+        },
+        {
+          "temp": 23.1,
+          "rides": 4553
+        },
+        {
+          "temp": 23.7,
+          "rides": 3958
+        },
+        {
+          "temp": 23,
+          "rides": 4123
+        },
+        {
+          "temp": 22.6,
+          "rides": 3855
+        },
+        {
+          "temp": 21.8,
+          "rides": 4575
+        },
+        {
+          "temp": 22,
+          "rides": 4917
+        },
+        {
+          "temp": 24.7,
+          "rides": 5805
+        },
+        {
+          "temp": 24.8,
+          "rides": 4660
+        },
+        {
+          "temp": 25.9,
+          "rides": 4274
+        },
+        {
+          "temp": 27.1,
+          "rides": 4492
+        },
+        {
+          "temp": 27.1,
+          "rides": 4978
+        },
+        {
+          "temp": 29,
+          "rides": 4677
+        },
+        {
+          "temp": 27.9,
+          "rides": 4679
+        },
+        {
+          "temp": 26.9,
+          "rides": 4758
+        },
+        {
+          "temp": 27.4,
+          "rides": 4788
+        },
+        {
+          "temp": 30.1,
+          "rides": 4098
+        },
+        {
+          "temp": 31.8,
+          "rides": 3982
+        },
+        {
+          "temp": 31.3,
+          "rides": 3974
+        },
+        {
+          "temp": 29.3,
+          "rides": 4968
+        },
+        {
+          "temp": 25.4,
+          "rides": 5312
+        },
+        {
+          "temp": 26,
+          "rides": 5342
+        },
+        {
+          "temp": 26.6,
+          "rides": 4906
+        },
+        {
+          "temp": 27.8,
+          "rides": 4548
+        },
+        {
+          "temp": 29,
+          "rides": 4833
+        },
+        {
+          "temp": 31.8,
+          "rides": 4401
+        },
+        {
+          "temp": 33.1,
+          "rides": 3915
+        },
+        {
+          "temp": 31,
+          "rides": 4586
+        },
+        {
+          "temp": 29.7,
+          "rides": 4966
+        },
+        {
+          "temp": 28.4,
+          "rides": 4460
+        },
+        {
+          "temp": 26,
+          "rides": 5020
+        },
+        {
+          "temp": 24.8,
+          "rides": 4891
+        },
+        {
+          "temp": 25.7,
+          "rides": 5180
+        },
+        {
+          "temp": 25.8,
+          "rides": 3767
+        },
+        {
+          "temp": 26.6,
+          "rides": 4844
+        },
+        {
+          "temp": 28.6,
+          "rides": 5119
+        },
+        {
+          "temp": 28.7,
+          "rides": 4744
+        },
+        {
+          "temp": 26,
+          "rides": 4010
+        },
+        {
+          "temp": 27.9,
+          "rides": 4835
+        },
+        {
+          "temp": 30.1,
+          "rides": 4507
+        },
+        {
+          "temp": 29.9,
+          "rides": 4790
+        },
+        {
+          "temp": 29.7,
+          "rides": 4991
+        },
+        {
+          "temp": 28.5,
+          "rides": 5202
+        },
+        {
+          "temp": 27.9,
+          "rides": 5305
+        },
+        {
+          "temp": 28,
+          "rides": 4708
+        },
+        {
+          "temp": 30.5,
+          "rides": 4648
+        },
+        {
+          "temp": 29.9,
+          "rides": 5225
+        },
+        {
+          "temp": 28.6,
+          "rides": 5515
+        },
+        {
+          "temp": 29.6,
+          "rides": 5362
+        },
+        {
+          "temp": 30.3,
+          "rides": 5119
+        },
+        {
+          "temp": 29.4,
+          "rides": 4649
+        },
+        {
+          "temp": 29.8,
+          "rides": 6043
+        },
+        {
+          "temp": 30.6,
+          "rides": 4665
+        },
+        {
+          "temp": 29.5,
+          "rides": 4629
+        },
+        {
+          "temp": 30.8,
+          "rides": 4592
+        },
+        {
+          "temp": 29.1,
+          "rides": 4040
+        },
+        {
+          "temp": 30.1,
+          "rides": 5336
+        },
+        {
+          "temp": 30.6,
+          "rides": 4881
+        },
+        {
+          "temp": 31.3,
+          "rides": 4086
+        },
+        {
+          "temp": 32.6,
+          "rides": 4258
+        },
+        {
+          "temp": 30.6,
+          "rides": 4342
+        },
+        {
+          "temp": 27.9,
+          "rides": 5084
+        },
+        {
+          "temp": 27.2,
+          "rides": 5538
+        },
+        {
+          "temp": 28.2,
+          "rides": 5923
+        },
+        {
+          "temp": 29.5,
+          "rides": 5302
+        },
+        {
+          "temp": 30.6,
+          "rides": 4458
+        },
+        {
+          "temp": 31.8,
+          "rides": 4541
+        },
+        {
+          "temp": 31.5,
+          "rides": 4332
+        },
+        {
+          "temp": 33.4,
+          "rides": 3784
+        },
+        {
+          "temp": 34.8,
+          "rides": 3387
+        },
+        {
+          "temp": 34.8,
+          "rides": 3285
+        },
+        {
+          "temp": 34,
+          "rides": 3606
+        },
+        {
+          "temp": 30.5,
+          "rides": 3840
+        },
+        {
+          "temp": 31.6,
+          "rides": 4590
+        },
+        {
+          "temp": 31.8,
+          "rides": 4656
+        },
+        {
+          "temp": 31.9,
+          "rides": 4390
+        },
+        {
+          "temp": 34.4,
+          "rides": 3846
+        },
+        {
+          "temp": 33,
+          "rides": 4475
+        },
+        {
+          "temp": 33,
+          "rides": 4302
+        },
+        {
+          "temp": 31.6,
+          "rides": 4266
+        },
+        {
+          "temp": 32.1,
+          "rides": 4845
+        },
+        {
+          "temp": 30,
+          "rides": 3574
+        },
+        {
+          "temp": 29.1,
+          "rides": 4576
+        },
+        {
+          "temp": 29.1,
+          "rides": 4866
+        },
+        {
+          "temp": 29.4,
+          "rides": 4294
+        },
+        {
+          "temp": 30.4,
+          "rides": 3785
+        },
+        {
+          "temp": 31.4,
+          "rides": 4326
+        },
+        {
+          "temp": 31.8,
+          "rides": 4602
+        },
+        {
+          "temp": 31.4,
+          "rides": 4780
+        },
+        {
+          "temp": 29.4,
+          "rides": 4792
+        },
+        {
+          "temp": 29,
+          "rides": 4905
+        },
+        {
+          "temp": 28.1,
+          "rides": 4150
+        },
+        {
+          "temp": 27.7,
+          "rides": 3820
+        },
+        {
+          "temp": 27.3,
+          "rides": 4338
+        },
+        {
+          "temp": 28.7,
+          "rides": 4725
+        },
+        {
+          "temp": 29.7,
+          "rides": 4694
+        },
+        {
+          "temp": 29.2,
+          "rides": 3805
+        },
+        {
+          "temp": 28.1,
+          "rides": 4153
+        },
+        {
+          "temp": 28.6,
+          "rides": 5191
+        },
+        {
+          "temp": 29.1,
+          "rides": 3873
+        },
+        {
+          "temp": 28.4,
+          "rides": 4758
+        },
+        {
+          "temp": 26.3,
+          "rides": 5895
+        },
+        {
+          "temp": 27.6,
+          "rides": 5130
+        },
+        {
+          "temp": 28.1,
+          "rides": 3542
+        },
+        {
+          "temp": 28.7,
+          "rides": 4661
+        },
+        {
+          "temp": 27.9,
+          "rides": 1115
+        },
+        {
+          "temp": 29,
+          "rides": 4334
+        },
+        {
+          "temp": 26.1,
+          "rides": 4634
+        },
+        {
+          "temp": 26.2,
+          "rides": 5204
+        },
+        {
+          "temp": 26.9,
+          "rides": 5058
+        },
+        {
+          "temp": 26.9,
+          "rides": 5115
+        },
+        {
+          "temp": 26.4,
+          "rides": 4727
+        },
+        {
+          "temp": 27.4,
+          "rides": 4484
+        },
+        {
+          "temp": 29.1,
+          "rides": 4940
+        },
+        {
+          "temp": 27.6,
+          "rides": 3351
+        },
+        {
+          "temp": 22.1,
+          "rides": 2710
+        },
+        {
+          "temp": 24.6,
+          "rides": 1996
+        },
+        {
+          "temp": 26,
+          "rides": 1842
+        },
+        {
+          "temp": 26.7,
+          "rides": 3544
+        },
+        {
+          "temp": 27.1,
+          "rides": 5345
+        },
+        {
+          "temp": 26.8,
+          "rides": 5046
+        },
+        {
+          "temp": 26.4,
+          "rides": 4713
+        },
+        {
+          "temp": 26.7,
+          "rides": 4763
+        },
+        {
+          "temp": 27.6,
+          "rides": 4785
+        },
+        {
+          "temp": 23.7,
+          "rides": 3659
+        },
+        {
+          "temp": 19.2,
+          "rides": 4760
+        },
+        {
+          "temp": 20.2,
+          "rides": 4511
+        },
+        {
+          "temp": 20.8,
+          "rides": 4274
+        },
+        {
+          "temp": 22.5,
+          "rides": 4539
+        },
+        {
+          "temp": 23,
+          "rides": 3641
+        },
+        {
+          "temp": 24.4,
+          "rides": 4352
+        },
+        {
+          "temp": 25.8,
+          "rides": 4795
+        },
+        {
+          "temp": 25,
+          "rides": 2395
+        },
+        {
+          "temp": 24.9,
+          "rides": 5423
+        },
+        {
+          "temp": 26,
+          "rides": 5010
+        },
+        {
+          "temp": 26.6,
+          "rides": 4630
+        },
+        {
+          "temp": 26.1,
+          "rides": 4120
+        },
+        {
+          "temp": 26,
+          "rides": 3907
+        },
+        {
+          "temp": 25.3,
+          "rides": 4839
+        },
+        {
+          "temp": 23.1,
+          "rides": 5202
+        },
+        {
+          "temp": 16.8,
+          "rides": 2429
+        },
+        {
+          "temp": 14.6,
+          "rides": 2918
+        },
+        {
+          "temp": 15.8,
+          "rides": 3570
+        },
+        {
+          "temp": 19.9,
+          "rides": 4456
+        },
+        {
+          "temp": 22.1,
+          "rides": 4826
+        },
+        {
+          "temp": 20.3,
+          "rides": 4765
+        },
+        {
+          "temp": 20.9,
+          "rides": 4985
+        },
+        {
+          "temp": 21.4,
+          "rides": 5409
+        },
+        {
+          "temp": 22.2,
+          "rides": 5511
+        },
+        {
+          "temp": 23.4,
+          "rides": 5117
+        },
+        {
+          "temp": 23.2,
+          "rides": 4563
+        },
+        {
+          "temp": 22.3,
+          "rides": 2416
+        },
+        {
+          "temp": 24.2,
+          "rides": 2913
+        },
+        {
+          "temp": 22.6,
+          "rides": 3644
+        },
+        {
+          "temp": 20.8,
+          "rides": 5217
+        },
+        {
+          "temp": 21,
+          "rides": 5041
+        },
+        {
+          "temp": 21.9,
+          "rides": 4570
+        },
+        {
+          "temp": 21.8,
+          "rides": 4748
+        },
+        {
+          "temp": 22.2,
+          "rides": 2424
+        },
+        {
+          "temp": 19.5,
+          "rides": 4195
+        },
+        {
+          "temp": 17.5,
+          "rides": 4304
+        },
+        {
+          "temp": 17.3,
+          "rides": 4308
+        },
+        {
+          "temp": 17.3,
+          "rides": 4381
+        },
+        {
+          "temp": 19,
+          "rides": 4187
+        },
+        {
+          "temp": 19.3,
+          "rides": 4687
+        },
+        {
+          "temp": 19.9,
+          "rides": 3894
+        },
+        {
+          "temp": 19.3,
+          "rides": 2659
+        },
+        {
+          "temp": 13.6,
+          "rides": 3747
+        },
+        {
+          "temp": 10.4,
+          "rides": 627
+        },
+        {
+          "temp": 13.1,
+          "rides": 3331
+        },
+        {
+          "temp": 13.9,
+          "rides": 3669
+        },
+        {
+          "temp": 16.4,
+          "rides": 4068
+        },
+        {
+          "temp": 15.5,
+          "rides": 4186
+        },
+        {
+          "temp": 16.7,
+          "rides": 3974
+        },
+        {
+          "temp": 16.5,
+          "rides": 4046
+        },
+        {
+          "temp": 13.4,
+          "rides": 3926
+        },
+        {
+          "temp": 14.3,
+          "rides": 3649
+        },
+        {
+          "temp": 16.2,
+          "rides": 4035
+        },
+        {
+          "temp": 16.7,
+          "rides": 4205
+        },
+        {
+          "temp": 16.4,
+          "rides": 4109
+        },
+        {
+          "temp": 15.6,
+          "rides": 2933
+        },
+        {
+          "temp": 13.3,
+          "rides": 3368
+        },
+        {
+          "temp": 14.6,
+          "rides": 4067
+        },
+        {
+          "temp": 18.1,
+          "rides": 3717
+        },
+        {
+          "temp": 21.7,
+          "rides": 4486
+        },
+        {
+          "temp": 21.7,
+          "rides": 4195
+        },
+        {
+          "temp": 18.7,
+          "rides": 1817
+        },
+        {
+          "temp": 14,
+          "rides": 3053
+        },
+        {
+          "temp": 11.2,
+          "rides": 3392
+        },
+        {
+          "temp": 13.5,
+          "rides": 3663
+        },
+        {
+          "temp": 19,
+          "rides": 3520
+        },
+        {
+          "temp": 18.3,
+          "rides": 2765
+        },
+        {
+          "temp": 17.1,
+          "rides": 1607
+        },
+        {
+          "temp": 18.1,
+          "rides": 2566
+        },
+        {
+          "temp": 15.3,
+          "rides": 1495
+        },
+        {
+          "temp": 15.4,
+          "rides": 2792
+        },
+        {
+          "temp": 15.4,
+          "rides": 3068
+        },
+        {
+          "temp": 18.8,
+          "rides": 3071
+        },
+        {
+          "temp": 20.6,
+          "rides": 3867
+        },
+        {
+          "temp": 18.8,
+          "rides": 2914
+        },
+        {
+          "temp": 13.3,
+          "rides": 3613
+        },
+        {
+          "temp": 12.8,
+          "rides": 3727
+        },
+        {
+          "temp": 12.9,
+          "rides": 3940
+        },
+        {
+          "temp": 12.3,
+          "rides": 3614
+        },
+        {
+          "temp": 13.6,
+          "rides": 3485
+        },
+        {
+          "temp": 15.8,
+          "rides": 3811
+        },
+        {
+          "temp": 19,
+          "rides": 2594
+        },
+        {
+          "temp": 16.8,
+          "rides": 705
+        },
+        {
+          "temp": 10.9,
+          "rides": 3322
+        },
+        {
+          "temp": 11.9,
+          "rides": 3620
+        },
+        {
+          "temp": 11.3,
+          "rides": 3190
+        },
+        {
+          "temp": 9.1,
+          "rides": 2743
+        },
+        {
+          "temp": 9.8,
+          "rides": 3310
+        },
+        {
+          "temp": 11.6,
+          "rides": 3523
+        },
+        {
+          "temp": 13,
+          "rides": 3740
+        },
+        {
+          "temp": 17.3,
+          "rides": 3709
+        },
+        {
+          "temp": 15.4,
+          "rides": 3577
+        },
+        {
+          "temp": 10.6,
+          "rides": 2739
+        },
+        {
+          "temp": 9.8,
+          "rides": 2431
+        },
+        {
+          "temp": 11.3,
+          "rides": 3403
+        },
+        {
+          "temp": 15.8,
+          "rides": 3750
+        },
+        {
+          "temp": 17.6,
+          "rides": 2660
+        },
+        {
+          "temp": 17.4,
+          "rides": 3068
+        },
+        {
+          "temp": 15.3,
+          "rides": 2209
+        },
+        {
+          "temp": 12.4,
+          "rides": 1011
+        },
+        {
+          "temp": 11.3,
+          "rides": 754
+        },
+        {
+          "temp": 13.2,
+          "rides": 1317
+        },
+        {
+          "temp": 13.3,
+          "rides": 1162
+        },
+        {
+          "temp": 12.3,
+          "rides": 2302
+        },
+        {
+          "temp": 10.2,
+          "rides": 2423
+        },
+        {
+          "temp": 12.8,
+          "rides": 2999
+        },
+        {
+          "temp": 16.8,
+          "rides": 2485
+        },
+        {
+          "temp": 15.2,
+          "rides": 2294
+        },
+        {
+          "temp": 11.2,
+          "rides": 1951
+        },
+        {
+          "temp": 6.1,
+          "rides": 2236
+        },
+        {
+          "temp": 4.4,
+          "rides": 2368
+        },
+        {
+          "temp": 10.9,
+          "rides": 3272
+        },
+        {
+          "temp": 13.7,
+          "rides": 4098
+        },
+        {
+          "temp": 16.1,
+          "rides": 4521
+        },
+        {
+          "temp": 13.8,
+          "rides": 3425
+        },
+        {
+          "temp": 9.2,
+          "rides": 2376
+        },
+        {
+          "temp": 12.7,
+          "rides": 3598
+        },
+        {
+          "temp": 11.2,
+          "rides": 2177
+        },
+        {
+          "temp": 15.7,
+          "rides": 4097
+        },
+        {
+          "temp": 11.2,
+          "rides": 3214
+        },
+        {
+          "temp": 7.4,
+          "rides": 2493
+        },
+        {
+          "temp": 6.8,
+          "rides": 2311
+        },
+        {
+          "temp": 7.8,
+          "rides": 2298
+        },
+        {
+          "temp": 15.3,
+          "rides": 2935
+        },
+        {
+          "temp": 12.4,
+          "rides": 3376
+        },
+        {
+          "temp": 7.8,
+          "rides": 3292
+        },
+        {
+          "temp": 8.9,
+          "rides": 3163
+        },
+        {
+          "temp": 7.1,
+          "rides": 1301
+        },
+        {
+          "temp": 6.7,
+          "rides": 1977
+        },
+        {
+          "temp": 9,
+          "rides": 2432
+        },
+        {
+          "temp": 14,
+          "rides": 4339
+        },
+        {
+          "temp": 12.1,
+          "rides": 4270
+        },
+        {
+          "temp": 14,
+          "rides": 4075
+        },
+        {
+          "temp": 17.4,
+          "rides": 3456
+        },
+        {
+          "temp": 12.9,
+          "rides": 4023
+        },
+        {
+          "temp": 11.6,
+          "rides": 3243
+        },
+        {
+          "temp": 11,
+          "rides": 3624
+        },
+        {
+          "temp": 16,
+          "rides": 4509
+        },
+        {
+          "temp": 19.2,
+          "rides": 4579
+        },
+        {
+          "temp": 16.4,
+          "rides": 3761
+        },
+        {
+          "temp": 12.8,
+          "rides": 4151
+        },
+        {
+          "temp": 10.8,
+          "rides": 2832
+        },
+        {
+          "temp": 10.9,
+          "rides": 2947
+        },
+        {
+          "temp": 11.6,
+          "rides": 3784
+        },
+        {
+          "temp": 14.5,
+          "rides": 4375
+        },
+        {
+          "temp": 10.5,
+          "rides": 2802
+        },
+        {
+          "temp": 10.9,
+          "rides": 3830
+        },
+        {
+          "temp": 11.5,
+          "rides": 3831
+        },
+        {
+          "temp": 9.2,
+          "rides": 2169
+        },
+        {
+          "temp": 5.2,
+          "rides": 1529
+        },
+        {
+          "temp": 9.1,
+          "rides": 3422
+        },
+        {
+          "temp": 13.1,
+          "rides": 3922
+        },
+        {
+          "temp": 14.3,
+          "rides": 4169
+        },
+        {
+          "temp": 13,
+          "rides": 3005
+        },
+        {
+          "temp": 14.1,
+          "rides": 4154
+        },
+        {
+          "temp": 14.2,
+          "rides": 4318
+        },
+        {
+          "temp": 11.5,
+          "rides": 2689
+        },
+        {
+          "temp": 11.5,
+          "rides": 3129
+        },
+        {
+          "temp": 11.8,
+          "rides": 3777
+        },
+        {
+          "temp": 16.2,
+          "rides": 4773
+        },
+        {
+          "temp": 18.6,
+          "rides": 5062
+        },
+        {
+          "temp": 16.7,
+          "rides": 3487
+        },
+        {
+          "temp": 11.9,
+          "rides": 2732
+        },
+        {
+          "temp": 11.4,
+          "rides": 3389
+        },
+        {
+          "temp": 15,
+          "rides": 4322
+        },
+        {
+          "temp": 14.7,
+          "rides": 4363
+        },
+        {
+          "temp": 14.1,
+          "rides": 1834
+        },
+        {
+          "temp": 19.9,
+          "rides": 4990
+        },
+        {
+          "temp": 14.5,
+          "rides": 3194
+        },
+        {
+          "temp": 17,
+          "rides": 4066
+        },
+        {
+          "temp": 13.4,
+          "rides": 3423
+        },
+        {
+          "temp": 10,
+          "rides": 3333
+        },
+        {
+          "temp": 10.6,
+          "rides": 3956
+        },
+        {
+          "temp": 16.6,
+          "rides": 4916
+        },
+        {
+          "temp": 21.6,
+          "rides": 5382
+        },
+        {
+          "temp": 16.8,
+          "rides": 4569
+        },
+        {
+          "temp": 11.8,
+          "rides": 4118
+        },
+        {
+          "temp": 14.8,
+          "rides": 4911
+        },
+        {
+          "temp": 19.1,
+          "rides": 5298
+        },
+        {
+          "temp": 23.2,
+          "rides": 5847
+        },
+        {
+          "temp": 23.5,
+          "rides": 6312
+        },
+        {
+          "temp": 22.9,
+          "rides": 6192
+        },
+        {
+          "temp": 17.9,
+          "rides": 4378
+        },
+        {
+          "temp": 21.1,
+          "rides": 7836
+        },
+        {
+          "temp": 19.4,
+          "rides": 5892
+        },
+        {
+          "temp": 22.3,
+          "rides": 6153
+        },
+        {
+          "temp": 23,
+          "rides": 6093
+        },
+        {
+          "temp": 21.8,
+          "rides": 6230
+        },
+        {
+          "temp": 22.7,
+          "rides": 6871
+        },
+        {
+          "temp": 24.7,
+          "rides": 8362
+        },
+        {
+          "temp": 20.6,
+          "rides": 3372
+        },
+        {
+          "temp": 17.9,
+          "rides": 4996
+        },
+        {
+          "temp": 18.3,
+          "rides": 5558
+        },
+        {
+          "temp": 13.3,
+          "rides": 5102
+        },
+        {
+          "temp": 19.9,
+          "rides": 5698
+        },
+        {
+          "temp": 20.3,
+          "rides": 6133
+        },
+        {
+          "temp": 15.2,
+          "rides": 5459
+        },
+        {
+          "temp": 17.4,
+          "rides": 6235
+        },
+        {
+          "temp": 17.5,
+          "rides": 6041
+        },
+        {
+          "temp": 17.8,
+          "rides": 5936
+        },
+        {
+          "temp": 19.1,
+          "rides": 6772
+        },
+        {
+          "temp": 22.2,
+          "rides": 6436
+        },
+        {
+          "temp": 17.8,
+          "rides": 6457
+        },
+        {
+          "temp": 16.5,
+          "rides": 6460
+        },
+        {
+          "temp": 17.9,
+          "rides": 6857
+        },
+        {
+          "temp": 20.5,
+          "rides": 5169
+        },
+        {
+          "temp": 20.1,
+          "rides": 5585
+        },
+        {
+          "temp": 18.3,
+          "rides": 5918
+        },
+        {
+          "temp": 14.3,
+          "rides": 4862
+        },
+        {
+          "temp": 16.3,
+          "rides": 5409
+        },
+        {
+          "temp": 18.1,
+          "rides": 6398
+        },
+        {
+          "temp": 20.3,
+          "rides": 7460
+        },
+        {
+          "temp": 24.9,
+          "rides": 7132
+        },
+        {
+          "temp": 27.2,
+          "rides": 6370
+        },
+        {
+          "temp": 24.9,
+          "rides": 6691
+        },
+        {
+          "temp": 19,
+          "rides": 4367
+        },
+        {
+          "temp": 20.4,
+          "rides": 6565
+        },
+        {
+          "temp": 21.6,
+          "rides": 7290
+        },
+        {
+          "temp": 23.4,
+          "rides": 6624
+        },
+        {
+          "temp": 16.3,
+          "rides": 1027
+        },
+        {
+          "temp": 13.2,
+          "rides": 3214
+        },
+        {
+          "temp": 16.9,
+          "rides": 5633
+        },
+        {
+          "temp": 19.5,
+          "rides": 6196
+        },
+        {
+          "temp": 20.4,
+          "rides": 5026
+        },
+        {
+          "temp": 18.8,
+          "rides": 6233
+        },
+        {
+          "temp": 15.4,
+          "rides": 4220
+        },
+        {
+          "temp": 18.8,
+          "rides": 6304
+        },
+        {
+          "temp": 19,
+          "rides": 5572
+        },
+        {
+          "temp": 25.1,
+          "rides": 5740
+        },
+        {
+          "temp": 23.1,
+          "rides": 6169
+        },
+        {
+          "temp": 23,
+          "rides": 6421
+        },
+        {
+          "temp": 25.7,
+          "rides": 6296
+        },
+        {
+          "temp": 25.5,
+          "rides": 6883
+        },
+        {
+          "temp": 23.1,
+          "rides": 6359
+        },
+        {
+          "temp": 22,
+          "rides": 6273
+        },
+        {
+          "temp": 23.8,
+          "rides": 5728
+        },
+        {
+          "temp": 23.6,
+          "rides": 4717
+        },
+        {
+          "temp": 20.7,
+          "rides": 6572
+        },
+        {
+          "temp": 21.9,
+          "rides": 7030
+        },
+        {
+          "temp": 23.1,
+          "rides": 7429
+        },
+        {
+          "temp": 25.1,
+          "rides": 6118
+        },
+        {
+          "temp": 23.5,
+          "rides": 2843
+        },
+        {
+          "temp": 25.1,
+          "rides": 5115
+        },
+        {
+          "temp": 26.1,
+          "rides": 7424
+        },
+        {
+          "temp": 24.3,
+          "rides": 7384
+        },
+        {
+          "temp": 23.1,
+          "rides": 7639
+        },
+        {
+          "temp": 24.6,
+          "rides": 8294
+        },
+        {
+          "temp": 25.5,
+          "rides": 7129
+        },
+        {
+          "temp": 24.5,
+          "rides": 4359
+        },
+        {
+          "temp": 25.2,
+          "rides": 6073
+        },
+        {
+          "temp": 25.5,
+          "rides": 5260
+        },
+        {
+          "temp": 26.9,
+          "rides": 6770
+        },
+        {
+          "temp": 27.9,
+          "rides": 6734
+        },
+        {
+          "temp": 28.4,
+          "rides": 6536
+        },
+        {
+          "temp": 28.3,
+          "rides": 6591
+        },
+        {
+          "temp": 29.2,
+          "rides": 6043
+        },
+        {
+          "temp": 29.6,
+          "rides": 5743
+        },
+        {
+          "temp": 26.9,
+          "rides": 6855
+        },
+        {
+          "temp": 27.9,
+          "rides": 7338
+        },
+        {
+          "temp": 26.8,
+          "rides": 4127
+        },
+        {
+          "temp": 23.9,
+          "rides": 8120
+        },
+        {
+          "temp": 24.7,
+          "rides": 7641
+        },
+        {
+          "temp": 24.5,
+          "rides": 6998
+        },
+        {
+          "temp": 22.2,
+          "rides": 7001
+        },
+        {
+          "temp": 22.7,
+          "rides": 7055
+        },
+        {
+          "temp": 24.7,
+          "rides": 7494
+        },
+        {
+          "temp": 26.6,
+          "rides": 7736
+        },
+        {
+          "temp": 29.1,
+          "rides": 7498
+        },
+        {
+          "temp": 29.8,
+          "rides": 6598
+        },
+        {
+          "temp": 29.6,
+          "rides": 6664
+        },
+        {
+          "temp": 26.8,
+          "rides": 4972
+        },
+        {
+          "temp": 26.9,
+          "rides": 7421
+        },
+        {
+          "temp": 26.6,
+          "rides": 7363
+        },
+        {
+          "temp": 26.2,
+          "rides": 7665
+        },
+        {
+          "temp": 25.9,
+          "rides": 7702
+        },
+        {
+          "temp": 24.3,
+          "rides": 6978
+        },
+        {
+          "temp": 23.3,
+          "rides": 5099
+        },
+        {
+          "temp": 28.2,
+          "rides": 6825
+        },
+        {
+          "temp": 32.1,
+          "rides": 6211
+        },
+        {
+          "temp": 33,
+          "rides": 5905
+        },
+        {
+          "temp": 31.9,
+          "rides": 5823
+        },
+        {
+          "temp": 30,
+          "rides": 7458
+        },
+        {
+          "temp": 30.5,
+          "rides": 6891
+        },
+        {
+          "temp": 29.3,
+          "rides": 6779
+        },
+        {
+          "temp": 25.9,
+          "rides": 7442
+        },
+        {
+          "temp": 28.6,
+          "rides": 7335
+        },
+        {
+          "temp": 30.7,
+          "rides": 6879
+        },
+        {
+          "temp": 34.2,
+          "rides": 5463
+        },
+        {
+          "temp": 31.4,
+          "rides": 5687
+        },
+        {
+          "temp": 33.4,
+          "rides": 5531
+        },
+        {
+          "temp": 32,
+          "rides": 6227
+        },
+        {
+          "temp": 32,
+          "rides": 6660
+        },
+        {
+          "temp": 32.4,
+          "rides": 7403
+        },
+        {
+          "temp": 33.9,
+          "rides": 6241
+        },
+        {
+          "temp": 34,
+          "rides": 6207
+        },
+        {
+          "temp": 35.3,
+          "rides": 4840
+        },
+        {
+          "temp": 33.7,
+          "rides": 4672
+        },
+        {
+          "temp": 29.1,
+          "rides": 6569
+        },
+        {
+          "temp": 29.6,
+          "rides": 6290
+        },
+        {
+          "temp": 29.4,
+          "rides": 7264
+        },
+        {
+          "temp": 29.3,
+          "rides": 7446
+        },
+        {
+          "temp": 30,
+          "rides": 7499
+        },
+        {
+          "temp": 28.8,
+          "rides": 6969
+        },
+        {
+          "temp": 30.6,
+          "rides": 6031
+        },
+        {
+          "temp": 31.3,
+          "rides": 6830
+        },
+        {
+          "temp": 33.6,
+          "rides": 6786
+        },
+        {
+          "temp": 32.5,
+          "rides": 5713
+        },
+        {
+          "temp": 31.6,
+          "rides": 6591
+        },
+        {
+          "temp": 27.3,
+          "rides": 5870
+        },
+        {
+          "temp": 24.4,
+          "rides": 4459
+        },
+        {
+          "temp": 27.4,
+          "rides": 7410
+        },
+        {
+          "temp": 30.4,
+          "rides": 6966
+        },
+        {
+          "temp": 30.8,
+          "rides": 7592
+        },
+        {
+          "temp": 29.7,
+          "rides": 8173
+        },
+        {
+          "temp": 31.8,
+          "rides": 6861
+        },
+        {
+          "temp": 32,
+          "rides": 6904
+        },
+        {
+          "temp": 31,
+          "rides": 6685
+        },
+        {
+          "temp": 29.6,
+          "rides": 6597
+        },
+        {
+          "temp": 30,
+          "rides": 7105
+        },
+        {
+          "temp": 29.2,
+          "rides": 7216
+        },
+        {
+          "temp": 29.4,
+          "rides": 7580
+        },
+        {
+          "temp": 30.9,
+          "rides": 7261
+        },
+        {
+          "temp": 31.4,
+          "rides": 7175
+        },
+        {
+          "temp": 32.5,
+          "rides": 6824
+        },
+        {
+          "temp": 31.5,
+          "rides": 5464
+        },
+        {
+          "temp": 30.9,
+          "rides": 7013
+        },
+        {
+          "temp": 30.2,
+          "rides": 7273
+        },
+        {
+          "temp": 30.8,
+          "rides": 7534
+        },
+        {
+          "temp": 31,
+          "rides": 7286
+        },
+        {
+          "temp": 29.3,
+          "rides": 5786
+        },
+        {
+          "temp": 28.4,
+          "rides": 6299
+        },
+        {
+          "temp": 28.7,
+          "rides": 6544
+        },
+        {
+          "temp": 29.6,
+          "rides": 6883
+        },
+        {
+          "temp": 29.8,
+          "rides": 6784
+        },
+        {
+          "temp": 29,
+          "rides": 7347
+        },
+        {
+          "temp": 29.5,
+          "rides": 7605
+        },
+        {
+          "temp": 29.7,
+          "rides": 7148
+        },
+        {
+          "temp": 27.8,
+          "rides": 7865
+        },
+        {
+          "temp": 26.1,
+          "rides": 4549
+        },
+        {
+          "temp": 26.1,
+          "rides": 6530
+        },
+        {
+          "temp": 26.6,
+          "rides": 7006
+        },
+        {
+          "temp": 27.4,
+          "rides": 7375
+        },
+        {
+          "temp": 28.5,
+          "rides": 7765
+        },
+        {
+          "temp": 28.8,
+          "rides": 7582
+        },
+        {
+          "temp": 27.1,
+          "rides": 6053
+        },
+        {
+          "temp": 26.8,
+          "rides": 5255
+        },
+        {
+          "temp": 28.8,
+          "rides": 6917
+        },
+        {
+          "temp": 29.9,
+          "rides": 7040
+        },
+        {
+          "temp": 28.1,
+          "rides": 7697
+        },
+        {
+          "temp": 29,
+          "rides": 7713
+        },
+        {
+          "temp": 31.3,
+          "rides": 7350
+        },
+        {
+          "temp": 30.9,
+          "rides": 6140
+        },
+        {
+          "temp": 28.6,
+          "rides": 5810
+        },
+        {
+          "temp": 29,
+          "rides": 6034
+        },
+        {
+          "temp": 29.8,
+          "rides": 6864
+        },
+        {
+          "temp": 30.2,
+          "rides": 7112
+        },
+        {
+          "temp": 28.6,
+          "rides": 6203
+        },
+        {
+          "temp": 28.8,
+          "rides": 7504
+        },
+        {
+          "temp": 27,
+          "rides": 5976
+        },
+        {
+          "temp": 25,
+          "rides": 8227
+        },
+        {
+          "temp": 23.9,
+          "rides": 7525
+        },
+        {
+          "temp": 23.7,
+          "rides": 7767
+        },
+        {
+          "temp": 24.6,
+          "rides": 7870
+        },
+        {
+          "temp": 25.1,
+          "rides": 7804
+        },
+        {
+          "temp": 26,
+          "rides": 8009
+        },
+        {
+          "temp": 24.9,
+          "rides": 8714
+        },
+        {
+          "temp": 23.8,
+          "rides": 7333
+        },
+        {
+          "temp": 23.8,
+          "rides": 6869
+        },
+        {
+          "temp": 25.6,
+          "rides": 4073
+        },
+        {
+          "temp": 22.7,
+          "rides": 7591
+        },
+        {
+          "temp": 22.4,
+          "rides": 7720
+        },
+        {
+          "temp": 24.6,
+          "rides": 8167
+        },
+        {
+          "temp": 26.7,
+          "rides": 8395
+        },
+        {
+          "temp": 21.7,
+          "rides": 7907
+        },
+        {
+          "temp": 21.1,
+          "rides": 7436
+        },
+        {
+          "temp": 22.6,
+          "rides": 7538
+        },
+        {
+          "temp": 26,
+          "rides": 7733
+        },
+        {
+          "temp": 26.7,
+          "rides": 7393
+        },
+        {
+          "temp": 25.4,
+          "rides": 7415
+        },
+        {
+          "temp": 22.2,
+          "rides": 8555
+        },
+        {
+          "temp": 21.6,
+          "rides": 6889
+        },
+        {
+          "temp": 21.4,
+          "rides": 6778
+        },
+        {
+          "temp": 24.2,
+          "rides": 4639
+        },
+        {
+          "temp": 27,
+          "rides": 7572
+        },
+        {
+          "temp": 27,
+          "rides": 7328
+        },
+        {
+          "temp": 25.2,
+          "rides": 8156
+        },
+        {
+          "temp": 22.7,
+          "rides": 7965
+        },
+        {
+          "temp": 17,
+          "rides": 3510
+        },
+        {
+          "temp": 15.7,
+          "rides": 5478
+        },
+        {
+          "temp": 18.3,
+          "rides": 6392
+        },
+        {
+          "temp": 21.1,
+          "rides": 7691
+        },
+        {
+          "temp": 17.8,
+          "rides": 7570
+        },
+        {
+          "temp": 17.9,
+          "rides": 7282
+        },
+        {
+          "temp": 16.1,
+          "rides": 7109
+        },
+        {
+          "temp": 21.4,
+          "rides": 6639
+        },
+        {
+          "temp": 23,
+          "rides": 5875
+        },
+        {
+          "temp": 19.2,
+          "rides": 7534
+        },
+        {
+          "temp": 18.7,
+          "rides": 7461
+        },
+        {
+          "temp": 21.4,
+          "rides": 7509
+        },
+        {
+          "temp": 23.1,
+          "rides": 5424
+        },
+        {
+          "temp": 19.9,
+          "rides": 8090
+        },
+        {
+          "temp": 19,
+          "rides": 6824
+        },
+        {
+          "temp": 20,
+          "rides": 7058
+        },
+        {
+          "temp": 22.3,
+          "rides": 7466
+        },
+        {
+          "temp": 24.1,
+          "rides": 7693
+        },
+        {
+          "temp": 22.6,
+          "rides": 7359
+        },
+        {
+          "temp": 22.4,
+          "rides": 7444
+        },
+        {
+          "temp": 21.7,
+          "rides": 7852
+        },
+        {
+          "temp": 19.6,
+          "rides": 4459
+        },
+        {
+          "temp": 18,
+          "rides": 22
+        },
+        {
+          "temp": 13,
+          "rides": 1096
+        },
+        {
+          "temp": 14.7,
+          "rides": 5566
+        },
+        {
+          "temp": 15,
+          "rides": 5986
+        },
+        {
+          "temp": 14.6,
+          "rides": 5847
+        },
+        {
+          "temp": 14.1,
+          "rides": 5138
+        },
+        {
+          "temp": 13.4,
+          "rides": 5107
+        },
+        {
+          "temp": 13.1,
+          "rides": 5259
+        },
+        {
+          "temp": 11.5,
+          "rides": 5686
+        },
+        {
+          "temp": 12.1,
+          "rides": 5035
+        },
+        {
+          "temp": 14.4,
+          "rides": 5315
+        },
+        {
+          "temp": 14.8,
+          "rides": 5992
+        },
+        {
+          "temp": 16,
+          "rides": 6536
+        },
+        {
+          "temp": 17.3,
+          "rides": 6852
+        },
+        {
+          "temp": 19.9,
+          "rides": 6269
+        },
+        {
+          "temp": 14.1,
+          "rides": 4094
+        },
+        {
+          "temp": 11.9,
+          "rides": 5495
+        },
+        {
+          "temp": 13.2,
+          "rides": 5445
+        },
+        {
+          "temp": 14.1,
+          "rides": 5698
+        },
+        {
+          "temp": 13.3,
+          "rides": 5629
+        },
+        {
+          "temp": 14,
+          "rides": 4669
+        },
+        {
+          "temp": 15.6,
+          "rides": 5499
+        },
+        {
+          "temp": 15.3,
+          "rides": 5634
+        },
+        {
+          "temp": 14.5,
+          "rides": 5146
+        },
+        {
+          "temp": 13.9,
+          "rides": 2425
+        },
+        {
+          "temp": 15.1,
+          "rides": 3910
+        },
+        {
+          "temp": 11.4,
+          "rides": 2277
+        },
+        {
+          "temp": 10.1,
+          "rides": 2424
+        },
+        {
+          "temp": 12.8,
+          "rides": 5087
+        },
+        {
+          "temp": 12,
+          "rides": 3959
+        },
+        {
+          "temp": 12.2,
+          "rides": 5260
+        },
+        {
+          "temp": 11.5,
+          "rides": 5323
+        },
+        {
+          "temp": 12.2,
+          "rides": 5668
+        },
+        {
+          "temp": 12.2,
+          "rides": 5191
+        },
+        {
+          "temp": 14.2,
+          "rides": 4649
+        },
+        {
+          "temp": 18.6,
+          "rides": 6234
+        },
+        {
+          "temp": 19.5,
+          "rides": 6606
+        },
+        {
+          "temp": 18,
+          "rides": 5729
+        },
+        {
+          "temp": 10.5,
+          "rides": 5375
+        },
+        {
+          "temp": 13.2,
+          "rides": 5008
+        },
+        {
+          "temp": 15.6,
+          "rides": 5582
+        },
+        {
+          "temp": 15.8,
+          "rides": 3228
+        },
+        {
+          "temp": 17.9,
+          "rides": 5170
+        },
+        {
+          "temp": 14.5,
+          "rides": 5501
+        },
+        {
+          "temp": 12.2,
+          "rides": 5319
+        },
+        {
+          "temp": 12.1,
+          "rides": 5532
+        },
+        {
+          "temp": 11.5,
+          "rides": 5611
+        },
+        {
+          "temp": 13.3,
+          "rides": 5047
+        },
+        {
+          "temp": 14.9,
+          "rides": 3786
+        },
+        {
+          "temp": 16.1,
+          "rides": 4585
+        },
+        {
+          "temp": 16.8,
+          "rides": 5557
+        },
+        {
+          "temp": 13.6,
+          "rides": 5267
+        },
+        {
+          "temp": 13.5,
+          "rides": 4128
+        },
+        {
+          "temp": 13.4,
+          "rides": 3623
+        },
+        {
+          "temp": 10.9,
+          "rides": 1749
+        },
+        {
+          "temp": 10.1,
+          "rides": 1787
+        },
+        {
+          "temp": 9.5,
+          "rides": 920
+        },
+        {
+          "temp": 11.9,
+          "rides": 1013
+        },
+        {
+          "temp": 10,
+          "rides": 441
+        },
+        {
+          "temp": 10.4,
+          "rides": 2114
+        },
+        {
+          "temp": 10.4,
+          "rides": 3095
+        },
+        {
+          "temp": 10.4,
+          "rides": 1341
+        },
+        {
+          "temp": 10.5,
+          "rides": 1796
+        },
+        {
+          "temp": 8.8,
+          "rides": 2729
+        }
+      ],
+      "encoding": {
+        "x": "temp",
+        "y": "rides",
+        "points": true
+      }
+    },
+    {
+      "type": "chart",
+      "kind": "bar",
+      "title": "Histogram of daily totals",
+      "data": [
+        {
+          "bucket": "0k",
+          "days": 9
+        },
+        {
+          "bucket": "1k",
+          "days": 37
+        },
+        {
+          "bucket": "1k",
+          "days": 68
+        },
+        {
+          "bucket": "2k",
+          "days": 53
+        },
+        {
+          "bucket": "3k",
+          "days": 68
+        },
+        {
+          "bucket": "4k",
+          "days": 106
+        },
+        {
+          "bucket": "4k",
+          "days": 116
+        },
+        {
+          "bucket": "5k",
+          "days": 80
+        },
+        {
+          "bucket": "6k",
+          "days": 56
+        },
+        {
+          "bucket": "7k",
+          "days": 61
+        },
+        {
+          "bucket": "7k",
+          "days": 65
+        },
+        {
+          "bucket": "8k",
+          "days": 12
+        }
+      ],
+      "encoding": {
+        "x": "bucket",
+        "y": "days"
+      }
+    },
+    {
+      "type": "chart",
+      "kind": "funnel",
+      "title": "Ridership funnel (nested conditions)",
+      "data": [
+        {
+          "stage": "All rides",
+          "rides": 3292679
+        },
+        {
+          "stage": "Working days",
+          "rides": 2292410
+        },
+        {
+          "stage": "+ clear/mist",
+          "rides": 2263618
+        },
+        {
+          "stage": "+ summer/fall",
+          "rides": 1371453
+        }
+      ],
+      "encoding": {
+        "category": "stage",
+        "value": "rides"
+      }
+    }
+  ]
+}

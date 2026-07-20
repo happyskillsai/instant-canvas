@@ -1,0 +1,15 @@
+{
+  "instantcanvas": 1,
+  "createdWith": "0.20.0",
+  "title": "Media gallery",
+  "description": "A gallery block renders every image under a folder as a live grid the reader can sort, zoom, select and delete. For video and audio too, run `open examples/media` to get the browse view with an inline player.",
+  "blocks": [
+    {
+      "type": "gallery",
+      "src": "examples/media",
+      "recursive": true,
+      "layout": "grid",
+      "sort": { "by": "name", "dir": "asc" }
+    }
+  ]
+}

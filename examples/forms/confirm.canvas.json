@@ -1,0 +1,21 @@
+{
+  "instantcanvas": 1,
+  "createdWith": "0.20.0",
+  "title": "Confirm — reset the demo database",
+  "description": "A confirmation card gates a destructive action. `open` blocks until the human confirms or cancels; the agent receives { \"confirmed\": true | false }.",
+  "blocks": [
+    {
+      "type": "confirm",
+      "title": "Drop and reload the bikeshare database?",
+      "description": "This deletes all local rows and re-imports the two-year dataset from CSV. It cannot be undone.",
+      "severity": "danger",
+      "details": [
+        { "label": "Target", "value": "postgres://localhost:5432/bikeshare" },
+        { "label": "Rows affected", "value": "18110" },
+        { "label": "Backup", "value": "none" }
+      ],
+      "confirmLabel": "Drop & reload",
+      "cancelLabel": "Keep my data"
+    }
+  ]
+}

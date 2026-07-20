@@ -1,0 +1,338 @@
+{
+  "instantcanvas": 1,
+  "createdWith": "0.20.0",
+  "title": "Capital Bikeshare — 2011–2012 Review",
+  "presentation": {
+    "aspect": "16:9",
+    "theme": {
+      "preset": "midnight",
+      "accent": "#12a594",
+      "palette": [
+        "#12a594",
+        "#f4653f",
+        "#2a3d66",
+        "#f2b134",
+        "#7b5ea7"
+      ]
+    },
+    "footer": {
+      "left": "Capital Bikeshare",
+      "right": "Slide {{slideNumber}} / {{totalSlides}}"
+    }
+  },
+  "slides": [
+    {
+      "layout": "title",
+      "title": "Ridership Review",
+      "subtitle": "Capital Bikeshare · 2011–2012",
+      "author": "InstantCanvas Analytics",
+      "date": "Annual Review",
+      "logo": "examples/assets/logo.svg",
+      "background": {
+        "src": "examples/assets/cover.svg",
+        "size": "cover",
+        "position": "center",
+        "scrim": {
+          "color": "#0b2a4a",
+          "opacity": 0.45
+        },
+        "ink": "#ffffff"
+      }
+    },
+    {
+      "layout": "section",
+      "title": "The shape of demand",
+      "subtitle": "Two years, 2.9 million rides"
+    },
+    {
+      "layout": "content",
+      "title": "Volume grew, led by members",
+      "body": [
+        {
+          "type": "chart",
+          "kind": "area",
+          "title": "Monthly volume: casual vs registered",
+          "data": [
+            {
+              "month": "2011-01-01",
+              "Casual": 3073,
+              "Registered": 35116
+            },
+            {
+              "month": "2011-02-01",
+              "Casual": 6242,
+              "Registered": 41973
+            },
+            {
+              "month": "2011-03-01",
+              "Casual": 12826,
+              "Registered": 51219
+            },
+            {
+              "month": "2011-04-01",
+              "Casual": 22346,
+              "Registered": 72524
+            },
+            {
+              "month": "2011-05-01",
+              "Casual": 31050,
+              "Registered": 104771
+            },
+            {
+              "month": "2011-06-01",
+              "Casual": 30612,
+              "Registered": 112900
+            },
+            {
+              "month": "2011-07-01",
+              "Casual": 36452,
+              "Registered": 104889
+            },
+            {
+              "month": "2011-08-01",
+              "Casual": 28842,
+              "Registered": 107849
+            },
+            {
+              "month": "2011-09-01",
+              "Casual": 26545,
+              "Registered": 100873
+            },
+            {
+              "month": "2011-10-01",
+              "Casual": 25222,
+              "Registered": 98289
+            },
+            {
+              "month": "2011-11-01",
+              "Casual": 15594,
+              "Registered": 86573
+            },
+            {
+              "month": "2011-12-01",
+              "Casual": 8448,
+              "Registered": 78875
+            },
+            {
+              "month": "2012-01-01",
+              "Casual": 8969,
+              "Registered": 87775
+            },
+            {
+              "month": "2012-02-01",
+              "Casual": 8721,
+              "Registered": 94416
+            },
+            {
+              "month": "2012-03-01",
+              "Casual": 31618,
+              "Registered": 133257
+            },
+            {
+              "month": "2012-04-01",
+              "Casual": 38456,
+              "Registered": 135768
+            },
+            {
+              "month": "2012-05-01",
+              "Casual": 44235,
+              "Registered": 151630
+            },
+            {
+              "month": "2012-06-01",
+              "Casual": 43294,
+              "Registered": 159536
+            },
+            {
+              "month": "2012-07-01",
+              "Casual": 41705,
+              "Registered": 161902
+            },
+            {
+              "month": "2012-08-01",
+              "Casual": 43197,
+              "Registered": 171306
+            },
+            {
+              "month": "2012-09-01",
+              "Casual": 43778,
+              "Registered": 174795
+            },
+            {
+              "month": "2012-10-01",
+              "Casual": 34538,
+              "Registered": 164303
+            },
+            {
+              "month": "2012-11-01",
+              "Casual": 21009,
+              "Registered": 131655
+            },
+            {
+              "month": "2012-12-01",
+              "Casual": 13245,
+              "Registered": 110468
+            }
+          ],
+          "encoding": {
+            "x": "month",
+            "y": [
+              "Casual",
+              "Registered"
+            ],
+            "stack": true
+          }
+        }
+      ],
+      "notes": "Registered riders are the base; casual demand is the summer-weighted top layer."
+    },
+    {
+      "layout": "two-column",
+      "leftHeading": "When they ride",
+      "rightHeading": "Who rides",
+      "left": [
+        {
+          "type": "markdown",
+          "text": "- Weekday commute peaks at **08:00** and **17:00**\n- Weekends shift to a **midday** dome"
+        },
+        {
+          "type": "chart",
+          "kind": "bar",
+          "title": "Average ridership by weekday",
+          "data": [
+            {
+              "day": "Sun",
+              "rides": 4229
+            },
+            {
+              "day": "Mon",
+              "rides": 4338
+            },
+            {
+              "day": "Tue",
+              "rides": 4511
+            },
+            {
+              "day": "Wed",
+              "rides": 4549
+            },
+            {
+              "day": "Thu",
+              "rides": 4667
+            },
+            {
+              "day": "Fri",
+              "rides": 4690
+            },
+            {
+              "day": "Sat",
+              "rides": 4551
+            }
+          ],
+          "encoding": {
+            "x": "day",
+            "y": "rides"
+          }
+        }
+      ],
+      "right": [
+        {
+          "type": "markdown",
+          "text": "- **Registered** members carry weekday volume\n- **Casual** riders swell on warm weekends"
+        },
+        {
+          "type": "chart",
+          "kind": "pie",
+          "title": "Ridership share by season",
+          "donut": true,
+          "data": [
+            {
+              "season": "Spring",
+              "rides": 471348
+            },
+            {
+              "season": "Summer",
+              "rides": 918589
+            },
+            {
+              "season": "Fall",
+              "rides": 1061129
+            },
+            {
+              "season": "Winter",
+              "rides": 841613
+            }
+          ],
+          "encoding": {
+            "category": "season",
+            "value": "rides"
+          }
+        }
+      ],
+      "split": "1-1"
+    },
+    {
+      "layout": "quadrant",
+      "title": "What the data says",
+      "cells": [
+        {
+          "heading": "Growth",
+          "blocks": [
+            {
+              "type": "markdown",
+              "text": "Ridership grew **65%** from 2011 to 2012."
+            }
+          ]
+        },
+        {
+          "heading": "Weather",
+          "blocks": [
+            {
+              "type": "markdown",
+              "text": "Temperature alone explains **R² = 0.55** of daily demand."
+            }
+          ]
+        },
+        {
+          "heading": "Rhythm",
+          "blocks": [
+            {
+              "type": "markdown",
+              "text": "Weekdays are twin-peaked commutes; weekends are single midday domes."
+            }
+          ]
+        },
+        {
+          "heading": "Opportunity",
+          "blocks": [
+            {
+              "type": "markdown",
+              "text": "Convert weekend casual riders into weekday members."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "layout": "statement",
+      "text": "Weather sets the level. The calendar sets the rhythm.",
+      "attribution": "— 2011–2012 ridership review"
+    },
+    {
+      "layout": "closing",
+      "title": "Thank you",
+      "subtitle": "InstantCanvas Analytics",
+      "logo": "examples/assets/logo.svg",
+      "background": {
+        "src": "examples/assets/cover.svg",
+        "size": "cover",
+        "position": "center",
+        "scrim": {
+          "color": "#0b2a4a",
+          "opacity": 0.45
+        },
+        "ink": "#ffffff"
+      }
+    }
+  ]
+}

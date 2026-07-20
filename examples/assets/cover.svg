@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 1697" width="1200" height="1697" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0b2a4a"/>
+      <stop offset="0.55" stop-color="#0f6d78"/>
+      <stop offset="1" stop-color="#12a594"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="1697" fill="url(#g)"/>
+  <g fill="none" stroke="#ffffff" stroke-opacity="0.14" stroke-width="3">
+    <path d="M0 1200 C 220 1080, 380 1320, 600 1180 S 980 1040, 1200 1160"/>
+    <path d="M0 1320 C 220 1200, 380 1440, 600 1300 S 980 1160, 1200 1280"/>
+    <path d="M0 1440 C 220 1320, 380 1560, 600 1420 S 980 1280, 1200 1400"/>
+  </g>
+  <g fill="#ffffff" fill-opacity="0.10">
+    <circle cx="250" cy="430" r="150"/>
+    <circle cx="900" cy="300" r="90"/>
+  </g>
+  <g stroke="#ffffff" stroke-opacity="0.5" fill="none">
+    <circle cx="250" cy="430" r="118" stroke-width="7"/>
+    <g stroke-width="3" stroke-opacity="0.35">
+      <line x1="140" y1="430" x2="360" y2="430"/>
+      <line x1="154.7" y1="375" x2="345.3" y2="485"/>
+      <line x1="195" y1="334.7" x2="305" y2="525.3"/>
+      <line x1="250" y1="320" x2="250" y2="540"/>
+      <line x1="305" y1="334.7" x2="195" y2="525.3"/>
+      <line x1="345.3" y1="375" x2="154.7" y2="485"/>
+    </g>
+    <circle cx="250" cy="430" r="16" fill="#ffffff" fill-opacity="0.9"/>
+  </g>
+</svg>

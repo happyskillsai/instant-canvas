@@ -531,16 +531,20 @@ test('paper: document.paper WITHOUT a cover passes (mutual exclusion is one-side
 })
 
 test('density: every shipped canvas in examples/ and demos/ is warning-free (the calibration gate)', () => {
-	// examples/ and demos/ were cleared to be rebuilt from scratch; the gate checks
-	// whatever canvases are present and re-engages once a curated corpus returns.
+	// Walk examples/ and demos/ recursively (examples/ is organized into subfolders).
+	// The gate checks whatever canvases are present and re-engages as they return.
 	const REPO = path.join(__dirname, '..', '..')
-	const files = []
-	for (const dir of ['examples', 'demos']) {
-		const abs = path.join(REPO, dir)
-		if (!fs.existsSync(abs)) continue
-		for (const f of fs.readdirSync(abs).filter((x) => x.endsWith('.canvas.json')))
-			files.push(path.join(abs, f))
+	const walk = (dir) => {
+		if (!fs.existsSync(dir)) return []
+		const out = []
+		for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+			const p = path.join(dir, e.name)
+			if (e.isDirectory()) out.push(...walk(p))
+			else if (e.name.endsWith('.canvas.json')) out.push(p)
+		}
+		return out
 	}
+	const files = [...walk(path.join(REPO, 'examples')), ...walk(path.join(REPO, 'demos'))]
 	for (const file of files) {
 		const r = validate(fs.readFileSync(file, 'utf8'), { root: REPO })
 		assert.deepEqual(densityWarns(r).map((w) => `${w.code}@${w.path}`), [],

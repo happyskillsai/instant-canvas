@@ -1,0 +1,319 @@
+{
+  "instantcanvas": 1,
+  "createdWith": "0.20.0",
+  "title": "Capital Bikeshare — 2011–2012 Ridership Review",
+  "document": {
+    "cover": {
+      "title": "Ridership Review",
+      "subtitle": "Capital Bikeshare · 2011–2012",
+      "author": "InstantCanvas Analytics",
+      "date": "Annual Report",
+      "logo": "examples/assets/logo.svg",
+      "background": {
+        "src": "examples/assets/cover.svg",
+        "size": "cover",
+        "position": "center",
+        "scrim": {
+          "color": "#0b2a4a",
+          "opacity": 0.35
+        },
+        "ink": "#ffffff"
+      }
+    },
+    "toc": {
+      "depth": 2
+    },
+    "header": {
+      "left": "Capital Bikeshare",
+      "right": "2011–2012 Review"
+    },
+    "footer": {
+      "center": "{{pageNumber}} / {{totalPages}}"
+    },
+    "backCover": {
+      "title": "Thank you",
+      "text": "Prepared by InstantCanvas Analytics. Data: Capital Bikeshare via UCI (CC BY 4.0).",
+      "logo": "examples/assets/logo.svg",
+      "background": {
+        "src": "examples/assets/backcover.svg",
+        "size": "cover",
+        "position": "center",
+        "scrim": {
+          "color": "#111827",
+          "opacity": 0.3
+        },
+        "ink": "#ffffff"
+      }
+    },
+    "theme": {
+      "accent": "#12a594",
+      "palette": [
+        "#12a594",
+        "#f4653f",
+        "#2a3d66",
+        "#f2b134",
+        "#7b5ea7"
+      ],
+      "paper": "#ffffff"
+    },
+    "page": {
+      "size": "A4"
+    }
+  },
+  "pages": [
+    {
+      "name": "Summary",
+      "blocks": [
+        {
+          "type": "markdown",
+          "text": "## Executive summary\n\nThe Capital Bikeshare system carried **3,292,679** rides\nacross 2011–2012, growing **65%** year over year. Registered\nmembers drove **81%** of volume;\ncasual riders — a smaller, weather-sensitive, weekend-weighted segment — made up the rest.\n\nDemand is strongly seasonal and temperature-led, peaking in the warm months and\nin the weekday commute windows. This review summarizes the shape of ridership and\nwhere the growth came from."
+        },
+        {
+          "type": "kpi",
+          "cards": [
+            {
+              "label": "Total rides",
+              "value": 3292679,
+              "format": "number"
+            },
+            {
+              "label": "YoY growth",
+              "value": 0.649,
+              "format": "percent",
+              "delta": {
+                "value": 0.649,
+                "label": "2011→2012",
+                "positiveIs": "up"
+              }
+            },
+            {
+              "label": "Registered share",
+              "value": 0.812,
+              "format": "percent"
+            }
+          ]
+        },
+        {
+          "type": "chart",
+          "kind": "area",
+          "title": "Monthly volume: casual vs registered",
+          "data": [
+            {
+              "month": "2011-01-01",
+              "Casual": 3073,
+              "Registered": 35116
+            },
+            {
+              "month": "2011-02-01",
+              "Casual": 6242,
+              "Registered": 41973
+            },
+            {
+              "month": "2011-03-01",
+              "Casual": 12826,
+              "Registered": 51219
+            },
+            {
+              "month": "2011-04-01",
+              "Casual": 22346,
+              "Registered": 72524
+            },
+            {
+              "month": "2011-05-01",
+              "Casual": 31050,
+              "Registered": 104771
+            },
+            {
+              "month": "2011-06-01",
+              "Casual": 30612,
+              "Registered": 112900
+            },
+            {
+              "month": "2011-07-01",
+              "Casual": 36452,
+              "Registered": 104889
+            },
+            {
+              "month": "2011-08-01",
+              "Casual": 28842,
+              "Registered": 107849
+            },
+            {
+              "month": "2011-09-01",
+              "Casual": 26545,
+              "Registered": 100873
+            },
+            {
+              "month": "2011-10-01",
+              "Casual": 25222,
+              "Registered": 98289
+            },
+            {
+              "month": "2011-11-01",
+              "Casual": 15594,
+              "Registered": 86573
+            },
+            {
+              "month": "2011-12-01",
+              "Casual": 8448,
+              "Registered": 78875
+            },
+            {
+              "month": "2012-01-01",
+              "Casual": 8969,
+              "Registered": 87775
+            },
+            {
+              "month": "2012-02-01",
+              "Casual": 8721,
+              "Registered": 94416
+            },
+            {
+              "month": "2012-03-01",
+              "Casual": 31618,
+              "Registered": 133257
+            },
+            {
+              "month": "2012-04-01",
+              "Casual": 38456,
+              "Registered": 135768
+            },
+            {
+              "month": "2012-05-01",
+              "Casual": 44235,
+              "Registered": 151630
+            },
+            {
+              "month": "2012-06-01",
+              "Casual": 43294,
+              "Registered": 159536
+            },
+            {
+              "month": "2012-07-01",
+              "Casual": 41705,
+              "Registered": 161902
+            },
+            {
+              "month": "2012-08-01",
+              "Casual": 43197,
+              "Registered": 171306
+            },
+            {
+              "month": "2012-09-01",
+              "Casual": 43778,
+              "Registered": 174795
+            },
+            {
+              "month": "2012-10-01",
+              "Casual": 34538,
+              "Registered": 164303
+            },
+            {
+              "month": "2012-11-01",
+              "Casual": 21009,
+              "Registered": 131655
+            },
+            {
+              "month": "2012-12-01",
+              "Casual": 13245,
+              "Registered": 110468
+            }
+          ],
+          "encoding": {
+            "x": "month",
+            "y": [
+              "Casual",
+              "Registered"
+            ],
+            "stack": true
+          }
+        }
+      ]
+    },
+    {
+      "name": "Seasonal shape",
+      "blocks": [
+        {
+          "type": "markdown",
+          "text": "## Seasonal shape\n\nRidership roughly triples from the depths of winter to the peak of fall. The\nweekly rhythm is a commuter's: weekday volume is carried by registered members,\nwhile casual demand swells on warm weekends."
+        },
+        {
+          "type": "chart",
+          "kind": "pie",
+          "title": "Ridership share by season",
+          "donut": true,
+          "data": [
+            {
+              "season": "Spring",
+              "rides": 471348
+            },
+            {
+              "season": "Summer",
+              "rides": 918589
+            },
+            {
+              "season": "Fall",
+              "rides": 1061129
+            },
+            {
+              "season": "Winter",
+              "rides": 841613
+            }
+          ],
+          "encoding": {
+            "category": "season",
+            "value": "rides"
+          }
+        },
+        {
+          "type": "chart",
+          "kind": "bar",
+          "title": "Average ridership by weekday",
+          "data": [
+            {
+              "day": "Sun",
+              "rides": 4229
+            },
+            {
+              "day": "Mon",
+              "rides": 4338
+            },
+            {
+              "day": "Tue",
+              "rides": 4511
+            },
+            {
+              "day": "Wed",
+              "rides": 4549
+            },
+            {
+              "day": "Thu",
+              "rides": 4667
+            },
+            {
+              "day": "Fri",
+              "rides": 4690
+            },
+            {
+              "day": "Sat",
+              "rides": 4551
+            }
+          ],
+          "encoding": {
+            "x": "day",
+            "y": "rides"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Outlook",
+      "blocks": [
+        {
+          "type": "markdown",
+          "text": "## Outlook\n\nTwo levers move the number: **weather** (outside our control, but forecastable)\nand **membership growth** (the compounding 2011→2012 trend). Sustaining\ndouble-digit growth means converting the weekend casual rider into a weekday\nregistered one — the segment with the steadiest, highest-value demand."
+        }
+      ]
+    }
+  ]
+}

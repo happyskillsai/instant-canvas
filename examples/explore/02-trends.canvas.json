@@ -1,0 +1,849 @@
+{
+  "instantcanvas": 1,
+  "createdWith": "0.20.0",
+  "title": "Bike Sharing — Trends over time",
+  "description": "The temporal family of charts: stacked volumes, a weather stream, monthly OHLC ranges, an uncertainty band, and a utilization dial.",
+  "blocks": [
+    {
+      "type": "chart",
+      "kind": "area",
+      "title": "Monthly volume: casual vs registered",
+      "description": "Registered riders carry the system; casual demand is a thin, summer-weighted top layer.",
+      "data": [
+        {
+          "month": "2011-01-01",
+          "Casual": 3073,
+          "Registered": 35116
+        },
+        {
+          "month": "2011-02-01",
+          "Casual": 6242,
+          "Registered": 41973
+        },
+        {
+          "month": "2011-03-01",
+          "Casual": 12826,
+          "Registered": 51219
+        },
+        {
+          "month": "2011-04-01",
+          "Casual": 22346,
+          "Registered": 72524
+        },
+        {
+          "month": "2011-05-01",
+          "Casual": 31050,
+          "Registered": 104771
+        },
+        {
+          "month": "2011-06-01",
+          "Casual": 30612,
+          "Registered": 112900
+        },
+        {
+          "month": "2011-07-01",
+          "Casual": 36452,
+          "Registered": 104889
+        },
+        {
+          "month": "2011-08-01",
+          "Casual": 28842,
+          "Registered": 107849
+        },
+        {
+          "month": "2011-09-01",
+          "Casual": 26545,
+          "Registered": 100873
+        },
+        {
+          "month": "2011-10-01",
+          "Casual": 25222,
+          "Registered": 98289
+        },
+        {
+          "month": "2011-11-01",
+          "Casual": 15594,
+          "Registered": 86573
+        },
+        {
+          "month": "2011-12-01",
+          "Casual": 8448,
+          "Registered": 78875
+        },
+        {
+          "month": "2012-01-01",
+          "Casual": 8969,
+          "Registered": 87775
+        },
+        {
+          "month": "2012-02-01",
+          "Casual": 8721,
+          "Registered": 94416
+        },
+        {
+          "month": "2012-03-01",
+          "Casual": 31618,
+          "Registered": 133257
+        },
+        {
+          "month": "2012-04-01",
+          "Casual": 38456,
+          "Registered": 135768
+        },
+        {
+          "month": "2012-05-01",
+          "Casual": 44235,
+          "Registered": 151630
+        },
+        {
+          "month": "2012-06-01",
+          "Casual": 43294,
+          "Registered": 159536
+        },
+        {
+          "month": "2012-07-01",
+          "Casual": 41705,
+          "Registered": 161902
+        },
+        {
+          "month": "2012-08-01",
+          "Casual": 43197,
+          "Registered": 171306
+        },
+        {
+          "month": "2012-09-01",
+          "Casual": 43778,
+          "Registered": 174795
+        },
+        {
+          "month": "2012-10-01",
+          "Casual": 34538,
+          "Registered": 164303
+        },
+        {
+          "month": "2012-11-01",
+          "Casual": 21009,
+          "Registered": 131655
+        },
+        {
+          "month": "2012-12-01",
+          "Casual": 13245,
+          "Registered": 110468
+        }
+      ],
+      "encoding": {
+        "x": "month",
+        "y": [
+          "Casual",
+          "Registered"
+        ],
+        "stack": true
+      }
+    },
+    {
+      "type": "chart",
+      "kind": "themeRiver",
+      "title": "Ridership by weather condition over time",
+      "data": [
+        {
+          "month": "2011-01-01",
+          "weather": "Clear",
+          "rides": 21004
+        },
+        {
+          "month": "2011-01-01",
+          "weather": "Mist",
+          "rides": 16679
+        },
+        {
+          "month": "2011-01-01",
+          "weather": "Light precip",
+          "rides": 506
+        },
+        {
+          "month": "2011-02-01",
+          "weather": "Clear",
+          "rides": 35190
+        },
+        {
+          "month": "2011-02-01",
+          "weather": "Mist",
+          "rides": 13025
+        },
+        {
+          "month": "2011-02-01",
+          "weather": "Light precip",
+          "rides": 0
+        },
+        {
+          "month": "2011-03-01",
+          "weather": "Clear",
+          "rides": 39703
+        },
+        {
+          "month": "2011-03-01",
+          "weather": "Mist",
+          "rides": 22034
+        },
+        {
+          "month": "2011-03-01",
+          "weather": "Light precip",
+          "rides": 2308
+        },
+        {
+          "month": "2011-04-01",
+          "weather": "Clear",
+          "rides": 52392
+        },
+        {
+          "month": "2011-04-01",
+          "weather": "Mist",
+          "rides": 41683
+        },
+        {
+          "month": "2011-04-01",
+          "weather": "Light precip",
+          "rides": 795
+        },
+        {
+          "month": "2011-05-01",
+          "weather": "Clear",
+          "rides": 87599
+        },
+        {
+          "month": "2011-05-01",
+          "weather": "Mist",
+          "rides": 48222
+        },
+        {
+          "month": "2011-05-01",
+          "weather": "Light precip",
+          "rides": 0
+        },
+        {
+          "month": "2011-06-01",
+          "weather": "Clear",
+          "rides": 103863
+        },
+        {
+          "month": "2011-06-01",
+          "weather": "Mist",
+          "rides": 39649
+        },
+        {
+          "month": "2011-06-01",
+          "weather": "Light precip",
+          "rides": 0
+        },
+        {
+          "month": "2011-07-01",
+          "weather": "Clear",
+          "rides": 122825
+        },
+        {
+          "month": "2011-07-01",
+          "weather": "Mist",
+          "rides": 18516
+        },
+        {
+          "month": "2011-07-01",
+          "weather": "Light precip",
+          "rides": 0
+        },
+        {
+          "month": "2011-08-01",
+          "weather": "Clear",
+          "rides": 107467
+        },
+        {
+          "month": "2011-08-01",
+          "weather": "Mist",
+          "rides": 29224
+        },
+        {
+          "month": "2011-08-01",
+          "weather": "Light precip",
+          "rides": 0
+        },
+        {
+          "month": "2011-09-01",
+          "weather": "Clear",
+          "rides": 53506
+        },
+        {
+          "month": "2011-09-01",
+          "weather": "Mist",
+          "rides": 67364
+        },
+        {
+          "month": "2011-09-01",
+          "weather": "Light precip",
+          "rides": 6548
+        },
+        {
+          "month": "2011-10-01",
+          "weather": "Clear",
+          "rides": 82959
+        },
+        {
+          "month": "2011-10-01",
+          "weather": "Mist",
+          "rides": 35085
+        },
+        {
+          "month": "2011-10-01",
+          "weather": "Light precip",
+          "rides": 5467
+        },
+        {
+          "month": "2011-11-01",
+          "weather": "Clear",
+          "rides": 72751
+        },
+        {
+          "month": "2011-11-01",
+          "weather": "Mist",
+          "rides": 23227
+        },
+        {
+          "month": "2011-11-01",
+          "weather": "Light precip",
+          "rides": 6189
+        },
+        {
+          "month": "2011-12-01",
+          "weather": "Clear",
+          "rides": 55808
+        },
+        {
+          "month": "2011-12-01",
+          "weather": "Mist",
+          "rides": 28216
+        },
+        {
+          "month": "2011-12-01",
+          "weather": "Light precip",
+          "rides": 3299
+        },
+        {
+          "month": "2012-01-01",
+          "weather": "Clear",
+          "rides": 66387
+        },
+        {
+          "month": "2012-01-01",
+          "weather": "Mist",
+          "rides": 30357
+        },
+        {
+          "month": "2012-01-01",
+          "weather": "Light precip",
+          "rides": 0
+        },
+        {
+          "month": "2012-02-01",
+          "weather": "Clear",
+          "rides": 69858
+        },
+        {
+          "month": "2012-02-01",
+          "weather": "Mist",
+          "rides": 31110
+        },
+        {
+          "month": "2012-02-01",
+          "weather": "Light precip",
+          "rides": 2169
+        },
+        {
+          "month": "2012-03-01",
+          "weather": "Clear",
+          "rides": 100286
+        },
+        {
+          "month": "2012-03-01",
+          "weather": "Mist",
+          "rides": 64589
+        },
+        {
+          "month": "2012-03-01",
+          "weather": "Light precip",
+          "rides": 0
+        },
+        {
+          "month": "2012-04-01",
+          "weather": "Clear",
+          "rides": 144757
+        },
+        {
+          "month": "2012-04-01",
+          "weather": "Mist",
+          "rides": 28440
+        },
+        {
+          "month": "2012-04-01",
+          "weather": "Light precip",
+          "rides": 1027
+        },
+        {
+          "month": "2012-05-01",
+          "weather": "Clear",
+          "rides": 123239
+        },
+        {
+          "month": "2012-05-01",
+          "weather": "Mist",
+          "rides": 72626
+        },
+        {
+          "month": "2012-05-01",
+          "weather": "Light precip",
+          "rides": 0
+        },
+        {
+          "month": "2012-06-01",
+          "weather": "Clear",
+          "rides": 174967
+        },
+        {
+          "month": "2012-06-01",
+          "weather": "Mist",
+          "rides": 27863
+        },
+        {
+          "month": "2012-06-01",
+          "weather": "Light precip",
+          "rides": 0
+        },
+        {
+          "month": "2012-07-01",
+          "weather": "Clear",
+          "rides": 158541
+        },
+        {
+          "month": "2012-07-01",
+          "weather": "Mist",
+          "rides": 40607
+        },
+        {
+          "month": "2012-07-01",
+          "weather": "Light precip",
+          "rides": 4459
+        },
+        {
+          "month": "2012-08-01",
+          "weather": "Clear",
+          "rides": 143454
+        },
+        {
+          "month": "2012-08-01",
+          "weather": "Mist",
+          "rides": 71049
+        },
+        {
+          "month": "2012-08-01",
+          "weather": "Light precip",
+          "rides": 0
+        },
+        {
+          "month": "2012-09-01",
+          "weather": "Clear",
+          "rides": 168694
+        },
+        {
+          "month": "2012-09-01",
+          "weather": "Mist",
+          "rides": 49879
+        },
+        {
+          "month": "2012-09-01",
+          "weather": "Light precip",
+          "rides": 0
+        },
+        {
+          "month": "2012-10-01",
+          "weather": "Clear",
+          "rides": 104538
+        },
+        {
+          "month": "2012-10-01",
+          "weather": "Mist",
+          "rides": 89642
+        },
+        {
+          "month": "2012-10-01",
+          "weather": "Light precip",
+          "rides": 4661
+        },
+        {
+          "month": "2012-11-01",
+          "weather": "Clear",
+          "rides": 111874
+        },
+        {
+          "month": "2012-11-01",
+          "weather": "Mist",
+          "rides": 40790
+        },
+        {
+          "month": "2012-11-01",
+          "weather": "Light precip",
+          "rides": 0
+        },
+        {
+          "month": "2012-12-01",
+          "weather": "Clear",
+          "rides": 56290
+        },
+        {
+          "month": "2012-12-01",
+          "weather": "Mist",
+          "rides": 66982
+        },
+        {
+          "month": "2012-12-01",
+          "weather": "Light precip",
+          "rides": 441
+        }
+      ],
+      "encoding": {
+        "x": "month",
+        "series": "weather",
+        "value": "rides"
+      }
+    },
+    {
+      "type": "chart",
+      "kind": "candlestick",
+      "title": "Monthly ride range (daily OHLC)",
+      "description": "Each candle is one month of daily totals: open = first day, close = last, wicks = min/max.",
+      "data": [
+        {
+          "month": "2011-01-01",
+          "open": 985,
+          "close": 1501,
+          "low": 431,
+          "high": 1985
+        },
+        {
+          "month": "2011-02-01",
+          "open": 1360,
+          "close": 1446,
+          "low": 1005,
+          "high": 2927
+        },
+        {
+          "month": "2011-03-01",
+          "open": 1851,
+          "close": 1685,
+          "low": 605,
+          "high": 3239
+        },
+        {
+          "month": "2011-04-01",
+          "open": 2227,
+          "close": 5312,
+          "low": 795,
+          "high": 5312
+        },
+        {
+          "month": "2011-05-01",
+          "open": 3351,
+          "close": 3982,
+          "low": 2633,
+          "high": 5805
+        },
+        {
+          "month": "2011-06-01",
+          "open": 3974,
+          "close": 5515,
+          "low": 3767,
+          "high": 5515
+        },
+        {
+          "month": "2011-07-01",
+          "open": 5362,
+          "close": 4302,
+          "low": 3285,
+          "high": 6043
+        },
+        {
+          "month": "2011-08-01",
+          "open": 4266,
+          "close": 5058,
+          "low": 1115,
+          "high": 5895
+        },
+        {
+          "month": "2011-09-01",
+          "open": 5115,
+          "close": 5202,
+          "low": 1842,
+          "high": 5423
+        },
+        {
+          "month": "2011-10-01",
+          "open": 2429,
+          "close": 3669,
+          "low": 627,
+          "high": 5511
+        },
+        {
+          "month": "2011-11-01",
+          "open": 4068,
+          "close": 3613,
+          "low": 1495,
+          "high": 4486
+        },
+        {
+          "month": "2011-12-01",
+          "open": 3727,
+          "close": 2485,
+          "low": 705,
+          "high": 3940
+        },
+        {
+          "month": "2012-01-01",
+          "open": 2294,
+          "close": 4509,
+          "low": 1301,
+          "high": 4521
+        },
+        {
+          "month": "2012-02-01",
+          "open": 4579,
+          "close": 1834,
+          "low": 1529,
+          "high": 5062
+        },
+        {
+          "month": "2012-03-01",
+          "open": 4990,
+          "close": 6235,
+          "low": 3194,
+          "high": 8362
+        },
+        {
+          "month": "2012-04-01",
+          "open": 6041,
+          "close": 5572,
+          "low": 1027,
+          "high": 7460
+        },
+        {
+          "month": "2012-05-01",
+          "open": 5740,
+          "close": 7338,
+          "low": 2843,
+          "high": 8294
+        },
+        {
+          "month": "2012-06-01",
+          "open": 4127,
+          "close": 5687,
+          "low": 4127,
+          "high": 8120
+        },
+        {
+          "month": "2012-07-01",
+          "open": 5531,
+          "close": 7216,
+          "low": 4459,
+          "high": 8173
+        },
+        {
+          "month": "2012-08-01",
+          "open": 7580,
+          "close": 7350,
+          "low": 4549,
+          "high": 7865
+        },
+        {
+          "month": "2012-09-01",
+          "open": 6140,
+          "close": 6889,
+          "low": 4073,
+          "high": 8714
+        },
+        {
+          "month": "2012-10-01",
+          "open": 6778,
+          "close": 5566,
+          "low": 22,
+          "high": 8156
+        },
+        {
+          "month": "2012-11-01",
+          "open": 5986,
+          "close": 5668,
+          "low": 2277,
+          "high": 6852
+        },
+        {
+          "month": "2012-12-01",
+          "open": 5191,
+          "close": 2729,
+          "low": 441,
+          "high": 6606
+        }
+      ],
+      "encoding": {
+        "x": "month",
+        "open": "open",
+        "close": "close",
+        "low": "low",
+        "high": "high"
+      }
+    },
+    {
+      "type": "chart",
+      "kind": "errorBars",
+      "title": "Monthly mean daily ridership ± 1σ",
+      "data": [
+        {
+          "month": "2011-01-01",
+          "mean": 1232,
+          "sd": 366
+        },
+        {
+          "month": "2011-02-01",
+          "mean": 1722,
+          "sd": 391
+        },
+        {
+          "month": "2011-03-01",
+          "mean": 2066,
+          "sd": 542
+        },
+        {
+          "month": "2011-04-01",
+          "mean": 3162,
+          "sd": 1025
+        },
+        {
+          "month": "2011-05-01",
+          "mean": 4381,
+          "sd": 564
+        },
+        {
+          "month": "2011-06-01",
+          "mean": 4784,
+          "sd": 437
+        },
+        {
+          "month": "2011-07-01",
+          "mean": 4559,
+          "sd": 669
+        },
+        {
+          "month": "2011-08-01",
+          "mean": 4409,
+          "sd": 797
+        },
+        {
+          "month": "2011-09-01",
+          "mean": 4247,
+          "sd": 949
+        },
+        {
+          "month": "2011-10-01",
+          "mean": 3984,
+          "sd": 1086
+        },
+        {
+          "month": "2011-11-01",
+          "mean": 3406,
+          "sd": 775
+        },
+        {
+          "month": "2011-12-01",
+          "mean": 2817,
+          "sd": 943
+        },
+        {
+          "month": "2012-01-01",
+          "mean": 3121,
+          "sd": 859
+        },
+        {
+          "month": "2012-02-01",
+          "mean": 3556,
+          "sd": 856
+        },
+        {
+          "month": "2012-03-01",
+          "mean": 5319,
+          "sd": 1231
+        },
+        {
+          "month": "2012-04-01",
+          "mean": 5807,
+          "sd": 1287
+        },
+        {
+          "month": "2012-05-01",
+          "mean": 6318,
+          "sd": 1061
+        },
+        {
+          "month": "2012-06-01",
+          "mean": 6761,
+          "sd": 938
+        },
+        {
+          "month": "2012-07-01",
+          "mean": 6568,
+          "sd": 853
+        },
+        {
+          "month": "2012-08-01",
+          "mean": 6919,
+          "sd": 781
+        },
+        {
+          "month": "2012-09-01",
+          "mean": 7286,
+          "sd": 963
+        },
+        {
+          "month": "2012-10-01",
+          "mean": 6414,
+          "sd": 1910
+        },
+        {
+          "month": "2012-11-01",
+          "mean": 5089,
+          "sd": 1111
+        },
+        {
+          "month": "2012-12-01",
+          "mean": 3991,
+          "sd": 1774
+        }
+      ],
+      "encoding": {
+        "x": "month",
+        "y": "mean",
+        "error": "sd",
+        "band": true
+      }
+    },
+    {
+      "type": "chart",
+      "kind": "gauge",
+      "title": "2012 average vs system peak",
+      "data": [
+        {
+          "metric": "Avg daily rides, 2012",
+          "value": 5600
+        }
+      ],
+      "encoding": {
+        "value": "value",
+        "name": "metric",
+        "min": 0,
+        "max": 8714
+      }
+    }
+  ]
+}

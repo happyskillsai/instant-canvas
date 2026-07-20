@@ -1,0 +1,4 @@
+# The repo root ignores every .env* except .env.example. Re-include the second
+# committed template so the multi-environment demo ships. A real `.env` a user
+# copies from these templates stays ignored — secrets never get committed.
+!.env.production.example
