@@ -1,6 +1,6 @@
 ---
 name: instant-canvas
-description: InstantCanvas — render data or markdown as local canvases or PDFs, print a document in white-paper style, collect credentials and secrets to disk, confirm a delete, and read or act on the files a user selected in the browser.
+description: InstantCanvas — render data or markdown as local canvases or PDFs, print a document in white-paper style, collect or edit secrets and env files on disk, confirm a delete, and read or act on the files a user selected in the browser.
 allowed-tools: Bash, Read, Write, Edit
 ---
 
@@ -15,7 +15,8 @@ All commands run via `npx` from any directory — the current directory is the w
 - **Presenting wrangled data visually**: metrics, comparisons, reports, query results → `markdown`, `kpi`, `chart`, `table` blocks.
 - **Showing a markdown file that already exists** → just `$IC open report.md`. See below: no canvas, no JSON.
 - **Browsing a folder** → `$IC open <folder>` opens a **browse view** of its canvases, documents, images, video and audio — the reader sorts, opens any item (zooming an image, or playing a video/audio clip in a bespoke player with a 0.5×–3× speed control), and can delete media; no canvas, no JSON. A `gallery` block places an image grid *beside* other blocks in a canvas.
-- **Collecting credentials, env vars, or multi-field setup input** → a `form` block with `secret` fields and a file destination.
+- **Collecting NEW credentials, env vars, or multi-field setup input** → a `form` block with `secret` fields and a file destination.
+- **Editing an EXISTING `.env`** (or any `.env.*`) → just `$IC open .env`. The runtime synthesises an edit form from the file's current keys; the human edits, adds or deletes vars in the browser and you get redacted metadata. No canvas, and you never read the values.
 - **Confirmation before a destructive action** (drop DB, delete infra) → a `confirm` block.
 
 ## Choosing the workspace
@@ -39,6 +40,16 @@ $IC print docs/report.md --out report.pdf   # and prints as paper (needs a local
 ```
 
 **Do not write a canvas JSON wrapping a markdown file you could have opened directly** — no envelope, no `stamp`, no `validate`. The runtime builds the envelope itself, in memory, and writes nothing to disk. Skip the entire loop below; it is for data *you* wrangled into a contract, and a `.md` is already the data.
+
+## An existing `.env` needs no form either
+
+The symmetric case. A `.env` (or any `.env.*`) is an **edit form** already — point at one and the runtime synthesises a form from the file's current keys:
+
+```bash
+$IC open .env                               # one field per key, for the human to edit/add/delete in the browser
+```
+
+**You do not author a form to edit an *existing* `.env`, and you must not** — editing it means knowing its current values, and you never read a secret file into context ([the secret rule](#the-secret-rule)). The runtime reads it kernel-side, pre-fills the form, blocks until the human submits, and writes their changes back parse-preservingly (comments, order and untouched keys byte-preserved); you receive redacted metadata only — field names, an `overwritten` list, a `removed` list, never a value ([Result handling](#result-handling)). Authoring a `form` block with an `env` destination (below) is still how you collect **new** values into a file *you* define. `validate` / `stamp` / `print` still refuse a `.env` — there is no contract to check and nothing to print.
 
 Two consequences worth knowing. A natively-opened markdown file is rendered as best it can be rather than validated: raw HTML is dropped (its prose kept) and a remote image becomes `*(remote image not shown)*`, because the runtime never fetches. And `validate` / `stamp` refuse a markdown file — there is no contract to check and nothing to stamp. Author a real canvas with a `markdown` block only when you need the file *beside* other blocks (charts, KPIs, a form).
 
@@ -127,7 +138,7 @@ Two rules are absolute:
 
 ## The secret rule
 
-Never ask the user to paste API keys, tokens, passwords, database URLs, or credentials into the chat. Create a form canvas with `secret` fields and a local destination instead. Never read the written secret files back into context unless the user explicitly asks.
+Never ask the user to paste API keys, tokens, passwords, database URLs, or credentials into the chat. Create a form canvas with `secret` fields and a local destination instead. Never read the written secret files back into context unless the user explicitly asks. To let the human **edit an existing** secret file, `open` it directly (`$IC open .env`) — the runtime reads it kernel-side and pre-fills the form; do **not** `cat` a `.env` into context to build a form yourself.
 
 Honest framing: this keeps secrets out of the conversation **during capture**. Nothing technically stops a later read of `.env` — the rule above is what protects the user. Follow it.
 
@@ -163,7 +174,7 @@ stop [--workspace <dir>]
 ```
 
 - `open` and `print` take a canvas **or** a markdown file. `print` needs an envelope-level `document` object on a canvas (see [Printing](#printing-a-canvas-the-document-object)), but nothing at all on a `.md` — it derives its own paper defaults.
-- Anything that is neither a canvas (`*.json`) nor a markdown file is refused unread — do not point these commands at `.env` or other data files.
+- `open` additionally accepts a `.env` (or `.env.*`) — it renders the edit form above — and a folder (a browse view). Everything else is refused unread, and `validate` / `stamp` / `print` refuse a `.env` too (there is no contract to check); do not point *those* at `.env` or other data files.
 - Workspace root = `--workspace` else the current directory. The canvas must live inside it, **and so must `--out`** (`PATH_OUTSIDE_WORKSPACE`, exit 1) — you cannot print outside the workspace (a temp or Desktop folder, say). Pass `--workspace` to widen the root; there is no confirmation prompt to fall back on.
 - `validate` also takes `--workspace`. Without it, a `markdown` block's `src` is resolved against the current directory — validating a canvas from elsewhere then invents `MISSING_SOURCE` errors that are artifacts of where you stood.
 - `--no-open` skips launching the browser. `--timeout <s>` overrides the interactive session expiry (default 600). `--result <file>` mirrors the stdout JSON to a file.
@@ -463,13 +474,13 @@ You pick the right chart for the data and can still ship unreadable pixels, beca
 |---|---|
 | display | `{"status":"opened","url":...,"canvas":...,"workspace":...,"timestamp":...}` |
 | printed | `{"status":"printed","path":...,"pages":...,"bytes":...,"timestamp":...}` |
-| form saved | `{"status":"saved","destination":{"kind","path"},"fields":[names],"overwritten":[names],"redacted":true,"timestamp"}` |
+| form saved | `{"status":"saved","destination":{"kind","path"},"fields":[names],"overwritten":[names],"removed":[names]?,"redacted":true,"timestamp"}` |
 | form, no file dest | `{"status":"submitted","fields":[...],"values":{non-secret only}?,"timestamp"}` |
 | user cancelled / expired | `{"status":"cancelled"\|"timeout",...}` — exit 0, a clean outcome; respect the user's choice |
 | confirm | `{"status":"confirmed"\|"cancelled","confirmed":true\|false,"timestamp"}` |
 | error | `{"status":"error","error":{"code","message","errors"?},"timestamp"}` |
 
-Secret values appear in **no** result variant — you get field names, never values. `"return": {"includeValues": true}` (only with `"kind": "none"`) returns non-secret values.
+Secret values appear in **no** result variant — you get field names, never values. `"return": {"includeValues": true}` (only with `"kind": "none"`) returns non-secret values. Editing a `.env` (`open .env`) uses the same `saved` shape and adds `removed` — the keys the human deleted (absent when none were).
 
 **The other commands each print exactly one JSON document too** — parse stdout the same way (exit code first, per the note above):
 
