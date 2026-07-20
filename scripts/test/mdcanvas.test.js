@@ -133,9 +133,10 @@ test('scan lists markdown documents beside canvases: kind, canvases-first orderi
 	const rootEntries = tree.collections[0].canvases
 	assert.deepEqual(rootEntries.map((e) => `${e.kind}:${e.id}`), [
 		'canvas:r.canvas.json',      // canvases lead — they are the answers somebody asked for
+		'env:.env',                  // a .env is its own openable `env` kind (a form)
 		'document:README.md',
 		'document:untitled.md',
-	], '.env and notes.txt are not documents')
+	], 'notes.txt is not renderable; a .env is surfaced as an env form')
 
 	assert.deepEqual(tree.collections[1].canvases.map((e) => e.id), ['docs/guide.mdx'])
 	assert.equal(tree.collections[1].canvases[0].title, 'Guide')

@@ -3,10 +3,11 @@
 const fs = require('node:fs')
 const path = require('node:path')
 const { insideRoot } = require('./paths')
-const { isExcludedDir, canvasEntry, documentEntry } = require('./scan')
+const { isExcludedDir, canvasEntry, documentEntry, envEntry } = require('./scan')
 const { companionIndex } = require('./companion')
 const { normalizeRelDir, mediaKind, mediaStat, isSkippable } = require('./gallery')
 const { hasMarkdownExtension } = require('./markdownsrc')
+const { isEnvFile } = require('./envfile')
 
 const toPosix = (p) => String(p).split(path.sep).join('/')
 
@@ -14,10 +15,10 @@ const toPosix = (p) => String(p).split(path.sep).join('/')
 // as "covered everything", so hitting it sets `truncated` and the UI must say so.
 const DEFAULT_CAP = 2000
 
-// The five item kinds the browse view can filter by, in display group order.
-// FOLDERS are navigation, not items — they are never in this set and never a
-// filterable type.
-const ITEM_KINDS = ['canvas', 'document', 'image', 'video', 'audio']
+// The item kinds the browse view can filter by, in display group order. FOLDERS
+// are navigation, not items — they are never in this set and never a filterable
+// type. `env` is a `.env`/`.env.*` file, which OPENS as a synthesised form.
+const ITEM_KINDS = ['canvas', 'env', 'document', 'image', 'video', 'audio']
 
 /**
  * The scan's canvas/document builders return the sidebar's entry shape keyed by
@@ -150,7 +151,11 @@ function collectFiles(root, relDir, index, want, buckets, cc) {
 		return // an unreadable directory contributes nothing, never throws
 	}
 	const fileNames = dirents
-		.filter((d) => d.isFile() && !d.name.startsWith('.'))
+		// Dot-FILES are never listed — EXCEPT a `.env`/`.env.*`, surfaced through the one
+		// shared `isEnvFile` gate so it can be opened as a form (every other dotfile,
+		// `.gitignore` and friends, stays hidden). This is a LISTING relaxation only: the
+		// bytes are never served here, and the file-serving/meta routes still 404 a `.env`.
+		.filter((d) => d.isFile() && (!d.name.startsWith('.') || isEnvFile(d.name)))
 		.map((d) => d.name)
 		.sort((a, b) => a.localeCompare(b))
 	const relOf = (name) => (relDir ? path.join(relDir, name) : name)
@@ -168,7 +173,12 @@ function collectFiles(root, relDir, index, want, buckets, cc) {
 	}
 	for (const name of fileNames) {
 		const rel = relOf(name)
-		if (name.endsWith('.json')) {
+		if (isEnvFile(name)) {
+			// Checked BEFORE the `.json` branch so a `.env.json` lists as the form it opens,
+			// not as a (markerless, dropped) canvas.
+			if (!want || want.has('env'))
+				add(buckets.env, withRel(envEntry(root, rel)))
+		} else if (name.endsWith('.json')) {
 			if (!want || want.has('canvas'))
 				add(buckets.canvas, withRel(canvasEntry(root, rel)))
 		} else if (hasMarkdownExtension(name)) {
@@ -285,7 +295,7 @@ function listDir(root, dirRel, { cap = DEFAULT_CAP, dirsOnly = false, recursive 
 
 	const want = normalizeTypes(types)
 	const index = companionIndex(root)
-	const buckets = { canvas: [], document: [], image: [], video: [], audio: [] }
+	const buckets = { canvas: [], env: [], document: [], image: [], video: [], audio: [] }
 	const cc = { total: 0, truncated: false, cap }
 
 	if (recursive)
@@ -293,7 +303,7 @@ function listDir(root, dirRel, { cap = DEFAULT_CAP, dirsOnly = false, recursive 
 	else
 		collectFiles(root, relDir, index, want, buckets, cc)
 
-	const items = [...buckets.canvas, ...buckets.document, ...buckets.image, ...buckets.video, ...buckets.audio]
+	const items = [...buckets.canvas, ...buckets.env, ...buckets.document, ...buckets.image, ...buckets.video, ...buckets.audio]
 	return { dir: toPosix(relDir), dirs, items, truncated: cc.truncated, recursive: !!recursive }
 }
 

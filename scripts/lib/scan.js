@@ -6,6 +6,7 @@ const { collectBlocks, isInteractiveBlock } = require('./validate')
 const { readCanvasFile, MAX_CANVAS_BYTES } = require('./canvasfile')
 const { enhancesOf, companionIndex } = require('./companion')
 const { hasMarkdownExtension, markdownTitle, MAX_MARKDOWN_BYTES } = require('./markdownsrc')
+const { isEnvFile } = require('./envfile')
 
 // Enough of a document to find its first H1 past any frontmatter. The scan runs
 // on every workspace refresh and every file change, so it reads a prefix rather
@@ -98,6 +99,32 @@ function documentEntry(root, rel, index) {
 }
 
 /**
+ * A `.env` (or `.env.*`) listed as itself.
+ *
+ * It is neither a canvas nor a document — it is a THIRD listable kind, `env`, that
+ * OPENS as a synthesised form (lib/envcanvas.js). The entry carries NO value and is
+ * built WITHOUT reading the file (a stat only, to skip a directory named `.env`):
+ * this listing surface must never open a `.env`, exactly like every other path
+ * surface — the title is the file's own name, nothing more. Because it is its own
+ * kind, the sidebar's `count` (canvases) and `docCount` are both left honest.
+ */
+function envEntry(root, rel) {
+	const abs = path.join(root, rel)
+	try {
+		if (!fs.statSync(abs).isFile())
+			return null // a directory named `.env` is not a form
+	} catch {
+		return null
+	}
+	return {
+		id: rel.split(path.sep).join('/'),
+		kind: 'env',
+		title: path.basename(rel),
+		interactive: true, // it opens a form, so the sidebar renders it as actionable
+	}
+}
+
+/**
  * Everything renderable in one directory: canvases first, then markdown
  * documents, each A→Z. Canvases lead because they are the answers somebody
  * asked for; the documents were already there.
@@ -116,8 +143,17 @@ function entriesInDir(root, relDir, index) {
 		.sort((a, b) => a.localeCompare(b))
 		.map((n) => build(root, relOf(n), index))
 		.filter(Boolean)
+	// Env files are dot-files, so `isSkippable` hides them from the canvas/document
+	// picks above — they are surfaced here through the ONE shared `isEnvFile` gate,
+	// never a parallel filename check. Listed after canvases and documents, A→Z.
+	const envs = names
+		.filter(isEnvFile)
+		.sort((a, b) => a.localeCompare(b))
+		.map((n) => envEntry(root, relOf(n)))
+		.filter(Boolean)
 	return [
 		...pick((n) => n.endsWith('.json'), canvasEntry),
+		...envs,
 		...pick(hasMarkdownExtension, documentEntry),
 	]
 }
@@ -182,4 +218,4 @@ function scan(root) {
 	}
 }
 
-module.exports = { scan, dirsUnder, entriesInDir, canvasEntry, documentEntry, readCanvasFile, MAX_CANVAS_BYTES, EXCLUDED_DIRS, isExcludedDir }
+module.exports = { scan, dirsUnder, entriesInDir, canvasEntry, documentEntry, envEntry, readCanvasFile, MAX_CANVAS_BYTES, EXCLUDED_DIRS, isExcludedDir }

@@ -47,16 +47,17 @@ function fixture() {
 	return root
 }
 
-test('browse: items are grouped canvases → documents → images, each A→Z, companion collapsed', () => {
+test('browse: items are grouped canvases → env → documents → images, each A→Z, companion collapsed', () => {
 	const root = fixture()
 	const r = listDir(root, '')
 	assert.equal(r.dir, '')
 	assert.equal(r.truncated, false)
 
-	// Grouping order, then A→Z within each group. The companion guide.canvas.json
-	// is NOT a listed canvas — it belongs to guide.md.
-	assert.deepEqual(kindsOf(r.items), ['canvas', 'canvas', 'document', 'document', 'image', 'image'])
-	assert.deepEqual(relsOf(r.items), ['deck.canvas.json', 'report.canvas.json', 'guide.md', 'notes.md', 'a.png', 'shot.heic'])
+	// Grouping order, then A→Z within each group. A `.env` is its own openable `env`
+	// kind between canvases and documents. The companion guide.canvas.json is NOT a
+	// listed canvas — it belongs to guide.md.
+	assert.deepEqual(kindsOf(r.items), ['canvas', 'canvas', 'env', 'document', 'document', 'image', 'image'])
+	assert.deepEqual(relsOf(r.items), ['deck.canvas.json', 'report.canvas.json', '.env', 'guide.md', 'notes.md', 'a.png', 'shot.heic'])
 
 	// The companion canvas is absent, and its document carries the badge.
 	assert.equal(r.items.find((i) => i.rel === 'guide.canvas.json'), undefined, 'the companion canvas is dropped')
@@ -71,12 +72,14 @@ test('browse: items are grouped canvases → documents → images, each A→Z, c
 	assert.equal(r.items.find((i) => i.rel === 'shot.heic').renderable, false)
 })
 
-test('browse: a .json without the marker, a dot-file, and a non-renderable file are never items', () => {
+test('browse: a .json without the marker and a non-renderable file are never items; a .env IS (it opens as a form)', () => {
 	const root = fixture()
-	const rels = relsOf(listDir(root, '').items)
+	const items = listDir(root, '').items
+	const rels = relsOf(items)
 	assert.equal(rels.includes('package.json'), false, 'a .json without the canvas marker is not a canvas')
-	assert.equal(rels.includes('.env'), false, 'a dot-file is never an item')
 	assert.equal(rels.includes('data.csv'), false, 'a non-renderable file is never an item')
+	// A `.env` is the ONE dotfile surfaced — as its own `env` kind, because it opens a form.
+	assert.equal(items.find((i) => i.rel === '.env').kind, 'env', 'a .env is listed as an env item')
 })
 
 test('browse: dirs are immediate children A→Z; dot-dirs flagged hidden, .git/node_modules omitted', () => {

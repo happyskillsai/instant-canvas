@@ -19,6 +19,7 @@ const { scan, dirsUnder, readCanvasFile, MAX_CANVAS_BYTES, isExcludedDir } = req
 const { validate, collectBlocks, isInteractiveBlock, flattenFields } = require('./lib/validate')
 const { readMarkdownSrc, inlineLocalImages, inlineImageFile, inlineMath, hasMarkdownExtension, renderableMarkdown, MAX_COVER_IMAGE_BYTES } = require('./lib/markdownsrc')
 const { virtualCanvasFor } = require('./lib/mdcanvas')
+const { virtualFormCanvasFor } = require('./lib/envcanvas')
 const { listImages, mediaStat, isStreamableFile, mediaKind, galleryMime, parseByteRange, normalizeRelDir, GALLERY_IMAGE_EXTS, MEDIA_VIDEO_EXTS, MEDIA_AUDIO_EXTS } = require('./lib/gallery')
 const { listDir, itemMeta } = require('./lib/browse')
 const { writeSelection, readSelection } = require('./lib/selection')
@@ -27,10 +28,11 @@ const { companionFor, enhancesOf } = require('./lib/companion')
 const { figureMap } = require('./lib/figures')
 const { Sessions } = require('./lib/session')
 const envfile = require('./lib/envfile')
+const { isEnvFile } = envfile
 const jsonfile = require('./lib/jsonfile')
 const themeLib = require('./lib/theme')
 const themestore = require('./lib/themestore')
-const { DEFAULT_URL_PROTOCOLS } = require('./lib/schema')
+const { DEFAULT_URL_PROTOCOLS, ENV_KEY_RE } = require('./lib/schema')
 const { PKG_VERSION } = require('./lib/pkgmeta')
 
 const WEB_DIR = path.join(__dirname, 'web')
@@ -175,6 +177,21 @@ function loadCanvas(rel) {
 		return { status: 200, body: { ok: true, path: rel, canvas, warnings: [], figures: figureMap(canvas), ...themeFor(rel, null) }, canvas }
 	}
 
+	// A `.env` (or any `.env.*`) is its own FORM canvas — synthesised here, kernel-side,
+	// never written. This is the symmetric case to the markdown branch above, and the
+	// one deliberate exception to "never open a .env": the values it reads reach only the
+	// browser (which pre-fills the form) and, on submit, disk — never the agent. It sits
+	// BEFORE the loadCanvasFile fallthrough, whose `.json`-only gate would otherwise 404
+	// it (that gate stays, and keeps protecting `validate`/non-open reads).
+	if (isEnvFile(rel)) {
+		const canvas = virtualFormCanvasFor(ROOT, rel)
+		// null → a directory named `.env`, or an unreadable file: 404, byte-clean, never
+		// the file's own bytes (the same discipline the markdown branch holds at :172-173).
+		if (!canvas)
+			return { status: 404, body: { ok: false, message: `Not readable: ${rel}` } }
+		return { status: 200, body: { ok: true, path: rel, canvas, warnings: [], figures: figureMap(canvas), ...themeFor(rel, null) }, canvas }
+	}
+
 	// A directory is NOT a canvas. GET /api/canvas answers only for canvas files and
 	// markdown documents; a folder navigates to the browse view (#/f/) through
 	// /api/open, which handles directories directly. Here it falls through to the
@@ -268,7 +285,24 @@ const themeFor = (rel, declared) => themestore.themeFor(ROOT, rel, declared)
  * implementation: a reader clicking Save and an agent running `instantcanvas theme` must
  * not be able to disagree about where a theme belongs.
  */
+/**
+ * A `.env` now LOADS as a synthesised form (loadCanvas's env branch), and the theme /
+ * paper WRITE doors must NOT follow it there. A form has no envelope to keep a theme in,
+ * and `applyTheme`/`applyPaper` would `JSON.parse` the `.env` and hand its first bytes back
+ * in a 500 message — the exact leak class this project exists to close. Before this feature
+ * the `.json`-gate in loadCanvas refused these routes for free; now the refusal is explicit,
+ * up front, before any read — keeping "POST /api/theme … stays refusing" (§5) exactly true.
+ */
+function refusesEnvTheme(res, rel) {
+	if (!isEnvFile(rel))
+		return false
+	sendJson(res, 404, { ok: false, message: `Not a themeable canvas: ${rel}` })
+	return true
+}
+
 function saveTheme(res, rel, body) {
+	if (refusesEnvTheme(res, rel))
+		return
 	const load = loadCanvas(rel)
 	if (load.status !== 200)
 		return sendJson(res, load.status, load.body)
@@ -317,6 +351,8 @@ function saveTheme(res, rel, body) {
  * cannot hold a theme at all (a form, a confirm, a sweep), with the reason attached.
  */
 function themePlan(res, rel, scope) {
+	if (refusesEnvTheme(res, rel))
+		return
 	const load = loadCanvas(rel)
 	if (load.status !== 200)
 		return sendJson(res, load.status, load.body)
@@ -341,6 +377,8 @@ function themePlan(res, rel, scope) {
  * everything else that refuses (a cover, a presentation) is a 400.
  */
 function savePaper(res, rel, body) {
+	if (refusesEnvTheme(res, rel))
+		return
 	const load = loadCanvas(rel)
 	if (load.status !== 200)
 		return sendJson(res, load.status, load.body)
@@ -379,6 +417,8 @@ function savePaper(res, rel, body) {
 
 /** What turning paper mode on WOULD do, without doing it — the mirror of themePlan. */
 function paperPlan(res, rel) {
+	if (refusesEnvTheme(res, rel))
+		return
 	const load = loadCanvas(rel)
 	if (load.status !== 200)
 		return sendJson(res, load.status, load.body)
@@ -752,6 +792,95 @@ function nonSecretValues(fields, clean) {
 	return out
 }
 
+/**
+ * Submit path for the NATIVE `.env` form (lib/envcanvas.js) — kept separate from the
+ * generic form path so that one stays byte-for-byte unchanged. It differs in three ways
+ * a generic form never faces, and each is a locked decision:
+ *
+ *  1. ADDED KEYS. The synthesised block lists only the file's existing keys, but the form
+ *     can add new ones — so the entries come from `body.values` itself (every key the
+ *     browser submitted), not from `block.fields`. Every value is a secret, every key name
+ *     is checked against ENV_KEY_RE (the add-a-key affordance can produce an invalid name).
+ *  2. VALUE-CHANGED OVERWRITE. The form submits ALL fields carrying their current defaults,
+ *     so "this key already exists" would flag every key. The overwrite confirmation instead
+ *     lists ONLY keys whose submitted value differs from the file's current value.
+ *  3. DELETE HANDSHAKE. Removed keys ride in `body.deletions`; before writing, a 409 names
+ *     the exact keys (a count/list in a confirmation is a promise — docs/gotchas/runtime.md),
+ *     and on confirm they are passed to envfile.merge's parse-preserving `remove`.
+ *
+ * registerSecret-first, redaction, field-NAMES-only logging and `redacted: true` are kept
+ * exactly as the generic path holds them.
+ */
+function handleEnvFormSubmit(session, block, body, res) {
+	const now = () => new Date().toISOString()
+	const dest = block.destination || { kind: 'env', path: '' }
+	const values = (body && typeof body.values === 'object' && body.values) || {}
+	const deletions = Array.isArray(body && body.deletions) ? body.deletions.map(String) : []
+	const confirmations = (body && body.confirmations) || {}
+
+	// Secret hygiene FIRST, and for EVERY submitted value (added keys included — they are
+	// not in block.fields), before anything can log or serialize.
+	for (const k of Object.keys(values))
+		if (typeof values[k] === 'string' && values[k])
+			registerSecret(values[k])
+
+	// A native form can ADD a key, so an invalid dotenv key name is a field error — the
+	// same ENV_KEY_RE the validator enforces for an authored env destination.
+	const fieldErrors = {}
+	for (const k of [...Object.keys(values), ...deletions])
+		if (!ENV_KEY_RE.test(k))
+			fieldErrors[k] = `"${k}" is not a valid environment variable name (letters, digits, "_"; not starting with a digit).`
+	if (Object.keys(fieldErrors).length)
+		return sendJson(res, 422, { ok: false, fieldErrors })
+
+	const destAbs = path.resolve(ROOT, dest.path)
+	if (!insideRoot(ROOT, destAbs) && confirmations.outsideRoot !== true)
+		return sendJson(res, 409, { ok: false, needsConfirmation: { outsideRoot: destAbs } })
+
+	const entries = {}
+	for (const k of Object.keys(values))
+		entries[k] = serializeForEnv(values[k])
+	// A write wins over a delete of the same key (the UI never sends both, but a
+	// contradiction must not silently delete what it also writes).
+	const remove = deletions.filter((k) => !Object.prototype.hasOwnProperty.call(entries, k))
+
+	// Value-changed overwrite: diff each submitted value against the file's CURRENT value,
+	// so an unchanged re-submit is not an "overwrite". Parsing the current file is a read of
+	// a `.env` — kernel-side only, and its values are already registered above.
+	let currentMap = new Map()
+	try {
+		currentMap = new Map(envfile.parse(fs.readFileSync(destAbs, 'utf8')).map((e) => [e.key, e.value]))
+	} catch { /* no file yet → nothing to overwrite */ }
+	const changed = Object.keys(entries).filter((k) => currentMap.has(k) && currentMap.get(k) !== String(values[k]))
+	if (changed.length && confirmations.overwrite !== true)
+		return sendJson(res, 409, { ok: false, needsConfirmation: { overwrite: changed } })
+
+	if (remove.length && confirmations.delete !== true)
+		return sendJson(res, 409, { ok: false, needsConfirmation: { delete: remove } })
+
+	let written
+	try {
+		written = envfile.merge(destAbs, entries, { mode: 'merge', remove })
+	} catch (err) {
+		klog('WRITE_FAILED for session', session.id, err)
+		return sendJson(res, 500, { ok: false, error: { code: 'WRITE_FAILED', message: redact(err.message) } })
+	}
+	const result = {
+		status: 'saved',
+		destination: { kind: 'env', path: dest.path },
+		fields: written.written,
+		overwritten: changed,
+		removed: written.removed,
+		redacted: true,
+		timestamp: now(),
+	}
+	sessions.resolve(session.id, result)
+	broadcast({ type: 'session', id: session.id, status: result.status })
+	// NAMES only — never values.
+	klog('session', session.id, 'env form submitted; wrote:', written.written.join(',') || '(none)', 'removed:', written.removed.join(',') || '(none)', '→', dest.path)
+	return sendJson(res, 200, { ok: true, result, fields: written.written, destination: { kind: 'env', path: dest.path } })
+}
+
 async function handleSubmit(session, body, res) {
 	const load = loadCanvas(session.canvasPath)
 	if (!load.canvas)
@@ -760,6 +889,11 @@ async function handleSubmit(session, body, res) {
 	if (!block)
 		return sendJson(res, 409, { ok: false, message: 'This canvas has no interactive block.' })
 	const now = () => new Date().toISOString()
+
+	// The native `.env` form has add-a-key, value-changed overwrite and delete semantics a
+	// generic form does not — routed to its own path so the generic one stays unchanged.
+	if (load.canvas.envNative === true && block.type === 'form')
+		return handleEnvFormSubmit(session, block, body, res)
 
 	if (block.type === 'confirm') {
 		const confirmed = body.confirmed === true

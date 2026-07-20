@@ -584,6 +584,27 @@ select.inp{appearance:auto}
 .rangeline .range-val{font-variant-numeric:tabular-nums;min-width:44px;text-align:right;font-weight:600}
 .form-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:24px}
 
+/* native .env form — one row per key: KEY | revealed value (+eye) | delete.
+   Controls are painted at rest (no hover-gating), so they exist on a touch screen. */
+.env-rows{display:flex;flex-direction:column;gap:8px;margin:6px 0 4px}
+.env-row{display:grid;grid-template-columns:minmax(110px,0.85fr) minmax(0,1.5fr) auto;gap:10px;align-items:center}
+.env-key,.env-key-input{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:13px}
+.env-key{font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:0 2px}
+.env-key-input{text-transform:none}
+.env-val-wrap{min-width:0}
+.env-val-wrap .inp{padding-right:36px}
+.env-del,.env-undo{display:inline-flex;align-items:center;justify-content:center;width:36px;height:36px;flex:0 0 auto;
+	border:1px solid var(--border);border-radius:9px;background:var(--panel);color:var(--muted);cursor:pointer;padding:0}
+.env-del:hover{color:var(--accent);border-color:var(--accent)}
+.env-del .lucide,.env-undo .lucide{width:16px;height:16px;display:block}
+.env-undo{display:none;color:var(--accent);border-color:var(--accent)}
+.env-row.env-deleting .env-del{display:none}
+.env-row.env-deleting .env-undo{display:inline-flex}
+.env-row.env-deleting .env-key,.env-row.env-deleting .inp{text-decoration:line-through;opacity:.45}
+.env-empty{color:var(--muted);font-size:13px;font-style:italic;padding:8px 2px}
+.env-add{margin-top:4px}
+.env-add .lucide{width:15px;height:15px;margin-right:5px;vertical-align:-2px}
+
 /* fieldsets — CSP blocks style="" attributes, so grid geometry is class-based */
 .fset{border:1px solid var(--fset-border);border-radius:12px;padding:6px 18px 16px;margin:22px 0;min-width:0}
 .fset legend{font-weight:650;font-size:13px;padding:0 8px;margin-left:-8px;color:var(--text)}

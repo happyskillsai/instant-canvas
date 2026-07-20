@@ -27,6 +27,7 @@ const { withChrome, findChrome } = require('./lib/cdp')
 const { figureMap } = require('./lib/figures')
 const { PKG_VERSION, UNKNOWN_VERSION } = require('./lib/pkgmeta')
 const { hasMarkdownExtension } = require('./lib/markdownsrc')
+const { isEnvFile } = require('./lib/envfile')
 const themeLib = require('./lib/theme')
 const themestore = require('./lib/themestore')
 const skillsconfig = require('./lib/skillsconfig')
@@ -217,6 +218,13 @@ function assertReadable(abs, command) {
 	const ext = path.extname(abs).toLowerCase()
 	if (ext === '.json' || hasMarkdownExtension(abs))
 		return
+	// A `.env` (or `.env.*`) is `open`-only: the kernel synthesises a form from it and
+	// routes its values to the browser and disk, never to the agent. `validate`/`stamp`/
+	// `print` on a `.env` must still refuse — the CLI never reads a value, and printing a
+	// form is meaningless — so this relaxes NOTHING for them (they fall through to the
+	// INVALID_SPEC throw below, and the .env-leak protection stays).
+	if (command === 'open' && isEnvFile(abs))
+		return
 	// A directory is `open`-only: `open <folder>` renders its images as a gallery,
 	// the same way `open <file.md>` renders markdown. Nothing else acts on a folder —
 	// there is no contract to validate, no envelope to stamp, no file to print or theme.
@@ -329,10 +337,11 @@ async function cmdOpen(args) {
 	assertReadable(canvasAbs, 'open')
 	const isDir = fs.statSync(canvasAbs).isDirectory()
 
-	// A markdown file — or a folder (a gallery) — is already the data; the runtime
-	// synthesises the envelope for it. There is nothing to validate, and nothing for
-	// the agent to write.
-	if (!hasMarkdownExtension(rel) && !isDir) {
+	// A markdown file, a `.env` (a synthesised form) — or a folder (a gallery) — is
+	// already the data; the runtime synthesises the envelope for it, kernel-side. There
+	// is nothing to validate, and nothing for the agent to write. A `.env` in particular
+	// is NEVER read on the CLI side: its values must not reach the agent's context.
+	if (!hasMarkdownExtension(rel) && !isEnvFile(rel) && !isDir) {
 		// Never launch UI for an invalid canvas.
 		const verdict = validate(fs.readFileSync(canvasAbs, 'utf8'), { root, self: rel })
 		log(renderHuman(verdict, rel))

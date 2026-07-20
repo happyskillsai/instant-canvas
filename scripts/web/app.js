@@ -5514,7 +5514,7 @@ async function renderCanvas() {
 		if (b.type === 'table') return renderTable(b)
 		if (b.type === 'gallery') return renderGalleryShell(i)
 		if (b.type === 'chart') return renderChartShell(b, i, numbered)
-		if (b.type === 'form') return renderForm(b)
+		if (b.type === 'form') return b.envNative ? renderEnvForm(b) : renderForm(b)
 		if (b.type === 'confirm') return renderConfirm(b)
 		return ''
 	}).join('')
@@ -5596,6 +5596,7 @@ const MEDIA_KINDS = ['image', 'video', 'audio']
 const FILTER_TYPES = [
 	{ kind: 'folder', label: 'Folders', icon: 'folder' },
 	{ kind: 'canvas', label: 'Canvases', icon: 'file-json' },
+	{ kind: 'env', label: 'Env', icon: 'lock' },
 	{ kind: 'document', label: 'Docs', icon: 'file-text' },
 	{ kind: 'image', label: 'Images', icon: 'image' },
 	{ kind: 'video', label: 'Videos', icon: 'film' },
@@ -6319,7 +6320,7 @@ async function restoreSelection() {
 		browseInstance.applySelection()
 }
 
-const GROUP_ORDER = { folder: 0, canvas: 1, document: 2, image: 3, video: 4, audio: 5 }
+const GROUP_ORDER = { folder: 0, canvas: 1, env: 2, document: 3, image: 4, video: 5, audio: 6 }
 const browseTitleOf = (it) => it.title || it.name || it.rel
 function browseSortVal(it, by) {
 	if (by === 'created') return it.mtimeMs || 0
@@ -6537,8 +6538,8 @@ async function renderBrowse(main, rel) {
 			// nudged to the top-RIGHT so it clears the top-left icon chip.
 			const check = document.createElement('div'); check.className = 'gt-check'; check.innerHTML = icon('check'); tile.append(check)
 			if (bs.selection.has(it.rel)) tile.classList.add('selected')
-			const glyphName = it.kind === 'document' ? 'file-text' : it.deck ? 'presentation' : 'file-json'
-			const kindLabel = it.kind === 'document' ? 'Document' : it.deck ? 'Presentation' : 'Canvas'
+			const glyphName = it.kind === 'document' ? 'file-text' : it.kind === 'env' ? 'lock' : it.deck ? 'presentation' : 'file-json'
+			const kindLabel = it.kind === 'document' ? 'Document' : it.kind === 'env' ? 'Env' : it.deck ? 'Presentation' : 'Canvas'
 			const fileName = it.rel.split('/').pop()
 			const titleText = it.title || fileName
 			tile.title = titleText + '\n' + fileName + (it.enhanced ? '\nEnhanced by ' + it.enhanced : '')
@@ -7548,6 +7549,75 @@ function renderForm(block) {
 	</div>`
 }
 
+// ---- the native `.env` form (§4.8) --------------------------------------------
+// A `.env` opens as a form whose fields ARE the file's keys, pre-filled in plaintext
+// (a locked decision). The reader edits a value, ADDS a key, or DELETES one; on submit
+// the values go to disk and the agent gets redacted metadata. The type stays `secret`
+// server-side (it is what arms registerSecret and SECRET_RETURN_BLOCKED) — here the
+// widget is simply shown revealed, with an eye to hide it, never downgraded to text.
+
+/** One row: a key (fixed for an existing key, editable for an added one), a revealed
+ *  value with an eye, and a delete control. Structure mirrors the secret widget so the
+ *  existing `data-eye` handler works unchanged (the value input is the eye's previous
+ *  sibling). */
+function envRowHtml(key, value, existing) {
+	const keyCell = existing
+		? `<div class="env-key" title="${esc(key)}">${esc(key)}</div>`
+		: `<input class="inp env-key-input" data-env-key placeholder="NAME" autocomplete="off" spellcheck="false"
+				pattern="[A-Za-z_][A-Za-z0-9_]*" title="Letters, digits and _, not starting with a digit" value="${esc(key)}">`
+	return `<div class="env-row" data-env-row data-existing="${existing ? '1' : '0'}"${existing ? ` data-key="${esc(key)}"` : ''}>
+		${keyCell}
+		<div class="inp-wrap env-val-wrap">
+			<input class="inp env-val" data-env-val type="text" value="${esc(value)}" autocomplete="off" spellcheck="false">
+			<button type="button" class="eye" data-eye title="Hide">${icon('eye-off')}</button>
+		</div>
+		<button type="button" class="env-del" data-env-del title="Delete this variable">${icon('trash-2')}</button>
+		<button type="button" class="env-undo" data-env-undo title="Keep this variable">${icon('x')}</button>
+	</div>`
+}
+
+function renderEnvForm(block) {
+	const noSession = !state.session
+	const rows = (block.fields || []).map((f) => envRowHtml(f.name, f.default != null ? String(f.default) : '', true)).join('')
+	return `<div class="block">
+		${block.title ? `<h2 class="form-title">${esc(block.title)}</h2>` : ''}
+		${block.description ? `<p class="form-desc">${esc(block.description)}</p>` : ''}
+		<form id="theForm" class="env-form" novalidate>
+			${destinationLine(block.destination)}
+			<div class="secbanner">${icon('lock')} <div>These values are saved <b>locally</b> to the file above and are <b>not</b> sent back to the agent or into the chat context.</div></div>
+			${noSession ? '<div class="placeholder gap-b">No active agent session for this form — ask the agent to run <code>open &lt;file&gt;.env</code> to start one.</div>' : ''}
+			<div class="env-rows" data-env-rows>
+				${rows}
+				<div class="env-empty" data-env-empty${rows ? ' hidden' : ''}>No variables yet — add one below.</div>
+			</div>
+			<button type="button" class="btn ghost env-add" data-env-add ${noSession ? 'disabled' : ''}>${icon('plus')} Add variable</button>
+			<div class="form-actions">
+				<button type="button" class="btn ghost" data-cancel ${noSession ? 'disabled' : ''}>${esc(block.cancelLabel || 'Cancel')}</button>
+				<button type="submit" class="btn primary" ${noSession ? 'disabled' : ''}>${esc(block.submitLabel || 'Save')} →</button>
+			</div>
+		</form>
+	</div>`
+}
+
+/** Gather the env form into {values, deletions}. A row marked for deletion contributes
+ *  its key to `deletions` (existing rows only — an added row is simply removed from the
+ *  DOM); every other row contributes its value. An added row with no name is ignored. */
+function collectEnvSubmit(form) {
+	const values = {}
+	const deletions = []
+	form.querySelectorAll('[data-env-row]').forEach((row) => {
+		const existing = row.dataset.existing === '1'
+		if (row.classList.contains('env-deleting')) {
+			if (existing) deletions.push(row.dataset.key)
+			return
+		}
+		const key = existing ? row.dataset.key : (row.querySelector('[data-env-key]').value.trim())
+		if (!key) return
+		values[key] = row.querySelector('[data-env-val]').value
+	})
+	return { values, deletions }
+}
+
 function renderConfirm(block) {
 	const severity = block.severity || 'info'
 	const headIcon = severity === 'danger' ? icon('octagon-alert') : severity === 'warning' ? icon('triangle-alert') : icon('info')
@@ -7700,12 +7770,14 @@ function showSuccess(payload) {
 }
 
 async function submitForm(form, block) {
-	const values = collectValues(form, flattenFields(block.fields))
+	// The native env form submits {values, deletions}; a generic form submits {values}.
+	const env = block.envNative === true
+	const { values, deletions } = env ? collectEnvSubmit(form) : { values: collectValues(form, flattenFields(block.fields)), deletions: [] }
 	const confirmations = {}
 	for (;;) {
 		const { status, json } = await api(`/api/session/${state.session.id}/submit`, {
 			method: 'POST',
-			body: JSON.stringify({ values, confirmations }),
+			body: JSON.stringify(env ? { values, deletions, confirmations } : { values, confirmations }),
 		})
 		if (status === 200 && json && json.ok) {
 			showSuccess(json)
@@ -7713,11 +7785,26 @@ async function submitForm(form, block) {
 			return
 		}
 		if (status === 422 && json && json.fieldErrors) {
-			showFieldErrors(form, json.fieldErrors)
+			if (env)
+				// The env rows carry no per-field error slot — name the offending keys in a toast.
+				toast(Object.values(json.fieldErrors)[0] || 'Some variable names are invalid.')
+			else
+				showFieldErrors(form, json.fieldErrors)
 			return
 		}
 		if (status === 409 && json && json.needsConfirmation) {
 			const need = json.needsConfirmation
+			if (need.delete) {
+				const yes = await askConfirmation({
+					title: 'Delete these variables?',
+					bodyHtml: `<p>These keys will be <b>removed</b> from <code>${esc(block.destination && block.destination.path || '.env')}</code>:</p>
+						<ul class="fieldlist">${need.delete.map((k) => `<li>${esc(k)}</li>`).join('')}</ul>`,
+					confirmLabel: 'Delete',
+				})
+				if (!yes) return
+				confirmations.delete = true
+				continue
+			}
 			if (need.outsideRoot) {
 				const yes = await askConfirmation({
 					title: 'Write outside the workspace?',
@@ -7836,6 +7923,39 @@ function wireInteractive(blocks) {
 			inp.type = reveal ? 'text' : 'password'
 			eye.innerHTML = icon(reveal ? 'eye-off' : 'eye')
 			eye.title = reveal ? 'Hide' : 'Reveal'
+			return
+		}
+		// --- native env form: add a variable (append a row, never re-render), delete/undo
+		// (mark, don't vanish — a count in a confirmation is a promise, so deletes stay
+		// visible and reversible until submit).
+		if (e.target.closest('[data-env-add]')) {
+			const rows = form.querySelector('[data-env-rows]')
+			const empty = rows.querySelector('[data-env-empty]')
+			if (empty) empty.hidden = true
+			const tmp = document.createElement('div')
+			tmp.innerHTML = envRowHtml('', '', false)
+			const row = tmp.firstElementChild
+			rows.insertBefore(row, empty)
+			const keyInp = row.querySelector('[data-env-key]')
+			if (keyInp) keyInp.focus()
+			return
+		}
+		const envDel = e.target.closest('[data-env-del]')
+		if (envDel) {
+			const row = envDel.closest('[data-env-row]')
+			if (row.dataset.existing === '1') {
+				row.classList.add('env-deleting') // reversible — the row stays, marked
+			} else {
+				row.remove() // an added row was never in the file — nothing to delete
+				const rows = form.querySelector('[data-env-rows]')
+				const empty = rows && rows.querySelector('[data-env-empty]')
+				if (empty && !rows.querySelector('[data-env-row]')) empty.hidden = false
+			}
+			return
+		}
+		const envUndo = e.target.closest('[data-env-undo]')
+		if (envUndo) {
+			envUndo.closest('[data-env-row]').classList.remove('env-deleting')
 			return
 		}
 		if (e.target.closest('[data-cancel]') && state.session) {

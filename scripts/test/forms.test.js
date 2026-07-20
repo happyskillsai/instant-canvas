@@ -147,6 +147,76 @@ test('acceptance 7: form round-trip writes .env, preserves it, and never leaks s
 	await apiReq(entry, 'POST', '/api/shutdown', {})
 })
 
+test('native .env form: value-changed overwrite + delete handshake, add a key, leak-free', async () => {
+	const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'ic-envform-')))
+	fs.writeFileSync(path.join(root, '.env'), '# db config\nDB_HOST=localhost\nDB_PORT=5432\nDB_PASSWORD=oldpw-9x\n')
+
+	// `open .env` synthesises the form and blocks like any interactive canvas.
+	const { sessionId, done } = await openInteractive(root, '.env')
+	const entry = await registry.readAlive(root)
+	assert.ok(entry, 'kernel is up')
+
+	// The native form submits ALL fields with their defaults. Editing ONE value and adding
+	// a NEW key: the overwrite confirmation must name ONLY the changed key — never every
+	// existing key — and a brand-new key is not an overwrite.
+	const edited = { DB_HOST: 'localhost', DB_PORT: '5432', DB_PASSWORD: 'newpw-7z', ADDED_KEY: 'added-val-3q' }
+	const over = await apiReq(entry, 'POST', `/api/session/${sessionId}/submit`, { values: edited })
+	assert.equal(over.status, 409)
+	assert.deepEqual(over.json.needsConfirmation.overwrite, ['DB_PASSWORD'], 'only the value-changed key, not DB_HOST/DB_PORT')
+
+	// Confirm the overwrite and delete DB_PORT in the same submit → a delete 409 NAMING it.
+	const delValues = { DB_HOST: 'localhost', DB_PASSWORD: 'newpw-7z', ADDED_KEY: 'added-val-3q' } // DB_PORT dropped
+	const del = await apiReq(entry, 'POST', `/api/session/${sessionId}/submit`, {
+		values: delValues, deletions: ['DB_PORT'], confirmations: { overwrite: true },
+	})
+	assert.equal(del.status, 409)
+	assert.deepEqual(del.json.needsConfirmation.delete, ['DB_PORT'], 'the delete confirmation names the exact key')
+
+	// Confirm the delete too → saved.
+	const ok = await apiReq(entry, 'POST', `/api/session/${sessionId}/submit`, {
+		values: delValues, deletions: ['DB_PORT'], confirmations: { overwrite: true, delete: true },
+	})
+	assert.equal(ok.status, 200)
+	assert.equal(ok.json.result.status, 'saved')
+	assert.deepEqual(ok.json.result.removed, ['DB_PORT'])
+	assert.equal(ok.json.result.redacted, true)
+	assert.deepEqual(ok.json.result.destination, { kind: 'env', path: '.env' })
+
+	// The file: comment + DB_HOST byte-identical, DB_PASSWORD edited, DB_PORT gone, ADDED_KEY appended.
+	assert.equal(fs.readFileSync(path.join(root, '.env'), 'utf8'),
+		'# db config\nDB_HOST=localhost\nDB_PASSWORD=newpw-7z\nADDED_KEY=added-val-3q\n')
+
+	const { code, stdout, stderr } = await done
+	assert.equal(code, 0)
+	// Redaction sweep: no value in ANY channel — stdout, stderr, or the kernel log.
+	const kernelLog = fs.existsSync(registry.logFile(root)) ? fs.readFileSync(registry.logFile(root), 'utf8') : ''
+	for (const secret of ['oldpw-9x', 'newpw-7z', 'added-val-3q']) {
+		assert.ok(!stdout.includes(secret), 'stdout leaks a value')
+		assert.ok(!stderr.includes(secret), 'stderr leaks a value')
+		assert.ok(!kernelLog.includes(secret), 'kernel log leaks a value')
+	}
+	await apiReq(entry, 'POST', '/api/shutdown', {})
+})
+
+test('native .env form: an invalid added key name is a field error, nothing written', async () => {
+	const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'ic-envbad-')))
+	fs.writeFileSync(path.join(root, '.env'), 'KEEP=1\n')
+	const { sessionId, done } = await openInteractive(root, '.env')
+	const entry = await registry.readAlive(root)
+
+	const bad = await apiReq(entry, 'POST', `/api/session/${sessionId}/submit`, { values: { KEEP: '1', '1BAD': 'x' } })
+	assert.equal(bad.status, 422)
+	assert.ok(bad.json.fieldErrors['1BAD'], 'an invalid dotenv key name is named')
+	assert.equal(fs.readFileSync(path.join(root, '.env'), 'utf8'), 'KEEP=1\n', 'a rejected submit writes nothing')
+
+	// A clean re-submit (drop the bad key, keep KEEP unchanged) resolves with no handshake.
+	const okr = await apiReq(entry, 'POST', `/api/session/${sessionId}/submit`, { values: { KEEP: '1' } })
+	assert.equal(okr.status, 200)
+	assert.equal(okr.json.result.status, 'saved')
+	assert.equal((await done).code, 0)
+	await apiReq(entry, 'POST', '/api/shutdown', {})
+})
+
 test('confirm canvas: confirmed:true/false round-trips; timeout returns clean status', async () => {
 	const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'ic-conf-')))
 	fs.writeFileSync(path.join(root, 'confirm.canvas.json'), JSON.stringify({

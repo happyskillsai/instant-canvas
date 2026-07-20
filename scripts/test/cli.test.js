@@ -81,7 +81,11 @@ test('cli: LEAK REGRESSION — a file that is neither a canvas nor a document is
 	fs.writeFileSync(path.join(root, 'secrets.txt'), secret + '\n')
 	fs.writeFileSync(path.join(root, 'creds.yaml'), secret + '\n')
 
-	for (const cmd of ['validate', 'open', 'stamp', 'print']) {
+	// `open` is EXCLUDED here on purpose: `open .env` is now accepted (a synthesised form —
+	// tested, with its own no-leak assertion, in the open-lifecycle test below), and for a
+	// `.env` the CLI never reads the file at all, so it cannot leak. validate/stamp/print
+	// still refuse all three files and must never echo a byte of them.
+	for (const cmd of ['validate', 'stamp', 'print']) {
 		for (const file of ['.env', 'secrets.txt', 'creds.yaml']) {
 			const args = cmd === 'print' ? [cmd, file, '--out', 'x.pdf'] : [cmd, file]
 			const r = run([...args, '--no-open'], { cwd: root })
@@ -156,11 +160,15 @@ test('cli: open lifecycle — display open, kernel reuse, kill -9 recovery, stop
 	assert.match(md.json.url, /#\/c\/notes\.md$/)
 	assert.deepEqual(fs.readdirSync(root).filter((f) => f.endsWith('.md')), ['notes.md'], 'nothing was written beside it')
 
-	// the markdown allowlist is the gate here too — `open .env` is not a document.
+	// `open .env` is now ACCEPTED — the kernel synthesises a FORM from it and blocks like
+	// any interactive canvas (it does not exit 1). The agent still never sees a value: the
+	// CLI forwards only the path and reads back redacted metadata. --timeout 1 lets the
+	// blocking open return a clean {status:"timeout"} instead of hanging the test.
 	fs.writeFileSync(path.join(root, '.env'), 'API_KEY=sk-live-topsecret\n')
-	const env = run(['open', '.env', '--no-open'], { cwd: root })
-	assert.equal(env.code, 1)
-	assert.ok(!/sk-live/.test(env.stdout + env.stderr), 'no secret content in any output channel')
+	const env = run(['open', '.env', '--no-open', '--timeout', '1'], { cwd: root })
+	assert.equal(env.code, 0, env.stderr)
+	assert.equal(env.json.status, 'timeout')
+	assert.ok(!/sk-live/.test(env.stdout + env.stderr), 'no secret value in any output channel')
 
 	// same kernel is reused
 	const s1 = run(['status', '--workspace', root])

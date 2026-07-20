@@ -559,16 +559,30 @@ test('kernel: the workspace tree lists markdown documents beside canvases', asyn
 	assert.equal(r.json.docCount, 1)
 })
 
-test('kernel: SECURITY — /api/canvas reads canvases and markdown, and NOTHING else', async () => {
+test('kernel: SECURITY — /api/canvas reads canvases, markdown and .env forms, and NOTHING else', async () => {
 	// Regression. This route used to read any file in the workspace and hand the
 	// JSON.parse failure back as INVALID_JSON — whose V8 message quotes the bytes
 	// it choked on, so `?path=.env` answered with `Unexpected token 'A',
 	// "API_KEY=sk"...`. Confinement never caught it: .env is inside the root.
-	for (const p of ['.env', 'secrets.txt']) {
-		const r = await httpReq({ port: K.port, path: `/api/canvas?path=${encodeURIComponent(p)}`, headers: K.auth })
-		assert.equal(r.status, 404, `${p} must not be readable through this route`)
-		assert.ok(!/API_KEY|sk-live/.test(r.text), `${p} content leaked into the error body: ${r.text}`)
-	}
+	// A non-env, non-canvas, non-markdown file is STILL a byte-clean 404.
+	const r = await httpReq({ port: K.port, path: '/api/canvas?path=secrets.txt', headers: K.auth })
+	assert.equal(r.status, 404, 'secrets.txt must not be readable through this route')
+	assert.ok(!/API_KEY|sk-live/.test(r.text), `secrets.txt content leaked into the error body: ${r.text}`)
+
+	// A `.env` now RESOLVES here — deliberately, as a synthesised FORM canvas. Its values
+	// reach the BROWSER (this loopback, token-gated response) to pre-fill the form, and
+	// disk on submit; they never reach the agent (the CLI `open` result is redacted — see
+	// cli.test.js). So the value appearing in THIS body is the feature, not the leak.
+	const env = await httpReq({ port: K.port, path: '/api/canvas?path=.env', headers: K.auth })
+	assert.equal(env.status, 200, '.env resolves as a form canvas')
+	assert.equal(env.json.canvas.envNative, true, 'flagged as the native env form')
+	const block = env.json.canvas.blocks[0]
+	assert.equal(block.type, 'form')
+	assert.equal(block.destination.kind, 'env')
+	assert.equal(block.destination.path, '.env')
+	const apiKey = block.fields.find((f) => f.name === 'API_KEY')
+	assert.equal(apiKey.type, 'secret', 'every field is a secret')
+	assert.equal(apiKey.default, 'sk-live-topsecret', 'pre-filled in plaintext for the browser')
 })
 
 test('kernel: editing a markdown file hot-reloads it exactly like editing a canvas', async () => {
@@ -671,16 +685,20 @@ test('kernel: GET /api/dir lists a folder — dirs (excluded omitted, dot flagge
 	assert.ok(r.json.dirs.some((d) => d.name === '.hidden' && d.hidden === true), 'a dot-dir is listed with hidden:true')
 	assert.equal(r.json.dirs.find((d) => d.name === 'node_modules'), undefined, 'node_modules is omitted')
 
-	// items: the root canvas and the markdown document, grouped canvases → documents.
-	// package.json (no marker), .env (dot-file) and secrets.txt (not renderable) are absent.
+	// items: the root canvas, the .env (its own openable `env` kind), and the markdown
+	// document, grouped canvases → env → documents. package.json (no marker) and
+	// secrets.txt (not renderable, not a dotenv shape) are absent; a `.env` is the ONE
+	// dotfile surfaced, because it opens as a form.
 	const rels = r.json.items.map((i) => i.rel)
 	assert.ok(rels.includes('report.canvas.json'))
 	assert.ok(rels.includes('guide.md'))
+	assert.ok(rels.includes('.env'), '.env is listed as an openable env form')
+	assert.equal(r.json.items.find((i) => i.rel === '.env').kind, 'env')
 	assert.equal(rels.includes('package.json'), false)
-	assert.equal(rels.includes('.env'), false)
 	assert.equal(rels.includes('secrets.txt'), false)
 	const kinds = r.json.items.map((i) => i.kind)
-	assert.ok(kinds.lastIndexOf('canvas') < kinds.indexOf('document'), 'canvases group before documents')
+	assert.ok(kinds.lastIndexOf('canvas') < kinds.indexOf('env'), 'canvases group before env')
+	assert.ok(kinds.lastIndexOf('env') < kinds.indexOf('document'), 'env groups before documents')
 
 	// &dirs=1 returns just the dirs, for lazy tree expansion.
 	const only = await httpReq({ port: K.port, path: '/api/dir?path=&dirs=1', headers: K.auth })
