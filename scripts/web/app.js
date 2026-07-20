@@ -7594,6 +7594,7 @@ function renderEnvForm(block) {
 		<form id="theForm" class="env-form" novalidate>
 			${destinationLine(block.destination)}
 			<div class="secbanner">${icon('lock')} <div>These values are saved <b>locally</b> to the file above and are <b>not</b> sent back to the agent or into the chat context.</div></div>
+			<p class="env-hint">${icon('copy')} <span>Click the copy icon on one or more rows to collect them — then paste (them all at once) into another <code>.env</code> file.</span></p>
 			<div class="env-rows" data-env-rows>
 				${rows}
 				<div class="env-empty" data-env-empty${rows ? ' hidden' : ''}>No variables yet — add one below.</div>

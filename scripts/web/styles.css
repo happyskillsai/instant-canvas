@@ -605,6 +605,10 @@ select.inp{appearance:auto}
 .env-row.env-deleting .env-undo{display:inline-flex}
 .env-row.env-deleting .env-copy{visibility:hidden}
 .env-row.env-deleting .env-key,.env-row.env-deleting .inp{text-decoration:line-through;opacity:.45}
+.env-hint{display:flex;gap:8px;align-items:flex-start;color:var(--muted);font-size:12px;line-height:1.5;margin:2px 2px 12px}
+.env-hint .lucide{width:14px;height:14px;flex:0 0 auto;margin-top:2px;opacity:.75}
+.env-hint code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:11px;padding:0 3px;border-radius:4px;
+	background:var(--panel-2);border:1px solid var(--border-2)}
 .env-empty{color:var(--muted);font-size:13px;font-style:italic;padding:8px 2px}
 .env-add{margin-top:4px}
 .env-add .lucide{width:15px;height:15px;margin-right:5px;vertical-align:-2px}
