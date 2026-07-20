@@ -5,6 +5,20 @@ The agent-facing contract for InstantCanvas. The runtime ships as the
 and LICENSE, and agents drive the CLI through `npx`. Versions track the runtime
 package they were authored alongside.
 
+## [0.19.0] - 2026-07-20
+
+### Added
+- **`instant-canvas selection` — read the files the user multi-selected in the browser.** The reader
+  multi-selects any workspace items (canvases, documents, images, video, audio, across folders) and
+  that set is recorded to disk; `$IC selection` prints it as JSON (`{items:[{path, kind}], count,
+  updatedAt, dropped?}` — workspace-relative paths, entries whose files were since moved/deleted
+  pruned on read) and `$IC selection --clear` empties it. This is how a user says "delete / move /
+  rename **these**" by pointing in the browser instead of typing paths: InstantCanvas **records** the
+  selection and never touches the files — you (the agent) read the set and act on the paths with your
+  own tools, and there is deliberately no destructive selection verb. SKILL.md teaches the
+  record→read→act loop and the exact output contract, and the skill description now names the
+  capability (and white-paper rendering) so those requests auto-trigger the skill.
+
 ## [0.18.0] - 2026-07-19
 
 ### Added
