@@ -1,1 +1,0 @@
-{"instantcanvas":1,"createdWith":"0.2.1","title":"Markdown — same document as .mdx","description":"Identical content read as MDX: frontmatter stripped, JSX warned about, never evaluated.","blocks":[{"type":"markdown","src":"demos/markdown-handbook.mdx"}]}

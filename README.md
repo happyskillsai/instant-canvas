@@ -47,7 +47,7 @@ npx -y @happyskillsai/instant-canvas catalog
 npx -y @happyskillsai/instant-canvas catalog sankey
 
 # render a canvas (spawns/reuses the workspace kernel, opens the browser)
-npx -y @happyskillsai/instant-canvas open examples/report.canvas.json
+npx -y @happyskillsai/instant-canvas open my.canvas.json
 
 # render a markdown file directly — no canvas JSON, no stamp, no validate
 npx -y @happyskillsai/instant-canvas open README.md
@@ -68,7 +68,7 @@ npx -y @happyskillsai/instant-canvas stop
 
 Maintainers run the same CLI from the working tree — `node scripts/instantcanvas.js <command>` — and the tests with `npm test` (710 tests, zero deps; the browser tests skip without Chrome; equivalent to `node --test scripts/test/`). `npm run coverage:cli` enforces the CLI's 100% line coverage. `npm run rls <major|minor|patch|x.y.z>` bumps the package version — validated semver, forward-only. Releases are orchestrated end to end by the `/release-cli` project skill — see [docs/releasing.md](docs/releasing.md).
 
-`examples/` contains four ready canvases (visual report, secrets → `.env` form, danger confirm, mixed); `demos/` holds larger showcases (all 17 general chart kinds, the 9 scientific ones, slider-driven sweeps, the form kitchen sink).
+`examples/` (reference canvases) and `demos/` (larger showcases) are the two homes for the workbench canvas corpus. They were cleared to be rebuilt from scratch into a cleaner, documented set — the validator and provenance gates re-engage automatically as canvases are added back to either folder.
 
 ## Project Structure
 
@@ -87,8 +87,8 @@ scripts/                         Ships to npm (scripts/test/ excluded by the fil
   SKILL.md                       Progressive-disclosure entry point; drives the CLI via npx
   skill.json                     HappySkills metadata + the `config` block (theme, palettes),
                                  whose schema is GENERATED from lib/theme.js — never hand-typed
-examples/                        WORKBENCH — four validated reference canvases (used by tests and docs)
-demos/                           WORKBENCH — showcase canvases (chart gallery, science gallery, sweep gallery, …)
+examples/                        WORKBENCH — reference canvases (being rebuilt; tests re-engage as they return)
+demos/                           WORKBENCH — showcase canvases (being rebuilt)
 prototype/index.html             WORKBENCH — original user-approved UI reference (read-only)
 readme-deck.canvas.json          WORKBENCH — this README's COMPANION canvas (cover, brand theme, back cover).
                                  `open README.md` / `print README.md` render it; the sidebar shows one entry.
