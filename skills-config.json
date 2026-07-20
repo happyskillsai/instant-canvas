@@ -1,0 +1,7 @@
+{
+	"nicolasdao/init-spec": {
+		"config": {
+			"rulesFile": "specs/.spec-rules.md"
+		}
+	}
+}
