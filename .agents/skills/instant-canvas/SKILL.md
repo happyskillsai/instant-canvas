@@ -471,4 +471,12 @@ You pick the right chart for the data and can still ship unreadable pixels, beca
 
 Secret values appear in **no** result variant — you get field names, never values. `"return": {"includeValues": true}` (only with `"kind": "none"`) returns non-secret values.
 
+**The other commands each print exactly one JSON document too** — parse stdout the same way (exit code first, per the note above):
+
+- `stamp` → `{"status":"stamped","canvas","createdWith","changed":true|false,"timestamp"}`. `changed:false` means the stamp was already there (a safe no-op) — the file was not touched.
+- `theme` (read, no flags) → `{"status":"theme","canvas","theme":{resolved hex tokens},"themeDeclared":{what the file literally says},"themeSource":"canvas"|"workspace"|"default","workspace","timestamp"}`. A **write** (`--set`/`--clear`) → `{"status":"themed","canvas","wrote","target":"canvas"|"workspace","created"?,...(theme/themeDeclared/themeSource),"timestamp"}` — `created` is the path of a file the write had to create (e.g. a markdown file's companion), present only then. `--all` writes with `"canvas":null,"target":"workspace"`. `theme --save <name>` / `--save <name> --clear` → `{"status":"palette-saved"|"palette-deleted","palette","wrote","theme"?,"timestamp"}`. `theme --list` → `{"status":"themes","presets":[{name,mode,label,description,accent,paper,palette}],"palettes":[{name,mode,theme}],"tokens","workspace","timestamp"}`.
+- `snapshot` → `{"status":"snapshotted","canvas","workspace","outDir","figures":[{figure,path,title,kind,page,image,width,height,facts,warnings}],"timestamp"}` — `image` is an absolute PNG path; a canvas with no charts succeeds with `"outDir":null,"figures":[]`. `snapshot --list` → `{"status":"figures","canvas","figures":[{figure,path,title,kind}],"timestamp"}` (no browser, no Chrome).
+- `selection` / `selection --clear` — documented in full under [The selection](#the-selection-the-reader-gestures-which-files-you-act-on-them) above.
+- `validate` → `{"ok","errorCount","errors","warnings"}` (exit 0/1). `status` → `{"running":true|false,"root","port"?,"pid"?,"startedAt"?,"version"?,"timestamp"}`. `stop` → `{"status":"stopped","running":false,"root","timestamp"}` (idempotent). `catalog` → the lean index or one schema object (not a `status` envelope).
+
 Platform note: macOS and Linux are exercised in CI. Windows support — paths, process spawn, Chrome/Edge discovery, and CRLF-preserving writes — is implemented and unit-tested, but not yet verified end-to-end on a Windows machine.
