@@ -12,6 +12,7 @@ source:
   - scripts/lib/markdownsrc.js
   - scripts/lib/mathsvg.js
   - scripts/lib/mdcanvas.js
+  - scripts/lib/envcanvas.js
   - scripts/lib/gallery.js
   - scripts/lib/pkgmeta.js
 ---
@@ -103,6 +104,8 @@ That is `virtualCanvasFor()` in `lib/mdcanvas.js`, and it is the same `markdown`
 The gate is the extension allowlist, reused rather than reimplemented — this route is a *second* way to name a file for rendering, and the first one already shipped the `src: ".env"` bug. `createdWith` is honest here rather than borrowed: the running runtime is what authored this object, this instant.
 
 **A folder is NOT a canvas.** `open photos/` used to synthesise an in-memory gallery canvas (`virtualGalleryFor`), but the universal-navigation redesign retired it: a folder now navigates to the **browse view** (`#/f/`, a mixed grid of its renderable items — see [frontend.md](frontend.md)) rather than rendering as a canvas, so `GET /api/canvas?path=<dir>` is a byte-clean 404. The authored `gallery` block below is untouched — it is the way an agent embeds a recursive image grid *inside* a canvas. `validate` / `stamp` / `print` / `theme` still refuse a folder with a teaching error (see [cli.md](cli.md)).
+
+**A `.env` IS a canvas — a synthesised *form*.** The symmetric case to markdown, except the envelope carries a `form` block instead of a `markdown` one (`lib/envcanvas.js`, `virtualFormCanvasFor`). `open .env` (or `.env.*`) synthesises, **kernel-side**, one `secret` field per existing key (pre-filled with the current value), a `destination: {kind: 'env', path, mode: 'merge'}`, and an `envNative: true` flag the browser keys its add/delete/copy affordances off. No new schema — it is the same `form` + `secret` + `env`-destination contract an agent would author to *collect* new values; the synthesis just points it at an existing file the agent must not read. The security of that read (every value `registerSecret`-ed before the envelope exists; values reach only the browser and disk) lives in [security.md](security.md); `validate` / `stamp` / `print` / `theme` refuse a `.env`, exactly as they refuse a folder.
 
 **The native view degrades where the authored path teaches.** Behind an agent's `src`, the validator is a teacher: raw HTML warns and a remote image is a hard `REMOTE_ASSET_BLOCKED`, so the agent fixes the file. A README has no such author, we will not rewrite the user's file, and `html: false` *escapes* rather than deletes — leaving it alone means printing `<details>` as literal text and breaking every badge. So `renderableMarkdown()` removes HTML instead of escaping it (keeping the prose the tags wrapped), turns an HTML `<img>` into a markdown image so a README's logo survives, and replaces a remote image with `*(remote image not shown)*`. This is the one deliberate behavioral fork in the project: the same file renders differently viewed natively than behind an authored `src`. See [gotchas/frontend.md](gotchas/frontend.md).
 

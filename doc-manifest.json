@@ -67,7 +67,7 @@
         "Hot reload",
         "Version handshake"
       ],
-      "line_count": 199,
+      "line_count": 201,
       "links_to": [
         "docs/canvas-schema.md",
         "docs/cli.md",
@@ -86,6 +86,7 @@
         "scripts/lib/session.js",
         "scripts/lib/scan.js",
         "scripts/lib/mdcanvas.js",
+        "scripts/lib/envcanvas.js",
         "scripts/lib/gallery.js",
         "scripts/lib/browse.js",
         "scripts/lib/imagemeta.js",
@@ -140,7 +141,7 @@
         "Validator behavior",
         "Catalog: progressive disclosure"
       ],
-      "line_count": 401,
+      "line_count": 404,
       "links_to": [
         "docs/architecture.md",
         "docs/cli.md",
@@ -163,6 +164,7 @@
         "scripts/lib/markdownsrc.js",
         "scripts/lib/mathsvg.js",
         "scripts/lib/mdcanvas.js",
+        "scripts/lib/envcanvas.js",
         "scripts/lib/gallery.js",
         "scripts/lib/pkgmeta.js"
       ],
@@ -199,7 +201,7 @@
         "Result contract (stdout of `open`)",
         "The agent workflow"
       ],
-      "line_count": 165,
+      "line_count": 167,
       "links_to": [
         "docs/architecture.md",
         "docs/canvas-schema.md",
@@ -245,7 +247,7 @@
         "CSP shim",
         "Icons and vendored assets"
       ],
-      "line_count": 134,
+      "line_count": 141,
       "links_to": [
         "docs/architecture.md",
         "docs/canvas-schema.md",
@@ -458,9 +460,10 @@
         "A route that serves the user's files by extension must refuse a symlink",
         "The reader's selection is state, not a repo dotfile — and it records, it never acts"
       ],
-      "line_count": 149,
+      "line_count": 151,
       "links_to": [
-        "docs/architecture.md"
+        "docs/architecture.md",
+        "docs/security.md"
       ],
       "over_size": false,
       "parse_error": null,
@@ -518,9 +521,11 @@
         "Audio never autoplays in headless Chrome without a flag, and `opts.args` REPLACES the defaults",
         "A piped `npm test` reports the PIPE's exit code, not the suite's",
         "A timing-fragile browser assertion breaks when the suite gets HEAVIER, not just when the code does",
-        "A hash-only `Page.navigate` is a same-document navigation, not a reload"
+        "A hash-only `Page.navigate` is a same-document navigation, not a reload",
+        "Headless Chrome blocks clipboard *read*, so spy on `writeText` to test a copy feature",
+        "Registering a value as a secret pollutes the whole single-process suite's redaction"
       ],
-      "line_count": 173,
+      "line_count": 185,
       "links_to": [
         "docs/gotchas/frontend.md"
       ],
@@ -621,7 +626,7 @@
         "Network perimeter",
         "What this does NOT protect against"
       ],
-      "line_count": 70,
+      "line_count": 74,
       "links_to": [
         "docs/architecture.md",
         "docs/cli.md"
@@ -640,6 +645,7 @@
         "scripts/lib/themestore.js",
         "scripts/lib/markdownsrc.js",
         "scripts/lib/mdcanvas.js",
+        "scripts/lib/envcanvas.js",
         "scripts/lib/gallery.js",
         "scripts/lib/browse.js",
         "scripts/lib/selection.js",
@@ -672,7 +678,7 @@
         "Security regressions",
         "Browser verification"
       ],
-      "line_count": 116,
+      "line_count": 117,
       "links_to": [
         "docs/gotchas/frontend.md",
         "docs/gotchas/testing.md",

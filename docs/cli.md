@@ -18,7 +18,7 @@ Entry point: `npx -y @happyskillsai/instant-canvas <command>`, run from any dire
 ## Commands
 
 ```
-open <canvas.json | file.md | folder> [--workspace <dir>] [--no-open] [--timeout <s>] [--result <file>]
+open <canvas.json | file.md | .env | folder> [--workspace <dir>] [--no-open] [--timeout <s>] [--result <file>]
 print <canvas.json | file.md> --out <file.pdf> [--workspace <dir>]
 stamp <canvas.json> [--workspace <dir>] [--retrofit]
 theme <canvas.json | file.md> [--set '<json>'] [--clear] [--workspace <dir>]
@@ -32,12 +32,12 @@ status [--workspace <dir>]
 stop [--workspace <dir>]
 ```
 
-Every command that takes a path first passes `assertReadable()`: a canvas is a `*.json`, a document is a `.md`/`.mdx`/`.markdown`, and **anything else is refused before it is opened**. This is not tidiness — refusing a file used to print the first ten bytes of it, because V8's `JSON.parse` error quotes the text it choked on (see [gotchas/runtime.md](gotchas/runtime.md)). A **directory is accepted for `open` only** — it opens the folder's **browse view** (`open` prints a `url` ending in `#/f/<rel>`, `#/f/` for the root; see [frontend.md](frontend.md)) — and `print` / `stamp` / `validate` / `theme` each refuse a folder with a one-line teaching error ("a folder has no contract to check — run `open <folder>`", and so on).
+Every command that takes a path first passes `assertReadable()`: a canvas is a `*.json`, a document is a `.md`/`.mdx`/`.markdown`, and **anything else is refused before it is opened**. This is not tidiness — refusing a file used to print the first ten bytes of it, because V8's `JSON.parse` error quotes the text it choked on (see [gotchas/runtime.md](gotchas/runtime.md)). **`open` accepts two more things, and only `open`:** a **`.env`/`.env.*`**, which the runtime synthesises into an editable **form** kernel-side (`open .env` — never read CLI-side, see [security.md](security.md)), and a **directory**, which opens the folder's **browse view** (`open` prints a `url` ending in `#/f/<rel>`, `#/f/` for the root; see [frontend.md](frontend.md)). `print` / `stamp` / `validate` / `theme` refuse both a folder and a `.env` with a one-line teaching error ("a folder has no contract to check — run `open <folder>`", and so on) — a `.env` has no contract to check and nothing to print, and the CLI must never read its values.
 
 ### open
 
 1. Workspace root = `--workspace` else cwd (realpath'd). The canvas must resolve inside it — otherwise exit 1 `PATH_OUTSIDE_WORKSPACE` with a message telling the agent to pass `--workspace`. When no `--workspace` was given and the cwd is **nested inside a git project** (an *ancestor* holds `.git`), `open` prints a one-line **stderr nudge** naming that project root and suggesting `--workspace` — the folders-only tree makes a nested workspace very visible. It is a nudge only: behaviour never changes, stdout still carries exactly one JSON document, and the agent-side resolution procedure lives in SKILL.md ("Choosing the workspace").
-2. **Validate locally first.** An invalid canvas never launches the UI; the CLI exits 1 with the full `errors[]` array. A **markdown file — or a folder — skips this step entirely**: a `.md` has no envelope to check (the runtime synthesises a markdown block; see [canvas-schema.md](canvas-schema.md)), and a folder is navigation, not a canvas — it just opens its browse view.
+2. **Validate locally first.** An invalid canvas never launches the UI; the CLI exits 1 with the full `errors[]` array. A **markdown file, a `.env`, or a folder skips this step entirely**: a `.md` has no envelope to check (the runtime synthesises a markdown block; see [canvas-schema.md](canvas-schema.md)), a `.env` is synthesised into a form kernel-side (the CLI never reads it), and a folder is navigation, not a canvas — it just opens its browse view. A `.env`'s form is interactive, so `open .env` **blocks** on a session and resolves it when the human submits (the `saved` result adds a `removed` list — the keys they deleted).
 3. Ensure a kernel: reuse via registry health ping, else spawn under the spawn lock (detached — survives the CLI exiting) and poll `/healthz` up to 10 s (`KERNEL_UNREACHABLE`, exit 2, includes the kernel log path). A version mismatch restarts an idle kernel.
 4. `POST /api/open`, then open the browser (unless `--no-open`; a failed browser launch is a stderr warning `BROWSER_OPEN_FAILED` with the URL, never an error).
 5. **Display canvas** → print `{"status": "opened", "url", ...}`, exit 0 immediately. **Interactive canvas** → block, polling the session every second until the human resolves it. Polling tolerates transient socket blips: fresh connection per request (`agent: false`) and up to 3 consecutive failures cross-checked against the registry health ping before declaring the kernel lost.
@@ -137,7 +137,7 @@ It takes **no path argument** (like `theme --all` / `status`): the workspace roo
 | print | `{"status":"printed","path","pages","bytes","figures":[{figure,path,title,kind,page,facts,warnings}],"timestamp"}` — `path` workspace-relative, `pages` == the deck's sheet count; `figures[]` is additive |
 | snapshot | `{"status":"snapshotted","canvas","workspace","outDir","figures":[{figure,path,title,kind,page,image,width,height,facts,warnings}],"timestamp"}` — `image` is an absolute PNG path; `outDir` is `null` when there were no charts |
 | snapshot `--list` | `{"status":"figures","canvas","figures":[{figure,path,title,kind}],"timestamp"}` — the map only, no browser |
-| form → file | `{"status":"saved","destination":{"kind","path"},"fields":[names],"overwritten":[names],"redacted":true,"timestamp"}` |
+| form → file | `{"status":"saved","destination":{"kind","path"},"fields":[names],"overwritten":[names],"removed":[names]?,"redacted":true,"timestamp"}` — `removed` (keys the human deleted) appears on an env-form edit (`open .env`); absent otherwise |
 | form, no file destination | `{"status":"submitted","fields":[...],"values":{non-secret only}?,"timestamp"}` |
 | cancelled / expired | `{"status":"cancelled"\|"timeout",...}` — exit 0 |
 | confirm | `{"status":"confirmed"\|"cancelled","confirmed":bool,"timestamp"}` |
@@ -157,6 +157,8 @@ Secret values appear in **no** variant — see [security.md](security.md).
 Step 4 is the one step the agent cannot fake, and skipping it is self-correcting rather than silent: `validate` and `open` both refuse an unstamped canvas with `MISSING_CREATED_WITH`, whose `hint` is the `stamp` command itself. The agent repairs it inside its own loop; the user never sees it.
 
 **To show a markdown file that already exists, skip all six steps**: `open report.md`. There is no wrapper to write, nothing to stamp, and nothing to validate. The loop above is for data the agent wrangled into a contract; a `.md` is already the data.
+
+**To let a human edit an existing `.env`, skip them the same way**: `open .env`. The runtime reads it kernel-side and synthesises the edit form (one field per key, pre-filled) — the agent authors nothing and never reads the values, which is the only way to edit a secret file without pulling it into context. Authoring a `form` block with an `env` destination is still how you collect *new* values into a file you define.
 
 **The loop ends at `open`, and `print` is not step 7.** `open` *shows* a canvas; `print` *writes a file* into the user's repository, and writing files nobody asked for is how a read-only "show me my data" turns into an edit to someone's project. Agents were routinely printing a multi-megabyte PDF beside every canvas they rendered — the runtime never did this, `open` has no print path at all, but nothing in the contract told them not to, so SKILL.md now says it outright. A reader who wants paper has the floating print button and Cmd+P. `print` runs when the user asked for a PDF, and not otherwise.
 
