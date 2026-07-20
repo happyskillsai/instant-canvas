@@ -1590,9 +1590,14 @@ body.media-overlay .doc-modal-view{display:flex;overflow:hidden}
 .g-prev{left:14px}
 .g-next{right:314px} /* clear of the 300px metadata panel */
 .g-nav .lucide{width:20px;height:20px}
+/* The -157px offset centers the bar within the stage COLUMN of the gallery block's
+   detail modal, where a 300px .g-meta panel sits beside the stage (flex sibling). */
 .g-zoombar{position:absolute;left:calc(50% - 157px);bottom:18px;transform:translateX(-50%);z-index:3;
 	display:flex;gap:4px;background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:5px;
 	box-shadow:var(--shadow)}
+/* In the item modal's image overlay the meta lives in the ABSOLUTE info drawer, not a
+   flex sibling, so the stage is full-width — center the bar on the stage itself. */
+body.image-overlay .g-zoombar{left:50%}
 .g-zbtn{border:none;background:transparent;color:var(--text);cursor:pointer;padding:5px 9px;border-radius:7px;
 	font-size:12.5px;display:inline-flex;align-items:center}
 .g-zbtn:hover{background:var(--tint)}
