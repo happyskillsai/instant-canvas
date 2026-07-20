@@ -6716,12 +6716,14 @@ async function renderBrowse(main, rel) {
 		const shown = sortedItems()
 		const kn = (k) => shown.filter((i) => i.kind === k).length
 		const label = (n, one, many) => n + ' ' + (n === 1 ? one : many)
-		const KIND_WORDS = [['canvas', 'canvas', 'canvases'], ['document', 'doc', 'docs'], ['image', 'image', 'images'], ['video', 'video', 'videos'], ['audio', 'audio file', 'audio files']]
-		const nf = kn('folder'), ni = kn('image'), nv = kn('video'), na = kn('audio')
+		const KIND_WORDS = [['canvas', 'canvas', 'canvases'], ['env', 'env file', 'env files'], ['document', 'doc', 'docs'], ['image', 'image', 'images'], ['video', 'video', 'videos'], ['audio', 'audio file', 'audio files']]
+		const nf = kn('folder'), ne = kn('env'), ni = kn('image'), nv = kn('video'), na = kn('audio')
 		const parts = []
 		if (nf) parts.push(label(nf, 'folder', 'folders'))
 		if (bs.types.size === 0) {
-			parts.push(label(kn('canvas'), 'canvas', 'canvases'), label(kn('document'), 'doc', 'docs'), label(ni, 'image', 'images'))
+			parts.push(label(kn('canvas'), 'canvas', 'canvases'))
+			if (ne) parts.push(label(ne, 'env file', 'env files'))
+			parts.push(label(kn('document'), 'doc', 'docs'), label(ni, 'image', 'images'))
 			if (nv) parts.push(label(nv, 'video', 'videos'))
 			if (na) parts.push(label(na, 'audio file', 'audio files'))
 		} else {
