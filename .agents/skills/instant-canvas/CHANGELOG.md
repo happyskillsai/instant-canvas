@@ -5,6 +5,25 @@ The agent-facing contract for InstantCanvas. The runtime ships as the
 and LICENSE, and agents drive the CLI through `npx`. Versions track the runtime
 package they were authored alongside.
 
+## [0.20.0] - 2026-07-20
+
+### Added
+- **`$IC open .env` — edit an existing `.env` in the browser, without ever reading it.** A `.env` (or
+  any `.env.*`) is now an editable form the runtime synthesises for you: `open .env` renders one field
+  per existing key, pre-filled, and the human edits values, adds keys and deletes keys straight back to
+  the file — the symmetric case to `open <file.md>`. This closes a real gap: you could always author a
+  `form` block with an `env` destination to *collect* NEW secrets, but never to *edit* an existing
+  `.env`, because editing needs the current values and you must never read a secret file into context.
+  Now the runtime reads it kernel-side and you orchestrate without seeing a value — the result is
+  redacted metadata only, its `saved` shape adding a `removed` list (the keys the human deleted) beside
+  `fields` and `overwritten`. SKILL.md teaches the capability and the secret-rule pointer ("open it,
+  never `cat` it"), and the skill description now names env editing so "edit my .env" requests
+  auto-trigger the skill.
+
+### Changed
+- **`open` now accepts a `.env`/`.env.*`** where it used to refuse one; `validate` / `stamp` / `print` /
+  `theme` still refuse it — there is no contract to check, and the CLI must never read its values.
+
 ## [0.19.0] - 2026-07-20
 
 ### Added
