@@ -2,6 +2,44 @@
 
 ## [Unreleased]
 
+## [0.20.0] - 2026-07-20
+
+### Added
+
+- **A `.env` is a native, canvas-free editable form.** `open .env` (or any `.env.*`, from the CLI or a
+  sidebar click) renders a browser form — one field per existing key, pre-filled — that edits values, adds
+  keys and deletes keys, writing straight back parse-preservingly (comments, order and untouched keys
+  byte-preserved; CRLF stays CRLF). It mirrors the "a markdown file *is* a canvas" mechanism: the runtime
+  synthesises the form envelope in memory (`lib/envcanvas.js`), so **no `*.canvas.json` is ever written**. It
+  closes a real gap — an agent could always author a form to *collect* new secrets, but never to *edit* an
+  existing `.env`, because editing means knowing the current values and the agent must never read a secret
+  file. Now the runtime reads it **kernel-side** and the agent orchestrates without ever seeing a value.
+  - **Every value is treated as a secret.** The runtime cannot tell a secret key from a benign one, so every
+    parsed value is `registerSecret`-ed before the synthesised envelope can exist and every field is
+    `type: "secret"`; values reach only the browser (pre-filling the form over the token-gated loopback) and,
+    on submit, disk — never the agent, which receives redacted metadata only (`"redacted": true`, field names,
+    an `overwritten` list, and a new `removed` list).
+  - **Two doors, one write core.** The agent-orchestrated `open .env` blocks a session; a human who clicked
+    the file in the browser has no session, so a direct save (`POST /api/env/save`) writes without one. Both
+    share the write path and the same refined handshakes — the overwrite confirmation lists only
+    **value-changed** keys, and a **delete** confirmation names the exact keys before removing them.
+  - **Discovery, both ways.** `.env`/`.env.*` files appear in the browse view and `/api/dir` as their own
+    openable `env` kind (with an "Env" filter chip), while every other dotfile stays hidden and the
+    media/meta file-serving routes still refuse a `.env` byte-clean.
+  - **The browser form.** Values are **masked by default** (an eye reveals per row); a **copy-to-clipboard**
+    toggle on each row accumulates `KEY=value` pairs additively, so several can be gathered and **pasted**
+    into another `.env`; a deletion is visible and reversible until submit.
+
+### Changed
+
+- **`open` now accepts a `.env`/`.env.*`** where it used to refuse one (exit 1). `validate` / `stamp` /
+  `print` / `theme` still refuse a `.env` — there is no contract to check, and the CLI must never read its
+  values.
+- **The form-`saved` result gains an additive `removed` field** — the keys a human deleted on an `open .env`
+  edit — beside `fields` and `overwritten`.
+- The agent-facing skill (`SKILL.md` / `skill.json`) teaches `open .env` and carries env-editing trigger
+  vocabulary in its description.
+
 ## [0.19.0] - 2026-07-20
 
 ### Added

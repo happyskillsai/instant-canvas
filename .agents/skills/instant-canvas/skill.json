@@ -1,6 +1,6 @@
 {
 	"name": "instant-canvas",
-	"version": "0.19.0",
+	"version": "0.20.0",
 	"description": "Local canvas runtime: renders canvas JSON (markdown, KPIs, tables, charts, forms) and .md files, prints to PDF as documents or white papers, collects or edits secrets and .env files, and reads which files a user selected in the browser.",
 	"type": "skill",
 	"license": "BSD-3-Clause",
