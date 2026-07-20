@@ -2,6 +2,44 @@
 
 ## [Unreleased]
 
+## [0.19.0] - 2026-07-20
+
+### Added
+- **A persisted multi-selection an agent can read and act on.** The browse view now lets a reader
+  multi-select **any** workspace items — canvases, documents, images, video and audio, across
+  folders — and records that set to a per-workspace state file (`stateDir()/<key>.selection.json`,
+  outside the repo, never in the workspace, the way registry state already lives). A new read-only
+  CLI surfaces it: `instant-canvas selection` prints the live set as JSON (`{items:[{path, kind}],
+  count, updatedAt, dropped?}` — workspace-relative paths, with entries whose files were since
+  moved/deleted pruned on read) and `selection --clear` empties the record. This closes the loop
+  where a user says "delete / move / rename **these**" by pointing in the browser: InstantCanvas
+  **records** the selection and never touches the files — the agent reads the set and performs the
+  operation with its own tools, and there is deliberately no destructive verb or route (`selection`
+  is read + `--clear` only, and no kernel route unlinks a selected file). The set is a workspace
+  union that survives navigation, reload and kernel restart (`POST`/`GET /api/selection`, restored
+  on the existing `workspace` broadcast), and every path is classified by extension and `lstat`
+  only, so a refused file is never opened (the same `.env`/`JSON.parse`-leak discipline the rest of
+  the runtime follows). `SKILL.md` teaches the record→read→act loop and the exact CLI contract, and
+  the skill description now names the capability so a request like "act on my selected files"
+  auto-triggers the skill.
+
+### Changed
+- **Browse-view Select is a mode toggle, and selection spans every renderable kind.** A canvas or a
+  document is selectable now (the selection is a record an agent acts on, not an in-browser delete),
+  and the lit **`Select`** button toggles the mode — clicking it exits while **keeping** the
+  selection, so the separate `Done` button (which read as redundant with `Clear`) is gone. The
+  in-browser media-delete invariant is preserved: it filters the selection to the media subset
+  before posting, its count-exact confirm counts only those, and a canvas or document path never
+  reaches `/api/gallery/delete`. The `Select` affordance now appears whenever a folder shows any
+  selectable item, not only when it holds media.
+
+### Fixed
+- **The image-overlay zoom bar is centered again.** Its `-157px` horizontal offset was sized to
+  dodge the 300px metadata panel that sits beside the stage in the gallery block's detail modal —
+  but the item overlay moved that metadata into an absolutely-positioned info drawer, leaving the
+  stage full-width, so the zoom controls sat ~157px left of center. The offset is now scoped to the
+  surface that still has the panel; the overlay centers the bar on the stage itself.
+
 ## [0.18.0] - 2026-07-19
 
 ### Added
