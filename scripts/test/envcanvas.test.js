@@ -14,7 +14,7 @@ const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
-const { spawn } = require('node:child_process')
+const { spawn, execFileSync } = require('node:child_process')
 
 // A CDP browser test spawns a kernel, so give it an isolated state dir (||=, before the
 // registry is required — docs/gotchas/testing.md).
@@ -178,7 +178,7 @@ test('native env form (CDP): pre-filled values, add a key, delete a key after co
 			const snap = {}
 			// The form is present and interactive (an active session enables the submit button).
 			await until(evaluate, 'document.querySelector(".env-form") && !document.querySelector(".env-form button[type=submit]").disabled')
-			// Pre-fill: values shown in PLAINTEXT (type=text), not masked.
+			// Pre-fill: the value is present (the input carries it) but MASKED by default.
 			snap.keepVal = await evaluate('var i=document.querySelector(\'[data-env-row][data-key="KEEP"] [data-env-val]\'); i ? i.value : null')
 			snap.keepType = await evaluate('var i=document.querySelector(\'[data-env-row][data-key="KEEP"] [data-env-val]\'); i ? i.type : null')
 			snap.dropVal = await evaluate('var i=document.querySelector(\'[data-env-row][data-key="DROP"] [data-env-val]\'); i ? i.value : null')
@@ -204,7 +204,7 @@ test('native env form (CDP): pre-filled values, add a key, delete a key after co
 		})
 
 		assert.equal(R.keepVal, 'keepval', 'KEEP pre-filled in plaintext')
-		assert.equal(R.keepType, 'text', 'the value is shown revealed, not masked')
+		assert.equal(R.keepType, 'password', 'values are masked (obfuscated) by default')
 		assert.equal(R.dropVal, 'dropval')
 		assert.equal(R.dropMarked, true, 'a deleted key is marked, not vanished')
 		assert.equal(R.confirmNamesDrop, true, 'the delete confirmation names the exact key')
@@ -219,5 +219,52 @@ test('native env form (CDP): pre-filled values, add a key, delete a key after co
 		try { child.kill('SIGKILL') } catch { /* already gone */ }
 		const e = await registry.readAlive(root).catch(() => null)
 		if (e) await new Promise((res) => { const r = spawn(process.execPath, [CLI, 'stop', '--workspace', root]); r.on('exit', res) })
+	}
+})
+
+// Masking + the additive copy-to-clipboard toggle + paste-adds-rows, in real Chrome.
+// Uses the SESSIONLESS path (open the workspace, then click into the .env) since none of
+// this needs an agent session.
+test('native env form (CDP): masked by default, additive copy-to-clipboard, paste adds rows', { skip: skipBrowser, timeout: 60_000 }, async () => {
+	const root = tmp()
+	fs.writeFileSync(path.join(root, '.env'), 'ALPHA=aval\nBETA=bval\n')
+	execFileSync(process.execPath, [CLI, 'open', '.', '--workspace', root, '--no-open'], { cwd: root, env: { ...process.env } })
+	const entry = await registry.readAlive(root)
+	assert.ok(entry, 'kernel is up')
+	const base = `http://127.0.0.1:${entry.port}/?token=${entry.token}`
+	// Headless Chrome blocks clipboard READ, so spy on writeText instead (no prod hook):
+	// record every value the app writes into window.__clip.
+	const SPY = 'window.__clip=[];try{navigator.clipboard.writeText=function(t){window.__clip.push(t);return Promise.resolve()}}catch(e){}'
+	try {
+		const R = await withChrome(CHROME, base + '#/f/', { onNewDocument: SPY }, async ({ evaluate }) => {
+			await evaluate('location.hash = "#/c/" + encodeURIComponent(".env"); true')
+			await until(evaluate, 'document.querySelector(".env-form") && document.querySelectorAll("[data-env-row]").length === 2')
+			const last = 'window.__clip.length ? window.__clip[window.__clip.length-1] : "NONE"'
+			const snap = {}
+			// Masked by default.
+			snap.type = await evaluate('document.querySelector(\'[data-env-row][data-key="ALPHA"] [data-env-val]\').type')
+			// Copy ALPHA then BETA — the clipboard accumulates BOTH (additive).
+			await evaluate('document.querySelector(\'[data-env-row][data-key="ALPHA"] [data-env-copy]\').click(); true')
+			await evaluate('document.querySelector(\'[data-env-row][data-key="BETA"] [data-env-copy]\').click(); true')
+			await sleep(150)
+			snap.clipBoth = await evaluate(last)
+			// Un-tick ALPHA — it drops off, BETA stays.
+			await evaluate('document.querySelector(\'[data-env-row][data-key="ALPHA"] [data-env-copy]\').click(); true')
+			await sleep(150)
+			snap.clipOne = await evaluate(last)
+			// Paste two KEY=value lines → two new rows.
+			await evaluate('(function(){var dt=new DataTransfer();dt.setData("text","GAMMA=gval\\nDELTA=dval");document.querySelector("#theForm").dispatchEvent(new ClipboardEvent("paste",{clipboardData:dt,bubbles:true,cancelable:true}));return true})()')
+			await sleep(200)
+			snap.keys = await evaluate('JSON.stringify(Array.from(document.querySelectorAll("[data-env-row]")).map(function(r){return r.dataset.existing==="1"?r.dataset.key:(r.querySelector("[data-env-key]")||{}).value}))')
+			return snap
+		})
+		assert.equal(R.type, 'password', 'values are masked (obfuscated) by default')
+		assert.equal(R.clipBoth.split('\n').sort().join('|'), 'ALPHA=aval|BETA=bval', 'copy is additive — both pairs land on the clipboard')
+		assert.equal(R.clipOne, 'BETA=bval', 'un-ticking removes exactly that pair')
+		const keys = JSON.parse(R.keys)
+		assert.ok(keys.includes('GAMMA') && keys.includes('DELTA'), 'pasted KEY=value pairs became rows')
+	} finally {
+		const e = await registry.readAlive(root).catch(() => null)
+		if (e) await new Promise((res) => { spawn(process.execPath, [CLI, 'stop', '--workspace', root]).on('exit', res) })
 	}
 })

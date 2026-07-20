@@ -7558,10 +7558,11 @@ function renderForm(block) {
 // server-side (it is what arms registerSecret and SECRET_RETURN_BLOCKED) — here the
 // widget is simply shown revealed, with an eye to hide it, never downgraded to text.
 
-/** One row: a key (fixed for an existing key, editable for an added one), a revealed
- *  value with an eye, and a delete control. Structure mirrors the secret widget so the
- *  existing `data-eye` handler works unchanged (the value input is the eye's previous
- *  sibling). */
+/** One row: a key (fixed for an existing key, editable for an added one), a MASKED
+ *  value with an eye to reveal, and a copy toggle + delete control. Values are obfuscated
+ *  by default — the system cannot know which are secret, so the safe default is to hide
+ *  every one. Structure mirrors the secret widget so the existing `data-eye` handler works
+ *  unchanged (the value input is the eye's previous sibling). */
 function envRowHtml(key, value, existing) {
 	const keyCell = existing
 		? `<div class="env-key" title="${esc(key)}">${esc(key)}</div>`
@@ -7570,11 +7571,14 @@ function envRowHtml(key, value, existing) {
 	return `<div class="env-row" data-env-row data-existing="${existing ? '1' : '0'}"${existing ? ` data-key="${esc(key)}"` : ''}>
 		${keyCell}
 		<div class="inp-wrap env-val-wrap">
-			<input class="inp env-val" data-env-val type="text" value="${esc(value)}" autocomplete="off" spellcheck="false">
-			<button type="button" class="eye" data-eye title="Hide">${icon('eye-off')}</button>
+			<input class="inp env-val" data-env-val type="password" value="${esc(value)}" autocomplete="off" spellcheck="false">
+			<button type="button" class="eye" data-eye title="Reveal">${icon('eye')}</button>
 		</div>
-		<button type="button" class="env-del" data-env-del title="Delete this variable">${icon('trash-2')}</button>
-		<button type="button" class="env-undo" data-env-undo title="Keep this variable">${icon('x')}</button>
+		<div class="env-actions">
+			<button type="button" class="env-copy" data-env-copy title="Copy to clipboard (toggle)" aria-pressed="false">${icon('copy')}</button>
+			<button type="button" class="env-del" data-env-del title="Delete this variable">${icon('trash-2')}</button>
+			<button type="button" class="env-undo" data-env-undo title="Keep this variable">${icon('x')}</button>
+		</div>
 	</div>`
 }
 
@@ -7620,6 +7624,88 @@ function collectEnvSubmit(form) {
 		values[key] = row.querySelector('[data-env-val]').value
 	})
 	return { values, deletions }
+}
+
+// ---- env clipboard (copy several KEY=value pairs, additive) --------------------
+
+/** A row's { key, value } from the DOM (null for an empty added row). */
+function envRowKV(row) {
+	const key = row.dataset.existing === '1' ? row.dataset.key : (row.querySelector('[data-env-key]') || {}).value
+	if (!key || !key.trim()) return null
+	return { key: key.trim(), value: (row.querySelector('[data-env-val]') || {}).value || '' }
+}
+
+// Quote for a .env line so a copied value round-trips through a paste (mirrors the
+// server's envfile.quote): wrap in double quotes iff it holds whitespace, #, ", ', = or a
+// newline, escaping \ " and newlines.
+function envQuote(v) {
+	const s = String(v)
+	if (!/[\s#"'=]/.test(s)) return s
+	return '"' + s.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, '\\n') + '"'
+}
+
+/** The KEY=value text for every row whose copy toggle is on, in display order. */
+function envClipboardText(form) {
+	return [...form.querySelectorAll('[data-env-row]')]
+		.filter((row) => row.querySelector('[data-env-copy].on') && !row.classList.contains('env-deleting'))
+		.map(envRowKV)
+		.filter(Boolean)
+		.map((kv) => `${kv.key}=${envQuote(kv.value)}`)
+		.join('\n')
+}
+
+/** Rebuild the clipboard from the current set of toggled rows and report the count. The
+ *  set is additive by construction: toggling a row on/off grows/shrinks this whole text. */
+function syncEnvClipboard(form) {
+	const text = envClipboardText(form)
+	const n = text ? text.split('\n').length : 0
+	const done = () => toast(n ? `${n} variable${n === 1 ? '' : 's'} on the clipboard` : 'Clipboard cleared')
+	if (navigator.clipboard && navigator.clipboard.writeText)
+		navigator.clipboard.writeText(text).then(done, () => toast('Could not write to the clipboard'))
+	else
+		done()
+}
+
+// ---- env paste (KEY=value text becomes rows) ----------------------------------
+
+const ENV_PAIR_RE = /^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=(.*)$/
+
+/** Unquote a pasted value, reversing envQuote (double-quoted → unescaped). */
+function envUnquote(raw) {
+	const v = String(raw).trim()
+	if (v.length >= 2 && v[0] === '"' && v[v.length - 1] === '"')
+		return v.slice(1, -1).replace(/\\(["\\n])/g, (_, c) => (c === 'n' ? '\n' : c))
+	return v
+}
+
+/** Parse pasted text into KEY/value pairs, skipping comments and non-matching lines. */
+function parseEnvPairs(text) {
+	const out = []
+	for (const line of String(text).split(/\r?\n/)) {
+		const m = ENV_PAIR_RE.exec(line)
+		if (m) out.push({ key: m[1], value: envUnquote(m[2]) })
+	}
+	return out
+}
+
+/** Apply pasted pairs: update a matching (non-deleting) row's value, else append one. */
+function applyEnvPaste(form, pairs) {
+	const rowsWrap = form.querySelector('[data-env-rows]')
+	const empty = rowsWrap.querySelector('[data-env-empty]')
+	for (const { key, value } of pairs) {
+		const existing = [...form.querySelectorAll('[data-env-row]')].find((row) => {
+			const kv = envRowKV(row)
+			return kv && kv.key === key && !row.classList.contains('env-deleting')
+		})
+		if (existing) {
+			existing.querySelector('[data-env-val]').value = value
+			continue
+		}
+		const tmp = document.createElement('div')
+		tmp.innerHTML = envRowHtml(key, value, false)
+		rowsWrap.insertBefore(tmp.firstElementChild, empty)
+	}
+	if (empty && form.querySelector('[data-env-row]')) empty.hidden = true
 }
 
 function renderConfirm(block) {
@@ -7747,23 +7833,24 @@ function askConfirmation({ title, bodyHtml, confirmLabel }) {
 	})
 }
 
-function showSuccess(payload) {
+function showSuccess(payload, { minimal = false } = {}) {
 	const { result, fields, destination } = payload
 	const ov = document.createElement('div')
 	ov.className = 'overlay'
 	const wroteFile = result.status === 'saved'
+	const removed = Array.isArray(result.removed) ? result.removed.length : 0
 	ov.innerHTML = `<div class="modal"><div class="modal-body center">
 		<div class="success-mark">${icon('check')}</div>
 		<h2 class="modal-title">${wroteFile ? 'Saved successfully' : 'Submitted'}</h2>
 		<div class="modal-sub">${wroteFile
-			? `${fields.length} values written to <code>${esc(destination.path)}</code>`
+			? `${fields.length} value${fields.length === 1 ? '' : 's'} written to <code>${esc(destination.path)}</code>${removed ? `, ${removed} removed` : ''}`
 			: `${fields.length} values submitted`}</div>
 		<ul class="fieldlist">${fields.map((f) => `<li>${esc(f)}</li>`).join('')}</ul>
-		<div class="agentbox">
+		${minimal ? '' : `<div class="agentbox">
 			<div class="cap">the agent receives (redacted)</div>
 			<pre>${esc(JSON.stringify(result, null, 2))}</pre>
 			<div class="note">↑ field <b>names</b> only — the secret values never leave this machine.</div>
-		</div>
+		</div>`}
 	</div>
 	<div class="modal-foot"><button class="btn primary" data-close>Done</button></div></div>`
 	ov.addEventListener('click', (ev) => {
@@ -7788,7 +7875,7 @@ async function submitForm(form, block) {
 			body: JSON.stringify(direct ? { path: state.activeId, values, deletions, confirmations } : env ? { values, deletions, confirmations } : { values, confirmations }),
 		})
 		if (status === 200 && json && json.ok) {
-			showSuccess(json)
+			showSuccess(json, { minimal: env })
 			state.session = null
 			return
 		}
@@ -7966,6 +8053,15 @@ function wireInteractive(blocks) {
 			envUndo.closest('[data-env-row]').classList.remove('env-deleting')
 			return
 		}
+		// Copy toggle: additive — flip this row's membership, then rewrite the clipboard from
+		// the whole toggled set (so three clicks put three pairs on it, un-clicking removes one).
+		const envCopy = e.target.closest('[data-env-copy]')
+		if (envCopy) {
+			const on = envCopy.classList.toggle('on')
+			envCopy.setAttribute('aria-pressed', on ? 'true' : 'false')
+			syncEnvClipboard(form)
+			return
+		}
 		if (e.target.closest('[data-cancel]')) {
 			if (state.session) {
 				api(`/api/session/${state.session.id}/cancel`, { method: 'POST', body: '{}' }).then(() => {
@@ -7981,6 +8077,23 @@ function wireInteractive(blocks) {
 			}
 		}
 	})
+
+	// Paste KEY=value text into the native env form → add/update rows. A single-line paste
+	// INTO a value/key field is left to fill that field normally; anything else that parses
+	// as one or more env pairs is captured and turned into rows.
+	if (block.envNative) {
+		form.addEventListener('paste', (e) => {
+			const text = (e.clipboardData || window.clipboardData) && (e.clipboardData || window.clipboardData).getData('text')
+			if (!text) return
+			const pairs = parseEnvPairs(text)
+			if (!pairs.length) return
+			const intoField = e.target.closest('[data-env-val], [data-env-key]')
+			if (intoField && !text.includes('\n')) return // filling one field with one line
+			e.preventDefault()
+			applyEnvPaste(form, pairs)
+			toast(`${pairs.length} variable${pairs.length === 1 ? '' : 's'} pasted in`)
+		})
+	}
 
 	form.addEventListener('input', (e) => {
 		if (e.target.type === 'range') {
