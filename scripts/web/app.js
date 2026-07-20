@@ -7579,7 +7579,10 @@ function envRowHtml(key, value, existing) {
 }
 
 function renderEnvForm(block) {
-	const noSession = !state.session
+	// A `.env` form is SELF-SERVICE: the reader owns their own file, so it is editable
+	// whether or not an agent session backs it. With a session (the agent ran `open .env`)
+	// Save resolves that session; without one (the reader clicked the file in the browser)
+	// Save writes straight to disk via /api/env/save. Either way, no buttons are disabled.
 	const rows = (block.fields || []).map((f) => envRowHtml(f.name, f.default != null ? String(f.default) : '', true)).join('')
 	return `<div class="block">
 		${block.title ? `<h2 class="form-title">${esc(block.title)}</h2>` : ''}
@@ -7587,15 +7590,14 @@ function renderEnvForm(block) {
 		<form id="theForm" class="env-form" novalidate>
 			${destinationLine(block.destination)}
 			<div class="secbanner">${icon('lock')} <div>These values are saved <b>locally</b> to the file above and are <b>not</b> sent back to the agent or into the chat context.</div></div>
-			${noSession ? '<div class="placeholder gap-b">No active agent session for this form — ask the agent to run <code>open &lt;file&gt;.env</code> to start one.</div>' : ''}
 			<div class="env-rows" data-env-rows>
 				${rows}
 				<div class="env-empty" data-env-empty${rows ? ' hidden' : ''}>No variables yet — add one below.</div>
 			</div>
-			<button type="button" class="btn ghost env-add" data-env-add ${noSession ? 'disabled' : ''}>${icon('plus')} Add variable</button>
+			<button type="button" class="btn ghost env-add" data-env-add>${icon('plus')} Add variable</button>
 			<div class="form-actions">
-				<button type="button" class="btn ghost" data-cancel ${noSession ? 'disabled' : ''}>${esc(block.cancelLabel || 'Cancel')}</button>
-				<button type="submit" class="btn primary" ${noSession ? 'disabled' : ''}>${esc(block.submitLabel || 'Save')} →</button>
+				<button type="button" class="btn ghost" data-cancel>${esc(block.cancelLabel || 'Cancel')}</button>
+				<button type="submit" class="btn primary">${esc(block.submitLabel || 'Save')} →</button>
 			</div>
 		</form>
 	</div>`
@@ -7775,11 +7777,15 @@ async function submitForm(form, block) {
 	// The native env form submits {values, deletions}; a generic form submits {values}.
 	const env = block.envNative === true
 	const { values, deletions } = env ? collectEnvSubmit(form) : { values: collectValues(form, flattenFields(block.fields)), deletions: [] }
+	// A native env form with NO session is a self-service edit → write straight to disk via
+	// /api/env/save (naming the file); otherwise resolve the agent's session as usual.
+	const direct = env && !state.session
+	const endpoint = direct ? '/api/env/save' : `/api/session/${state.session.id}/submit`
 	const confirmations = {}
 	for (;;) {
-		const { status, json } = await api(`/api/session/${state.session.id}/submit`, {
+		const { status, json } = await api(endpoint, {
 			method: 'POST',
-			body: JSON.stringify(env ? { values, deletions, confirmations } : { values, confirmations }),
+			body: JSON.stringify(direct ? { path: state.activeId, values, deletions, confirmations } : env ? { values, deletions, confirmations } : { values, confirmations }),
 		})
 		if (status === 200 && json && json.ok) {
 			showSuccess(json)
@@ -7960,12 +7966,19 @@ function wireInteractive(blocks) {
 			envUndo.closest('[data-env-row]').classList.remove('env-deleting')
 			return
 		}
-		if (e.target.closest('[data-cancel]') && state.session) {
-			api(`/api/session/${state.session.id}/cancel`, { method: 'POST', body: '{}' }).then(() => {
-				toast('Cancelled — the agent receives {"status": "cancelled"}')
-				state.session = null
-				renderCanvas()
-			})
+		if (e.target.closest('[data-cancel]')) {
+			if (state.session) {
+				api(`/api/session/${state.session.id}/cancel`, { method: 'POST', body: '{}' }).then(() => {
+					toast('Cancelled — the agent receives {"status": "cancelled"}')
+					state.session = null
+					renderCanvas()
+				})
+			} else {
+				// A self-service env edit with no session — nothing to cancel; just leave,
+				// discarding the in-form edits, back to the folder this file lives in.
+				const folder = ocDirname(state.activeId)
+				location.hash = '#/f/' + (folder ? encodeURIComponent(folder) : '')
+			}
 		}
 	})
 
@@ -8018,7 +8031,9 @@ function wireInteractive(blocks) {
 
 	form.addEventListener('submit', async (e) => {
 		e.preventDefault()
-		if (!state.session)
+		// A native env form is self-service — it may submit with no session (a direct write).
+		// Every other form needs an active agent session to submit into.
+		if (!state.session && !block.envNative)
 			return
 		// Custom widgets first (they have no native constraint hooks)…
 		const customErrors = {}

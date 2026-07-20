@@ -10,7 +10,7 @@ const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
 const http = require('node:http')
-const { spawn } = require('node:child_process')
+const { spawn, execFileSync } = require('node:child_process')
 
 const CLI = path.join(__dirname, '..', 'instantcanvas.js')
 const FIXTURES = path.join(__dirname, 'fixtures')
@@ -195,6 +195,42 @@ test('native .env form: value-changed overwrite + delete handshake, add a key, l
 		assert.ok(!stderr.includes(secret), 'stderr leaks a value')
 		assert.ok(!kernelLog.includes(secret), 'kernel log leaks a value')
 	}
+	await apiReq(entry, 'POST', '/api/shutdown', {})
+})
+
+test('native .env form: sessionless direct save (POST /api/env/save) a human triggers by clicking the file', async () => {
+	const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'ic-envsave-')))
+	fs.writeFileSync(path.join(root, '.env'), '# c\nKEEP=1\nDROP=2\nEDIT=old-1x\n')
+	// Open the WORKSPACE (browse view) — a kernel comes up, but there is NO session for the
+	// .env: this is the "clicked it in the sidebar" path, not `open .env`.
+	execFileSync(process.execPath, [CLI, 'open', '.', '--workspace', root, '--no-open'], { cwd: root, env: { ...process.env } })
+	const entry = await registry.readAlive(root)
+	assert.ok(entry, 'kernel is up')
+
+	// Same handshakes as the session path: value-changed overwrite names only EDIT…
+	const over = await apiReq(entry, 'POST', '/api/env/save', { path: '.env', values: { KEEP: '1', DROP: '2', EDIT: 'new-2y', ADDED: 'added-3z' } })
+	assert.equal(over.status, 409)
+	assert.deepEqual(over.json.needsConfirmation.overwrite, ['EDIT'])
+	// …then a delete handshake naming DROP…
+	const del = await apiReq(entry, 'POST', '/api/env/save', { path: '.env', values: { KEEP: '1', EDIT: 'new-2y', ADDED: 'added-3z' }, deletions: ['DROP'], confirmations: { overwrite: true } })
+	assert.equal(del.status, 409)
+	assert.deepEqual(del.json.needsConfirmation.delete, ['DROP'])
+	// …then the write.
+	const ok = await apiReq(entry, 'POST', '/api/env/save', { path: '.env', values: { KEEP: '1', EDIT: 'new-2y', ADDED: 'added-3z' }, deletions: ['DROP'], confirmations: { overwrite: true, delete: true } })
+	assert.equal(ok.status, 200)
+	assert.equal(ok.json.result.redacted, true)
+	assert.deepEqual(ok.json.result.removed, ['DROP'])
+	assert.equal(fs.readFileSync(path.join(root, '.env'), 'utf8'), '# c\nKEEP=1\nEDIT=new-2y\nADDED=added-3z\n')
+
+	// Confined: the route writes ONLY a real, in-root .env that resolves to a native env form.
+	assert.equal((await apiReq(entry, 'POST', '/api/env/save', { path: 'README.md', values: { X: '1' } })).status, 404, 'a non-env path is refused')
+	assert.equal((await apiReq(entry, 'POST', '/api/env/save', { path: '../.env', values: { X: '1' } })).status, 403, 'a .env outside the workspace is refused')
+
+	// Leak sweep: no value in the kernel log.
+	const kernelLog = fs.existsSync(registry.logFile(root)) ? fs.readFileSync(registry.logFile(root), 'utf8') : ''
+	for (const v of ['old-1x', 'new-2y', 'added-3z'])
+		assert.ok(!kernelLog.includes(v), 'kernel log leaks a value')
+
 	await apiReq(entry, 'POST', '/api/shutdown', {})
 })
 

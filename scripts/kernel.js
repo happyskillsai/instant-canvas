@@ -811,15 +811,19 @@ function nonSecretValues(fields, clean) {
  * registerSecret-first, redaction, field-NAMES-only logging and `redacted: true` are kept
  * exactly as the generic path holds them.
  */
-function handleEnvFormSubmit(session, block, body, res) {
+// The pure write core, shared by BOTH doors into a native env form: the agent-session
+// submit (below) and the sessionless direct save a human triggers by clicking the file in
+// the browser (POST /api/env/save). It reads `rel` (the .env's own path — a native env
+// form always writes to itself), returns { status, payload } for any outcome, and `result`
+// on a 200. It resolves no session and broadcasts nothing: each caller owns that.
+function writeEnvForm(rel, body) {
 	const now = () => new Date().toISOString()
-	const dest = block.destination || { kind: 'env', path: '' }
 	const values = (body && typeof body.values === 'object' && body.values) || {}
 	const deletions = Array.isArray(body && body.deletions) ? body.deletions.map(String) : []
 	const confirmations = (body && body.confirmations) || {}
 
 	// Secret hygiene FIRST, and for EVERY submitted value (added keys included — they are
-	// not in block.fields), before anything can log or serialize.
+	// not in the synthesised block), before anything can log or serialize.
 	for (const k of Object.keys(values))
 		if (typeof values[k] === 'string' && values[k])
 			registerSecret(values[k])
@@ -831,11 +835,11 @@ function handleEnvFormSubmit(session, block, body, res) {
 		if (!ENV_KEY_RE.test(k))
 			fieldErrors[k] = `"${k}" is not a valid environment variable name (letters, digits, "_"; not starting with a digit).`
 	if (Object.keys(fieldErrors).length)
-		return sendJson(res, 422, { ok: false, fieldErrors })
+		return { status: 422, payload: { ok: false, fieldErrors } }
 
-	const destAbs = path.resolve(ROOT, dest.path)
+	const destAbs = path.resolve(ROOT, rel)
 	if (!insideRoot(ROOT, destAbs) && confirmations.outsideRoot !== true)
-		return sendJson(res, 409, { ok: false, needsConfirmation: { outsideRoot: destAbs } })
+		return { status: 409, payload: { ok: false, needsConfirmation: { outsideRoot: destAbs } } }
 
 	const entries = {}
 	for (const k of Object.keys(values))
@@ -853,32 +857,39 @@ function handleEnvFormSubmit(session, block, body, res) {
 	} catch { /* no file yet → nothing to overwrite */ }
 	const changed = Object.keys(entries).filter((k) => currentMap.has(k) && currentMap.get(k) !== String(values[k]))
 	if (changed.length && confirmations.overwrite !== true)
-		return sendJson(res, 409, { ok: false, needsConfirmation: { overwrite: changed } })
-
+		return { status: 409, payload: { ok: false, needsConfirmation: { overwrite: changed } } }
 	if (remove.length && confirmations.delete !== true)
-		return sendJson(res, 409, { ok: false, needsConfirmation: { delete: remove } })
+		return { status: 409, payload: { ok: false, needsConfirmation: { delete: remove } } }
 
 	let written
 	try {
 		written = envfile.merge(destAbs, entries, { mode: 'merge', remove })
 	} catch (err) {
-		klog('WRITE_FAILED for session', session.id, err)
-		return sendJson(res, 500, { ok: false, error: { code: 'WRITE_FAILED', message: redact(err.message) } })
+		klog('WRITE_FAILED for env', rel, err)
+		return { status: 500, payload: { ok: false, error: { code: 'WRITE_FAILED', message: redact(err.message) } } }
 	}
 	const result = {
 		status: 'saved',
-		destination: { kind: 'env', path: dest.path },
+		destination: { kind: 'env', path: rel },
 		fields: written.written,
 		overwritten: changed,
 		removed: written.removed,
 		redacted: true,
 		timestamp: now(),
 	}
-	sessions.resolve(session.id, result)
-	broadcast({ type: 'session', id: session.id, status: result.status })
-	// NAMES only — never values.
-	klog('session', session.id, 'env form submitted; wrote:', written.written.join(',') || '(none)', 'removed:', written.removed.join(',') || '(none)', '→', dest.path)
-	return sendJson(res, 200, { ok: true, result, fields: written.written, destination: { kind: 'env', path: dest.path } })
+	return { status: 200, result, payload: { ok: true, result, fields: written.written, destination: { kind: 'env', path: rel } } }
+}
+
+// Agent-session door: the agent ran `open .env` and is BLOCKED waiting for the result.
+function handleEnvFormSubmit(session, body, res) {
+	const r = writeEnvForm(session.canvasPath, body)
+	if (r.status === 200) {
+		sessions.resolve(session.id, r.result)
+		broadcast({ type: 'session', id: session.id, status: r.result.status })
+		// NAMES only — never values.
+		klog('session', session.id, 'env form submitted; wrote:', r.result.fields.join(',') || '(none)', 'removed:', r.result.removed.join(',') || '(none)', '→', session.canvasPath)
+	}
+	return sendJson(res, r.status, r.payload)
 }
 
 async function handleSubmit(session, body, res) {
@@ -893,7 +904,7 @@ async function handleSubmit(session, body, res) {
 	// The native `.env` form has add-a-key, value-changed overwrite and delete semantics a
 	// generic form does not — routed to its own path so the generic one stays unchanged.
 	if (load.canvas.envNative === true && block.type === 'form')
-		return handleEnvFormSubmit(session, block, body, res)
+		return handleEnvFormSubmit(session, body, res)
 
 	if (block.type === 'confirm') {
 		const confirmed = body.confirmed === true
@@ -1150,6 +1161,28 @@ async function route(req, res, url) {
 		if (rel)
 			broadcast({ type: 'canvas', path: rel })
 		return sendJson(res, 200, { ok: true })
+	}
+
+	// Sessionless direct save of a native `.env` form: a human clicked the file in the
+	// browser (no agent, no `open`), so there is no session to submit against. Same write
+	// core, same value-changed/delete handshakes, same redaction — it just resolves no
+	// session and instead nudges the tree + re-render so the saved state shows. Confined:
+	// only a real, in-root `.env` that resolves to a native env form is writable here.
+	if (method === 'POST' && p === '/api/env/save') {
+		const body = await readBody(req)
+		const rel = relCanvasPath(String(body.path || ''))
+		if (!isEnvFile(rel))
+			return sendJson(res, 404, { ok: false, message: `Not an env file: ${rel}` })
+		const load = loadCanvas(rel)
+		if (load.status !== 200 || !load.canvas || load.canvas.envNative !== true)
+			return sendJson(res, load.status === 200 ? 400 : load.status, load.body || { ok: false, message: 'Not an editable env form.' })
+		const r = writeEnvForm(rel, body)
+		if (r.status === 200) {
+			broadcast({ type: 'canvas', path: rel })
+			broadcast({ type: 'workspace' })
+			klog('env form saved directly; wrote:', r.result.fields.join(',') || '(none)', 'removed:', r.result.removed.join(',') || '(none)', '→', rel)
+		}
+		return sendJson(res, r.status, r.payload)
 	}
 
 	if (method === 'POST' && p === '/api/open') {
