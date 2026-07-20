@@ -31,6 +31,7 @@ const themeLib = require('./lib/theme')
 const themestore = require('./lib/themestore')
 const skillsconfig = require('./lib/skillsconfig')
 const { companionFor } = require('./lib/companion')
+const { readSelection, clearSelection } = require('./lib/selection')
 
 const VERSION = PKG_VERSION
 const KERNEL = path.join(__dirname, 'kernel.js')
@@ -76,6 +77,11 @@ Commands:
   catalog [name] [--full]      Lean index; <name> = block | chart kind | field
                                type | fieldset | sweep | document | theme |
                                presentation | slide | envelope for ONE full schema.
+  selection [--clear]          Print the items the reader multi-selected in the
+      [--workspace <dir>]      browser, as JSON (workspace-relative paths + kind),
+                               so the agent can act on them with its own tools.
+                               InstantCanvas RECORDS the selection — it never
+                               deletes/moves the files. --clear empties the record.
   status [--workspace <dir>]   Report the workspace kernel state.
   stop [--workspace <dir>]     Stop the workspace kernel.
 
@@ -938,6 +944,40 @@ function cmdValidate(args) {
 	out(result, result.ok ? 0 : 1)
 }
 
+/**
+ * Read — or clear — the persisted multi-selection the reader gestured in the
+ * browser. This is the agent's door onto that set: `selection` prints the precise
+ * paths so the agent can `mv`/`cp`/`rm`/rename them with its OWN tools.
+ * InstantCanvas RECORDS the selection and nothing more — there is deliberately no
+ * `--delete`/`--move`/`--copy`/`--rename` verb, and `--clear` empties the RECORD,
+ * never the user's files.
+ *
+ * Takes NO path argument (like `theme --all` / `status`): the workspace root is
+ * `--workspace` else cwd, realpath'd. Paths in `items[]` are workspace-relative,
+ * consistent with `open`'s `canvas` and `print`'s `path`. Exactly one JSON
+ * document on stdout via `out()`.
+ */
+async function cmdSelection(args) {
+	const root = resolveWorkspace(args)
+	if (args.clear) {
+		const { cleared } = clearSelection(root)
+		// Best-effort nudge so an OPEN browser drops its highlights: `--clear` fires the
+		// existing /api/refresh → `workspace` broadcast, on which the browser re-fetches
+		// GET /api/selection. No kernel running is the normal case, not an error.
+		await nudgeKernel(root, '')
+		out({ status: 'selection-cleared', workspace: root, cleared, timestamp: now() }, 0)
+	}
+	const { items, updatedAt, dropped } = readSelection(root)
+	out({
+		status: 'selection',
+		workspace: root,
+		items,
+		count: items.length,
+		updatedAt,
+		...(dropped.length ? { dropped } : {}),
+	}, 0)
+}
+
 function cmdCatalog(args) {
 	try {
 		out(catalog(args.full ? '--full' : args._[0]), 0)
@@ -1245,6 +1285,7 @@ async function main() {
 		case 'validate': return cmdValidate(args)
 		case 'theme': return cmdTheme(args)
 		case 'catalog': return cmdCatalog(args)
+		case 'selection': return cmdSelection(args)
 		case 'status': return cmdStatus(args)
 		case 'stop': return cmdStop(args)
 		default:

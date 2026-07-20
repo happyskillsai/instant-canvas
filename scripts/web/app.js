@@ -73,6 +73,15 @@ const state = {
 	browseScope: 'folder',  // 'folder' (this folder only) | 'subtree' (+ all subfolders)
 	browseOrder: [],        // [rel] of the open folder's items, in displayed order
 	browseFolder: null,     // which folder browseOrder belongs to
+	// The persisted multi-selection (§ selection): the reader's cross-folder gesture
+	// that an AGENT later acts on. A Map<workspace-relative path → kind> that is NOT
+	// cleared on folder navigation; the whole set is POSTed to /api/selection on every
+	// change and restored from GET /api/selection on boot and each `workspace`
+	// broadcast (so a CLI `selection --clear` reflects in an open browser). InstantCanvas
+	// RECORDS this — it never deletes/moves the files. `selecting` is whether Select mode
+	// is active (sticky across folders, like layout/sort).
+	selection: new Map(),
+	selecting: false,
 	charts: [], // {el, block} for every mounted Plotly graph in the current view
 	observers: [],
 	canvasDoc: null,
@@ -6278,6 +6287,38 @@ function disposeBrowse() {
 	}
 }
 
+// ---------- persisted multi-selection (workspace union) ----------
+
+// POST the WHOLE set to /api/selection — the record is server-side, the browser is
+// only the gesture. Debounced so a rapid burst of toggles coalesces into one write
+// whose body is the final set (avoids an earlier, larger POST landing after a later,
+// smaller one). The server RECORDS ONLY — this never deletes or moves a file.
+let selPersistTimer = null
+function persistSelection() {
+	clearTimeout(selPersistTimer)
+	selPersistTimer = setTimeout(() => {
+		const items = [...state.selection].map(([path, kind]) => ({ path, kind }))
+		api('/api/selection', { method: 'POST', body: JSON.stringify({ items }) })
+	}, 120)
+}
+
+// Rehydrate the union from the kernel's live (revalidated) set — on boot and on every
+// `workspace` broadcast, so a reload, a kernel restart, or a CLI `selection --clear`
+// all reflect in the open browser. Mutates the EXISTING Map in place (clear + set) so
+// the alias renderBrowse holds (`bs.selection`) stays valid, then re-applies the
+// `selected` class to any mounted tiles.
+async function restoreSelection() {
+	const { status, json } = await api('/api/selection')
+	if (status !== 200 || !json || !json.ok || !Array.isArray(json.items))
+		return
+	state.selection.clear()
+	for (const it of json.items)
+		if (it && typeof it.path === 'string')
+			state.selection.set(it.path, it.kind)
+	if (browseInstance && browseInstance.applySelection)
+		browseInstance.applySelection()
+}
+
 const GROUP_ORDER = { folder: 0, canvas: 1, document: 2, image: 3, video: 4, audio: 5 }
 const browseTitleOf = (it) => it.title || it.name || it.rel
 function browseSortVal(it, by) {
@@ -6311,8 +6352,11 @@ async function renderBrowse(main, rel) {
 		sort: state.browseSort,
 		types: new Set((Array.isArray(state.browseTypes) ? state.browseTypes : []).filter((k) => FILTER_TYPES.some((t) => t.kind === k))),
 		scope: state.browseScope === 'subtree' ? 'subtree' : 'folder',
-		selecting: false,
-		selection: new Set(), // image rels only
+		selecting: state.selecting, // Select mode is sticky across folders (§ selection)
+		// The workspace-wide selection is a Map<rel → kind> owned by `state` and shared
+		// by reference here, so selecting in folder A stays selected when you navigate to
+		// B. NEVER reassigned — mutated in place — so restoreSelection's alias holds.
+		selection: state.selection,
 		tiles: new Map(),     // rel -> tile node
 		lastToggled: null,
 		cleanup: [],
@@ -6322,6 +6366,7 @@ async function renderBrowse(main, rel) {
 	const root = document.createElement('div')
 	root.className = 'gallery browse'
 	root.classList.toggle('g-list', bs.layout === 'list')
+	root.classList.toggle('g-selecting', bs.selecting) // Select mode survived navigation
 	// A breadcrumb of the folder path — the pane's primary way up, since (unlike the modal)
 	// it has no × to close. A house to the workspace root, then one button per segment, each
 	// navigating to that folder's #/f/; the current folder is the last, non-navigating crumb.
@@ -6393,9 +6438,13 @@ async function renderBrowse(main, rel) {
 		}
 	}
 
-	// Images, videos and audio are all selectable + deletable; a canvas or a document
-	// never is — the reader's browser does not destroy those (browse.test.js pins it).
-	const isSelectable = (it) => !!it && ['image', 'video', 'audio'].includes(it.kind)
+	// EVERY renderable kind is selectable now — canvases, documents, images, videos and
+	// audio — because the selection is a RECORD an agent acts on, not an in-browser
+	// delete. A FOLDER is never selectable (it is navigation). Selecting a canvas or a
+	// document does NOT make the browser able to destroy it: recording ≠ deletion — the
+	// media-delete button still filters to the media subset (§ delete invariant below).
+	const SELECTABLE_KINDS = ['canvas', 'document', 'image', 'video', 'audio']
+	const isSelectable = (it) => !!it && SELECTABLE_KINDS.includes(it.kind)
 
 	// "Media" is on iff all three media kinds are selected together.
 	const mediaSelected = () => MEDIA_KINDS.every((k) => bs.types.has(k))
@@ -6483,6 +6532,11 @@ async function renderBrowse(main, rel) {
 			// lines, ellipsis) and the actual file name (1 line, muted mono, ellipsis).
 			// Full text is in the hover tooltip.
 			tile.classList.add('bt-card')
+			// A canvas/document is selectable now (§ selection), so it carries the same
+			// check overlay as a media tile — shown only in Select mode (.g-selecting) and
+			// nudged to the top-RIGHT so it clears the top-left icon chip.
+			const check = document.createElement('div'); check.className = 'gt-check'; check.innerHTML = icon('check'); tile.append(check)
+			if (bs.selection.has(it.rel)) tile.classList.add('selected')
 			const glyphName = it.kind === 'document' ? 'file-text' : it.deck ? 'presentation' : 'file-json'
 			const kindLabel = it.kind === 'document' ? 'Document' : it.deck ? 'Presentation' : 'Canvas'
 			const fileName = it.rel.split('/').pop()
@@ -6633,11 +6687,22 @@ async function renderBrowse(main, rel) {
 			const label = document.createElement('div'); label.className = 'g-count'
 			label.textContent = n + ' selected'
 			info.append(label)
-			const del = makeBtn('g-btn g-danger', icon('trash-2') + '<span>Delete</span>', () => openDeleteDialog(), 'Delete the selected files')
-			del.disabled = n === 0
-			const clear = makeBtn('g-btn', 'Clear', () => clearSelection(), 'Clear the selection')
-			const done = makeBtn('g-btn', 'Done', () => exitSelect(), 'Leave selection mode')
-			controls.append(viewSeg(), del, clear, done)
+			// The in-browser Delete only ever removes MEDIA — /api/gallery/delete refuses a
+			// non-media path (NOT_A_MEDIA_FILE) and fails the whole batch, and the reader's
+			// browser must never destroy a canvas or a document. So the button counts and
+			// posts only the media subset; with zero media selected it is disabled. Deleting
+			// canvases/documents is the AGENT's job, from the recorded selection.
+			const nMedia = mediaSelectedCount()
+			const del = makeBtn('g-btn g-danger', icon('trash-2') + '<span>Delete</span>' + (nMedia && nMedia !== n ? ' <span class="g-badge">' + nMedia + '</span>' : ''), () => openDeleteDialog(), 'Delete the selected media files')
+			del.disabled = nMedia === 0
+			const clear = makeBtn('g-btn', 'Clear', () => clearSelection(), 'Empty the selection')
+			// `Select` is a TOGGLE, lit while active — clicking it EXITS select mode and
+			// KEEPS the selection (the agent still reads it). This replaces a separate
+			// `Done` button: one mode toggle + Clear, rather than two buttons that read as
+			// the same thing. Clear empties; Select(lit) leaves. The delete flow still calls
+			// exitSelect() itself to drop out of the mode after a delete.
+			const selectToggle = makeBtn('g-btn g-select on', 'Select', () => exitSelect(), 'Exit select mode (keeps your selection)')
+			controls.append(viewSeg(), del, clear, selectToggle)
 			toolbar.append(info, controls)
 			return
 		}
@@ -6681,9 +6746,11 @@ async function renderBrowse(main, rel) {
 		// even while the modal is closed.
 		const nActive = filterActiveCount()
 		const filterBtn = makeBtn('g-btn g-filter' + (nActive ? ' on' : ''), icon('list-filter') + '<span>Filter</span>' + (bs.types.size ? '<span class="g-badge">' + bs.types.size + '</span>' : ''), () => openFilterDialog(), 'Filter what shows')
-		// Select/delete covers images, videos and audio — the affordance appears only when
-		// the folder holds at least one such file (never for a canvas or document alone).
-		const selectBtn = ni + nv + na > 0 ? makeBtn('g-btn g-select', 'Select', () => enterSelect(), 'Select files to delete') : null
+		// Selection covers EVERY renderable kind (a record an agent acts on), so the
+		// affordance appears whenever the folder shows at least one selectable item —
+		// a canvas or document counts now, not just media. Only a folder is never selectable.
+		const nSelectable = shown.filter((i) => i.kind !== 'folder').length
+		const selectBtn = nSelectable > 0 ? makeBtn('g-btn g-select', 'Select', () => enterSelect(), 'Select items for an agent to act on') : null
 		// Order (desktop, L→R): sort · filter · select · grid-or-list. On a phone the sort
 		// control drops to a FULL-WIDTH second row (via flex order in styles.css), leaving
 		// filter · select · grid-or-list on the first row.
@@ -6872,24 +6939,39 @@ async function renderBrowse(main, rel) {
 		document.addEventListener('keydown', onKey, true)
 	}
 
-	// ---------- selection (images only) ----------
+	// ---------- selection (all renderable kinds; a workspace union that persists) ----------
 
-	function enterSelect() { bs.selecting = true; root.classList.add('g-selecting'); renderToolbar() }
-	function exitSelect() { bs.selecting = false; root.classList.remove('g-selecting'); clearSelection(); renderToolbar() }
+	// Select mode is sticky across folders (state.selecting), so building a selection
+	// spanning several folders stays in one gesture.
+	function enterSelect() { bs.selecting = state.selecting = true; root.classList.add('g-selecting'); renderToolbar() }
+	// Done LEAVES select mode but does NOT wipe the selection — it persists, for the
+	// agent, across navigation and reload. Only the explicit Clear empties it.
+	function exitSelect() { bs.selecting = state.selecting = false; root.classList.remove('g-selecting'); renderToolbar() }
+	// Clear empties the WHOLE workspace union and records the empty set. It clears the
+	// RECORD, never the user's files.
 	function clearSelection() {
-		for (const r of bs.selection) { const t = bs.tiles.get(r); if (t) t.classList.remove('selected') }
-		bs.selection.clear(); bs.lastToggled = null; renderToolbar()
+		for (const r of bs.selection.keys()) { const t = bs.tiles.get(r); if (t) t.classList.remove('selected') }
+		bs.selection.clear(); bs.lastToggled = null
+		persistSelection()
+		renderToolbar()
 	}
 	function toggleSelect(r) {
 		const it = itemFor(r)
-		if (!isSelectable(it)) return // never a canvas or a document
+		if (!isSelectable(it)) return // a folder is navigation, never selected
 		const tile = bs.tiles.get(r)
 		if (!tile) return
 		if (bs.selection.has(r)) { bs.selection.delete(r); tile.classList.remove('selected') }
-		else { bs.selection.add(r); tile.classList.add('selected') }
+		else { bs.selection.set(r, it.kind); tile.classList.add('selected') }
 		bs.lastToggled = r
+		persistSelection() // POST the whole set — the record is server-side
 		renderToolbar()
 	}
+
+	// The media subset of the whole union — the only thing the in-browser Delete may
+	// touch. Reads the kind stored beside each path, so it covers media selected in
+	// OTHER folders too, not just what is on screen.
+	const mediaRels = () => [...bs.selection].filter(([, k]) => MEDIA_KINDS.includes(k)).map(([p]) => p)
+	const mediaSelectedCount = () => mediaRels().length
 
 	// ---------- pointer / click (delegated, so live tiles work) ----------
 
@@ -6901,7 +6983,7 @@ async function renderBrowse(main, rel) {
 		if (!tile || (e.button !== undefined && e.button !== 0)) return
 		pressRel = tile.dataset.rel; pressX = e.clientX; pressY = e.clientY; pressMoved = false; suppressClick = false
 		cancelPress()
-		if (['image', 'video', 'audio'].includes(tile.dataset.kind)) {
+		if (SELECTABLE_KINDS.includes(tile.dataset.kind)) {
 			pressTimer = setTimeout(() => {
 				pressTimer = null
 				// The long-press ACTS now (select). The click that fires on release must
@@ -6923,7 +7005,7 @@ async function renderBrowse(main, rel) {
 		if (!tile) return
 		const r = tile.dataset.rel
 		const kind = tile.dataset.kind
-		const canSelect = ['image', 'video', 'audio'].includes(kind)
+		const canSelect = SELECTABLE_KINDS.includes(kind)
 		// The path caption (subtree scope) navigates to WHERE the file lives instead of
 		// opening it — but not mid-selection, where a tile click means toggle.
 		const pathBtn = e.target.closest('.bt-path')
@@ -6954,9 +7036,12 @@ async function renderBrowse(main, rel) {
 	// ---------- delete (images only) — the gallery's count-exact confirm ----------
 
 	function openDeleteDialog() {
-		const rels = [...bs.selection]
+		// MEDIA ONLY — a canvas/document path must never reach /api/gallery/delete, and
+		// the count in this confirm is a promise, so it counts exactly what will be
+		// deleted (the media subset, not the whole selection).
+		const rels = mediaRels()
 		if (!rels.length) return
-		const names = rels.map((r) => { const it = itemFor(r); return it ? it.name : r })
+		const names = rels.map((r) => { const it = itemFor(r); return it ? it.name : r.split('/').pop() })
 		document.body.classList.add('modal-open')
 		const overlay = document.createElement('div'); overlay.className = 'g-modal g-confirm'
 		const card = document.createElement('div'); card.className = 'g-cbox'
@@ -6997,6 +7082,9 @@ async function renderBrowse(main, rel) {
 		}
 		bs.items = bs.items.filter((i) => !json.deleted.includes(i.rel))
 		updateEmpty()
+		// The deleted media are gone, so record the pruned union (the kernel's fs.watch
+		// broadcast will also reconcile via restoreSelection — this just avoids the window).
+		persistSelection()
 		exitSelect()
 		refresh()
 	}
@@ -7004,6 +7092,13 @@ async function renderBrowse(main, rel) {
 	browseInstance = {
 		refresh,
 		itemFor, // the drawer's "Enhanced by" row reads a document's companion from the browse item
+		// Re-apply the `selected` class to mounted tiles after the union is rehydrated
+		// (boot / `workspace` broadcast — restoreSelection), and refresh the toolbar count.
+		applySelection() {
+			for (const [r, tile] of bs.tiles)
+				tile.classList.toggle('selected', bs.selection.has(r))
+			renderToolbar()
+		},
 		dispose() { cancelPress() },
 	}
 
@@ -8082,6 +8177,10 @@ function connectWs() {
 			// and diff by path, so a file added inside it appears without a rebuild.
 			if (browseInstance)
 				browseInstance.refresh()
+			// Reconcile the persisted multi-selection off the same broadcast: an agent's
+			// `selection --clear` (→ /api/refresh → this `workspace` message) drops the
+			// reader's highlights, and a file deleted on disk is pruned from the live set.
+			restoreSelection()
 		} else if (msg.type === 'canvas') {
 			if (msg.path === state.activeId)
 				renderCanvas() // full re-render; state loss accepted in MVP
@@ -8458,6 +8557,10 @@ async function boot() {
 	state.tree = json
 	connectWs()
 	await buildTree() // the tree must exist before route()'s syncTreeActive reveals into it
+	// Rehydrate the persisted multi-selection BEFORE the first browse render, so a
+	// reload brings its `selected` tiles back (§ selection). No browseInstance yet — this
+	// only fills state.selection; route() → renderBrowse reads it for the tiles.
+	await restoreSelection()
 	// The app lands on the workspace root's browse view — the one place that shows
 	// the whole workspace, whatever kinds it holds.
 	if (!location.hash)

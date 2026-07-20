@@ -1,6 +1,6 @@
 ---
 name: instant-canvas
-description: InstantCanvas — render data and markdown as local canvases or PDFs, keeping secrets out of the chat. Use when visualizing or printing data or markdown, checking a chart is readable, collecting credentials, or confirming a destructive action.
+description: InstantCanvas — render data or markdown as local canvases or PDFs, print a document in white-paper style, collect credentials and secrets to disk, confirm a delete, and read or act on the files a user selected in the browser.
 allowed-tools: Bash, Read, Write, Edit
 ---
 
@@ -92,6 +92,39 @@ Same rule as a markdown file: **do not write a canvas to show a folder you could
 
 **Deletion belongs to the reader, not to you.** The reader multi-selects images, video or audio in the browse view and permanently deletes them; you never delete media, and you are not notified when they do — there is no session and no result to read. A gallery cannot render on paper, so it is invalid beside an envelope-level `document`, and its deck toggle is muted in the browser.
 
+## The selection: the reader gestures which files, you act on them
+
+The browse view lets the reader multi-select **any** workspace items — canvases, documents, images, video, audio, across folders — and that selection is **recorded to disk**. This is how a user says "delete/move/rename **these**" without typing paths: they point in the browser, you read the set and act with **your own tools**.
+
+```bash
+$IC selection
+#   exactly one JSON document on stdout, exit 0:
+#   {"status":"selection","workspace":"<abs root>",
+#    "items":[{"path":"<workspace-relative>","kind":"canvas|document|image|video|audio"}, ...],
+#    "count":N,"updatedAt":"<ISO-8601>"|null,"dropped":[{"path","reason"}]?}
+$IC selection --clear
+#   {"status":"selection-cleared","workspace":"<abs root>","cleared":N,"timestamp":"<ISO-8601>"}
+```
+
+**The exact surface** (this is the whole API — there is nothing else):
+
+- **No path argument.** The workspace root is `--workspace <dir>` else the current directory (realpath'd), exactly like `status`. Run it from the user's workspace, or pass `--workspace`.
+- **`items[]` is the LIVE set.** Each entry is a **workspace-relative** `path` plus an advisory `kind` recomputed from the file extension (never trust it over the extension — a `.json` reads as `canvas`). `count` equals `items.length`. An empty selection is `"items":[],"count":0,"updatedAt":null` — a normal answer, not an error.
+- **`dropped[]` appears only when something was pruned** — an item the reader selected whose file was since moved, renamed, or deleted. Those are already removed from `items[]`, so **`items[]` is always safe to act on**; `dropped[]` is just there if you want to tell the user "3 of your picks no longer exist."
+- **`--clear`** empties the record (never the files) and nudges an open browser to drop its highlights. `cleared` is how many were in the set.
+
+The loop:
+
+1. The user selects items in the browser and says something like "move the selected files into `archive/`" or "rename these."
+2. Run `$IC selection` (from the workspace, or pass `--workspace <dir>`) and parse `items[]`.
+3. Perform the operation the user asked for with **your own tools** — shell `mv`/`cp`/`rm`, an edit, whatever fits. **InstantCanvas does not do this for you.**
+4. Optionally `$IC selection --clear` afterwards, so the browser's highlights drop and the next gesture starts clean.
+
+Two rules are absolute:
+
+- **InstantCanvas records the selection; it never deletes, moves, copies, or renames.** There is no `selection --delete`/`--move` verb and there never will be — **you** are the actor. Recording a canvas or a document in the selection does not let the browser destroy it (the in-browser delete still only removes media); acting on them is your job, from this list.
+- **The selection carries paths, not secrets.** But if a selected path is a secret file (`.env`, a keyfile), the [secret rule](#the-secret-rule) still holds: move or rename it by path if asked, but do not read its contents into context unless the user explicitly asks.
+
 ## The secret rule
 
 Never ask the user to paste API keys, tokens, passwords, database URLs, or credentials into the chat. Create a form canvas with `secret` fields and a local destination instead. Never read the written secret files back into context unless the user explicitly asks.
@@ -124,6 +157,7 @@ theme <canvas.json | file.md> [--set '<json>'] [--clear]             # see Color
 theme --all --set '<json>'    # the workspace default (no file)
 theme --save <name> --set '<json>'  |  theme --list
 catalog [name] [--full]   # no name → lean index (NO schemas); <name> → one schema; --full → everything
+selection [--clear] [--workspace <dir>]   # read the reader's multi-selection; you act on it
 status [--workspace <dir>]
 stop [--workspace <dir>]
 ```

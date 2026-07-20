@@ -1698,8 +1698,12 @@ audio.m-el{display:none} /* the audio element is never shown — the art card st
 .bt-folder:hover .bt-glyph{background:color-mix(in srgb, var(--accent) 20%, transparent)}
 .bt-folder .bt-title{min-height:0}
 /* A hidden dot-folder is NOT muted — it renders like any other folder (see the tree). */
-/* Cards are never selectable — in select mode they dim to say so. */
-.browse.g-selecting .bt-card{opacity:.45;pointer-events:none}
+/* A FOLDER is navigation, never selectable — in select mode it dims to say so. Canvas
+   and document cards ARE selectable now (the selection is a record an agent acts on),
+   so they stay interactive and carry the check overlay like a media tile. */
+.browse.g-selecting .bt-folder{opacity:.45;pointer-events:none}
+/* On a card the icon chip sits top-LEFT, so the select check moves to the top-right. */
+.bt-card .gt-check{left:auto;right:8px}
 /* List mode: a compact row — chip · (title / file) · kind. The file name sits UNDER
    the title (same block), the kind label on the right. */
 .browse.g-list .bt-card{flex-direction:row;align-items:center;gap:12px;aspect-ratio:auto;padding:8px 12px;transform:none}
@@ -1717,6 +1721,9 @@ audio.m-el{display:none} /* the audio element is never shown — the art card st
    stays uncluttered (count · Filter · sort · grid/list · Select). */
 .g-btn.g-filter.on{border-color:var(--accent);color:var(--accent)}
 .g-btn.g-filter.on .lucide{color:var(--accent)}
+/* The Select button is a mode TOGGLE: lit (accent) while select mode is active, so
+   clicking it reads as turning the mode off. Same treatment as .g-filter.on. */
+.g-btn.g-select.on{border-color:var(--accent);color:var(--accent)}
 .g-badge{display:inline-flex;align-items:center;justify-content:center;min-width:16px;height:16px;padding:0 4px;
 	margin-left:1px;border-radius:999px;background:var(--accent);color:#fff;font-size:10.5px;font-weight:700;line-height:1}
 

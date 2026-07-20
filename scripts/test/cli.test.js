@@ -233,6 +233,61 @@ test('cli: a folder is open-only — validate/stamp/print/theme each refuse it, 
 	assert.equal(missing.json.status, 'error')
 })
 
+test('cli: selection prints the recorded set, reports read-time drops, and --clear empties it', () => {
+	const { writeSelection } = require('../lib/selection')
+	const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'ic-selcli-')))
+	fs.writeFileSync(path.join(root, 'report.md'), '# R\n')
+	fs.writeFileSync(path.join(root, 'a.canvas.json'), '{"instantcanvas":1,"blocks":[]}')
+	fs.writeFileSync(path.join(root, 'ephemeral.md'), '# E\n')
+
+	// Empty first: exactly one JSON document, no `dropped` key when nothing dropped.
+	const empty = run(['selection', '--workspace', root])
+	assert.equal(empty.code, 0)
+	assert.equal(empty.json.status, 'selection')
+	assert.equal(empty.json.count, 0)
+	assert.equal(empty.json.updatedAt, null)
+	assert.equal(empty.stdout.trim().split('\n').length, 1)
+	assert.equal('dropped' in empty.json, false)
+
+	// Seed a valid pair plus a file that exists NOW; delete it so read-time
+	// revalidation prunes it into `dropped[]`.
+	writeSelection(root, [
+		{ path: 'report.md', kind: 'document' },
+		{ path: 'a.canvas.json', kind: 'canvas' },
+		{ path: 'ephemeral.md', kind: 'document' },
+	])
+	fs.rmSync(path.join(root, 'ephemeral.md'))
+
+	const read = run(['selection', '--workspace', root])
+	assert.equal(read.code, 0)
+	assert.equal(read.json.workspace, root)
+	assert.deepEqual(read.json.items.map((i) => i.path).sort(), ['a.canvas.json', 'report.md'])
+	assert.equal(read.json.count, 2)
+	assert.ok(read.json.dropped.some((d) => d.path === 'ephemeral.md'), 'the deleted item is reported dropped')
+
+	// --clear with NO kernel running still exits 0 and empties the RECORD (the
+	// files are never touched — nothing to touch here anyway).
+	const cleared = run(['selection', '--clear', '--workspace', root])
+	assert.equal(cleared.code, 0)
+	assert.equal(cleared.json.status, 'selection-cleared')
+	assert.equal(cleared.json.cleared, 2)
+	assert.equal(cleared.stdout.trim().split('\n').length, 1)
+	assert.equal(fs.existsSync(path.join(root, 'report.md')), true, 'clear never deletes a selected file')
+
+	assert.equal(run(['selection', '--workspace', root]).json.count, 0)
+})
+
+test('cli: selection defaults to the cwd workspace when --workspace is omitted', () => {
+	const { writeSelection } = require('../lib/selection')
+	const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'ic-selcwd-')))
+	fs.writeFileSync(path.join(root, 'note.md'), '# N\n')
+	writeSelection(root, [{ path: 'note.md', kind: 'document' }])
+	const r = run(['selection'], { cwd: root })
+	assert.equal(r.code, 0)
+	assert.equal(r.json.workspace, root)
+	assert.deepEqual(r.json.items.map((i) => i.path), ['note.md'])
+})
+
 test('cli: an unknown flag is refused with usage, before anything runs', () => {
 	const r = run(['open', '--bogus'])
 	assert.equal(r.code, 1)

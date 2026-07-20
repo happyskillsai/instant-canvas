@@ -896,6 +896,55 @@ test('kernel: gallery delete refuses more than 500 paths at once, deleting nothi
 	assert.equal(r.json.error.code, 'TOO_MANY_PATHS')
 })
 
+test('kernel: POST then GET /api/selection round-trips the live set and reports drops', async () => {
+	// A mixed batch across kinds and folders, plus a non-allowlisted secret that
+	// must be DROPPED — never written, never opened.
+	const post = await httpReq({
+		port: K.port, method: 'POST', path: '/api/selection', headers: K.auth,
+		body: { items: [
+			{ path: 'report.canvas.json', kind: 'canvas' },
+			{ path: 'guide.md', kind: 'document' },
+			{ path: 'photos/a.png', kind: 'image' },
+			{ path: '.env', kind: 'document' },
+		] },
+	})
+	assert.equal(post.status, 200)
+	assert.equal(post.json.ok, true)
+	assert.equal(post.json.count, 3, '.env is dropped: not allowlisted')
+	assert.equal(post.json.dropped.length, 1)
+	assert.equal(post.json.dropped[0].path, '.env')
+
+	const get = await httpReq({ port: K.port, path: '/api/selection', headers: K.auth })
+	assert.equal(get.status, 200)
+	assert.deepEqual(get.json.items.map((i) => i.path).sort(), ['guide.md', 'photos/a.png', 'report.canvas.json'])
+	assert.equal(get.json.count, 3)
+	assert.equal(typeof get.json.updatedAt, 'string')
+
+	// RECORDS ONLY: the .env it refused still exists, untouched — the selection
+	// surface never deletes, moves, or opens a file.
+	assert.equal(fs.existsSync(path.join(K.root, '.env')), true)
+	assert.equal(fs.readFileSync(path.join(K.root, '.env'), 'utf8'), 'API_KEY=sk-live-topsecret\n')
+})
+
+test('kernel: GET /api/selection prunes a since-deleted item from the live set', async () => {
+	fs.writeFileSync(path.join(K.root, 'ephemeral.md'), '# Bye\n')
+	await httpReq({
+		port: K.port, method: 'POST', path: '/api/selection', headers: K.auth,
+		body: { items: [{ path: 'report.canvas.json', kind: 'canvas' }, { path: 'ephemeral.md', kind: 'document' }] },
+	})
+	fs.rmSync(path.join(K.root, 'ephemeral.md'))
+	const get = await httpReq({ port: K.port, path: '/api/selection', headers: K.auth })
+	assert.deepEqual(get.json.items.map((i) => i.path), ['report.canvas.json'])
+	assert.equal(get.json.count, 1)
+})
+
+test('kernel: /api/selection is behind the token like every other route', async () => {
+	const post = await httpReq({ port: K.port, method: 'POST', path: '/api/selection', body: { items: [] } })
+	assert.equal(post.status, 403)
+	const get = await httpReq({ port: K.port, path: '/api/selection' })
+	assert.equal(get.status, 403)
+})
+
 test('kernel: §4.1 a hidden (non-excluded) folder hot-reloads, and the debounce bounds a churn storm', async () => {
 	// Browse must reach hidden folders, so the watcher no longer drops every
 	// dot-segment — an edit under .claude/ must reach the browser exactly like a

@@ -67,7 +67,7 @@
         "Hot reload",
         "Version handshake"
       ],
-      "line_count": 196,
+      "line_count": 199,
       "links_to": [
         "docs/canvas-schema.md",
         "docs/cli.md",
@@ -97,7 +97,8 @@
         "scripts/lib/canvasfile.js",
         "scripts/lib/jsonedit.js",
         "scripts/lib/fsatomic.js",
-        "scripts/lib/browser.js"
+        "scripts/lib/browser.js",
+        "scripts/lib/selection.js"
       ],
       "source_unresolved": [],
       "tags": [
@@ -194,10 +195,11 @@
         "stamp",
         "theme",
         "validate / catalog / status / stop",
+        "selection",
         "Result contract (stdout of `open`)",
         "The agent workflow"
       ],
-      "line_count": 153,
+      "line_count": 165,
       "links_to": [
         "docs/architecture.md",
         "docs/canvas-schema.md",
@@ -356,9 +358,10 @@
         "A detached media element keeps playing",
         "A pane that waits for three misses is OUTRUN by a fast restart",
         "Chrome plays from a 200-only server, so a playback test cannot prove Range works",
-        "The ⌘ in a keyboard hint is the wrong glyph off macOS"
+        "The ⌘ in a keyboard hint is the wrong glyph off macOS",
+        "A pixel offset that dodges a sibling panel breaks when the panel stops being a sibling"
       ],
-      "line_count": 346,
+      "line_count": 354,
       "links_to": [
         "docs/architecture.md",
         "docs/security.md"
@@ -452,9 +455,10 @@
         "A validator error is a wall of red in someone's browser",
         "A rejected file leaks its own first bytes through `JSON.parse`",
         "Deleting collections is not `rm -rf`",
-        "A route that serves the user's files by extension must refuse a symlink"
+        "A route that serves the user's files by extension must refuse a symlink",
+        "The reader's selection is state, not a repo dotfile — and it records, it never acts"
       ],
-      "line_count": 140,
+      "line_count": 149,
       "links_to": [
         "docs/architecture.md"
       ],
@@ -469,7 +473,8 @@
         "scripts/lib/skillsconfig.js",
         "scripts/lib/themestore.js",
         "scripts/lib/companion.js",
-        "scripts/lib/gallery.js"
+        "scripts/lib/gallery.js",
+        "scripts/lib/selection.js"
       ],
       "source_unresolved": [],
       "tags": [
@@ -512,9 +517,10 @@
         "A synchronous `execFileSync` in a before hook FREEZES every other file's async test — and hangs the whole single-process suite",
         "Audio never autoplays in headless Chrome without a flag, and `opts.args` REPLACES the defaults",
         "A piped `npm test` reports the PIPE's exit code, not the suite's",
-        "A timing-fragile browser assertion breaks when the suite gets HEAVIER, not just when the code does"
+        "A timing-fragile browser assertion breaks when the suite gets HEAVIER, not just when the code does",
+        "A hash-only `Page.navigate` is a same-document navigation, not a reload"
       ],
-      "line_count": 165,
+      "line_count": 173,
       "links_to": [
         "docs/gotchas/frontend.md"
       ],
@@ -615,9 +621,10 @@
         "Network perimeter",
         "What this does NOT protect against"
       ],
-      "line_count": 68,
+      "line_count": 70,
       "links_to": [
-        "docs/architecture.md"
+        "docs/architecture.md",
+        "docs/cli.md"
       ],
       "over_size": false,
       "parse_error": null,
@@ -635,6 +642,7 @@
         "scripts/lib/mdcanvas.js",
         "scripts/lib/gallery.js",
         "scripts/lib/browse.js",
+        "scripts/lib/selection.js",
         "scripts/lib/fsatomic.js",
         "scripts/kernel.js",
         "scripts/instantcanvas.js"

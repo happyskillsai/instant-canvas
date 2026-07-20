@@ -21,6 +21,7 @@ const { readMarkdownSrc, inlineLocalImages, inlineImageFile, inlineMath, hasMark
 const { virtualCanvasFor } = require('./lib/mdcanvas')
 const { listImages, mediaStat, isStreamableFile, mediaKind, galleryMime, parseByteRange, normalizeRelDir, GALLERY_IMAGE_EXTS, MEDIA_VIDEO_EXTS, MEDIA_AUDIO_EXTS } = require('./lib/gallery')
 const { listDir, itemMeta } = require('./lib/browse')
+const { writeSelection, readSelection } = require('./lib/selection')
 const { dimensions } = require('./lib/imagemeta')
 const { companionFor, enhancesOf } = require('./lib/companion')
 const { figureMap } = require('./lib/figures')
@@ -943,6 +944,30 @@ async function route(req, res, url) {
 	if (method === 'POST' && p === '/api/gallery/delete') {
 		const body = await readBody(req)
 		return handleGalleryDelete(res, body)
+	}
+
+	// The persisted multi-selection. The browser POSTs the whole set on every
+	// toggle; the agent reads it back with `instant-canvas selection` and acts
+	// with its OWN tools. This surface RECORDS ONLY — writeSelection never unlinks,
+	// moves, or opens a selected file (extension + lstat, exactly like the delete
+	// route's validation, minus the destruction). It deliberately does NOT fire a
+	// `workspace` broadcast: that would rebuild the whole tree on every tile toggle.
+	// The browser re-fetches GET /api/selection on the existing `workspace`
+	// broadcast instead, so a CLI `--clear` → /api/refresh drops an open browser's
+	// highlights for free.
+	if (method === 'POST' && p === '/api/selection') {
+		const body = await readBody(req)
+		const items = body && Array.isArray(body.items) ? body.items : []
+		const { items: kept, dropped } = writeSelection(ROOT, items)
+		return sendJson(res, 200, { ok: true, count: kept.length, dropped })
+	}
+
+	// The live selection, revalidated — what the browser rehydrates from on load
+	// and on the `workspace` broadcast. A since-moved/deleted item is pruned from
+	// the response (read is pure — the file is not rewritten).
+	if (method === 'GET' && p === '/api/selection') {
+		const { items, updatedAt } = readSelection(ROOT)
+		return sendJson(res, 200, { ok: true, items, count: items.length, updatedAt })
 	}
 
 	if (method === 'GET' && p === '/api/theme/presets')

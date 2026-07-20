@@ -49,12 +49,35 @@ function normalizeTypes(types) {
 }
 
 /**
+ * The kind of a renderable path, decided from the EXTENSION alone and NEVER by
+ * opening the file: `'image'`/`'video'`/`'audio'` (via the shared `mediaKind`),
+ * `'document'` (the markdown allowlist), `'canvas'` (a `.json`), or `null` for
+ * anything else (an unknown extension, `.env`). The one dispatcher the item
+ * drawer, the browse listing, and the selection lib all share, so the renderable
+ * allowlist lives in exactly one place. The `.json` verdict is advisory — the
+ * marker is never read here — which is deliberate: it is what keeps the selection
+ * write path out of the `JSON.parse`-leak class (a `.json` is `canvas` without a
+ * single byte opened).
+ */
+function classifyKind(rel) {
+	if (typeof rel !== 'string' || rel === '')
+		return null
+	const mkind = mediaKind(rel)
+	if (mkind)
+		return mkind
+	if (hasMarkdownExtension(rel))
+		return 'document'
+	if (rel.endsWith('.json'))
+		return 'canvas'
+	return null
+}
+
+/**
  * Stat-only metadata for ANY renderable path — the item info drawer's single
- * source, warm and cold. Classifies `kind` from the EXTENSION using the very
- * predicates `collectFiles` uses (no second extension list): `mediaKind` for
- * image/video/audio, the markdown allowlist for `document`, a `.json` for
- * `canvas`. Returns `null` (→ 404) for anything else — an unknown extension, a
- * directory, `.env`.
+ * source, warm and cold. Classifies `kind` with the shared `classifyKind` (no
+ * second extension list): `mediaKind` for image/video/audio, the markdown
+ * allowlist for `document`, a `.json` for `canvas`. Returns `null` (→ 404) for
+ * anything else — an unknown extension, a directory, `.env`.
  *
  * Media kinds delegate to `mediaStat` VERBATIM (insideRoot + lstat, refusing a
  * symlink and a directory in one check); the route adds an image's pixel
@@ -65,23 +88,15 @@ function normalizeTypes(types) {
  * extension gate + `lstat` is the whole defense. It serves no file bytes.
  */
 function itemMeta(root, rel) {
-	if (typeof rel !== 'string' || rel === '')
-		return null
-
-	// Media: mediaStat is the shared image/video/audio gate (extension + lstat).
-	const mkind = mediaKind(rel)
-	if (mkind)
-		return mediaStat(root, rel)
-
-	// Canvas / document: decide from the extension, never open the file.
-	let kind = null
-	if (hasMarkdownExtension(rel))
-		kind = 'document'
-	else if (rel.endsWith('.json'))
-		kind = 'canvas'
+	const kind = classifyKind(rel)
 	if (!kind)
 		return null
 
+	// Media: mediaStat is the shared image/video/audio gate (extension + lstat).
+	if (kind === 'image' || kind === 'video' || kind === 'audio')
+		return mediaStat(root, rel)
+
+	// Canvas / document: decide from the extension, never open the file.
 	const abs = path.resolve(root, rel)
 	if (!insideRoot(root, abs))
 		return null
@@ -282,4 +297,4 @@ function listDir(root, dirRel, { cap = DEFAULT_CAP, dirsOnly = false, recursive 
 	return { dir: toPosix(relDir), dirs, items, truncated: cc.truncated, recursive: !!recursive }
 }
 
-module.exports = { listDir, itemMeta, ITEM_KINDS }
+module.exports = { listDir, itemMeta, classifyKind, ITEM_KINDS }

@@ -22,6 +22,7 @@ process.env.INSTANTCANVAS_STATE_DIR = process.env.INSTANTCANVAS_STATE_DIR || fs.
 const { withChrome, findChrome, sleep } = require('./helpers/cdp')
 const { PKG_VERSION } = require('../lib/pkgmeta')
 const { FIXTURES } = require('./helpers/mediafixtures')
+const { selectionFile } = require('../lib/selection')
 
 const CLI = path.join(__dirname, '..', 'instantcanvas.js')
 const CHROME = findChrome()
@@ -131,30 +132,17 @@ test.before(async () => {
 		await until(evaluate, 'location.hash === "#/f/mix" && ' + q('.browse .gt') + ' >= 4', 6000)
 		await sleep(150)
 
-		// ---- selection covers IMAGE / VIDEO / AUDIO, never a canvas or document ----
+		// A poll over the ON-DISK selection state file — the union the browser persists
+		// (workspace-relative paths + kind, revalidated). No backticks in here.
+		const readSel = () => { try { return JSON.parse(fs.readFileSync(selectionFile(root), 'utf8')) } catch { return null } }
+		const untilFile = async (pred, ms = 8000) => { const dl = Date.now() + ms; for (;;) { const s = readSel(); if (pred(s)) return s; if (Date.now() > dl) return s; await sleep(120) } }
+
+		// ---- SELECTION now covers EVERY renderable kind (a record an agent acts on) ----
 		await evaluate('(function(){ var b = Array.from(document.querySelectorAll(".browse .g-btn")).find(function(x){ return x.textContent.trim() === "Select" }); b && b.click() })()')
 		out.steps.selecting = await until(evaluate, q('.browse.g-selecting') + ' === 1', 4000)
-		await click('.browse .gt[data-rel="mix/a.png"]')
-		await sleep(120)
-		out.imageSelected = await evaluate(q('.browse .gt.selected') + ' === 1')
-		await click('.browse .gt[data-rel="mix/tiny.mp4"]')
-		await sleep(120)
-		out.videoSelected = await evaluate(q('.browse .gt.selected') + ' === 2') // the video joined the selection
-		await click('.browse .gt[data-rel="mix/tiny.mp3"]')
-		await sleep(120)
-		out.audioSelected = await evaluate(q('.browse .gt.selected') + ' === 3') // and the audio
-		await click('.browse .gt[data-rel="mix/report.canvas.json"]')
-		await sleep(120)
-		out.cardNotSelected = await evaluate(q('.browse .gt.selected') + ' === 3') // a canvas adds nothing
-		out.cardsHaveNoCheck = await evaluate(q('.browse .bt-canvas .gt-check') + ' === 0 && ' + q('.browse .bt-document .gt-check') + ' === 0')
-		// The grid/list toggle stays available in select mode (it used to vanish).
-		out.viewToggleInSelect = await evaluate(q('.browse.g-selecting .g-seg.g-view') + ' >= 1')
-
-		// LONG-PRESS: leave select mode, then press-and-hold an image. It must ENTER
-		// select and STAY selected on release — the click that follows a long-press must
-		// not re-toggle it (a select-then-instantly-deselect regression).
-		await evaluate('(function(){ var b = Array.from(document.querySelectorAll(".browse .g-btn")).find(function(x){ return x.textContent.trim() === "Done" }); b && b.click() })()')
-		await sleep(150)
+		// LONG-PRESS enters select and STAYS selected on release — the click that follows
+		// must not re-toggle it. On mix/a.png (still on disk here; the delete test is much
+		// later), then cleared so the persistence flow starts from a clean union.
 		const rect = await evaluate('(function(){ var t = document.querySelector(\'.browse .gt[data-rel="mix/a.png"]\'); if (!t) return null; var r = t.getBoundingClientRect(); return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) } })()')
 		if (rect) {
 			await send('Input.dispatchMouseEvent', { type: 'mousePressed', x: rect.x, y: rect.y, button: 'left', clickCount: 1 })
@@ -163,6 +151,84 @@ test.before(async () => {
 			await sleep(250)
 			out.longPressStaysSelected = await evaluate(q('.browse .gt[data-rel="mix/a.png"].selected') + ' === 1')
 		}
+		// Clear the union so the persistence assertions below start from empty.
+		await evaluate('(function(){ var b = Array.from(document.querySelectorAll(".browse .g-btn")).find(function(x){ return x.textContent.trim() === "Clear" }); b && b.click() })()')
+		await untilFile((s) => !s || !s.items || s.items.length === 0)
+
+		// Pick THREE kinds — an image, a canvas AND a document — proving a card is
+		// selectable now, and that it carries the check overlay (recording, not deletion).
+		await click('.browse .gt[data-rel="mix/a.png"]'); await sleep(100)
+		await click('.browse .gt[data-rel="mix/report.canvas.json"]'); await sleep(100)
+		await click('.browse .gt[data-rel="mix/guide.md"]'); await sleep(100)
+		out.threeKindsSelected = await evaluate(q('.browse .gt.selected') + ' === 3')
+		out.cardSelectable = await evaluate(q('.browse .bt-canvas.selected') + ' === 1 && ' + q('.browse .bt-document.selected') + ' === 1')
+		out.cardsHaveCheck = await evaluate(q('.browse .bt-canvas .gt-check') + ' >= 1 && ' + q('.browse .bt-document .gt-check') + ' >= 1')
+
+		// ---- `Select` is the mode TOGGLE; there is no separate `Done` button ----
+		out.noDoneButton = await evaluate('Array.from(document.querySelectorAll(".browse .g-btn")).every(function(b){ return b.textContent.trim() !== "Done" })')
+		out.selectLitInMode = await evaluate(q('.browse .g-btn.g-select.on') + ' === 1')
+		await evaluate('(function(){ var b = document.querySelector(".browse .g-btn.g-select.on"); b && b.click() })()')
+		await sleep(150)
+		out.toggleExitedMode = await evaluate(q('.browse.g-selecting') + ' === 0')
+		// Exiting KEEPS the selection (class stays, union unchanged) — that is the whole
+		// point of the toggle vs the old Done-clears behaviour.
+		out.toggleKeptSelection = await evaluate(q('.browse .gt.selected') + ' === 3 && ((window.ic&&window.ic.state.selection)?window.ic.state.selection.size:-1) === 3')
+		// re-enter select mode to continue the cross-folder union flow below.
+		await evaluate('(function(){ var b = Array.from(document.querySelectorAll(".browse .g-btn")).find(function(x){ return x.textContent.trim() === "Select" }); b && b.click() })()')
+		await until(evaluate, q('.browse.g-selecting') + ' === 1', 4000)
+		out.viewToggleInSelect = await evaluate(q('.browse.g-selecting .g-seg.g-view') + ' >= 1')
+		// The union is PERSISTED to disk as workspace-relative paths + recomputed kind.
+		const sel3 = await untilFile((s) => s && Array.isArray(s.items) && s.items.length === 3)
+		out.persisted3 = (sel3 && sel3.items || []).map((i) => i.path).sort()
+		out.persisted3Kinds = (sel3 && sel3.items || []).slice().sort((a, b) => a.path.localeCompare(b.path)).map((i) => i.kind)
+
+		// ---- UNION ACROSS FOLDERS: navigate to root (mode is STICKY) and add a 4th ----
+		out.stickyMode = await evaluate('!!(window.ic && window.ic.state && window.ic.state.selecting)')
+		await evaluate('location.hash = "#/f/"')
+		await until(evaluate, 'location.hash === "#/f/" && ' + q('.browse .gt') + ' > 0', 6000)
+		await sleep(150)
+		out.stillSelectingAtRoot = await evaluate(q('.browse.g-selecting') + ' === 1')
+		await click('.browse .gt[data-rel="deck.canvas.json"]'); await sleep(120)
+		const sel4 = await untilFile((s) => s && s.items && s.items.length === 4)
+		out.persisted4 = (sel4 && sel4.items || []).map((i) => i.path).sort()
+
+		// ---- RESTORE ON RELOAD: reload the page; the 4 come back selected ----
+		// A genuine full reload — navigating to a URL that differs only in the HASH is a
+		// same-document navigation (no reboot), so add a throwaway query param to force a
+		// fresh document load. This is what actually exercises disk → GET /api/selection →
+		// restore (state.selecting also resets, unlike an in-memory hash change).
+		await send('Page.navigate', { url: url.replace('#', '&_r=1#') })
+		out.steps.reloaded = await until(evaluate, 'location.hash === "#/f/" && !!(window.ic && window.ic.state && window.ic.state.tree) && ' + q('.browse .gt') + ' > 0', 20000)
+		await sleep(250)
+		out.restoredUnionSize = await evaluate('(window.ic && window.ic.state && window.ic.state.selection) ? window.ic.state.selection.size : -1')
+		out.rootDeckSelectedAfterReload = await evaluate(q('.browse .gt[data-rel="deck.canvas.json"].selected') + ' === 1')
+		await evaluate('location.hash = "#/f/mix"')
+		await until(evaluate, 'location.hash === "#/f/mix" && ' + q('.browse .gt') + ' >= 4', 8000)
+		await sleep(200)
+		out.mixTrioSelectedAfterReload = await evaluate(q('.browse .gt[data-rel="mix/a.png"].selected') + ' === 1 && ' + q('.browse .gt[data-rel="mix/report.canvas.json"].selected') + ' === 1 && ' + q('.browse .gt[data-rel="mix/guide.md"].selected') + ' === 1')
+
+		// ---- DELETE INVARIANT: the media-delete button posts ONLY the media subset ----
+		// The union is a.png (image) + report.canvas.json + guide.md + deck (canvas/docs).
+		// The Delete count and the POST must be the ONE media file — a canvas/document
+		// must never reach /api/gallery/delete.
+		await evaluate('(function(){ window.__delPosts = []; var f = window.fetch; window.fetch = function(u, o){ if (String(u).indexOf("/api/gallery/delete") >= 0 && o && o.body) window.__delPosts.push(JSON.parse(o.body)); return f.apply(this, arguments) } })()')
+		// Enter select mode only if not already in it (a lit `Select` toggle would EXIT).
+		await evaluate('(function(){ if(!document.querySelector(".browse.g-selecting")){ var b = Array.from(document.querySelectorAll(".browse .g-btn")).find(function(x){ return x.textContent.trim() === "Select" }); b && b.click() } })()')
+		await until(evaluate, q('.browse.g-selecting') + ' === 1', 4000)
+		await evaluate('(function(){ var b = Array.from(document.querySelectorAll(".browse .g-toolbar .g-danger")).find(function(x){ return /Delete/.test(x.textContent) }); b && b.click() })()')
+		await sleep(250)
+		out.confirmDeleteBtn = await evaluate('(function(){ var b = document.querySelector(".g-confirm .g-cactions .g-danger"); return b ? b.textContent.trim() : "" })()')
+		out.confirmListNames = await evaluate('Array.from(document.querySelectorAll(".g-confirm .g-cli")).map(function(x){ return x.textContent })')
+		await evaluate('(function(){ var b = document.querySelector(".g-confirm .g-cactions .g-danger"); b && b.click() })()')
+		await sleep(400)
+		out.delPosts = await evaluate('window.__delPosts || []')
+		out.aPngGone = !fs.existsSync(path.join(root, 'mix', 'a.png'))
+		out.canvasDocSurvive = fs.existsSync(path.join(root, 'mix', 'report.canvas.json')) && fs.existsSync(path.join(root, 'mix', 'guide.md'))
+		// Leave select mode for the breadcrumb test below. `Select` is now a lit toggle
+		// that exits; the delete flow already auto-exits, so only click it if still in mode
+		// (clicking a NON-lit Select would re-enter).
+		await evaluate('(function(){ if(document.querySelector(".browse.g-selecting")){ var b = Array.from(document.querySelectorAll(".browse .g-btn.g-select.on")).find(Boolean); b && b.click() } })()')
+		await sleep(120)
 
 		// ---- the pane breadcrumb's house segment navigates to the workspace root ----
 		await evaluate('location.hash = "#/f/mix"')
@@ -230,13 +296,48 @@ test('browse: clicking a document or an image tile navigates to its overlay rout
 	assert.equal(R.steps.imgNavigated, true, 'an image tile navigates to #/c/ too')
 })
 
-test('browse: selection covers image/video/audio; a canvas or document never selectable', { skip, timeout: 120_000 }, () => {
+test('browse: selection covers EVERY renderable kind — a canvas and a document too', { skip, timeout: 120_000 }, () => {
 	assert.equal(R.steps.selecting, true, 'select mode engaged')
-	assert.equal(R.imageSelected, true, 'an image tile is selectable')
-	assert.equal(R.videoSelected, true, 'a video tile is selectable')
-	assert.equal(R.audioSelected, true, 'an audio tile is selectable')
-	assert.equal(R.cardNotSelected, true, 'clicking a canvas/document tile selects nothing')
-	assert.equal(R.cardsHaveNoCheck, true, 'canvas/document tiles carry no selection checkbox')
+	assert.equal(R.threeKindsSelected, true, 'an image, a canvas AND a document are all selected')
+	assert.equal(R.cardSelectable, true, 'a canvas card and a document card both carry the selected class')
+	assert.equal(R.cardsHaveCheck, true, 'canvas/document cards carry the selection check overlay')
+})
+
+test('browse: Select is a mode toggle (no separate Done), and exiting keeps the selection', { skip, timeout: 120_000 }, () => {
+	assert.equal(R.noDoneButton, true, 'there is no Done button — Select toggles the mode')
+	assert.equal(R.selectLitInMode, true, 'the Select button is lit (.on) while select mode is active')
+	assert.equal(R.toggleExitedMode, true, 'clicking the lit Select exits select mode')
+	assert.equal(R.toggleKeptSelection, true, 'exiting keeps the selection (class + union unchanged)')
+})
+
+test('browse: the selection persists to a per-workspace state file as relative paths + kind', { skip, timeout: 120_000 }, () => {
+	assert.deepEqual(R.persisted3, ['mix/a.png', 'mix/guide.md', 'mix/report.canvas.json'], 'the three picks are on disk, workspace-relative')
+	// Kind is recomputed from the extension server-side (advisory on the wire).
+	assert.deepEqual(R.persisted3Kinds, ['image', 'document', 'canvas'], 'kinds are recomputed from the extension')
+})
+
+test('browse: the selection is a workspace UNION that spans folders', { skip, timeout: 120_000 }, () => {
+	assert.equal(R.stickyMode, true, 'select mode is sticky across navigation')
+	assert.equal(R.stillSelectingAtRoot, true, 'navigating to another folder stays in select mode')
+	assert.deepEqual(R.persisted4, ['deck.canvas.json', 'mix/a.png', 'mix/guide.md', 'mix/report.canvas.json'], 'a pick in a second folder joins the same union')
+})
+
+test('browse: the selection is RESTORED on reload', { skip, timeout: 120_000 }, () => {
+	assert.equal(R.steps.reloaded, true, 'the page reloaded')
+	assert.equal(R.restoredUnionSize, 4, 'all four come back into state.selection')
+	assert.equal(R.rootDeckSelectedAfterReload, true, 'the root pick is re-marked selected')
+	assert.equal(R.mixTrioSelectedAfterReload, true, 'the mix trio is re-marked selected after navigating back')
+})
+
+test('browse: the media-delete button only ever posts the MEDIA subset', { skip, timeout: 120_000 }, () => {
+	// The union holds one image and three canvas/document items; Delete counts + posts
+	// only the image. A canvas/document path must never reach /api/gallery/delete.
+	assert.equal(R.confirmDeleteBtn, 'Delete 1', 'the confirm counts only the one media file')
+	assert.deepEqual(R.confirmListNames, ['a.png'], 'the confirm lists only the media file')
+	assert.equal(R.delPosts.length, 1, 'exactly one delete POST')
+	assert.deepEqual(R.delPosts[0].paths, ['mix/a.png'], 'only the media path was posted — no canvas/document')
+	assert.equal(R.aPngGone, true, 'the image was deleted')
+	assert.equal(R.canvasDocSurvive, true, 'the selected canvas and document were NOT deleted')
 })
 
 test('browse: the grid/list toggle stays available in select mode', { skip, timeout: 120_000 }, () => {
@@ -249,7 +350,7 @@ test('browse: a long-press selects and STAYS selected on release', { skip, timeo
 		console.error('NOTE: long-press did not register under CDP in this run')
 		return
 	}
-	assert.equal(R.longPressStaysSelected, true, 'the long-pressed image is still selected after release')
+	assert.equal(R.longPressStaysSelected, true, 'the long-pressed media tile is still selected after release')
 })
 
 test('browse: zero page errors throughout, and the drive completed', { skip, timeout: 120_000 }, () => {

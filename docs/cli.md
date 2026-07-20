@@ -27,6 +27,7 @@ theme --save <name> --set '<json>' | --clear
 theme --list
 validate <canvas.json | skills-config.json>
 catalog [name] [--full]
+selection [--clear] [--workspace <dir>]   # read (or clear) the reader's multi-selection
 status [--workspace <dir>]
 stop [--workspace <dir>]
 ```
@@ -116,6 +117,17 @@ Exit 0 clean; exit 1 on `INVALID_THEME`, `INVALID_JSON` (the `--set` string itse
 - `catalog` is the progressive-disclosure surface — lean index bare, one schema by name (a block, a chart kind, a field type, `fieldset`, `sweep`, `document`, **`theme`**, or `envelope`), `--full` for everything (see [canvas-schema.md](canvas-schema.md)). `catalog theme` is the document color system: the token shape *and* every preset with its swatches, prose and light/dark mode, so picking one costs no second call.
 - `status` reports `{running, root, port, pid, startedAt, version}`.
 - `stop` shuts the kernel down and is idempotent.
+
+### selection
+
+**The reader gestures which files; the agent acts.** The browser records the reader's multi-selection of workspace items (canvases, documents, images, video, audio, across folders) to `stateDir()/<key>.selection.json`; this command is the agent's read-only door onto that set. Told "delete / move / rename the selected ones", an agent runs `selection`, parses `items[]`, and performs the operation with its **own** tools — **InstantCanvas never performs the file operation itself** (there is deliberately no `--delete`/`--move`/`--copy`/`--rename` verb, ever).
+
+```
+selection                                   # → {"status":"selection","workspace","items":[{path,kind}],"count","updatedAt",...}
+selection --clear                           # empties the record → {"status":"selection-cleared","cleared":N,...}
+```
+
+It takes **no path argument** (like `theme --all` / `status`): the workspace root is `--workspace` else cwd, realpath'd. Bare, it calls `readSelection` (`lib/selection.js`) — the revalidated live set, a since-moved/deleted item pruned into an optional `dropped[]` — and prints one JSON document via `out()`, paths **workspace-relative** (consistent with `open`'s `canvas` and `print`'s `path`). `--clear` empties the *record* (never the user's files) and best-effort `POST /api/refresh` to a live kernel, so an open browser drops its highlights (the same nudge `theme` uses; no kernel running is the normal case, not an error). Exit 0 clean; the read never opens a selected file (extension + `lstat` only — the `.env`/`JSON.parse`-leak rule, see [security.md](security.md)).
 
 ## Result contract (stdout of `open`)
 

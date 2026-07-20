@@ -163,3 +163,11 @@ budgeted its palette-save subprocess (the ~2 s `npx happyskills skills-config se
 past it, and three palette tests went red with no change to the code they cover. Same fix: poll
 for the save's **observable outcome** (the saved chip appearing) under a 30 s deadline, then a
 short settle. A fixed wait that "has margin" is a countdown to the suite outgrowing it.
+
+## A hash-only `Page.navigate` is a same-document navigation, not a reload
+
+The selection-restore test needed a genuine page reload — the feature's whole claim is that a persisted selection survives one, restored from disk via `GET /api/selection`. The drive reloaded with `Page.navigate({ url })`, where `url` was the app URL with hash `#/f/`. It looked like a reload and the test passed. It was **not** a reload: the current location already had the same origin, path and query (`?token=…`), differing only in the **hash**, so Chrome performed a **same-document navigation** — `app.js` never re-ran, `window.ic.state` (including `state.selecting` and the in-memory `state.selection`) persisted untouched, and the "restore" assertion was silently proving **in-memory persistence**, not the disk → GET → repopulate path it was written for. It would have stayed green even if `restoreSelection()` were deleted.
+
+The bug only surfaced because a *later* change added a lit `Select` toggle to the toolbar: the drive's "click Select to enter select mode" step, run after the fake reload, found the app still in select mode (state never reset) and its click *exited* instead. The real defect was one level up — the reload wasn't one.
+
+Two rules. **To truly reload a page under CDP, the URL must differ in more than its fragment** — change the query (append a throwaway `&_r=1` before the `#`) or call `Page.reload`; a hash change reboots nothing. And **assert something only a real reload resets** — here, that `state.selecting` comes back `false` and the selection is re-fetched, not merely still in memory. A restore test that a same-document navigation can pass is testing the wrong thing.

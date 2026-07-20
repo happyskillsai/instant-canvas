@@ -10,6 +10,7 @@ source:
   - scripts/lib/themestore.js
   - scripts/lib/companion.js
   - scripts/lib/gallery.js
+  - scripts/lib/selection.js
 ---
 
 # Gotchas — Runtime (kernel & CLI)
@@ -138,3 +139,11 @@ Two lessons outlive the feature, because any future destructive surface will fac
 The gallery streams images straight off disk (`GET /api/gallery/file`), gated by the file's extension — the same `.env` discipline as every other path surface: decide from the extension, never open a file the gate would refuse. But a gallery serves *arbitrary user files*, not a canvas the agent wrote, and that adds a wrinkle the markdown paths never had: **the extension gate reads the LINK name, not the target.** A `photo.png` that is a symlink to `../.env` passes `isRenderableImage('photo.png')`, and because `.env` is a real file *inside* the root, `insideRoot` would admit it too — so it could be streamed back as `image/png`.
 
 So every gallery surface (`listImages`, `mediaStat`, the file route, and the delete route in `lib/gallery.js`/`kernel.js`) uses **`lstat`, never `stat`**, and requires a regular file: `lstat().isFile()` is false for a symlink *and* a directory, so one check refuses both. `insideRoot` still realpaths the symlink that escapes the root; the `lstat` refusal is for the one that stays inside it and lies about its type. The general rule: **when a route serves files chosen by extension, the extension describes the link — only `lstat` describes what the link actually is.**
+
+## The reader's selection is state, not a repo dotfile — and it records, it never acts
+
+Two mistakes are tempting when persisting the reader's multi-selection (`lib/selection.js`), and both were made before by the feature this file is full of.
+
+**Where it lives.** The selection is a global, per-workspace state file — `stateDir()/<key>.selection.json`, mirroring the registry entry — **not** a dotfile in the workspace. Putting per-workspace state *in the repo* is exactly the `.instantcanvas.json` mistake ("Three forgiving layers…" above): it churns git, it trips the file watcher, and it needs bespoke keys the state dir gives for free. State files are also written **LF, `0o600`** — machine-managed, never hand-edited, so unlike a *user's* file they carry no line-ending convention to preserve (do **not** add the CRLF-detection logic the splice writers need; see "A splice preserves the file's bytes, but not its LINE ENDING").
+
+**What it does.** InstantCanvas **records** the selection; it never deletes, moves, copies, or renames a selected file — the *agent* does, with its own tools. So the lib has `writeSelection`/`readSelection`/`clearSelection` and nothing destructive, and there is no `selection --delete` verb and no kernel route that unlinks a selected file. This is the same line the removed folder-delete drew, restated: a reader-facing surface may record intent, but the destruction belongs to the filesystem and the agent. And, as everywhere on a path surface, it **never opens a selected file** — `kind` is recomputed from the extension, so a `.json` is `canvas` without a byte read, which is what keeps the whole feature out of the `JSON.parse`-leak class even when the reader selects a secret-adjacent file.

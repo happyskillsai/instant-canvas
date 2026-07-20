@@ -1,7 +1,7 @@
 {
 	"name": "instant-canvas",
 	"version": "0.18.0",
-	"description": "Local canvas runtime for coding agents: renders canvas JSON (markdown, KPIs, tables, 26 chart kinds incl. 3D and ML plots, forms) and plain .md files as-is, prints them to PDF, and collects input/secrets straight to local files.",
+	"description": "Local canvas runtime: renders canvas JSON (markdown, KPIs, tables, 26 chart kinds, forms) and .md files, prints to PDF as documents or white papers, collects secrets to disk, and reads which files a user selected in the browser.",
 	"type": "skill",
 	"license": "BSD-3-Clause",
 	"repository": "https://github.com/happyskillsai/instant-canvas.git",
