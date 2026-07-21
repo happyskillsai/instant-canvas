@@ -122,9 +122,18 @@ function drivePresenting(rel) {
 		await sleep(1600)
 		const r = {}
 		const idx = () => evaluate('window.ic.state.presIndex')
+		// What a slide actually PAINTS, browsed and presented. Read as the browser computed it,
+		// never off the stylesheet: every --doc-* read inside .slide carries a literal fallback,
+		// so a slide that inherits no theme still renders — in the wrong colors, silently.
+		const paint = (sel) => evaluate('(() => { const s = document.querySelector(' + JSON.stringify(sel) + ');'
+			+ ' if (!s) return null; const c = getComputedStyle(s);'
+			+ ' return { bg: c.backgroundColor, ink: c.color, accent: c.getPropertyValue("--accent").trim(),'
+			+ ' paper: c.getPropertyValue("--doc-paper").trim(), scheme: c.colorScheme } })()')
+		r.stripPaint = await paint('.strip-scale .slide')
 		// Enter via a real click on the Present control.
 		await evaluate('document.getElementById("presentBtn").click()')
 		await sleep(400)
+		r.stagePaint = await paint('#stageHolder .slide')
 		r.entered = await evaluate('window.ic.state.presenting === true && !document.getElementById("stage").hidden && !!document.querySelector("#stageHolder .slide")')
 		// Never assert document.fullscreenElement — a synthetic gesture is refused headless.
 		r.startIndex = await idx()
@@ -262,6 +271,20 @@ test('Present enters the stage in-viewport and the standard keyboard vocabulary 
 	assert.equal(presenting.afterClick, 5, 'a click/tap advances')
 	assert.equal(presenting.afterEnd, 7, 'End jumps to the last slide')
 	assert.equal(presenting.afterHome, 0, 'Home jumps to the first')
+})
+
+test('a slide paints IDENTICALLY browsed and presented — the stage takes the deck theme', { skip: browserSkip }, () => {
+	// The guard first: presentation-full declares preset "midnight", so the filmstrip slide
+	// must genuinely be dark paper. Without this, the comparison below would be satisfied by
+	// two unthemed white slides and could never fail — which is exactly how this bug shipped.
+	assert.ok(presenting.stripPaint, 'the filmstrip slide was measured')
+	assert.notEqual(presenting.stripPaint.bg, 'rgb(255, 255, 255)', 'the fixture deck is themed, so a lost theme is visible')
+	assert.equal(presenting.stripPaint.scheme, 'dark', 'midnight resolves to dark paper')
+	// The stage is a SIBLING overlay, not a descendant of .pres-mode, so it inherits none of
+	// that root's --doc-* properties and must be handed them itself. Relational, not literal:
+	// the invariant is "the same slide, the same colors", true for any theme or preset.
+	assert.deepEqual(presenting.stagePaint, presenting.stripPaint,
+		'the presented slide has the same background, ink, accent and color-scheme as the browsed one')
 })
 
 test('B blanks the screen, / stays inert, notes never reach the stage, Esc returns to the filmstrip', { skip: browserSkip }, () => {
