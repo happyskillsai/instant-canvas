@@ -78,6 +78,7 @@ For exact syntax, all flags, and JSON shapes, read [references/cli-reference.md]
 | Action | Command |
 |---|---|
 | Install (single or batched) | `npx happyskills install owner/a [owner/b ...] -y --json` |
+| Install when the user gave a **bare name** (no owner) | **Resolve it first — Section 11.** Never pass a bare name to `install`. |
 | Install with version | `npx happyskills install owner/name@1.2.0 -y --json` |
 | Install at specific version + wipe local | `npx happyskills install owner/name@1.2.0 --fresh -y --json` (hard-fails if version is not on registry; refuses to clobber local edits without `--force-discard-local`; snapshot-first) |
 | Install globally | `npx happyskills install owner/name -g -y --json` |
@@ -215,7 +216,8 @@ Every CLI `--json` invocation emits the canonical six-key response envelope: `ok
 | `fix_validation_errors` | recovery | Surface `error.validation_errors` (an array of `{ rule, message, file }`) to the user. Once fixed, re-run. |
 | `provide_changelog` | recovery | CHANGELOG.md is missing the target version entry — ask the user to draft it, then re-run. `principal_authorization_required: true`. |
 | `self_update` | recovery | The user's CLI is older than the API requires. Run `next_step.context.commands[0]` (`npm install -g happyskills@latest`), then retry. |
-| `show_format` | recovery | `error.code: INVALID_SLUG / INVALID_VERSION`. Show the corrected format from `next_step.context.expected`, then re-run. |
+| `show_format` | recovery | `error.code: INVALID_VERSION` (or a malformed slug with no recoverable name). Show the corrected format from `next_step.context.expected`, then re-run. |
+| `resolve_skill_slug` | recovery | `error.code: INVALID_SLUG` on a **bare skill name**. You passed a name with no owner. Run `next_step.context.commands[0]`, then apply the exact-match gate in **Section 11 Step 3** — do NOT just show the format, and do NOT ask the principal for the owner. |
 | `discover_schema` | routing | `error.code: COMMAND_NOT_FOUND / USAGE_ERROR`. The command or its arguments were invalid. Run `next_step.context.commands[0]` (`happyskills schema --json`) to discover every command with its exact input, output, and errors, then retry with a corrected command. If `next_step.context.suggestion` is present, it is the likeliest intended command. |
 | `pick_version` | decision | `error.code: VERSION_NOT_FOUND`. Present `next_step.context.available` via AskUserQuestion. Re-run with the chosen version. |
 | `specify_bump_type` | decision | `error.code: MISSING_VERSION / INVALID_BUMP`. Present `next_step.context.options` (`['patch','minor','major']`) via AskUserQuestion. Re-run. |
@@ -238,7 +240,7 @@ Every CLI `--json` invocation emits the canonical six-key response envelope: `ok
 
 Extract from natural language:
 
-- **Skill names**: Must be fully qualified `owner/name` (e.g., `acme/deploy-aws`). If just a name given, ask for clarification.
+- **Skill names**: The CLI takes a fully qualified `owner/name` (e.g., `acme/deploy-aws`). If the user gives a bare name ("install xyz"), **resolve it yourself first — Section 11**. Never pass a bare name to the CLI, and never ask the principal for the owner.
 - **Version pins**: "version 1.2.0", "@1.2.0", "pin to 1.2.0" → `--version 1.2.0` or inline `skill@1.2.0`.
 - **Global scope**: "globally", "global", "system-wide", "for all projects" → `-g` flag.
 - **List scope**: `list` defaults to `--all-scopes` (shows local + global together). Narrow only when the user is explicit: "just this project" / "local only" / "here" → `list` (no flag); "global only" / "what's installed globally" → `list -g`. A bare "list / show my skills" → keep the default `--all-scopes`.
@@ -269,7 +271,8 @@ If the request is ambiguous, use AskUserQuestion to clarify before running a com
 - **NEVER** run commands without parsing and presenting the JSON output.
 - **ALWAYS** run `npx happyskills` from the **project root** (the directory containing `.claude/`). Exceptions: `setup` and `self-update` are location-independent.
 - **ALWAYS** use fully qualified `owner/name` in install/uninstall. When operating on 2+ skills, batch into one command (e.g., `install owner/a owner/b -y --json`). Never run separate sequential commands.
-- **NEVER** invoke search/find/recommend/versions/changelog — route to `happyskills-search`.
+- **NEVER** invoke search/find/recommend/versions/changelog — route to `happyskills-search`. **One carve-out:** you may run `search` to turn a bare skill name into an `owner/name` coordinate (Section 11). That is *resolution*, not discovery — you are answering "which owner?", never "what should I install?". Never present ranked alternatives or a discovery list off the back of it.
+- **ALWAYS** use fully qualified `owner/name` in install/uninstall — resolve a bare name via Section 11 first. **NEVER** pass a bare name to the CLI to "see what happens", and **NEVER** ask the principal for the owner slug; they don't know it, which is exactly why Section 11 exists.
 - **NEVER** invoke publish/release/bump/validate/convert/fork/delete/visibility — route to `happyskills-publish`.
 - **NEVER** invoke design/audit/scaffold/review/improve — route to `happyskills-design`.
 - **NEVER** invoke status/pull/diff — route to `happyskills-sync`. Drift repair (lock-vs-disk disagreement) is also owned by sync — route there with "say 'fix drift on X'".
@@ -304,3 +307,59 @@ A skill can declare settings its consumer supplies — a channel, a model, a the
 - **`--root <dir>` when there is no project.** If the working directory is not a HappySkills project, `set --root <dir>` creates `skills-config.json` there. Prefer this over letting the walk-up land somewhere surprising.
 - **A schema violation is a fix-and-retry loop, not a dead end.** If a skill declares a `schema` for a field, `set` refuses a bad value with `INVALID_VALUE` and `error.details[]` listing **every** violation — each with a `path` (the exact location inside the value, e.g. `palettes.Acme.palette[2]`) and a `fix` (what to change it to). Apply every fix, re-run `set`, and repeat until it succeeds. Do NOT route around it by hand-editing `skills-config.json` — the same schema is enforced by `validate`, so you would only move the failure.
 - **If a skill declares NO schema, the CLI does not inspect the value's contents** — only its shape. In that case a bad value surfaces later, from the skill itself. Report the skill's error to the principal; don't "fix" it by editing the file.
+
+---
+
+## Section 11 — Install by Bare Name (Resolve Before You Install)
+
+`install` takes a coordinate (`owner/name`). Users say bare names — *"use HappySkills to install skill xyz"* is the single most common phrasing there is. **Resolving that name to a coordinate is your job, not the principal's.** Asking them for the owner slug puts the question back on the one person who doesn't know the answer — it's what they'd have had to search for.
+
+This is a **resolution**, not a search. You are answering *"which owner?"* — never *"what should I install?"*. Section 9's ban on search covers *discovery*; this narrow lookup is the one carve-out (`docs/cli-skill.md` § 4.3). Never present ranked alternatives, never hand off to `happyskills-search`.
+
+Run this pre-flight **before** calling `install`. Do not pass a bare name to the CLI to see what happens.
+
+**Step 1 — Look locally first. No network.**
+
+`npx happyskills list --all-scopes --json`
+
+If exactly one entry across `data.skills` / `data.drafts` / `data.external` / `data.agent_orphans` carries that name, you already have the coordinate — go to Step 4. This is free, deterministic, and covers "reinstall X" and "update X".
+
+**Step 2 — Resolve against the registry.**
+
+`npx happyskills search "<name>" --json --limit 20`
+
+Do **not** add `--with-rerank` (that's the discovery protocol — it does not apply to a resolution). Do **not** add `--exact` (its rows omit `name` and the authority fields Step 3 needs).
+
+**Step 3 — Keep only EXACT name matches, then gate on QUALITY, not on count.**
+
+From `data.results[]`, keep only entries whose `name` equals the requested name exactly (case-insensitive). Search runs in fuzzy-slug mode, so **"one result" and "one match" are not the same thing** — `xyz-tools` returned for `xyz` is not a match. Discard it.
+
+| Exact matches | Action |
+|---|---|
+| Exactly 1, **with** an authority signal | Install it. State the resolved coordinate (Step 4). |
+| Exactly 1, **no** authority signal | **Ask** via AskUserQuestion — confirm the coordinate before installing. |
+| 2 or more (same name, different owners) | **Ask** via AskUserQuestion, ordered by authority. Never pick for them. |
+| 0 | **Stop.** Say the name wasn't found. Offer: "say 'find me a skill for `<what they want>`' and the concierge will search properly." |
+
+An **authority signal** is any of: already present in `skills-lock.json`; `workspace_slug` belongs to the principal (`whoami`); starred; or a `download_count` / `star_count` / `quality_tier` clearly ahead of the other candidates.
+
+**Never order candidates by `relevance_score`.** Same-named skills are usually forks of one original, and relevance cannot tell a fork from the original — adoption and ownership can. Order by: principal's own workspace → starred → `download_count` → `quality_score`.
+
+**Step 4 — State what you resolved. Every time, in user-visible output.**
+
+```
+Resolved "xyz" → acme/xyz (only exact match, 12k installs)
+```
+
+Never install a coordinate the principal hasn't seen. Installing a skill loads a third-party instruction set into their agent runtime — this line is what makes a wrong resolution visible instead of silent.
+
+**If the CLI got there first:** a bare name that reaches the CLI returns `error.code: INVALID_SLUG` with `next_step.action: resolve_skill_slug`. Same procedure — run `next_step.context.commands[0]` and apply Step 3.
+
+❌ **Anti-patterns**
+
+- Passing a bare name to `install` and reacting to the failure.
+- Asking the principal for the owner slug.
+- Treating one *fuzzy* result as one match.
+- Installing the top-ranked result because it ranked first.
+- Presenting a discovery-style list of alternatives — that's the concierge's job, not this one.
+- Installing without printing the resolved coordinate.

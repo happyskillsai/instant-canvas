@@ -5,7 +5,7 @@ Maps user intents to the family-member skill that handles them. Use this as the 
 **How to use this map:**
 1. Find the matching row in the Quick Lookup table below.
 2. If the family-member skill is **bundled**, tell the user the trigger phrase — e.g., "Say 'publish my skill' and `happyskills-publish` will handle it." Do NOT run the action yourself; route by stating the phrase.
-3. If the family-member skill is **opt-in** (currently `happyskills-collab` and `happyskills-stats`), go to **Section 3.5 of SKILL.md**: identify the satellite from its explicit table and offer to install it directly. Do not make the user rephrase as "find me happyskills-X". (Note: `npx happyskills resolve` cannot identify a not-yet-installed satellite — it only sees installed skills — so opt-in routing is driven by the concierge's explicit roster, not `resolve`.)
+3. If the family-member skill is **opt-in** (currently `happyskills-collab`, `happyskills-profile`, and `happyskills-stats`), go to **Section 3.5 of SKILL.md**: identify the satellite from its explicit table and offer to install it directly. Do not make the user rephrase as "find me happyskills-X". (Note: `npx happyskills resolve` cannot identify a not-yet-installed satellite — it only sees installed skills — so opt-in routing is driven by the concierge's explicit roster, not `resolve`.)
 
 ---
 
@@ -42,7 +42,7 @@ Maps user intents to the family-member skill that handles them. Use this as the 
 | convert a foreign / hand-rolled skill to managed | `happyskills-publish` | yes |
 | fork a skill | `happyskills-publish` | yes |
 | delete from registry | `happyskills-publish` | yes |
-| change visibility / make public/private | `happyskills-publish` | yes |
+| change a **skill's** visibility / make a skill public/private/workspace | `happyskills-publish` | yes |
 | status / is my skill modified / divergence | `happyskills-sync` | yes |
 | pull remote changes / sync my skill | `happyskills-sync` | yes |
 | diff / what changed locally vs remote | `happyskills-sync` | yes |
@@ -54,6 +54,10 @@ Maps user intents to the family-member skill that handles them. Use this as the 
 | add / remove person to/from a group | `happyskills-collab` | **opt-in** |
 | set default group | `happyskills-collab` | **opt-in** |
 | grant / revoke / change skill access | `happyskills-collab` | **opt-in** |
+| update my profile / edit my profile page / change my profile picture or avatar | `happyskills-profile` | **opt-in** |
+| set my bio / tagline / status / location / links | `happyskills-profile` | **opt-in** |
+| change my display name or handle (rename) | `happyskills-profile` | **opt-in** |
+| make my **profile page** public / private | `happyskills-profile` | **opt-in** |
 | my usage / how I have been using HappySkills / my install or search history | `happyskills-stats` | **opt-in** |
 | how many people installed my skills / reach / downloads of skills I authored | `happyskills-stats` | **opt-in** |
 | report a bug / give feedback / feature request / compliment (about HappySkills itself) | `happyskills-help` (me) | yes |
@@ -166,7 +170,35 @@ Triggers that should fire this flow:
 
 ---
 
-## 7. Usage Analytics — Opt-In (`happyskills-stats`)
+## 7. Public Profile — Opt-In (`happyskills-profile`)
+
+What profile owns: the workspace's public profile page at `/w/<slug>/` — its **identity and presentation**. Display name and handle, avatar (with local image optimisation + crop), tagline, status, location, websites and social links, About/bio, pinned skills, expertise-map visibility, and the profile-page public/private toggle. One flat command: `profile`.
+
+**This satellite is NOT bundled by default.** When the user asks about any of the features below, run the **install-on-recommendation flow** in **Section 3.5 of SKILL.md**: the intent maps explicitly to `happyskills-profile` (install target `happyskillsai/happyskills-profile`); confirm it isn't already installed, then offer it via AskUserQuestion and, on install, run `npx happyskills install happyskillsai/happyskills-profile -y --json` and tell the user to restart Claude Code and re-ask.
+
+Triggers that should fire this flow:
+
+| User says | What profile owns once installed |
+|---|---|
+| "show my profile" / "view my profile page" / "pull my profile" | `profile` (read) |
+| "update my profile" / "edit my profile" | `profile` (edit) |
+| "change my profile picture" / "upload a new avatar" / "new photo" | `profile --avatar` |
+| "re-crop my photo" / "adjust my avatar" | `profile --crop` |
+| "set my bio" / "write my about section" | `profile --readme` / `--readme-file` |
+| "change my tagline" / "set my status" / "set my location" | `profile --tagline` / `--status` / `--location` |
+| "add my website / github / linkedin / …" | `profile --website` / `--github` / … |
+| "change my display name" | `profile --name` |
+| "change my handle" / "rename my workspace" (moves every skill URL — confirm first) | `profile --handle` |
+| "pin these skills to my profile" | `profile --pin` |
+| "hide / show my expertise map or focus areas" | `profile --hide-map` / `--show-map` |
+| "make my **profile page** public" / "publish my profile" / "list me in search" | `profile --public` |
+| "make my **profile page** private" / "hide my profile" | `profile --private` |
+
+**Boundary vs publish:** "make my **profile / page** public/private" is `happyskills-profile`. "make my **skill** public/private/workspace" is `happyskills-publish`'s `visibility` command. Different object (workspace identity vs a skill), different skill.
+
+---
+
+## 8. Usage Analytics — Opt-In (`happyskills-stats`)
 
 What stats owns: read-only usage analytics over the `happyskills stats` command — the user's own activity (`my_activity`) and the aggregate reach of skills the user authored (`my_skills_reach`). It never reveals *who* installed a skill.
 
@@ -187,7 +219,7 @@ Triggers that should fire this flow:
 
 ---
 
-## 8. Feedback (`happyskills-help` — me)
+## 9. Feedback (`happyskills-help` — me)
 
 What I own: lodging feedback against the HappySkills platform itself — bugs in the CLI / web app / API / docs, feature wishes, compliments, questions worth recording.
 
@@ -212,7 +244,7 @@ What I own: lodging feedback against the HappySkills platform itself — bugs in
 
 ---
 
-## 9. Cross-Cutting Topics
+## 10. Cross-Cutting Topics
 
 These are concepts that span multiple family members. When users ask, you handle them yourself (don't route).
 

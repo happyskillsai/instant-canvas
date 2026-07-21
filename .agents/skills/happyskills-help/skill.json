@@ -1,6 +1,6 @@
 {
 	"name": "happyskills-help",
-	"version": "0.8.4",
+	"version": "0.9.0",
 	"type": "skill",
 	"description": "HappySkills concierge — explain how HappySkills works, list and install its optional opt-in skills, route any request to the right family skill, sign in, and send feedback. Hands off skill discovery, versions, and changelogs to happyskills-search.",
 	"authors": [

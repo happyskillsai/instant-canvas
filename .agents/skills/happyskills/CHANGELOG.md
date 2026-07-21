@@ -1,5 +1,17 @@
 # Changelog
 
+## [2.8.0] - 2026-07-21
+
+### Added
+- **Section 11 — Install by Bare Name.** "Install skill xyz" is the most common phrasing a user produces, and it was a guaranteed dead end: `install` needs an `owner/name` coordinate, so core refused and asked the principal for the owner slug — the one thing they don't know and would have had to search for. Core now resolves the name itself, with a mandatory pre-flight: **lock first** (`list --all-scopes`, free and deterministic — covers "reinstall X" / "update X"), then an exact-name registry lookup.
+- **The gate is match QUALITY, not match count.** Search runs in fuzzy-slug mode, so one *result* is not one *match* — `xyz-tools` returned for `xyz` is discarded. Silent install requires exactly one **exact** name match from a single owner **plus** an authority signal (in the lock, the principal's own workspace, starred, or clearly ahead on `download_count` / `star_count` / `quality_tier`). Everything else asks via AskUserQuestion. Candidates are ordered by ownership and adoption, **never by `relevance_score`** — same-named skills are usually forks of one original, and relevance cannot tell a fork from the original.
+- **The resolved coordinate must be stated in user-visible output** (`Resolved "xyz" → acme/xyz (only exact match, 12k installs)`). Installing a skill loads a third-party instruction set into the agent runtime; this line is what makes a wrong resolution visible instead of silent.
+- **`resolve_skill_slug` added to the § 7 `next_step` dispatch table.** A bare name that reaches the CLI now returns `INVALID_SLUG` + `next_step.action: resolve_skill_slug` (was: a generic `USAGE_ERROR` routing to `discover_schema`, i.e. "your arguments were malformed" when the real next move was a registry lookup). Requires `happyskills` CLI with envelope schema `1.3.0+`.
+
+### Changed
+- **§ 9 search constraint now carries an explicit carve-out.** Core may run `search` to turn a bare name into a coordinate. That is *resolution* — answering "which owner?" — and is distinct from *discovery*, which remains `happyskills-search`'s exclusively. Ranked alternatives and discovery-style lists are still forbidden here. Documented as the family's second permitted cross-skill action in `docs/cli-skill.md` § 4.3.
+- **§ 8 no longer says "ask for clarification" on a bare name.** Asking the principal for the owner slug is now an explicit anti-pattern.
+
 ## [2.7.0] - 2026-07-13
 
 ### Added

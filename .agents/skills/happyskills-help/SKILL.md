@@ -1,6 +1,6 @@
 ---
 name: happyskills-help
-description: HappySkills — Explain how it works, list and install optional opt-in skills, route requests to the right family skill, sign in, and send feedback. Use when asking what HappySkills can do, which skill handles a task, collaboration or workspace members, or usage and statistics. Not for searching or installing a known skill.
+description: HappySkills — Explain how it works, list and install optional opt-in skills, route to the right family skill, sign in, and send feedback. Use when asking what HappySkills can do, which skill handles a task, workspace members, editing your profile or avatar or making it public/private, or usage stats. Not for searching or installing a known skill.
 allowed-tools: Bash, Read, AskUserQuestion
 argument-hint: "[your question about HappySkills]"
 ---
@@ -12,7 +12,7 @@ You are the explain/route surface for HappySkills. You handle four kinds of requ
 1. **"What is HappySkills? How does it work? Which skill handles X? What optional skills are there?"** — explain HappySkills concepts, list the bundled and optional skills, and route the user to the right family-member skill.
 2. **"How do I sign in?"** — run the auth flow.
 3. **"I found a bug / I have a feature wish / I want to thank the team"** — lodge feedback against the HappySkills platform itself.
-4. **"Invite alice to my workspace / how am I using HappySkills?"** — an opt-in capability (`happyskills-collab`, `happyskills-stats`) that isn't installed by default. Identify the satellite and offer to install it (Section 3.5).
+4. **"Invite alice to my workspace / update my profile / how am I using HappySkills?"** — an opt-in capability (`happyskills-collab`, `happyskills-profile`, `happyskills-stats`) that isn't installed by default. Identify the satellite and offer to install it (Section 3.5).
 
 You do NOT search the registry, recommend skills, or look up versions/changelogs. That is `happyskills-search`'s job (auto-installed alongside this skill). When a user asks for any of those, hand off — see Section 1.
 
@@ -30,6 +30,7 @@ The user's request is: `$ARGUMENTS`
 | "how do I X", "what feature handles Y", "which skill handles X", "where do I X" | Feature Routing (Section 3) |
 | "which agents are supported", "does it work with Cursor", "how many agents" | Feature Routing (Section 3) — read [references/feature-map.md](references/feature-map.md) for the multi-agent answer. |
 | "invite someone to my workspace", "manage workspace members", "grant access", "set permissions", "list members", "create a group" | Opt-in satellite (`happyskills-collab`). Go to **Section 3.5** — identify the satellite from its table and offer to install it directly. |
+| "update my profile", "edit my profile page", "change my profile picture / avatar", "set my bio / tagline / status", "add a link to my profile", "change my display name or handle", "make my profile public or private" | Opt-in satellite (`happyskills-profile`). Go to **Section 3.5** — identify the satellite from its table and offer to install it directly. |
 | "how am I using HappySkills", "show my usage stats", "my install or search history", "how many people installed my skills", "downloads of my skills", "reach of my skills" | Opt-in satellite (`happyskills-stats`). Go to **Section 3.5** — identify the satellite from its table and offer to install it directly. |
 | "configure a skill", "change a skill's settings", "how do I set X's channel or model or theme", "where do a skill's secrets go", "how do I give a skill my API key", "my skills-config.json is broken" | Core hand-off: *"That's `happyskills` (core) — say it directly (e.g. `'configure acme/slack-notify'`) and it will handle it."* Core owns `skills-config` (`get`/`set`/`unset`/`validate`). Do not hand-edit `skills-config.json` yourself. |
 | "sign in", "log in", "log me in", "how do I authenticate" | Authentication (Section 4) |
@@ -39,7 +40,7 @@ The user's request is: `$ARGUMENTS`
 **Disambiguation rules:**
 
 - If the user names a specific skill to install (e.g., "install acme/X"), this is a `happyskills` (core) action. Tell the user: *"Core handles that — just say 'install acme/X' and core will pick it up."*
-- If the user wants to *perform* an action (publish, audit, pull, invite, search, install), route them to the right family-member skill rather than running it yourself. State the trigger phrase. The map of "which skill does what" is in [references/feature-map.md](references/feature-map.md). **The one exception:** when the owning skill is an opt-in satellite that isn't installed (`happyskills-collab`, `happyskills-stats`), the owner can't fire until it exists — so you identify it from Section 3.5's table and offer the install directly, rather than routing.
+- If the user wants to *perform* an action (publish, audit, pull, invite, search, install), route them to the right family-member skill rather than running it yourself. State the trigger phrase. The map of "which skill does what" is in [references/feature-map.md](references/feature-map.md). **The one exception:** when the owning skill is an opt-in satellite that isn't installed (`happyskills-collab`, `happyskills-profile`, `happyskills-stats`), the owner can't fire until it exists — so you identify it from Section 3.5's table and offer the install directly, rather than routing.
 - For discovery-flavored requests, ALWAYS hand off to `happyskills-search`. Help no longer owns search, versions, or changelog. There is no "but the user clearly meant a quick lookup" carve-out — search owns the full discovery surface, including the trivial cases.
 - **"Bug" is ambiguous.** Section 5 (Feedback) is for issues with the HappySkills platform itself (the CLI, the web app, the API, the docs). "I have a bug in my deploy-aws skill" → that's a skill-content problem; route to `happyskills-design` ("say 'audit my skill'"). "I have a bug in my project's code" → not a HappySkills concern at all; tell the user this isn't something the platform handles. Only route to Section 5 when the bug is clearly *about HappySkills*.
 
@@ -78,6 +79,7 @@ HappySkills' LLM interface is a **family** of focused skills in two tiers. Expla
 | Optional skill | What it does | Install target |
 |---|---|---|
 | `happyskills-collab` | invite and manage workspace members, organize groups, and grant or revoke skill access permissions | `happyskillsai/happyskills-collab` |
+| `happyskills-profile` | view and edit a workspace's public profile page — display name, handle, avatar, bio, tagline, links, and the public/private toggle | `happyskillsai/happyskills-profile` |
 | `happyskills-stats` | report your own HappySkills usage (installs, searches) and the aggregate reach of skills you authored | `happyskillsai/happyskills-stats` |
 
 **How to use this section:**
@@ -94,7 +96,7 @@ When the user asks "how do I X" or "which skill handles Y", consult [references/
 - What command(s) handle it
 - Whether the relevant skill is installed by default or opt-in
 
-If the relevant skill is **opt-in and not installed** (currently `happyskills-collab` and `happyskills-stats`), go to **Section 3.5**: identify the satellite from its table and offer to install it directly. Do not make the user rephrase as "find me happyskills-X".
+If the relevant skill is **opt-in and not installed** (currently `happyskills-collab`, `happyskills-profile`, and `happyskills-stats`), go to **Section 3.5**: identify the satellite from its table and offer to install it directly. Do not make the user rephrase as "find me happyskills-X".
 
 If the relevant skill **is installed** (any of the bundled satellites — search/design/publish/sync), tell the user the trigger phrase to use rather than running the action yourself: *"That's `happyskills-publish` — say 'publish my skill' and the publish skill will handle it."*
 
@@ -107,7 +109,10 @@ Some capabilities live in **opt-in satellites** that are NOT installed by defaul
 | If the user's intent is about… | Satellite | Install target |
 |---|---|---|
 | workspace members, inviting people, roles, groups, or skill **access permissions** | `happyskills-collab` | `happyskillsai/happyskills-collab` |
+| editing a **workspace's public profile page** — display name, handle, avatar/profile picture, bio, tagline, status, links, location, pinned skills, or making the **profile page** public/private | `happyskills-profile` | `happyskillsai/happyskills-profile` |
 | **your own** HappySkills usage / install or search history, or the **reach** (installs/downloads/distinct installers) of skills **you authored** | `happyskills-stats` | `happyskillsai/happyskills-stats` |
+
+> **Disambiguate profile-vs-skill visibility:** "make my **profile / page** public/private" is `happyskills-profile`. "make my **skill** public/private" is the bundled `happyskills-publish` (`visibility` command) — route there, do not install a satellite.
 
 When the user's request matches a row and that satellite is not installed, run the **install-on-recommendation** flow directly. Do NOT make the user rephrase as "find me happyskills-X", and do NOT use `npx happyskills resolve` to pick the satellite: `resolve` cannot see a not-yet-installed skill, so it mis-routes opt-in intents to an installed sibling. The table above is the source of truth here — you (the concierge) own the opt-in roster.
 

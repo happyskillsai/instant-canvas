@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.9.0] - 2026-07-19
+
+### Added
+- **Route profile/identity intents to the new `happyskills-profile` opt-in satellite.** "Update my profile", "change my profile picture", "edit my bio", "set my tagline/status", "change my display name or handle", and "make my profile page public/private" now identify `happyskills-profile` (install target `happyskillsai/happyskills-profile`) via the Section 3.5 explicit-table install-on-recommendation flow. Wired across the frontmatter description (so the concierge auto-fires on profile intents when the satellite isn't installed), the four-kinds intro, the Section 1 routing table, the Section 2.5 opt-in roster, the Section 3.5 satellite table, and `references/feature-map.md` (new § 7).
+- **Disambiguation:** "make my **profile page** public/private" → `happyskills-profile`; "make my **skill** public/private" → the bundled `happyskills-publish` (`visibility`). Added at both the Section 3.5 table and the feature-map publish/profile rows so the two visibility surfaces never collide.
+
 ## [0.8.4] - 2026-07-13
 
 ### Fixed
