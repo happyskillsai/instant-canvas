@@ -20,6 +20,7 @@ Entry point: `npx -y @happyskillsai/instant-canvas <command>`, run from any dire
 ```
 open <canvas.json | file.md | .env | folder> [--workspace <dir>] [--no-open] [--timeout <s>] [--result <file>]
 print <canvas.json | file.md> --out <file.pdf> [--workspace <dir>]
+snapshot <canvas.json | file.md> [--figure <n[,n…]>] [--out-dir <dir>] [--list] [--workspace <dir>]
 stamp <canvas.json> [--workspace <dir>] [--retrofit]
 theme <canvas.json | file.md> [--set '<json>'] [--clear] [--workspace <dir>]
 theme --all --set '<json>'    # the workspace default — no file argument

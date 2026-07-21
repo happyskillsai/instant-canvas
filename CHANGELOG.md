@@ -2,6 +2,37 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **A crowded x axis now spaces out its labels instead of drawing all of them.** Reported against a two-year
+  daily-ridership report whose Figure 1 printed a solid black smear where the date axis should be: 731 tick
+  labels across a 568 px axis, 0.8 px each. The cause was ours, not Plotly's — `catTicks` (the 30-char tick
+  eliding) has to say `tickmode: "array"` to set custom `ticktext`, and that is exactly what turns Plotly's
+  own tick thinning **off**, so `bar`/`line`/`area` (and `dendrogram`, which hand-rolled the same pattern
+  for its leaves) demanded one label per row. Two fixes, because there are two kinds of x axis:
+  - **Dates are a time axis again.** `line`, `area`, `bar` and `candlestick` hardcoded
+    `xaxis.type: "category"`, which threw away date handling entirely; ISO-dated x values now render as
+    `type: "date"` with Plotly choosing month/quarter/year boundaries. The 731-point figure comes back as
+    five dated ticks. The date pattern is single-sourced from `lib/validate.js` into the page
+    (`<body data-date-re>`), because the validator's density checks *exempt* a date axis precisely on the
+    grounds that the renderer makes it continuous.
+  - **Category axes thin their ticks to the width.** `fitAxisTicks()` keeps every k-th label so each
+    survivor gets ≥12 px — the same threshold the `AXIS_TOO_DENSE` warning quotes — measured after the
+    render, where the axis width exists, and always recomputed from the figure's original tick arrays so a
+    resize cannot ratchet the axis down. Verified across a resize cycle: 60 labels → 30 → back to 60.
+  - It stands down on any axis an author pinned through `options`, exactly like the legend/margin fit.
+- **Heatmap cell labels are decided by cell size, not by a row count.** The old gate was
+  `rows.length <= 120`, a count standing in for a question about geometry — so a 144-row grid with roomy
+  columns lost every label it had space for. `fitHeatmapLabels()` compares the rendered cell box against the
+  **measured** label width (a 2D canvas at the trace's own font, never an estimate from character counts).
+- **Three density-warning blind spots closed.** `LABELS_WILL_ELIDE` now covers `line`/`area` (their labels
+  elide like any other category label — the old code exempted them from the elide check as a side effect of
+  exempting them from the density check, so a line of 40 long account names warned about nothing);
+  `AXIS_TOO_DENSE` now covers `violin` (whose ticks are trace names and *cannot* be thinned, so a warning is
+  its only recourse) and `dendrogram` (counted by leaves, which are derived from `left`/`right` rather than
+  declared on a channel). The `line`/`area` exemption from `AXIS_TOO_DENSE` rested on a comment claiming
+  Plotly auto-elided their ticks; it did not, and the exemption is now earned by code that thins.
+
 ## [0.20.0] - 2026-07-20
 
 ### Added

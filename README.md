@@ -12,6 +12,7 @@ Death to the admin panel: a local, schema-driven canvas runtime that lets coding
 - [What this repository is](#what-this-repository-is)
 - [Overview](#overview)
 - [Getting Started](#getting-started)
+  - [A guided tour — [`examples/`](examples/README.md)](#a-guided-tour--examplesexamplesreadmemd)
 - [Project Structure](#project-structure)
 - [Documentation](#documentation)
 <!-- END toc -->
@@ -20,7 +21,7 @@ Death to the admin panel: a local, schema-driven canvas runtime that lets coding
 
 **This repository is the `@happyskillsai/instant-canvas` npm package, and the workbench that maintains it.** The whole runtime — the CLI (`scripts/instantcanvas.js`), the per-workspace kernel, the validator and catalog, the browser app, and the vendored assets — lives at the repo root and publishes to npm as `@happyskillsai/instant-canvas` (the unscoped name is blocked by npm's similarity rule), invoked via `npx -y @happyskillsai/instant-canvas <command>` from any directory. The installed command is plain `instant-canvas`.
 
-The [HappySkills](https://happyskills.dev) skill at `.agents/skills/instant-canvas/` (published as `nicolasdao/instant-canvas`) is the agent-facing contract only: SKILL.md, skill.json, CHANGELOG.md and LICENSE — ~55 KB in total, against a 2 MB registry cap. It teaches agents to drive the CLI through npx; the heavy files (a ~2.6 MB strict Plotly build, a ~1 MB highlight.js bundle) ship in the npm tarball and are fetched lazily on first use. This split is what makes the skill publishable at all — the old runtime-in-skill bundle was ~4.4 MB against a 2 MB registry cap (see [docs/gotchas/packaging.md](docs/gotchas/packaging.md)).
+The [HappySkills](https://happyskills.dev) skill at `.agents/skills/instant-canvas/` (published as `nicolasdao/instant-canvas`) is the agent-facing contract only: SKILL.md, skill.json, CHANGELOG.md and LICENSE — ~87 KB in total, against a 2 MB registry cap. It teaches agents to drive the CLI through npx; the heavy files (a ~2.6 MB strict Plotly build, a ~1 MB highlight.js bundle) ship in the npm tarball and are fetched lazily on first use. This split is what makes the skill publishable at all — the old runtime-in-skill bundle was ~4.4 MB against a 2 MB registry cap (see [docs/gotchas/packaging.md](docs/gotchas/packaging.md)).
 
 Everything else is workbench: this documentation (`docs/`), the specifications (`specs/`), the UI prototype (`prototype/`), and the self-contained example showcase (`examples/`) that tests and docs rely on. None of it ships — the npm tarball is allowlisted to `scripts/` (minus `scripts/test/`), and the skill bundle carries only its four contract files. Keep the boundary strict: what a consumer needs lives in `scripts/` or the skill folder; maintainer material stays at the repo level.
 
@@ -34,7 +35,7 @@ Instead of maintaining an answers *warehouse* (pre-built admin panels), agents d
 
 Two design commitments run through everything:
 
-- **Progressive disclosure.** The contract is large (26 chart kinds, 16 field types, a full form-layout system), but agents never load it wholesale: `catalog` returns a ~8 KB lean index; `catalog <name>` returns exactly one schema; the deterministic validator turns mistakes into self-explanatory fixes.
+- **Progressive disclosure.** The contract is large (26 chart kinds, 16 field types, a full form-layout system), but agents never load it wholesale: `catalog` returns a ~9 KB lean index; `catalog <name>` returns exactly one schema; the deterministic validator turns mistakes into self-explanatory fixes.
 - **Zero dependencies.** The published package declares no npm dependencies — npx installs `instant-canvas` itself and nothing else. Plain Node ≥ 20, built-in `http`, a hand-rolled WebSocket server, a handful of vendored browser files (a custom strict Plotly.js build, its stylesheet, markdown-it, a full highlight.js, and the self-hosted Inter webfont for the app chrome). No build step — rebuilding the Plotly and highlight.js bundles is a maintainer-only task, documented in `scripts/web/vendor/VENDORED.md`.
 
 ## Getting Started
@@ -66,7 +67,7 @@ npx -y @happyskillsai/instant-canvas status
 npx -y @happyskillsai/instant-canvas stop
 ```
 
-Maintainers run the same CLI from the working tree — `node scripts/instantcanvas.js <command>` — and the tests with `npm test` (710 tests, zero deps; the browser tests skip without Chrome; equivalent to `node --test scripts/test/`). `npm run coverage:cli` enforces the CLI's 100% line coverage. `npm run rls <major|minor|patch|x.y.z>` bumps the package version — validated semver, forward-only. Releases are orchestrated end to end by the `/release-cli` project skill — see [docs/releasing.md](docs/releasing.md).
+Maintainers run the same CLI from the working tree — `node scripts/instantcanvas.js <command>` — and the tests with `npm test` (714 tests, zero deps; the browser tests skip without Chrome; equivalent to `node --test scripts/test/`). `npm run coverage:cli` enforces the CLI's 100% line coverage. `npm run rls <major|minor|patch|x.y.z>` bumps the package version — validated semver, forward-only. Releases are orchestrated end to end by the `/release-cli` project skill — see [docs/releasing.md](docs/releasing.md).
 
 ### A guided tour — [`examples/`](examples/README.md)
 
@@ -81,7 +82,7 @@ Every step in [`examples/README.md`](examples/README.md) shows **the prompt you'
 ```
 package.json                     THE PRODUCT — npm package "@happyskillsai/instant-canvas" (bin: instant-canvas)
 scripts/                         Ships to npm (scripts/test/ excluded by the files allowlist)
-  instantcanvas.js               CLI: open | print | stamp | validate | theme | catalog | status | stop
+  instantcanvas.js               CLI: open | print | snapshot | stamp | validate | theme | catalog | selection | status | stop
   kernel.js                      Per-workspace localhost server (HTTP + hand-rolled WS)
   lib/                           schema/validate/catalog, registry, redact, envfile, pkgmeta, mdcanvas
                                  (the envelope a markdown file gets for free), companion (the envelope
@@ -89,7 +90,7 @@ scripts/                         Ships to npm (scripts/test/ excluded by the fil
                                  themestore, jsonedit, a zero-dep CDP client, …
   web/                           Browser app (no framework) + csp-shim + vendored Plotly/markdown-it/highlight.js
   test/                          node:test suite + fixtures + browser-driving tests (repo-only)
-.agents/skills/instant-canvas/   THE SKILL — agent-facing contract published to HappySkills (~55 KB)
+.agents/skills/instant-canvas/   THE SKILL — agent-facing contract published to HappySkills (~87 KB)
   SKILL.md                       Progressive-disclosure entry point; drives the CLI via npx
   skill.json                     HappySkills metadata + the `config` block (theme, palettes),
                                  whose schema is GENERATED from lib/theme.js — never hand-typed

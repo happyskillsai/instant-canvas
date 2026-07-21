@@ -16,7 +16,7 @@ const { normalizeRoot, insideRoot, stateDir } = require('./lib/paths')
 const registry = require('./lib/registry')
 const { registerSecret, redact, errorOut } = require('./lib/redact')
 const { scan, dirsUnder, readCanvasFile, MAX_CANVAS_BYTES, isExcludedDir } = require('./lib/scan')
-const { validate, collectBlocks, isInteractiveBlock, flattenFields } = require('./lib/validate')
+const { validate, collectBlocks, isInteractiveBlock, flattenFields, ISO_DATE_RE } = require('./lib/validate')
 const { readMarkdownSrc, inlineLocalImages, inlineImageFile, inlineMath, hasMarkdownExtension, renderableMarkdown, MAX_COVER_IMAGE_BYTES } = require('./lib/markdownsrc')
 const { virtualCanvasFor } = require('./lib/mdcanvas')
 const { virtualFormCanvasFor } = require('./lib/envcanvas')
@@ -1286,15 +1286,18 @@ function serveShell(res) {
 	} catch {
 		return sendJson(res, 500, { ok: false, message: 'App shell missing.' })
 	}
-	// CSP forbids inline <script>, so the token, the version, and the image/video/audio
+	// CSP forbids inline <script>, so the token, the version, the image/video/audio
 	// extension unions (which let the browser classify a routed path WITHOUT a copied
-	// list) reach the page as placeholder substitutions rather than injected globals.
+	// list) and the date-axis pattern (which the validator's density checks are written
+	// AGAINST, so a second copy in app.js would be a silent hole) reach the page as
+	// placeholder substitutions rather than injected globals.
 	html = html
 		.replaceAll('__IC_TOKEN__', TOKEN)
 		.replaceAll('__IC_VERSION__', VERSION)
 		.replaceAll('__IC_IMAGE_EXTS__', JSON.stringify(GALLERY_IMAGE_EXTS))
 		.replaceAll('__IC_VIDEO_EXTS__', JSON.stringify(MEDIA_VIDEO_EXTS))
 		.replaceAll('__IC_AUDIO_EXTS__', JSON.stringify(MEDIA_AUDIO_EXTS))
+		.replaceAll('__IC_DATE_RE__', ISO_DATE_RE.source)
 	res.writeHead(200, {
 		'Content-Type': 'text/html; charset=utf-8',
 		'X-Content-Type-Options': 'nosniff',

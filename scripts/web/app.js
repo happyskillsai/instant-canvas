@@ -28,6 +28,15 @@ const VIDEO_EXTS = new Set((() => {
 const AUDIO_EXTS = new Set((() => {
 	try { return JSON.parse(document.body.dataset.audioExts || '[]') } catch { return [] }
 })())
+// The date-axis pattern, single-sourced from lib/validate.js the same way
+// (`<body data-date-re>`). It decides `xaxis.type: 'date'` vs `'category'`, and the
+// validator's density checks are written against exactly this rule — they exempt a date
+// axis BECAUSE the renderer makes it continuous, so a second copy here would be a hole,
+// not a duplication. A missing//unparseable attribute degrades to "nothing is a date",
+// which is the old behavior rather than a broken axis.
+const DATE_RE = (() => {
+	try { return new RegExp(document.body.dataset.dateRe || '(?!)') } catch { return /(?!)/ }
+})()
 const pathExt = (p) => { const m = /\.[^./\\]+$/.exec(String(p)); return m ? m[0].toLowerCase() : '' }
 const isImagePath = (p) => IMAGE_EXTS.has(pathExt(p))
 const isVideoPath = (p) => VIDEO_EXTS.has(pathExt(p))
@@ -2053,6 +2062,41 @@ const shortTick = (v) => {
 }
 const catTicks = (vals) => ({ tickmode: 'array', tickvals: vals, ticktext: vals.map(shortTick) })
 
+// How much of a label survives is rendering (above); HOW MANY labels survive is the
+// same question one axis wider, and it had the opposite answer for a long time.
+//
+// `catTicks` says `tickmode: 'array'`, which is the ONLY way to hand Plotly its
+// ticktext — and it is also precisely what turns Plotly's own tick thinning OFF. So
+// every kind routed through it demanded one label per row: a 731-day line printed 731
+// ticks into a 568px axis (0.8px each — a solid black smear), while a candlestick
+// beside it, which passes no tickvals, let Plotly thin 400 dates to a comfortable 40.
+// The runtime was overriding good behavior and calling it a Plotly limitation.
+//
+// Two answers, because there are two kinds of x:
+//   * A DATE axis is continuous and needs no tickvals at all — `type: 'date'` and
+//     Plotly picks month/quarter/year boundaries that are right at every width. This
+//     is what `errorBars` (which sets no axis type) had been doing correctly all along.
+//   * A CATEGORY axis still needs its ticktext, so the array stays and the runtime
+//     thins it — `fitAxisTicks()` below, after the render, where the width exists.
+const DATE_MIN_ROWS = 2 // one date is a label, not a time axis
+/** True when every non-null x value reads as a date, so the axis is genuinely continuous.
+ *  ALL of them, never "most": one "n/a" among the dates means the agent is shipping
+ *  categories with date-shaped names, and a date axis would silently drop that row. */
+function isDateAxis(vals) {
+	let seen = 0
+	for (const v of vals) {
+		if (v === null || v === undefined || v === '') continue
+		if (typeof v !== 'string' || !DATE_RE.test(v.trim())) return false
+		seen++
+	}
+	return seen >= DATE_MIN_ROWS
+}
+/** The x-axis config for the catTicks kinds: a real time axis when the values are dates,
+ *  else the category axis with its elided ticks. The full tick arrays travel with the
+ *  figure so `fitAxisTicks` can thin them from the ORIGINAL set on every measure — thinning
+ *  a thinned axis would converge on one tick. */
+const xAxisFor = (vals) => (isDateAxis(vals) ? { type: 'date' } : { type: 'category', ...catTicks(vals) })
+
 function chartFigure(block) {
 	const fmt = block.format || {}
 	const yFmt = (v) => fmtValue(v, fmt.y || 'number', fmt.currency)
@@ -2110,8 +2154,9 @@ function chartFigure(block) {
 					...base(), ...legend(multi),
 					barmode: enc.stack ? 'stack' : 'group',
 					bargap: 0.35,
-					// The x values stay whole (the hover reads them); only the ticks elide.
-					xaxis: { type: 'category', ...catTicks(x) },
+					// The x values stay whole (the hover reads them); only the ticks elide,
+					// and only as many of them as the axis can actually hold.
+					xaxis: xAxisFor(x),
 					yaxis: { title: '' },
 					hovermode: 'x unified',
 				},
@@ -2184,7 +2229,9 @@ function chartFigure(block) {
 				const v = at.get(JSON.stringify([xv, yv]))
 				return v === undefined ? null : v
 			}))
-			const labelled = rows.length <= 120
+			// Whether the cells are labelled is decided AFTER the render, from the cell
+			// size against the measured label width (`fitHeatmapLabels`). Starting off
+			// rather than on means a grid that cannot hold its numbers never flashes them.
 			return {
 				data: [{
 					type: 'heatmap',
@@ -2196,7 +2243,8 @@ function chartFigure(block) {
 					xgap: 2,
 					ygap: 2,
 					text: z.map((row) => row.map((v) => hs(yFmt(v)))),
-					...(labelled ? { texttemplate: '%{text}', textfont: { size: 10 } } : {}),
+					texttemplate: '',
+					textfont: { size: 10 },
 					hovertemplate: '%{y} · %{x}: %{text}<extra></extra>',
 				}],
 				layout: { ...base(), xaxis: { type: 'category' }, yaxis: { type: 'category' } },
@@ -2271,11 +2319,12 @@ function chartFigure(block) {
 			}
 		}
 
-		case 'candlestick':
+		case 'candlestick': {
+			const cx = rows.map((r) => r[enc.x])
 			return {
 				data: [{
 					type: 'candlestick',
-					x: rows.map((r) => r[enc.x]),
+					x: cx,
 					open: rows.map((r) => Number(r[enc.open])),
 					high: rows.map((r) => Number(r[enc.high])),
 					low: rows.map((r) => Number(r[enc.low])),
@@ -2283,8 +2332,15 @@ function chartFigure(block) {
 					increasing: { line: { color: p.color[1] }, fillcolor: p.color[1] },
 					decreasing: { line: { color: p.down }, fillcolor: p.down },
 				}],
-				layout: { ...base(), xaxis: { type: 'category', rangeslider: { visible: false } } },
+				// A candlestick is dates by definition, and a hardcoded category axis
+				// threw that away: 400 trading days came out as 40 evenly-spaced category
+				// ticks rather than month boundaries. Non-date x still reads as categories.
+				layout: {
+					...base(),
+					xaxis: { ...xAxisFor(cx), rangeslider: { visible: false } },
+				},
 			}
+		}
 
 		case 'boxplot':
 			// Statistics are precomputed by the agent, so feed Plotly the fences
@@ -2660,10 +2716,13 @@ function chartFigure(block) {
 				}],
 				layout: {
 					...base(), ...legend(false, true),
+					// The leaves ARE the ticks, so this axis had the catTicks problem
+					// without going through catTicks: 80 leaves meant 80 forced labels at
+					// 7px each. It elides and thins on the same rules now.
 					xaxis: {
 						tickmode: 'array',
 						tickvals: path.leaves.map((_, i) => i),
-						ticktext: path.leaves.map(String),
+						ticktext: path.leaves.map(shortTick),
 						zeroline: false,
 						showgrid: false,
 					},
@@ -2931,6 +2990,128 @@ const LEGEND_PAD = 8  // px between the legend and the bottom edge of the chart 
  *
  *  It is deliberately kind-agnostic — it reads the DOM, not the block — so every
  *  chart with a legend below it is covered, including ones added later. */
+const TICK_MIN_PX = 12 // MIN_LABEL_PX in lib/validate.js — the number the warnings quote
+
+/** True when the author reached into the x axis through `options`. Same rule as
+ *  `legendPinned` below: `options` is applied last and is the author's final word. */
+function axisPinned(block) {
+	const xa = (block && block.options && block.options.layout && block.options.layout.xaxis) || null
+	return !!xa && (xa.type !== undefined || xa.tickmode !== undefined || xa.tickvals !== undefined ||
+		xa.ticktext !== undefined || xa.dtick !== undefined || xa.nticks !== undefined)
+}
+
+/** The tick arrays a figure was BUILT with, stashed on the box at plot time. Thinning
+ *  must always start from this full set: thinning an already-thinned axis would take
+ *  every k-th of every k-th on each resize and walk the axis down to one label. */
+const captureTicks = (box, layout) => {
+	const xa = (layout && layout.xaxis) || null
+	box._icTicks = xa && Array.isArray(xa.tickvals) && Array.isArray(xa.ticktext)
+		? { vals: xa.tickvals, text: xa.ticktext }
+		: null
+}
+
+/** Keep every k-th label, where k is the smallest stride that gives each survivor
+ *  TICK_MIN_PX of axis to itself. Returns null when they all already fit. */
+function thinTicks(full, axisPx) {
+	const n = full.vals.length
+	const room = Math.floor(axisPx / TICK_MIN_PX)
+	if (!n || !room || n <= room)
+		return null
+	const stride = Math.ceil(n / room)
+	const vals = [], text = []
+	for (let i = 0; i < n; i += stride) {
+		vals.push(full.vals[i])
+		text.push(full.text[i])
+	}
+	return { vals, text }
+}
+
+/** Space out the x tick labels so each one has room to be read.
+ *
+ *  This is the count half of the eliding rule: a label the reader cannot read is not a
+ *  label, and how many of them an axis carries is rendering — ours — exactly like how
+ *  much of each one survives. It only ever touches an axis the runtime itself put
+ *  `tickmode: 'array'` on (a category axis from `catTicks`, or a dendrogram's leaves);
+ *  a date axis has no tickvals to thin because Plotly is already choosing its own, and
+ *  an axis the author pinned through `options` is left alone.
+ *
+ *  Post-render for the same reason `fitLegendBelow` is: the axis width depends on the
+ *  box, which depends on the pane and on whether we are on a sheet or in the continuous
+ *  view. It converges because the decision is a pure function of (full ticks, axis px)
+ *  and the relayout changes neither — the second measurement asks for what is already
+ *  there and bails. */
+async function fitAxisTicks(box, block) {
+	const fl = box._fullLayout
+	const full = box._icTicks
+	if (!fl || !fl._size || !full || axisPinned(block))
+		return
+	// A sweep tunes its own axis furniture around the slider.
+	if (fl.sliders && fl.sliders.length)
+		return
+	const want = thinTicks(full, fl._size.w) || full
+	const now = fl.xaxis && Array.isArray(fl.xaxis.tickvals) ? fl.xaxis.tickvals.length : -1
+	if (now === want.vals.length)
+		return
+	state.fits++
+	try {
+		await window.Plotly.relayout(box, { 'xaxis.tickvals': want.vals, 'xaxis.ticktext': want.text })
+	} finally {
+		state.fits--
+	}
+}
+
+/** Show a heatmap's cell values only when a cell is big enough to hold one.
+ *
+ *  The old gate was `rows.length <= 120` — a row COUNT standing in for a question about
+ *  geometry, so a wide-but-shallow grid lost labels it had room for while a tall narrow
+ *  one printed numbers into 4px cells. The cell size is knowable only after the render,
+ *  and the label width is measurable rather than guessable (a 2D canvas at the same font
+ *  answers exactly how wide "1,284" is), so both are measured here. */
+function textWidthPx(text, font) {
+	const ctx = textWidthPx._ctx || (textWidthPx._ctx = document.createElement('canvas').getContext('2d'))
+	ctx.font = font
+	return ctx.measureText(text).width
+}
+
+const HEATMAP_LABEL_PAD = 8 // px of breathing room a cell label needs around itself
+
+async function fitHeatmapLabels(box, block) {
+	const fl = box._fullLayout
+	const trace = box.data && box.data[0]
+	if (!fl || !fl._size || !trace || trace.type !== 'heatmap' || !Array.isArray(trace.text))
+		return
+	// The author's own `texttemplate` is their final word, like a pinned margin.
+	if (block && block.options && block.options.data && block.options.data[0] && block.options.data[0].texttemplate !== undefined)
+		return
+	const nx = (trace.x || []).length, ny = (trace.y || []).length
+	if (!nx || !ny)
+		return
+	const font = `${(trace.textfont && trace.textfont.size) || 10}px ${getComputedStyle(box).fontFamily}`
+	let widest = 0
+	for (const row of trace.text)
+		for (const cell of row || [])
+			widest = Math.max(widest, textWidthPx(String(cell === null || cell === undefined ? '' : cell), font))
+	const fits = (fl._size.w / nx) >= widest + HEATMAP_LABEL_PAD &&
+		(fl._size.h / ny) >= ((trace.textfont && trace.textfont.size) || 10) + HEATMAP_LABEL_PAD
+	const want = fits ? '%{text}' : ''
+	if ((trace.texttemplate || '') === want)
+		return
+	state.fits++
+	try {
+		await window.Plotly.restyle(box, { texttemplate: want }, [0])
+	} finally {
+		state.fits--
+	}
+}
+
+/** Every post-render fit, in the one order that converges: the ticks decide how tall the
+ *  axis furniture is, so they must settle BEFORE the legend measures it. */
+async function fitChart(box, block) {
+	await fitAxisTicks(box, block)
+	await fitHeatmapLabels(box, block)
+	await fitLegendBelow(box, block)
+}
+
 /** True when the canvas author reached into the bottom margin or the legend's
  *  placement through the `options` escape hatch. `options` is applied LAST and is
  *  authoritative — two systems fighting over one margin is worse than either
@@ -3021,8 +3202,9 @@ function mountCharts(blocks, scope = document) {
 					attachSweep(entry)
 				} else {
 					const fig = chartFigureWithOptions(block)
+					captureTicks(box, fig.layout)
 					await window.Plotly.newPlot(box, fig.data, fig.layout, PLOTLY_CONFIG)
-					await fitLegendBelow(box, block)
+					await fitChart(box, block)
 				}
 			} catch (err) {
 				box.textContent = `Could not render this ${block.kind} chart.`
@@ -3032,10 +3214,11 @@ function mountCharts(blocks, scope = document) {
 				return
 			state.charts.push(entry)
 			recordChartFacts(box) // bystander: read the rendered geometry once it has settled
-			// A narrower box re-rotates the tick labels, so the margin must be re-measured.
+			// A narrower box holds fewer labels and re-rotates the ones it keeps, so both
+			// the tick density and the margin must be re-measured.
 			const ro = new ResizeObserver(async () => {
 				await window.Plotly.Plots.resize(box)
-				await fitLegendBelow(box, block)
+				await fitChart(box, block)
 				recordChartFacts(box) // geometry changed — keep the facts current
 			})
 			ro.observe(box)
@@ -3058,8 +3241,9 @@ async function rethemeCharts() {
 			await window.Plotly.react(entry.el, fig.data, sweepLayout(entry.block, fig.layout, entry.active), PLOTLY_CONFIG)
 		} else {
 			const fig = chartFigureWithOptions(entry.block)
+			captureTicks(entry.el, fig.layout)
 			await window.Plotly.react(entry.el, fig.data, fig.layout, PLOTLY_CONFIG)
-			await fitLegendBelow(entry.el, entry.block)
+			await fitChart(entry.el, entry.block)
 		}
 	}
 }
@@ -3947,7 +4131,7 @@ function moveChartsTo(rootEl, view) {
 		if (box.classList.contains('js-plotly-plot')) {
 			const entry = state.charts.find((e) => e.el === box)
 			Promise.resolve(window.Plotly.Plots.resize(box))
-				.then(() => fitLegendBelow(box, entry && entry.block))
+				.then(() => fitChart(box, entry && entry.block))
 		}
 	}
 }
@@ -4540,7 +4724,7 @@ function stageMoveChartsIn(stageSlide) {
 		placeholder.replaceWith(live)
 		if (live.classList.contains('js-plotly-plot')) {
 			const entry = state.charts.find((e) => e.el === live)
-			Promise.resolve(window.Plotly.Plots.resize(live)).then(() => fitLegendBelow(live, entry && entry.block))
+			Promise.resolve(window.Plotly.Plots.resize(live)).then(() => fitChart(live, entry && entry.block))
 		}
 	}
 }
@@ -4552,7 +4736,7 @@ function stageReturnCharts() {
 		rec.home.insertBefore(rec.node, rec.before && rec.before.isConnected ? rec.before : null)
 		if (rec.node.classList.contains('js-plotly-plot')) {
 			const entry = state.charts.find((e) => e.el === rec.node)
-			Promise.resolve(window.Plotly.Plots.resize(rec.node)).then(() => fitLegendBelow(rec.node, entry && entry.block))
+			Promise.resolve(window.Plotly.Plots.resize(rec.node)).then(() => fitChart(rec.node, entry && entry.block))
 		}
 	}
 	pres.movedCharts = []

@@ -415,8 +415,11 @@ test('AXIS_TOO_DENSE fires on a crammed bar axis and names the math; a sparse ax
 })
 
 test('AXIS_TOO_DENSE targets discrete-mark kinds only: a line curve with many points is silent', () => {
-	// The `waves` lesson: a line/area draws a continuous curve and auto-elides its ticks,
-	// so 60 ordered x-points is the normal readable case, unlike 60 bars.
+	// The `waves` lesson: a line/area draws a continuous curve and the RUNTIME thins its
+	// ticks to the axis width, so 60 ordered x-points is the normal readable case, unlike
+	// 60 bars — a bar without its label is an orphan, and only aggregating fixes that.
+	// (This exemption used to rest on a claim that Plotly auto-elided them, which it did
+	// not: `catTicks` was forcing every tick. The exemption is now earned, not assumed.)
 	const cats = Array.from({ length: 60 }, (_, i) => `p${i}`)
 	const line = validate(chartCanvas({ type: 'chart', kind: 'line', title: 'L', data: cats.map((c, i) => ({ x: c, y: i })), encoding: { x: 'x', y: 'y' } }))
 	assert.equal(densityWarns(line).length, 0, 'a line is a curve, not sixty labeled marks')
@@ -439,6 +442,53 @@ test('LABELS_WILL_ELIDE fires when many labels exceed 30 chars; short labels are
 	assert.match(w.hint, /horizontal bar/)
 	// Eight SHORT labels: no elide warning (and few enough not to cram).
 	assert.ok(!dcodes(validate(barWith(['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H']))).includes('LABELS_WILL_ELIDE'))
+})
+
+test('LABELS_WILL_ELIDE covers every kind whose ticks run through catTicks, line and area included', () => {
+	// The elide check used to ride on the SAME map as AXIS_TOO_DENSE, so exempting
+	// line/area from the density check silently exempted them from this one too — and a
+	// line of 40 long account names printed 40 elided ticks and warned about none of
+	// them. Length and count are different questions: a line thins its label COUNT and
+	// still elides each label's LENGTH.
+	for (const kind of ['line', 'area']) {
+		const rows = Array.from({ length: 8 }, (_, i) => ({ x: longName(i), y: i }))
+		const r = validate(chartCanvas({ type: 'chart', kind, title: 'L', data: rows, encoding: { x: 'x', y: 'y' } }))
+		const w = densityWarns(r).find((x) => x.code === 'LABELS_WILL_ELIDE')
+		assert.ok(w, `a ${kind} with long category labels elides them and says so`)
+		assert.equal(w.path, 'blocks[0].encoding.x')
+		// …and it is ONLY the elide warning: the count is the runtime's problem, not the agent's.
+		assert.deepEqual(dcodes(r), ['LABELS_WILL_ELIDE'], `a ${kind} is never called too dense`)
+	}
+})
+
+test('AXIS_TOO_DENSE covers violin (its ticks are trace names) and dendrogram (its ticks are leaves)', () => {
+	// Both were invisible to the density funnel. A violin cannot thin at all — each group
+	// is a separate trace — so the warning is the only answer it has.
+	const vi = []
+	for (let i = 0; i < 60; i++)
+		for (let j = 0; j < 3; j++) vi.push({ g: `Group ${i}`, v: j })
+	const violin = densityWarns(validate(chartCanvas({ type: 'chart', kind: 'violin', title: 'V', data: vi, encoding: { x: 'g', y: 'v' } })))
+	assert.ok(violin.some((w) => w.code === 'AXIS_TOO_DENSE'), 'sixty violins cannot each carry a readable label')
+
+	// A dendrogram's labels are its LEAVES, derived from left/right rather than declared
+	// on a channel — so it needs its own count, and it reports at the block, not a channel.
+	const rows = []
+	let refs = Array.from({ length: 80 }, (_, i) => `Leaf ${i + 1}`), m = 0
+	while (refs.length > 1) {
+		rows.push({ l: refs.shift(), r: refs.shift(), h: 1 + m * 0.1 })
+		refs.push(`#${m++}`)
+	}
+	const den = validate(chartCanvas({ type: 'chart', kind: 'dendrogram', title: 'D', data: rows, encoding: { left: 'l', right: 'r', height: 'h' } }))
+	const w = densityWarns(den).find((x) => x.code === 'AXIS_TOO_DENSE')
+	assert.ok(w, 'eighty leaves cannot each be labelled on an A4 axis')
+	assert.match(w.message, /80 dendrogram leaves/)
+	assert.match(w.hint, /Cut the tree/)
+	// The back-references ("#0") are merges, not leaves — counting them would inflate this.
+	assert.ok(!/1[0-9]\d dendrogram leaves/.test(w.message), 'merge back-references are not counted as leaves')
+	// A small tree is silent.
+	assert.equal(densityWarns(validate(chartCanvas({ type: 'chart', kind: 'dendrogram', title: 'D',
+		data: [{ l: 'a', r: 'b', h: 1 }, { l: '#0', r: 'c', h: 2 }], encoding: { left: 'l', right: 'r', height: 'h' } }))).length, 0,
+	'three leaves fit')
 })
 
 test('HEATMAP_TOO_DENSE fires per-axis with the cell math; a small grid is silent', () => {

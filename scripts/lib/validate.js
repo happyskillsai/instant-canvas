@@ -507,12 +507,25 @@ const MAX_SLICES = 10                 // a pie past this reads as a ring of sliv
 const DENSITY_ROW_CAP = 5000          // scan is bounded so `validate` stays fast
 
 // The categorical axis channel per kind — the kinds that put ONE labeled mark per
-// category, where cramming actually bites. line/area are deliberately absent: they draw
-// a continuous curve and Plotly auto-elides the x ticks, so many ordered points (a time
-// series, an angle sweep) is the normal, readable case — the shipped `waves` demo carries
-// 73 angle points on a line and reads perfectly. Continuous kinds (scatter, …) are absent
-// for the same reason (D2). Only discrete-mark kinds are here.
-const AXIS_CATEGORY_CHANNEL = { bar: 'x', boxplot: 'x', funnel: 'category' }
+// category, where cramming actually bites AND the runtime cannot thin its way out.
+// A bar without its label is an orphan (the reader cannot tell which category it is)
+// and a violin's "ticks" are trace names, so neither can be spaced out: aggregating
+// or transposing is the only fix, which is what the warning teaches.
+//
+// line/area are deliberately absent, but NOT for the reason first written here. The
+// old comment claimed they "auto-elide the x ticks" — they did not: `catTicks` handed
+// Plotly `tickmode: 'array'` with one tickval per row, which is precisely what DEFEATS
+// Plotly's own thinning, and a 731-point line printed 731 labels at 0.8px each. They
+// are exempt now because the runtime genuinely thins them (`fitAxisTicks` in app.js),
+// so many ordered points is once again the normal, readable case. Continuous kinds
+// (scatter, …) are absent for the same reason (D2).
+const AXIS_CATEGORY_CHANNEL = { bar: 'x', boxplot: 'x', funnel: 'category', violin: 'x' }
+
+// The kinds whose ticks the runtime renders through `catTicks` — where a label past
+// DENSITY_TICK_MAX_CHARS elides. A SUPERSET of the map above in one direction and a
+// subset in another: line/area elide (they are crammed by long names even though their
+// count is now handled), while boxplot/funnel/violin do not pass through catTicks at all.
+const AXIS_ELIDE_CHANNEL = { bar: 'x', line: 'x', area: 'x' }
 
 /** Paper content width in CSS px: the declared page (size, orientation, margin) else A4/15mm. */
 function contentWidthPx(doc) {
@@ -531,7 +544,13 @@ function contentWidthPx(doc) {
  *  drop genuine text categories and miss a crammed axis. A real time axis (`2026-07`,
  *  `2026-07-15`, an ISO datetime) is continuous and excluded; an exotic label like
  *  "Q3-2026" reads as a category, which is the safe direction (a bar of quarters is
- *  categorical anyway). Pure years are caught by the numeric test above. */
+ *  categorical anyway). Pure years are caught by the numeric test above.
+ *
+ *  This pattern is ALSO what the browser uses to decide `xaxis.type: 'date'` vs
+ *  `'category'` (templated into `<body data-date-re>`, the `data-image-exts` pattern),
+ *  and the two must not drift: the density checks exempt a date axis precisely BECAUSE
+ *  the renderer makes it continuous. Two copies of this rule is one silent hole — the
+ *  731-date line that printed 731 ticks and warned about none of them. */
 const ISO_DATE_RE = /^\d{4}[-/](0?[1-9]|1[0-2])([-/](0?[1-9]|[12]\d|3[01]))?([T ]\d{1,2}:\d{2}(:\d{2})?)?(Z|[+-]\d{2}:?\d{2})?$/
 function isNumericLike(v) {
 	return typeof v === 'number' || (typeof v === 'string' && v.trim() !== '' && Number.isFinite(Number(v)))
@@ -560,6 +579,33 @@ function worstFrameDistinct(block, key) {
 	return best
 }
 
+/** The leaf labels of a dendrogram: every left/right value that is not a "#i" back-reference
+ *  to an earlier merge. Mirrors `dendrogramPath()` in app.js, which derives its tick labels
+ *  the same way — the axis IS the leaf list, so this is the count that lands on paper. */
+function dendrogramLeaves(block) {
+	const enc = typeOf(block.encoding) === 'object' ? block.encoding : {}
+	const rows = Array.isArray(block.data) ? block.data : []
+	const seen = new Set()
+	for (let i = 0; i < rows.length && i < DENSITY_ROW_CAP; i++) {
+		const r = rows[i]
+		if (!r || typeof r !== 'object') continue
+		for (const key of [enc.left, enc.right]) {
+			const v = r[key]
+			if (typeof v === 'string' && !/^#\d+$/.test(v)) seen.add(v)
+		}
+	}
+	return [...seen]
+}
+
+/** LABELS_WILL_ELIDE, shared by every kind whose ticks run through catTicks. */
+function warnElide(labels, path, warn) {
+	const long = labels.filter((v) => String(v).length > DENSITY_TICK_MAX_CHARS)
+	if (long.length >= LABELS_ELIDE_MIN || (labels.length && long.length / labels.length >= LABELS_ELIDE_FRACTION))
+		warn('LABELS_WILL_ELIDE', path,
+			`${long.length} of ${labels.length} category labels exceed ${DENSITY_TICK_MAX_CHARS} characters and will elide on the axis.`,
+			`Ticks elide at ${DENSITY_TICK_MAX_CHARS} characters (hover keeps the full string). Shorten the display names in the data, or use a horizontal bar where a long label gets a full row.`)
+}
+
 /**
  * Static density warnings (§D). Warnings ONLY — never errors. Fires against categorical
  * channels only; continuous kinds are exempt by omission from AXIS_CATEGORY_CHANNEL.
@@ -572,20 +618,32 @@ function checkDensity(block, base, ctx) {
 	const warn = (code, p, message, hint) => ctx.warn(code, p, message, { hint, ...(figure !== undefined ? { figure } : {}) })
 	const px = Math.round(width)
 
-	// AXIS_TOO_DENSE + LABELS_WILL_ELIDE — the categorical axis of a bar/line/area/boxplot/funnel.
+	// AXIS_TOO_DENSE — one labeled mark per category, on a kind that cannot thin.
 	const channel = AXIS_CATEGORY_CHANNEL[kind]
 	if (channel && typeof enc[channel] === 'string') {
-		const distinct = worstFrameDistinct(block, enc[channel])
-		const cats = distinct.filter(isCategorical) // only clearly-discrete values count
+		const cats = worstFrameDistinct(block, enc[channel]).filter(isCategorical) // only clearly-discrete values count
 		if (cats.length && cats.length * MIN_LABEL_PX > width)
 			warn('AXIS_TOO_DENSE', `${base}.encoding.${channel}`,
 				`${cats.length} categories across ~${px}px of paper ⇒ ~${Math.round(width / cats.length)}px per label, below the ~${MIN_LABEL_PX}px a label needs.`,
 				'Aggregate to a top-N plus an "other" bucket, split into small multiples, or swap axes (a horizontal bar gives every label its own row).')
-		const long = cats.filter((v) => String(v).length > DENSITY_TICK_MAX_CHARS)
-		if (long.length >= LABELS_ELIDE_MIN || (cats.length && long.length / cats.length >= LABELS_ELIDE_FRACTION))
-			warn('LABELS_WILL_ELIDE', `${base}.encoding.${channel}`,
-				`${long.length} of ${cats.length} category labels exceed ${DENSITY_TICK_MAX_CHARS} characters and will elide on the axis.`,
-				`Ticks elide at ${DENSITY_TICK_MAX_CHARS} characters (hover keeps the full string). Shorten the display names in the data, or use a horizontal bar where a long label gets a full row.`)
+	}
+
+	// LABELS_WILL_ELIDE — the kinds whose ticks run through catTicks. Independent of the
+	// check above: a line thins its label COUNT but still elides each label's LENGTH.
+	const elideChannel = AXIS_ELIDE_CHANNEL[kind]
+	if (elideChannel && typeof enc[elideChannel] === 'string')
+		warnElide(worstFrameDistinct(block, enc[elideChannel]).filter(isCategorical), `${base}.encoding.${elideChannel}`, warn)
+
+	// DENDROGRAM_TOO_DENSE — a dendrogram's ticks are its LEAVES, which are derived from
+	// left/right rather than declared on a channel, so it needs its own count. It renders
+	// through catTicks, so it elides and thins exactly like a line.
+	if (kind === 'dendrogram') {
+		const leaves = dendrogramLeaves(block)
+		if (leaves.length && leaves.length * MIN_LABEL_PX > width)
+			warn('AXIS_TOO_DENSE', base,
+				`${leaves.length} dendrogram leaves across ~${px}px of paper ⇒ ~${(width / leaves.length).toFixed(1)}px per label; the axis thins its ticks to fit, so most leaf names will not be printed.`,
+				'Cut the tree at a height that yields fewer leaves, or cluster into groups and label those.')
+		warnElide(leaves, base, warn)
 	}
 
 	// HEATMAP_TOO_DENSE — cells too small to read on either axis.
@@ -1492,4 +1550,4 @@ function renderHuman(result, fileLabel = 'canvas') {
 	return lines.join('\n')
 }
 
-module.exports = { validate, renderHuman, collectBlocks, isInteractiveBlock, flattenFields, levenshtein, closest }
+module.exports = { validate, renderHuman, collectBlocks, isInteractiveBlock, flattenFields, levenshtein, closest, ISO_DATE_RE }

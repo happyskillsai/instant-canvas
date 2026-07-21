@@ -119,6 +119,36 @@ const CANVAS = {
 			],
 			encoding: { x: 'account', y: ['Web', 'Robot'], stack: true },
 			options: { layout: { margin: { b: 170 }, legend: { orientation: 'h', x: 0, y: -0.55 } } } },
+		// Dates were rendered on a CATEGORY axis with one forced tickval per row, which
+		// is what turns Plotly's own tick thinning off: 400 days printed 400 labels into
+		// ~570px. A date axis needs no tickvals at all — Plotly picks the boundaries.
+		{ type: 'chart', kind: 'line', title: 'date axis',
+			data: Array.from({ length: 400 }, (_, i) => {
+				const d = new Date(Date.UTC(2011, 0, 1))
+				d.setUTCDate(d.getUTCDate() + i)
+				return { day: d.toISOString().slice(0, 10), v: 100 + (i % 37) }
+			}),
+			encoding: { x: 'day', y: ['v'] } },
+		// The category half: 60 genuine categories still need their elided ticktext, so
+		// the array stays and the RUNTIME thins it to what the axis can hold.
+		{ type: 'chart', kind: 'bar', title: 'dense cats',
+			data: Array.from({ length: 60 }, (_, i) => ({ c: 'Item ' + (i + 1), v: i % 13 })),
+			encoding: { x: 'c', y: ['v'] } },
+		// An author who reached into the x axis owns it — the thinning stands down, the
+		// same rule the legend/margin fit already follows.
+		{ type: 'chart', kind: 'bar', title: 'pinned axis',
+			data: Array.from({ length: 60 }, (_, i) => ({ c: 'Item ' + (i + 1), v: i % 13 })),
+			encoding: { x: 'c', y: ['v'] },
+			options: { layout: { xaxis: { tickmode: 'linear', dtick: 1 } } } },
+		// Heatmap cell labels: the old gate was a ROW COUNT (<=120), so this 144-row grid
+		// lost labels its cells had ample room for. The decision is geometry now.
+		{ type: 'chart', kind: 'heatmap', title: 'heatmap roomy',
+			data: Array.from({ length: 144 }, (_, i) => ({ x: 'C' + (i % 12), y: 'R' + Math.floor(i / 12), v: i })),
+			encoding: { x: 'x', y: 'y', value: 'v' } },
+		// …and the other direction: 40 rows of cells too short to hold a number.
+		{ type: 'chart', kind: 'heatmap', title: 'heatmap thin',
+			data: Array.from({ length: 120 }, (_, i) => ({ x: 'C' + (i % 3), y: 'R' + Math.floor(i / 3), v: i })),
+			encoding: { x: 'x', y: 'y', value: 'v' } },
 		// a swept chart: slider + one figure per frame
 		{ type: 'chart', kind: 'errorBars', title: 'sweep',
 			encoding: { x: 'n', y: 'acc', error: 'sd', band: true },
@@ -242,6 +272,41 @@ test.before(async () => {
 							gap: Math.round(lr.top - Math.max(...ticks.map((t) => t.getBoundingClientRect().bottom))),
 							labels: ticks.map((t) => t.textContent),
 						};
+					})(),
+					// Axis tick density, measured where it exists. A label the reader cannot
+					// read is not a label, so the invariant is px-per-tick, never a count.
+					// (No backticks in here: this whole block is inside a template literal.)
+					axes: (() => {
+						const byTitle = (name) => {
+							const card = [...document.querySelectorAll('.chart-title')]
+								.find((t) => t.textContent === name);
+							if (!card) return null;
+							const box = card.parentElement.querySelector('.chart-box');
+							const fl = box._fullLayout;
+							const ticks = [...box.querySelectorAll('.xtick > text')].map((t) => t.textContent);
+							return {
+								type: fl.xaxis.type,
+								tickmode: fl.xaxis.tickmode,
+								ticks: ticks.length,
+								axisPx: Math.round(fl._size.w),
+								labels: ticks.slice(0, 3),
+								dtick: fl.xaxis.dtick,
+							};
+						};
+						return { date: byTitle('date axis'), cats: byTitle('dense cats'), pinned: byTitle('pinned axis') };
+					})(),
+					// Heatmap cell labels are a geometry decision, not a row count. Read the
+					// rendered text nodes, not the trace attribute: the attribute is what we
+					// asked for and the nodes are what the reader gets.
+					heat: (() => {
+						const cells = (name) => {
+							const card = [...document.querySelectorAll('.chart-title')]
+								.find((t) => t.textContent === name);
+							if (!card) return null;
+							const box = card.parentElement.querySelector('.chart-box');
+							return box.querySelectorAll('.heatmap-label').length;
+						};
+						return { roomy: cells('heatmap roomy'), thin: cells('heatmap thin') };
 					})(),
 					// The author's own layout patch, read back off the live figure.
 					// (No backticks in here: this whole block is inside a template literal.)
@@ -372,6 +437,47 @@ test('long axis labels never collide with the legend, and elide past 30 characte
 		assert.equal(l.length, 30, `an elided tick is exactly 30 characters ("${l}")`)
 	assert.ok(a.labels.includes('NutraDrip Service Providers'),
 		`a 26-char name is shown WHOLE — the point of raising the cap (got: ${JSON.stringify(a.labels)})`)
+})
+
+test('a date x axis is continuous, and a crowded category axis thins its labels to fit', { skip, timeout: 120_000 }, () => {
+	// The bug this pins: `catTicks` handed Plotly `tickmode: 'array'` with one tickval
+	// per row, which is exactly what turns Plotly's own thinning OFF. A 731-day line
+	// printed 731 labels into a 568px axis — 0.8px each, a solid black smear — while a
+	// candlestick beside it, passing no tickvals, thinned 400 dates to a readable 40.
+	// Both halves are asserted as px-per-tick, never as a count: a count is a number
+	// that reads fine at one pane width and lies at every other.
+	const { date, cats, pinned } = snapshot.axes
+
+	// A date axis is CONTINUOUS: no tickvals at all, and Plotly picks the boundaries.
+	assert.ok(date, 'found the 400-date line chart')
+	assert.equal(date.type, 'date', 'dates render on a time axis, not as categories')
+	assert.notEqual(date.tickmode, 'array', 'a date axis hands Plotly no forced tickvals')
+	assert.ok(date.ticks > 0 && date.ticks <= 24, `400 days come back as a readable handful of ticks (got ${date.ticks})`)
+	assert.ok(date.axisPx / date.ticks >= 12, `each date tick has room to be read (${date.ticks} across ${date.axisPx}px)`)
+
+	// A category axis keeps its ticktext (eliding still needs it) and the RUNTIME thins it.
+	assert.ok(cats, 'found the 60-category bar chart')
+	assert.equal(cats.type, 'category', '60 genuine categories stay categorical')
+	assert.equal(cats.tickmode, 'array', 'and keep the tick array that carries their elided text')
+	assert.ok(cats.ticks > 0 && cats.ticks < 60, `the axis dropped labels it had no room for (got ${cats.ticks} of 60)`)
+	assert.ok(cats.axisPx / cats.ticks >= 12, `every surviving label has >=12px (${cats.ticks} across ${cats.axisPx}px)`)
+	// Thinning must SPACE OUT the existing labels, never invent or reorder them.
+	assert.ok(cats.labels.every((l) => /^Item \d+$/.test(l)), `the labels are the data's own (got ${JSON.stringify(cats.labels)})`)
+
+	// And an author who reached into the axis keeps it, untouched.
+	assert.ok(pinned, 'found the chart whose author pinned its x axis')
+	assert.equal(pinned.tickmode, 'linear', 'the author\'s tickmode survives the fit pass')
+	assert.equal(pinned.dtick, 1, 'and their dtick — the thinning never touched this axis')
+})
+
+test('heatmap cell labels are decided by cell size, not by a row count', { skip, timeout: 120_000 }, () => {
+	// The old gate was `rows.length <= 120`, a row count standing in for a question about
+	// geometry: this 144-row grid has 12 roomy columns and lost every label, while a tall
+	// narrow grid under the cap printed numbers into cells too short to hold them.
+	const h = snapshot.heat
+	assert.ok(h.roomy > 0, `a 144-row grid with roomy cells IS labelled (got ${h.roomy} labels)`)
+	assert.equal(h.roomy, 144, 'every cell carries its value')
+	assert.equal(h.thin, 0, `a grid whose cells are too short to hold a number is not labelled (got ${h.thin})`)
 })
 
 test('an `options` patch on the legend or the bottom margin outranks the auto-fit', { skip, timeout: 120_000 }, () => {

@@ -19,10 +19,11 @@
         "What this repository is",
         "Overview",
         "Getting Started",
+        "A guided tour — [`examples/`](examples/README.md)",
         "Project Structure",
         "Documentation"
       ],
-      "line_count": 120,
+      "line_count": 127,
       "links_to": [
         "docs/architecture.md",
         "docs/canvas-schema.md",
@@ -33,7 +34,8 @@
         "docs/mission.md",
         "docs/releasing.md",
         "docs/security.md",
-        "docs/testing.md"
+        "docs/testing.md",
+        "examples/README.md"
       ],
       "over_size": false,
       "parse_error": null,
@@ -141,7 +143,7 @@
         "Validator behavior",
         "Catalog: progressive disclosure"
       ],
-      "line_count": 404,
+      "line_count": 406,
       "links_to": [
         "docs/architecture.md",
         "docs/cli.md",
@@ -201,7 +203,7 @@
         "Result contract (stdout of `open`)",
         "The agent workflow"
       ],
-      "line_count": 167,
+      "line_count": 168,
       "links_to": [
         "docs/architecture.md",
         "docs/canvas-schema.md",
@@ -247,7 +249,7 @@
         "CSP shim",
         "Icons and vendored assets"
       ],
-      "line_count": 141,
+      "line_count": 150,
       "links_to": [
         "docs/architecture.md",
         "docs/canvas-schema.md",
@@ -324,6 +326,7 @@
         "Math must be MathJax SVG output, never KaTeX or MathJax-CHTML",
         "Plotly injects a `<style>` element unless you claim its id",
         "Plotly's automargin takes the MAX of its pushers, never the sum",
+        "`tickmode: 'array'` is the ONLY way to set ticktext, and it silently turns Plotly's tick thinning OFF",
         "Changing a default in the template SILENTLY RELOCATES every `options` patch written against the old one",
         "Plotly cannot read CSS variables",
         "A linked SVG cannot be themed, so the brand mark is inlined",
@@ -363,7 +366,7 @@
         "The ⌘ in a keyboard hint is the wrong glyph off macOS",
         "A pixel offset that dodges a sibling panel breaks when the panel stops being a sibling"
       ],
-      "line_count": 354,
+      "line_count": 370,
       "links_to": [
         "docs/architecture.md",
         "docs/security.md"
@@ -503,6 +506,7 @@
         "Waiting for an element does not mean the app is listening",
         "A throwing `waitFor` in a `before` hook reports the wrong failure",
         "A new test that cannot fail is worse than no test",
+        "A test that asserts the CURRENT rendering PINS it — including the bug in it",
         "Never poll `readAlive` in a before hook — it DELETES the kernel it fails to ping",
         "A fixture that never contains the hard case makes the bug unfailable",
         "Assert what the browser computed, never what the stylesheet says",
@@ -525,7 +529,7 @@
         "Headless Chrome blocks clipboard *read*, so spy on `writeText` to test a copy feature",
         "Registering a value as a secret pollutes the whole single-process suite's redaction"
       ],
-      "line_count": 185,
+      "line_count": 193,
       "links_to": [
         "docs/gotchas/frontend.md"
       ],
@@ -678,7 +682,7 @@
         "Security regressions",
         "Browser verification"
       ],
-      "line_count": 117,
+      "line_count": 121,
       "links_to": [
         "docs/gotchas/frontend.md",
         "docs/gotchas/testing.md",

@@ -31,6 +31,14 @@ When one driving step never happens, a helper that throws sinks the whole `test.
 
 The render smoke test was written, passed, and proved nothing until the bug it targets was deliberately reintroduced. It did not fail. That is how the real cause (the 2-dimension `splom`, not `newPlot` re-entrancy) was found. Before trusting any regression test, break the thing it guards and watch it go red.
 
+## A test that asserts the CURRENT rendering PINS it — including the bug in it
+
+The sibling of the rule above, and the harder one to spot, because this test *could* fail — it simply guarded the wrong thing. `print.test.js` asserted `bar.facts.ticks === 62`, with the comment *"all 62 category ticks were rendered"*. That was written as a **completeness** check (the facts recorder sees every tick), and it silently became a **behavioral** promise that the axis must draw one label per row — which was precisely the defect: 62 labels crammed into ~568 px because `catTicks` had disabled Plotly's own thinning. The suite was green, and the only test touching tick counts was holding the bug in place. A fix could not land without turning a passing assertion red, which is exactly the moment a maintainer is most likely to "restore" it.
+
+The tell is the *shape* of the assertion, not its subject: **an exact equality against a rendered quantity that depends on geometry** (`ticks === 62`, `sheets === 7`, `width === 340`) is a promise that the layout will never adapt. Assert the **invariant the reader cares about** instead — here `axisPx / ticks >= 12`, "every label that survives has room to be read", which is true at any pane width, on paper and on screen, and would have gone red against the old code rather than defending it.
+
+Two consequences. When a fix requires editing an existing assertion, **stop and ask whether that assertion was ever a requirement** — if it merely transcribed what the code did on the day it was written, it is a snapshot masquerading as a spec. And prefer a **relational** assertion (a ratio, a bound, an ordering) over a literal for anything the browser computes; the literal is only correct until the first font, pane, or paper-size change.
+
 ## Never poll `readAlive` in a before hook — it DELETES the kernel it fails to ping
 
 `registry.readAlive()` proves liveness with a **500 ms health ping, and unregisters the entry when that ping times out** — which is exactly right in production (it is what makes `kill -9` recovery automatic) and a trap in a test. Under full-suite load a dozen kernels and several headless Chromes are already up, the ping loses its race, and `readAlive` cheerfully deletes the registry entry of a kernel that is listening perfectly happily. Every later poll then finds nothing, and the hook concludes *"kernel did not come up"* about a kernel you can `curl` by hand.

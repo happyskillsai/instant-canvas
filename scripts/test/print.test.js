@@ -424,12 +424,18 @@ test('print reports figures[] with rendered facts, page numbers and per-figure d
 		assert.ok(Array.isArray(f.warnings))
 	}
 
-	// The dense bar's 62 long labels were measured as ELIDED — the whole point of the
+	// The dense bar's long labels were measured as ELIDED — the whole point of the
 	// funnel's middle tier: a number the agent could not otherwise see.
 	const bar = figs.find((f) => f.kind === 'bar')
 	assert.ok(bar.facts.elided > 0, `the dense bar reports elided ticks (got ${bar.facts.elided})`)
-	assert.equal(bar.facts.ticks, 62, 'all 62 category ticks were rendered')
 	assert.ok(bar.facts.axisPx > 0, 'the plot-area width was measured')
+	// It used to assert all 62 ticks were RENDERED, which pinned the bug: `catTicks`
+	// handed Plotly one tickval per row, which turns Plotly's own thinning off, and 62
+	// labels went into ~568px at 9px each. The axis thins itself now, so the invariant
+	// is the readable one — every tick that survives has room to be read.
+	assert.ok(bar.facts.ticks > 0 && bar.facts.ticks < 62, `the 62-category axis thinned its ticks (got ${bar.facts.ticks})`)
+	assert.ok(bar.facts.axisPx / bar.facts.ticks >= 12,
+		`each surviving tick has ≥12px of axis (${bar.facts.ticks} ticks across ${bar.facts.axisPx}px)`)
 
 	// Threshold breaches are restated per figure with the D3 codes.
 	const codesFor = (kind) => (figs.find((f) => f.kind === kind).warnings || []).map((w) => w.code)

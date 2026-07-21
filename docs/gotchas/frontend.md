@@ -73,6 +73,22 @@ The test asserts **intersecting rectangles in a real browser** (`render.test.js`
 
 **The data-damage tell.** The agent that hit this had already worked around it *twice* in its own canvas: it hand-truncated the account names in the JSON (`"NutraDrip Service Pr…"`) and hand-patched `margin.b: 170` through `options`. When you find an agent editing its own data to fix a layout, the layout is the bug — the contract is missing something the runtime should have owned. Tick eliding is now the runtime's (30 chars, hover keeps the whole string), so nobody has to.
 
+## `tickmode: 'array'` is the ONLY way to set ticktext, and it silently turns Plotly's tick thinning OFF
+
+The label-eliding fix above (30 chars, `catTicks`) was correct and shipped a second, larger bug inside itself. To give Plotly custom `ticktext` you must say `tickmode: 'array'` and hand it `tickvals` — and `tickmode: 'array'` means *"draw a tick at every value in this list"*, which is precisely what disables the automatic thinning Plotly does on its own. So every kind routed through `catTicks` (`bar`, `line`, `area`, and `dendrogram`, which rolled the same pattern by hand for its leaves) **demanded one label per row**. A 731-day line printed **731 tick labels into a 568 px axis** — 0.8 px each, a black smear where the axis should be — and the reader who reported it assumed it was a chart-library limitation.
+
+It was the opposite. The proof was already in the same `switch`: **`candlestick`, which passes no tickvals, let Plotly thin 400 dates to 40**, and **`errorBars`, which sets no `xaxis.type` at all, rendered 200 ISO dates as 7 month ticks** — the correct implementation, one `case` block away, working the whole time. The runtime was overriding good default behavior and the override looked like a limitation.
+
+Three lessons, and the first is the one that generalises past axes:
+
+- **When you override a library default to gain one behavior, ask what the default was also buying.** `tickmode: 'array'` was reached for to control label *text*; it silently took ownership of label *count*. The tell is a rendering that is wrong at every width — automatic behavior adapts, a hardcoded list cannot.
+- **A neighbour that looks inconsistent may be the correct one.** Four kinds hardcoded `xaxis.type: 'category'` (dates included, which also cost the date-axis tick labels a candlestick exists for) and one set nothing. The odd one out was right.
+- **Thin from the ORIGINAL set, never from what is on screen.** `fitAxisTicks` recomputes from the arrays the figure was built with (`captureTicks`), because thinning an already-thinned axis takes every k-th of every k-th: the axis ratchets down one resize at a time and never comes back. Measured across a resize cycle — 60 → 30 → 60 — because "it looked fine after one resize" is exactly how this class of bug survives.
+
+The sibling defect in the same file: heatmap cell labels were gated on `rows.length <= 120`, **a row count standing in for a question about cell size**, so a 144-row grid with roomy columns lost every label while a tall narrow one printed numbers into 4 px cells. Whenever a threshold is a count and the question is geometry, it is wrong in both directions at once — measure the box, and measure the *text* too (a 2D canvas at the same font, never `length * 6`).
+
+And the reason none of this was caught: the density **validator** exempted `line`/`area` from `AXIS_TOO_DENSE` on the written premise that they "auto-elide their ticks". They did not — `catTicks` was preventing exactly that. A comment asserting a library's behavior is a claim that rots silently; the exemption is now earned by code that thins, with `print`'s `facts.ticks` as the evidence.
+
 ## Changing a default in the template SILENTLY RELOCATES every `options` patch written against the old one
 
 The sibling trap to the fix above, and it was caught only because a test asserted the author's numbers rather than the picture. Moving the legend to `yref: 'container'` in `plotlyTemplate()` looked purely internal. It was not: **container coordinates are clamped to 0–1**, while paper coordinates are not — and a negative `y` is *the* Plotly idiom for "put the legend below the plot".
