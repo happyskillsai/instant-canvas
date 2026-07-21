@@ -4751,6 +4751,15 @@ function stageShow(index) {
 		return
 	index = Math.max(0, Math.min(index, total - 1))
 	state.presIndex = index
+	// The stage is a SIBLING overlay, not a descendant of .pres-mode — so it inherits none of
+	// the --doc-* properties applyDocumentTheme wrote onto that root, and a themed slide fell
+	// back to .slide's literals the moment it was presented (a midnight deck browsed dark and
+	// presented on white paper). Charts hid it: their colorway is compiled hex inside the
+	// figure, so they kept the theme while everything around them lost it. Re-apply here
+	// rather than once on entry — this runs on every navigation and on the hot-reload rebuild,
+	// and an unthemed deck clears the properties again (applyDocumentTheme removes what a
+	// theme does not carry), so nothing leaks from the last deck presented.
+	applyDocumentTheme($('stage'), docTheme())
 	stageReturnCharts()
 	const holder = $('stageHolder')
 	holder.textContent = ''

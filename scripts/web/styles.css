@@ -1349,8 +1349,14 @@ body.modal-open .main{overflow:hidden}
 	   this to 0, so a slide fills the screen and the page with square corners. */
 	border-radius:16px;
 }
-/* Dark paper: the semantic layer the --doc-* tokens cannot carry, mirroring .sheet's. */
-.pres-mode[data-paper="dark"] .slide{
+/* Dark paper: the semantic layer the --doc-* tokens cannot carry, mirroring .sheet's.
+   BOTH surfaces that hold a slide are named: the filmstrip root (.pres-mode) and the
+   presenting stage (.stage), which is a sibling overlay rather than a descendant. Keying
+   this on the filmstrip alone let a dark deck present on white paper — every --doc-* read
+   inside .slide carries a literal fallback, so the loss is silent. Whenever a new surface
+   mounts a .slide, it applies the theme AND joins this selector. */
+.pres-mode[data-paper="dark"] .slide,
+.stage[data-paper="dark"] .slide{
 	--bg:#0e1014; --panel-2:#1b1f29; --border-2:#1f242e; --accent-soft:#2a1610;
 	--green:#34d399; --amber:#fbbf24; --red:#f87171;
 	--code-kw:#c4b5fd; --code-str:#6ee7b7; --code-num:#fcd34d; --code-fn:#67e8f9;
