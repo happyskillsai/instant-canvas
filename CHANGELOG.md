@@ -2,8 +2,17 @@
 
 ## [Unreleased]
 
+## [0.20.1] - 2026-07-21
+
 ### Fixed
 
+- **A presented slide keeps its document theme.** The presenting stage is a *sibling* overlay rather than a
+  descendant of the filmstrip root, so it inherited none of the `--doc-*` properties `applyDocumentTheme`
+  writes there — a midnight deck browsed dark and then presented on white paper. Charts hid it, because a
+  colorway is compiled to hex inside the figure and survived while everything around it lost the theme. The
+  theme is now applied on every `stageShow`, so it also covers navigation and the hot-reload rebuild, and an
+  unthemed deck clears the properties again rather than inheriting the last deck presented. Dark paper's
+  semantic layer (the tokens `--doc-*` cannot carry) now names **both** surfaces that mount a slide.
 - **A crowded x axis now spaces out its labels instead of drawing all of them.** Reported against a two-year
   daily-ridership report whose Figure 1 printed a solid black smear where the date axis should be: 731 tick
   labels across a 568 px axis, 0.8 px each. The cause was ours, not Plotly's — `catTicks` (the 30-char tick
