@@ -5,6 +5,25 @@ The agent-facing contract for InstantCanvas. The runtime ships as the
 and LICENSE, and agents drive the CLI through `npx`. Versions track the runtime
 package they were authored alongside.
 
+## [0.20.1] - 2026-07-21
+
+### Changed
+- **Ship every row — a long time series is no longer a density problem you have to solve.** The runtime
+  now owns *how many* axis labels are drawn, not just how much of each one survives: a crowded category
+  axis spaces its labels out so each keeps ≥12px, and ISO-dated x values render on a real time axis with
+  month/quarter ticks instead of one forced label per row. So a two-year daily series is an ordinary line
+  chart — send all 731 points with dates as `"2011-07-04"` and stop aggregating to months, or dropping
+  points, to make an axis fit. That was the same mistake as pre-truncating a label, one level up.
+- **`AXIS_TOO_DENSE` means something narrower now, and `LABELS_WILL_ELIDE` reaches further.** The density
+  warning fires on the kinds where every mark needs its own label — `bar`, `boxplot`, `funnel`, `violin`,
+  and a `dendrogram` counted by its leaves — because a bar whose label was dropped is an orphan and only
+  aggregating or transposing fixes it. `line` and `area` never trip it (their labels are spaced for you)
+  but *do* warn when their labels are long enough to elide: thinning fixes how many labels there are,
+  never how long each one is.
+- **`print`'s `figures[].facts.ticks` is the count the axis actually DREW**, after spacing — so it is
+  normally lower than your row count (731 daily points come back as ~5 dated ticks) and that is the axis
+  working, not data loss. Read it against `axisPx`: `axisPx / ticks` is the room each label got.
+
 ## [0.20.0] - 2026-07-20
 
 ### Added
