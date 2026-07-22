@@ -47,6 +47,9 @@ const skipBrowser = CHROME ? false : 'Chrome not found — set CHROME_PATH to ru
 const TEST_MAX_UPLOAD = 4096
 
 const sha = (buf) => crypto.createHash('sha256').update(buf).digest('hex')
+// A real 1×1 PNG, so the pasted-image tile mounts an <img> that actually decodes —
+// garbage bytes under an .png name would leave a broken image on the page.
+const PNG_1x1_B64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='
 const canvas = (title) => JSON.stringify({ instantcanvas: 1, createdWith: PKG_VERSION, title, blocks: [] })
 
 // ------------------------------------------------------------------ http helpers
@@ -515,6 +518,13 @@ test.before(async () => {
 	broot = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'ic-up-browser-')))
 	fs.writeFileSync(path.join(broot, 'keeper.canvas.json'), canvas('Keeper'))
 	fs.writeFileSync(path.join(broot, 'clash.csv'), 'ORIGINAL CONTENT\n')
+	// The paste half's own collision target, kept separate from the drop's so neither
+	// test can be satisfied by the other's leftovers.
+	fs.writeFileSync(path.join(broot, 'pclash.csv'), 'ORIGINAL PASTE TARGET\n')
+	// (The .env the paste half needs is written mid-drive, not here: an .env is a TILE,
+	// and the drop-zone geometry test below aims at a point 97% down the pane that has
+	// to land OUTSIDE .browse. One more tile in the opening grid moves that point
+	// inside it and the test correctly refuses to prove anything.)
 	// A SPARSE root (one tile) and an EMPTY folder: both leave most of the pane blank,
 	// which is exactly where the drop zone used to stop existing.
 	fs.mkdirSync(path.join(broot, 'empty'))
@@ -609,6 +619,15 @@ test.before(async () => {
 		// code there was barely a .browse box to aim at. Navigate in and drop.
 		await evaluate('location.hash = "#/f/empty"')
 		res.steps.emptyFolderReady = await until(evaluate, 'window.ic.state.browseId === "empty" && document.querySelector(".browse .g-empty") !== null')
+		// The dashed box IS the target the reader aims at, so it must be the size of the
+		// zone. Measured as a RATIO of the pane, never a pixel literal — a literal only
+		// holds at the one viewport it was written on (docs/gotchas/testing.md).
+		res.steps.emptyBox = await evaluate('(function(){'
+			+ ' var e = document.querySelector(".browse .g-empty"), m = document.getElementById("main");'
+			+ ' if (!e || !m) return null;'
+			+ ' var er = e.getBoundingClientRect(), mr = m.getBoundingClientRect();'
+			+ ' return {ratio: er.height / mr.height, text: e.textContent, dashed: getComputedStyle(e).borderStyle};'
+			+ '})()')
 		res.steps.emptyFolderDrop = await evaluate('window.__dropAtPoint(0.5, 0.9, [{name: "into-empty.md", body: "# EMPTY"}])')
 		res.steps.emptyFolderLanded = await until(evaluate, 'Array.from(document.querySelectorAll(".browse .gt")).some(function(t){ return t.dataset.rel === "empty/into-empty.md" })', 12000)
 		await evaluate('location.hash = "#/f/"')
@@ -634,6 +653,112 @@ test.before(async () => {
 		await sleep(400)
 		res.steps.folderToast = await evaluate('(function(){ var t = document.querySelector(".toast"); return t ? t.textContent : null })()')
 		await evaluate('DataTransferItem.prototype.webkitGetAsEntry = window.__realEntry;')
+
+		// ==================== PASTE: the same flow, a different gesture ============
+		//
+		// Headless Chrome blocks clipboard READ (docs/gotchas/testing.md), so a real
+		// system clipboard cannot be populated and pasted from. The working shape is
+		// the one envcanvas.test.js already uses: build a DataTransfer, attach the
+		// files, dispatch a ClipboardEvent. `prevented` is the falsifiable evidence
+		// throughout — a synthetic paste inserts nothing into a field either way, so
+		// "the text arrived in the input" could never fail, while "our handler did NOT
+		// suppress this event" can.
+		await evaluate([
+			'window.__paste = function(sel, opts){',
+			'  opts = opts || {};',
+			'  var dt = new DataTransfer();',
+			'  (opts.files || []).forEach(function(f){',
+			'    var body = f.b64 ? Uint8Array.from(atob(f.b64), function(c){ return c.charCodeAt(0) }) : f.body;',
+			'    dt.items.add(new File([body], f.name, {type: f.type || "text/plain"}));',
+			'  });',
+			'  if (opts.text) dt.setData("text/plain", opts.text);',
+			'  var el = sel ? document.querySelector(sel) : document.body;',
+			'  if (!el) return {missing: true};',
+			'  if (sel && el.focus) el.focus();',
+			'  var ev = new ClipboardEvent("paste", {clipboardData: dt, bubbles: true, cancelable: true});',
+			'  el.dispatchEvent(ev);',
+			'  return {prevented: ev.defaultPrevented};',
+			'};',
+			'window.__uploadReqs = function(){ return performance.getEntriesByType("resource").filter(function(r){ return r.name.indexOf("/api/upload") >= 0 }).length };',
+		].join(''))
+
+		// --- plain TEXT on the browse view is a silent no-op ------------------------
+		// No toast and no request. An error toast every time somebody pastes prose
+		// would be worse than not having the feature at all. The request count is a
+		// DELTA against a baseline, because the drop half above already issued
+		// uploads — counting from zero would be measuring the wrong thing.
+		await evaluate('document.querySelectorAll(".toast").forEach(function(t){ t.remove() })')
+		res.steps.reqsBeforeText = await evaluate('window.__uploadReqs()')
+		res.steps.pasteText = await evaluate('window.__paste(null, {text: "just some prose the reader copied"})')
+		await sleep(400)
+		res.steps.toastsAfterText = await evaluate('document.querySelectorAll(".toast").length')
+		res.steps.reqsAfterText = await evaluate('window.__uploadReqs()')
+
+		// --- a pasted FILE lands, and the grid syncs in place ------------------------
+		await evaluate('(function(){ var t = document.querySelector(".browse .gt"); if (t) t.__pkeep = 11 })()')
+		res.steps.pasteFile = await evaluate('window.__paste(null, {files: [{name: "pasted-a.md", body: "# PASTED IN"}]})')
+		res.steps.pasteTileAppeared = await until(evaluate, 'Array.from(document.querySelectorAll(".browse .gt")).some(function(t){ return t.dataset.rel === "pasted-a.md" })', 12000)
+		res.steps.pasteKeeperSurvived = await evaluate('(function(){ var t = document.querySelector(".browse .gt"); return !!t && t.__pkeep === 11 && t.isConnected })()')
+		// The POSITIVE CONTROL for the silence assertion above: a paste that IS a file
+		// demonstrably reaches the route, so "no request" cannot be green because the
+		// handler never issues one under any circumstances.
+		res.steps.reqsAfterFile = await evaluate('window.__uploadReqs()')
+
+		// --- a colliding paste asks, and CANCEL writes nothing ----------------------
+		await evaluate('document.querySelectorAll(".toast").forEach(function(t){ t.remove() })')
+		res.snapBeforeCancel = snapshotDir(broot)
+		await evaluate('window.__paste(null, {files: [{name: "pclash.csv", body: "OVERWRITTEN BY A PASTE"}]})')
+		res.steps.pasteConfirmShown = await until(evaluate, 'document.querySelector(".g-confirm") !== null')
+		res.steps.pasteConfirmNames = await evaluate('Array.from(document.querySelectorAll(".g-confirm .g-cli")).map(function(e){ return e.textContent })')
+		await evaluate('(function(){ var b = Array.from(document.querySelectorAll(".g-confirm .g-btn")).find(function(x){ return /Cancel/.test(x.textContent) }); if (b) b.click() })()')
+		res.steps.pasteConfirmGone = await until(evaluate, 'document.querySelector(".g-confirm") === null')
+		await sleep(700) // let any (wrongly) issued PUT land before the snapshot
+		res.snapAfterCancel = snapshotDir(broot)
+
+		// --- a RAW IMAGE has no filename, so one is generated -----------------------
+		res.steps.pasteImage = await evaluate('window.__paste(null, {files: [{name: "image.png", type: "image/png", b64: ' + JSON.stringify(PNG_1x1_B64) + '}]})')
+		res.steps.pastedImageLanded = await until(evaluate, 'Array.from(document.querySelectorAll(".browse .gt")).some(function(t){ return /^pasted-\\d{8}-\\d{6}[.]png$/.test(t.dataset.rel || "") })', 12000)
+
+		// --- REGRESSION: the native .env form's own KEY=value paste still works ------
+		// Written now rather than in the fixture: an .env is a tile, and the drop-zone
+		// geometry test above needs the opening grid it was written against.
+		// Distinctive values — every .env value is registerSecret-ed for the rest of
+		// the single-process run, and a common one would redact another file's
+		// plaintext assertion (docs/gotchas/testing.md).
+		fs.writeFileSync(path.join(broot, '.env'), 'ENVPASTE_ALPHA=envpaste-alpha-one\n')
+		await evaluate('location.hash = "#/c/.env"')
+		res.steps.envFormReady = await until(evaluate, 'document.querySelector("#theForm [data-env-row]") !== null')
+		res.snapBeforeEnvPaste = snapshotDir(broot)
+		res.steps.envPaste = await evaluate('window.__paste("[data-env-row] [data-env-val]", {text: "ENVPASTE_BETA=envpaste-beta-two\\nENVPASTE_GAMMA=envpaste-gamma-three"})')
+		await sleep(400)
+		res.steps.envKeys = await evaluate('JSON.stringify(Array.from(document.querySelectorAll("[data-env-row]")).map(function(r){ return r.dataset.existing === "1" ? r.dataset.key : (r.querySelector("[data-env-key]") || {}).value }))')
+		// ...and the half that makes the focus-in-field yield FALSIFIABLE. A text-only
+		// clipboard returns silently whether or not the yield exists, so a text paste
+		// alone could never catch its removal. A paste carrying a FILE while the
+		// reader is typing in a field is the case the yield is actually for.
+		res.steps.envFilePaste = await evaluate('window.__paste("[data-env-row] [data-env-val]", {files: [{name: "into-env-field.md", body: "# NO"}]})')
+		await sleep(700)
+		res.snapAfterEnvPaste = snapshotDir(broot)
+		await evaluate('location.hash = "#/f/"')
+		await until(evaluate, 'window.ic.state.browseId === ""')
+
+		// --- REGRESSION: ⌘K's search box takes its text paste -----------------------
+		await evaluate('document.getElementById("openSearch").click()')
+		res.steps.searchOpen = await until(evaluate, '!document.getElementById("searchModal").hidden')
+		res.steps.reqsBeforeSearchPaste = await evaluate('window.__uploadReqs()')
+		res.steps.searchPaste = await evaluate('window.__paste("#csmInput", {text: "keeper"})')
+		await sleep(300)
+		res.steps.reqsAfterSearchPaste = await evaluate('window.__uploadReqs()')
+		await evaluate('document.getElementById("csmInput").dispatchEvent(new KeyboardEvent("keydown", {key: "Escape", bubbles: true}))')
+		await until(evaluate, 'document.getElementById("searchModal").hidden')
+
+		// --- an ITEM OVERLAY owns the paste, so nothing is written -------------------
+		await evaluate('location.hash = "#/c/keeper.canvas.json"')
+		res.steps.overlayOpen = await until(evaluate, '!document.getElementById("docModal").hidden')
+		res.steps.overlayPaste = await evaluate('window.__paste(null, {files: [{name: "into-overlay.md", body: "# NO"}]})')
+		await sleep(700)
+		await evaluate('location.hash = "#/f/"')
+		await until(evaluate, 'window.ic.state.browseId === ""')
 
 		res.steps.inlineStyles = await evaluate(q('.browse [style]'))
 		res.steps.csp = await evaluate('window.__csp.length')
@@ -690,6 +815,19 @@ test('upload browser: the EMPTY SPACE below the tiles is part of the drop zone',
 	assert.equal(fs.readFileSync(path.join(broot, 'below-tiles.md'), 'utf8'), '# BELOW')
 })
 
+test('browse browser: an empty folder\'s dashed box FILLS the pane and names both gestures', { skip: skipBrowser }, () => {
+	const box = B.steps.emptyBox
+	assert.ok(box, 'the empty folder should render its dashed box')
+	// It used to be one line of text under the toolbar while the zone was the whole
+	// pane — the box drew the target smaller than it is. A ratio, not a pixel count.
+	assert.ok(box.ratio > 0.6, 'the empty box should fill the pane, not sit as a strip — ratio was ' + box.ratio)
+	assert.equal(box.dashed, 'dashed', 'it is still the dashed drop-target box')
+	// Paste is invisible: there is no affordance for it anywhere else, so the empty
+	// state is the only place a reader can learn the folder takes one.
+	assert.match(box.text, /paste/i)
+	assert.match(box.text, /drop/i)
+})
+
 test('upload browser: an EMPTY folder is a drop zone too', { skip: skipBrowser }, () => {
 	// The limit case of the same bug: no tiles at all, so there was almost no
 	// content-sized box to aim at.
@@ -724,6 +862,77 @@ test('upload browser: dropping a FOLDER toasts and writes nothing', { skip: skip
 	assert.ok(B.steps.folderToast, 'a folder drop must say why, never silently do nothing')
 	assert.match(B.steps.folderToast, /folder/i)
 	assert.equal(fs.existsSync(path.join(broot, 'somefolder')), false)
+})
+
+// ------------------------------------------------------------ paste (spec 3)
+
+test('paste browser: plain text on the browse view is a SILENT no-op', { skip: skipBrowser }, () => {
+	// Not prevented — the paste proceeds natively, which is what keeps every ordinary
+	// text paste in the app working.
+	assert.equal(B.steps.pasteText.prevented, false, 'a text paste must not be suppressed')
+	assert.equal(B.steps.toastsAfterText, 0, 'no toast: silence is the correct answer to a clipboard with no files')
+	assert.equal(B.steps.reqsAfterText, B.steps.reqsBeforeText, 'a text paste must issue no upload request')
+	// The positive control, without which the two assertions above could be satisfied
+	// by a handler that never uploads anything at all.
+	assert.ok(B.steps.reqsAfterFile > B.steps.reqsAfterText, 'a FILE paste must reach the upload route')
+})
+
+test('paste browser: a pasted file lands byte-for-byte and the grid syncs in place', { skip: skipBrowser }, () => {
+	assert.equal(B.steps.pasteFile.prevented, true, 'a file paste is ours, so it is prevented')
+	const onDisk = fs.readFileSync(path.join(broot, 'pasted-a.md'))
+	assert.equal(sha(onDisk), sha(Buffer.from('# PASTED IN')), 'hash equality, never a size')
+	assert.equal(B.steps.pasteTileAppeared, true, 'the pasted file must appear in the grid')
+	assert.equal(B.steps.pasteKeeperSurvived, true, 'the live refresh must diff by path, never rebuild the grid')
+})
+
+test('paste browser: a colliding paste names the file and CANCEL writes nothing', { skip: skipBrowser }, () => {
+	assert.equal(B.steps.pasteConfirmShown, true, 'a paste collision must ask before writing — the SAME dialog a drop opens')
+	assert.deepEqual(B.steps.pasteConfirmNames, ['pclash.csv'])
+	assert.equal(B.steps.pasteConfirmGone, true)
+	// A recursive before/after of the whole workspace: a cancel that wrote ANY file
+	// anywhere fails here, not only at the path this test happened to name.
+	assert.deepEqual(B.snapAfterCancel, B.snapBeforeCancel, 'cancel must leave the workspace byte-for-byte unchanged')
+	assert.equal(fs.readFileSync(path.join(broot, 'pclash.csv'), 'utf8'), 'ORIGINAL PASTE TARGET\n')
+})
+
+test('paste browser: a RAW image is written as pasted-YYYYMMDD-HHMMSS.png', { skip: skipBrowser }, () => {
+	assert.equal(B.steps.pasteImage.prevented, true)
+	assert.equal(B.steps.pastedImageLanded, true, 'the generated name must appear in the grid')
+	const named = fs.readdirSync(broot).filter((f) => /^pasted-\d{8}-\d{6}\.png$/.test(f))
+	assert.equal(named.length, 1, 'exactly one generated name: ' + JSON.stringify(named))
+	// The extension came from the clipboard item's MIME type, and the bytes are the
+	// reader's own — asserted by hash, like every other write in this file.
+	assert.equal(sha(fs.readFileSync(path.join(broot, named[0]))), sha(Buffer.from(PNG_1x1_B64, 'base64')))
+	assert.equal(fs.existsSync(path.join(broot, 'image.png')), false, 'the generic clipboard name is never used as-is')
+})
+
+test('paste browser: REGRESSION — the .env form still takes its KEY=value paste, and writes no file', { skip: skipBrowser }, () => {
+	assert.equal(B.steps.envFormReady, true, 'the .env form should render its rows')
+	const keys = JSON.parse(B.steps.envKeys)
+	assert.ok(keys.includes('ENVPASTE_BETA') && keys.includes('ENVPASTE_GAMMA'), 'pasted pairs must become rows: ' + B.steps.envKeys)
+	// The half a document-level paste listener would break: the pasted text must not
+	// have been turned into a FILE in the folder behind the form.
+	assert.deepEqual(B.snapAfterEnvPaste, B.snapBeforeEnvPaste, 'an env-form paste must write nothing to disk')
+	// And the falsifiable half: a paste carrying a real FILE while focus is in a field
+	// is the case the focus-in-field yield exists for. Remove that yield and THIS goes
+	// red (sabotage-verified) — the text assertions above would not.
+	assert.equal(B.steps.envFilePaste.prevented, false, 'a paste into a field is never ours, files or not')
+	assert.equal(fs.existsSync(path.join(broot, 'into-env-field.md')), false)
+})
+
+test('paste browser: REGRESSION — ⌘K search takes its text paste and uploads nothing', { skip: skipBrowser }, () => {
+	assert.equal(B.steps.searchOpen, true)
+	// A synthetic paste never types into an input (it is untrusted), so the falsifiable
+	// evidence is that WE did not swallow the event — defaultPrevented stays false —
+	// and that nothing was uploaded.
+	assert.equal(B.steps.searchPaste.prevented, false, 'the search box must keep its own paste')
+	assert.equal(B.steps.reqsAfterSearchPaste, B.steps.reqsBeforeSearchPaste, 'a search paste must issue no upload request')
+})
+
+test('paste browser: an item overlay owns the paste — nothing is written', { skip: skipBrowser }, () => {
+	assert.equal(B.steps.overlayOpen, true)
+	assert.equal(B.steps.overlayPaste.prevented, false, 'with the overlay open the paste is not ours')
+	assert.equal(fs.existsSync(path.join(broot, 'into-overlay.md')), false)
 })
 
 test('upload browser: zero CSP violations and zero page errors', { skip: skipBrowser }, () => {
