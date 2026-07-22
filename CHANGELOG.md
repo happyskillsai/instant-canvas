@@ -2,6 +2,45 @@
 
 ## [Unreleased]
 
+## [0.23.0] - 2026-07-22
+
+### Added
+
+- **Paste files into the folder you are browsing** (`⌘V` / `Ctrl+V`). Copy files in Finder, Explorer or
+  your file manager, click the pane, and paste — they are written into the folder you are viewing and
+  appear in the grid on their own. It is the same operation as a drop with a different gesture, and it is
+  deliberately the *same code*: the drop handler's plan → confirm → sequential write → report sequence was
+  extracted into one `uploadFiles()` with two thin callers, because two upload paths that can disagree
+  about the overwrite handshake are two different products. A paste therefore inherits every guard the
+  drop already carries — the whole-batch collision question, the dialog that names every clashing file,
+  the Cancel that writes *nothing* rather than skipping the clashes, and the validation the write route
+  re-runs for itself.
+
+  **A document-level paste listener sits underneath every input in the app**, so it yields before it acts:
+  it steps aside — letting the paste proceed natively — whenever focus or the event's target is in a
+  field or a form, whenever another surface owns the keyboard (an open item, presenting, `⌘K`, the palette
+  panel, the folder menu, a modal, a gallery selection, the mobile drawer), and whenever you are not
+  looking at a folder. Only after it has decided the paste is its own does it call `preventDefault()`. The
+  native `.env` form still turns pasted `KEY=value` text into rows, and the search box still takes its
+  text; both are pinned by regression tests, because the failure mode here is not a broken feature but
+  every text field in the app quietly refusing to accept a paste.
+
+  **Pasting anything that is not a file does nothing at all** — no toast, no request. An error message on
+  every stray `⌘V` over prose would be worse than not having the feature.
+
+  **A screenshot gets a name.** A raw image on the clipboard has no filename — the browser reports an
+  empty name, or the generic `image.png` for every screenshot alike — so a lone unnamed image is written
+  as `pasted-YYYYMMDD-HHMMSS.png`, its extension taken from the clipboard's own MIME type. Two pastes
+  inside one second collide, and the collision dialog asks about it, rather than the runtime inventing a
+  suffix you could not predict.
+
+### Changed
+
+- **An empty folder's dashed box now fills the pane, and says you can paste as well as drop.** The box is
+  the target a reader aims at, and it used to stop after one line of text while the zone underneath it was
+  the whole pane — drawing the target considerably smaller than it actually is. Paste has no other
+  affordance anywhere in the interface, so the empty state is also the one place it can be learned.
+
 ## [0.22.0] - 2026-07-22
 
 ### Added
