@@ -2,6 +2,47 @@
 
 ## [Unreleased]
 
+## [0.22.0] - 2026-07-22
+
+### Added
+
+- **Drag files out of Finder, Explorer or your file manager and drop them into the folder you are
+  browsing.** They are written straight into that folder and appear in the grid on their own. The framing
+  that justifies it is *handing the agent data*: drop a CSV into the workspace, then ask the agent to
+  chart it — the reader gestures, the agent acts. The target is the folder you are **viewing** and only
+  that: no per-tile targeting, no sidebar targeting, so there is never a question about where a drop
+  landed. The zone is the whole main pane — including the empty space below the last tile, and an empty
+  folder that has no tiles at all, because a zone sized by its content is not the zone the reader is
+  aiming at.
+
+  **Nothing is ever silently overwritten.** `POST /api/upload/plan` answers the collision question for the
+  WHOLE batch before a byte moves, so a forty-file drop asks one question rather than forty — the same
+  announce-before-you-write pattern `GET /api/theme/plan` established, and what lets the confirmation's
+  count be a promise. The dialog names every colliding file, and Cancel writes nothing at all rather than
+  skipping the clashes. `PUT /api/upload` re-runs the full validation itself: the plan is a courtesy to
+  the reader, never a token of authorization, because a client can call the write route directly.
+
+  This is the first surface that writes **arbitrary reader bytes at an arbitrary name** into the
+  workspace, so it carries every guard the existing writers use. A name must be a bare basename — both
+  separators are refused (`path.basename` on POSIX does not treat `\` as one, and a Windows browser can
+  send one), along with `.`/`..`, a leading dot, names over 255 *bytes*, the Windows reserved device
+  names, a trailing dot or space, and control characters. The destination is confined **twice** — the
+  directory, and the joined path, since the two can be individually innocent and combine into an escape —
+  and the directory is `lstat`ed, never `stat`ed, so a symlinked directory that resolves back inside the
+  root is refused. Writes stream to a temp file **in the destination directory** and `rename` into place,
+  so the rename is atomic on one filesystem, and every error path unlinks it: no `.part` litter, ever. One
+  file is capped at 2 GiB, checked against `Content-Length` up front *and* counted as bytes arrive, so a
+  missing or lying header cannot defeat it; over the cap the kernel answers `Connection: close` rather
+  than destroying the socket, which would reach the client as a hang-up instead of a reason. Dropping a
+  **folder** is refused with a toast — recursion is a separate feature, and half-processing a drop would
+  write some of what the reader dropped and silently skip the rest.
+
+  A document-wide guard also stops a *missed* drop from making the browser navigate away to the dropped
+  file, which would replace the app and strand the kernel with nothing attached.
+
+  No CLI command, no flag, no agent surface: an agent discovers dropped files the way it discovers any
+  file, with its own tools.
+
 ## [0.21.0] - 2026-07-22
 
 ### Added
