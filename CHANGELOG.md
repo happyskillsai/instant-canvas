@@ -2,6 +2,33 @@
 
 ## [Unreleased]
 
+## [0.20.2] - 2026-07-22
+
+### Changed
+
+- **A filter chip no longer rebuilds the browse grid.** Every click in the filter modal used to destroy and
+  recreate every tile, so the browser re-decoded every image on the folder: measured on 40 full-resolution
+  photos, one round-trip cost **56 image decodes** and ten rapid toggles cost 336. Folder scope now mounts
+  every loaded item once and the filter is pure visibility — an attribute write that moves no DOM at all;
+  subtree scope still refetches, because the server kind-filters **before** the 2000-item cap and a rare kind
+  must never be starved behind a common one, but it diffs the response instead of rebuilding. Both come back
+  **0 re-decodes**. And a hidden tile is `display: none`, so its lazy `<img>` never fetches at all: filtering
+  to Canvases in an image-heavy folder now actively *stops* image loading rather than merely hiding it.
+- **Offscreen browse and gallery tiles cost no layout or paint** (`content-visibility: auto`) — most visible
+  on the 2000-item subtree listing, where any repaint used to rasterize the whole grid. Printing is
+  unaffected: relevancy is viewport-based and a printed page has no viewport, so the tiles unskip in
+  `@media print`.
+
+### Fixed
+
+- **Filtering no longer wipes the selection you are building.** Toggling a type chip in folder scope called
+  `clearSelection()`, destroying a workspace-wide record that deliberately survives navigation, reloads and
+  kernel restarts — while the same toggle in subtree scope left it alone, so the two scopes disagreed about
+  what a filter means. The selection is a record for the agent; the filter is a view concern. An item the
+  filter hides now stays selected, exactly like one in a folder you navigated away from. Narrowing a subtree
+  filter no longer prunes it either — a tile vanishing there means "a kind you filtered out", not "a deleted
+  file".
+
 ## [0.20.1] - 2026-07-21
 
 ### Fixed
