@@ -69,7 +69,7 @@
         "Hot reload",
         "Version handshake"
       ],
-      "line_count": 201,
+      "line_count": 205,
       "links_to": [
         "docs/canvas-schema.md",
         "docs/cli.md",
@@ -101,7 +101,8 @@
         "scripts/lib/jsonedit.js",
         "scripts/lib/fsatomic.js",
         "scripts/lib/browser.js",
-        "scripts/lib/selection.js"
+        "scripts/lib/selection.js",
+        "scripts/lib/reveal.js"
       ],
       "source_unresolved": [],
       "tags": [
@@ -249,7 +250,7 @@
         "CSP shim",
         "Icons and vendored assets"
       ],
-      "line_count": 150,
+      "line_count": 151,
       "links_to": [
         "docs/architecture.md",
         "docs/canvas-schema.md",
@@ -338,6 +339,7 @@
         "The `options` escape hatch is a Plotly figure fragment, merged by index",
         "Never write a literal NUL into `app.js`",
         "Re-rendering on click detaches the element that was clicked",
+        "The click that OPENS a popover will also close it, unless the anchor counts as \"inside\"",
         "Highlighting search matches by string-building is two bugs, not one",
         "A `> *` rule to make z-index work OVERRODE `position: absolute` on the cover's furniture",
         "`api()` returns `{status, json}`, and reading the body off the wrapper fails SILENTLY",
@@ -367,7 +369,7 @@
         "The ⌘ in a keyboard hint is the wrong glyph off macOS",
         "A pixel offset that dodges a sibling panel breaks when the panel stops being a sibling"
       ],
-      "line_count": 384,
+      "line_count": 392,
       "links_to": [
         "docs/architecture.md",
         "docs/gotchas/testing.md",
@@ -526,13 +528,14 @@
         "A green suite proves the schemas agree; nobody was testing the prose",
         "A synchronous `execFileSync` in a before hook FREEZES every other file's async test — and hangs the whole single-process suite",
         "Audio never autoplays in headless Chrome without a flag, and `opts.args` REPLACES the defaults",
+        "A shim that records argv with `printf '%s\\t' \"$@\"` invents an argument that was never passed",
         "A piped `npm test` reports the PIPE's exit code, not the suite's",
         "A timing-fragile browser assertion breaks when the suite gets HEAVIER, not just when the code does",
         "A hash-only `Page.navigate` is a same-document navigation, not a reload",
         "Headless Chrome blocks clipboard *read*, so spy on `writeText` to test a copy feature",
         "Registering a value as a secret pollutes the whole single-process suite's redaction"
       ],
-      "line_count": 203,
+      "line_count": 211,
       "links_to": [
         "docs/gotchas/frontend.md"
       ],
@@ -633,7 +636,7 @@
         "Network perimeter",
         "What this does NOT protect against"
       ],
-      "line_count": 74,
+      "line_count": 76,
       "links_to": [
         "docs/architecture.md",
         "docs/cli.md"
@@ -656,6 +659,7 @@
         "scripts/lib/gallery.js",
         "scripts/lib/browse.js",
         "scripts/lib/selection.js",
+        "scripts/lib/reveal.js",
         "scripts/lib/fsatomic.js",
         "scripts/kernel.js",
         "scripts/instantcanvas.js"
@@ -685,7 +689,7 @@
         "Security regressions",
         "Browser verification"
       ],
-      "line_count": 121,
+      "line_count": 122,
       "links_to": [
         "docs/gotchas/frontend.md",
         "docs/gotchas/testing.md",

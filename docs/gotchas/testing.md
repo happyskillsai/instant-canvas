@@ -153,6 +153,14 @@ playing, and give it ~900 ms before asserting `currentTime > 0`.** Asserting rig
 `loadedmetadata` reads `0` — the element has its duration but has not started decoding audio
 yet — and the test fails for the wrong reason.
 
+## A shim that records argv with `printf '%s\t' "$@"` invents an argument that was never passed
+
+The way to prove a spawn passed a folder as **one** argv entry rather than a shell string is to put a recording shim on a temp `PATH` and read back what it received (`reveal.test.js`). The obvious recorder is wrong in a way that only shows on the empty case: **`printf` runs its format string once even with no arguments**, so a shim written as `printf '%s\t' "$@"` emits one empty field for an invocation that passed *nothing*, and the assertion reads `['']` where the truth is `[]`. It cost a correct implementation a red test — the `$TERMINAL` branch genuinely passes no arguments (the folder rides the spawn's `cwd`), and the harness reported a phantom one.
+
+Use a loop, whose body simply does not run when there is nothing to iterate: `for a in "$@"; do printf '%s\t' "$a"; done`. And prefix each invocation with a literal marker (`printf 'CALL\t'`) before the arguments — otherwise a zero-argument call writes a bare newline that is indistinguishable from no call at all, so "it was never invoked" and "it was invoked with nothing" collapse into the same reading. The general shape: **when a test harness encodes a list, make the empty list distinguishable from the absent list**, or the two failure modes you most need to tell apart become the same string.
+
+The sibling trap in the same file is timing, and it is the one this file already warns about from another angle: a detached `spawn` writes its line whenever the OS gets to it — measured missing at 500 ms and present at 1200 ms on an *idle* machine. A fixed sleep there is a countdown to the suite outgrowing it; poll for the expected count instead.
+
 ## A piped `npm test` reports the PIPE's exit code, not the suite's
 
 `npm test 2>&1 | tail -9` exits **0 even when tests fail**, because a shell pipeline's status
