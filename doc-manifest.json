@@ -363,6 +363,8 @@
         "The `hidden` attribute does NOT hide a `.tbtn` — an author `display` rule outranks it",
         "Hiding an element stops the work the BROWSER owns, never the work you kicked off yourself",
         "A document-level Esc/arrow handler must yield to EVERY open sub-surface",
+        "A document-level `paste` handler must YIELD before it PREVENTS — it sits under every input in the app",
+        "Two guards that both protect one surface are each individually unfalsifiable",
         "`captureScreenshot` with `captureBeyondViewport` misses a below-the-fold deck sheet — the deck scrolls inside `.main`, not the page",
         "A detached media element keeps playing",
         "A pane that waits for three misses is OUTRUN by a fast restart",
@@ -371,7 +373,7 @@
         "A pixel offset that dodges a sibling panel breaks when the panel stops being a sibling",
         "A drop zone sized by its CONTENT is not the drop zone the reader sees"
       ],
-      "line_count": 408,
+      "line_count": 422,
       "links_to": [
         "docs/architecture.md",
         "docs/gotchas/testing.md",
