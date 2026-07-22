@@ -2,6 +2,34 @@
 
 ## [Unreleased]
 
+## [0.21.0] - 2026-07-22
+
+### Added
+
+- **A folder can now be opened in Finder, Explorer or your file manager — and in a terminal — from inside
+  the browser.** Right-click a folder in the sidebar tree, a folder tile or a breadcrumb segment in the
+  browse view, or use the new always-visible ⋮ in the browse toolbar, which acts on the folder you are in.
+  All four open the *same* menu, because two menus that can disagree about what an action does are two
+  different products; it also copies the folder's absolute path or its bare name. The first label is
+  OS-specific — *Open in Finder* / *Show in Explorer* / *Open in file manager* — and the platform comes from
+  the kernel (`<body data-platform>`), never `navigator`, which describes the browser rather than the machine
+  it runs on. The native context menu is suppressed on those four targets only, so Inspect Element keeps
+  working everywhere else.
+
+  Behind it, `POST /api/reveal` is reader-triggered like the gallery delete and the selection routes: no
+  session, no CLI door, no agent surface, since an agent already has its own shell. It **spawns a viewer and
+  never mutates the workspace**. A folder name is untrusted input, so the opener always `spawn`s with an
+  **argv array** — there is no `exec` and no `shell: true` anywhere in `lib/reveal.js`, because `; rm -rf ~`
+  is a legal directory name and a shell string would execute it. The route validates before any process
+  exists: an exact action enum, `insideRoot`, then `lstat` rather than `stat`, so one check refuses both a
+  plain file and a **symlinked directory** — which `insideRoot` admits happily when it resolves back inside
+  the root. Refusals carry none of the target's bytes, and a machine with no file manager or no terminal gets
+  `{ok:false, code:"NO_FILE_MANAGER"}` and a toast rather than a silent success.
+
+  Linux's terminal ladder (`$TERMINAL`, then `x-terminal-emulator`, `gnome-terminal`, `konsole`,
+  `xfce4-terminal`, `alacritty`, `kitty`) and Windows' `wt.exe`-then-`cmd.exe` fallback are best-effort and
+  unverified on real hardware; both fail closed rather than guess.
+
 ## [0.20.2] - 2026-07-22
 
 ### Changed
