@@ -1731,6 +1731,18 @@ audio.m-el{display:none} /* the audio element is never shown — the art card st
    room for its icon + kicker + 2-line title + file name without clipping. */
 .browse .g-tiles{grid-template-columns:repeat(auto-fill,minmax(172px,1fr))}
 .browse .gt-name{font-size:12.5px;color:var(--text);margin-top:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:0 2px}
+/* Drop files in. The highlight is a CLASS and nothing else — the CSP drops `style=""`
+   attributes, and `.browse [style]` is asserted to be 0. `position:relative` gives the
+   dashed ring and the progress line a box to sit in without adding one to the markup. */
+.browse{position:relative}
+.browse.browse-dropping{outline:2px dashed var(--accent);outline-offset:6px;border-radius:10px;
+	background:color-mix(in srgb,var(--accent) 6%,transparent)}
+/* The sequential write's progress line. Pinned to the pane rather than floated as a
+   toast, so it sits where the files are about to appear. */
+.browse-drop-status{position:sticky;bottom:8px;margin-top:12px;align-self:flex-start;
+	display:inline-block;padding:7px 12px;border-radius:999px;
+	background:var(--panel-2);border:1px solid var(--border);
+	color:var(--muted);font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
 /* A canvas/document is an EDITORIAL card, not a thumbnail (§5: no preview rendering).
    A TOP-ANCHORED vertical stack: the icon chip (top-left), the kind kicker directly
    under it, a bold title (2 lines, reserved so the file name always aligns), then the
