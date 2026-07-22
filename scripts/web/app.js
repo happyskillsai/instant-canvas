@@ -7588,176 +7588,6 @@ async function renderBrowse(main, rel) {
 		dispose() { cancelPress() },
 	}
 
-	// ---------------------------------------------------------- drop files in
-	//
-	// Drag files out of Finder/Explorer/Nautilus onto this pane and they are written
-	// into THIS folder — the reader handing the agent data ("drop the CSV in, then ask
-	// for a chart"). The target is the current folder only: no per-tile targeting, no
-	// sidebar targeting, so there is never a question about where a drop landed.
-	//
-	// Nothing is ever silently overwritten. The plan route answers the collision
-	// question for the whole batch first, so a 40-file drop asks ONE question, and the
-	// count in that question equals what the writes perform.
-	function mountDrop() {
-		// dragenter/dragleave fire for EVERY descendant the cursor crosses, so a boolean
-		// flickers the highlight off the moment the pointer moves between two tiles.
-		// Count enters against leaves instead.
-		let depth = 0
-		let busy = false
-
-		// A class, never an inline style: the CSP drops `style=""` attributes, and
-		// `.browse [style]` is asserted to be 0.
-		const paint = () => root.classList.toggle('browse-dropping', depth > 0 && !busy)
-		const reset = () => { depth = 0; paint() }
-
-		// Only when this browse view is the surface the reader is looking at. With the
-		// item modal open, the pane is still mounted BEHIND it — a drop there is aimed
-		// at the modal, not at the folder.
-		const zoneLive = () => $('docModal').hidden && !state.presenting && !document.querySelector('.g-modal')
-
-		// Does this drag carry files at all? A text selection or a dragged link is not
-		// a file drop, and highlighting for one promises something we will not do.
-		const hasFiles = (e) => !!e.dataTransfer && Array.from(e.dataTransfer.types || []).includes('Files')
-
-		root.addEventListener('dragenter', (e) => {
-			if (!zoneLive() || !hasFiles(e)) return
-			e.preventDefault(); e.stopPropagation()
-			depth++; paint()
-		})
-		root.addEventListener('dragover', (e) => {
-			if (!zoneLive() || !hasFiles(e)) return
-			// stopPropagation so the document-level guard does not reset dropEffect to
-			// 'none' on the way up and give the reader a "no entry" cursor over a pane
-			// that will happily take the file.
-			e.preventDefault(); e.stopPropagation()
-			if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy'
-		})
-		root.addEventListener('dragleave', (e) => {
-			if (!hasFiles(e)) return
-			depth = Math.max(0, depth - 1); paint()
-		})
-		root.addEventListener('drop', (e) => {
-			if (!zoneLive() || !hasFiles(e)) return
-			e.preventDefault(); e.stopPropagation()
-			reset()
-			if (busy) { toast('Still writing the last drop — try again in a moment.'); return }
-
-			// A FOLDER is refused outright, and the whole drop with it. Recursing into a
-			// directory entry is a separate feature; half-processing one would write some
-			// of what the reader dropped and silently skip the rest.
-			const items = Array.from(e.dataTransfer.items || [])
-			const anyDir = items.some((it) => {
-				if (typeof it.webkitGetAsEntry !== 'function') return false
-				const entry = it.webkitGetAsEntry()
-				return !!(entry && entry.isDirectory)
-			})
-			if (anyDir) { toast('Dropping folders is not supported — drop individual files.'); return }
-
-			const files = Array.from(e.dataTransfer.files || [])
-			if (!files.length) return
-			runDrop(files)
-		})
-		// No teardown needed: every listener is on `root`, which renderBrowse discards
-		// wholesale on the next render, so they leave with it. (Unlike the gallery
-		// block's document-level keydown, which does need its `cleanup` entry.)
-
-		async function runDrop(files) {
-			const names = files.map((f) => f.name)
-			const { status, json } = await api('/api/upload/plan', {
-				method: 'POST',
-				body: JSON.stringify({ path: bs.rel, names }),
-			})
-			if (status === 409 && json && json.needsConfirmation) {
-				// CANCEL MEANS NOTHING IS WRITTEN — not "skip the colliding ones". The
-				// reader answered a question about the batch, so the batch is the unit.
-				const go = await confirmOverwrite(json.needsConfirmation.overwrite || [])
-				if (!go) { toast('Nothing was written.'); return }
-				return writeAll(files, true)
-			}
-			if (status !== 200 || !json || !json.ok) {
-				const msg = json && (json.message || (json.error && json.error.message))
-				toast('Cannot drop here' + (msg ? ': ' + msg : '.'))
-				return
-			}
-			return writeAll(files, false)
-		}
-
-		/** Name EVERY colliding file, and let the count be exactly what the writes will do. */
-		function confirmOverwrite(names) {
-			return new Promise((resolve) => {
-				document.body.classList.add('modal-open')
-				const overlay = document.createElement('div'); overlay.className = 'g-modal g-confirm'
-				const card = document.createElement('div'); card.className = 'g-cbox'
-				const h = document.createElement('h2')
-				h.textContent = 'Replace ' + names.length + (names.length === 1 ? ' file?' : ' files?')
-				const listEl = document.createElement('div'); listEl.className = 'g-clist'
-				for (const n of names) { const li = document.createElement('div'); li.className = 'g-cli'; li.textContent = n; listEl.append(li) }
-				const warn = document.createElement('p'); warn.className = 'g-cwarn'
-				warn.textContent = names.length === 1
-					? 'A file with this name is already in this folder. Replacing it overwrites what is on disk.'
-					: 'Files with these names are already in this folder. Replacing them overwrites what is on disk.'
-				const actions = document.createElement('div'); actions.className = 'g-cactions'
-				const done = (answer) => { overlay.remove(); document.body.classList.remove('modal-open'); resolve(answer) }
-				const cancel = makeBtn('g-btn', 'Cancel', () => done(false))
-				const confirm = makeBtn('g-btn g-danger', 'Replace ' + names.length, () => done(true))
-				actions.append(cancel, confirm)
-				card.append(h, listEl, warn, actions)
-				overlay.append(card)
-				document.body.append(overlay)
-				overlay.addEventListener('click', (ev) => { if (ev.target === overlay) done(false) })
-				confirm.focus()
-			})
-		}
-
-		async function writeAll(files, overwrite) {
-			busy = true
-			paint()
-			const status = document.createElement('div')
-			status.className = 'browse-drop-status'
-			root.append(status)
-			const failed = []
-			let written = 0
-			try {
-				// SEQUENTIAL, deliberately. A 40-file parallel blast at a single-threaded
-				// kernel buys nothing and makes honest progress impossible to report.
-				for (let i = 0; i < files.length; i++) {
-					const f = files[i]
-					status.textContent = 'Writing ' + (i + 1) + ' of ' + files.length + ' — ' + f.name
-					const q = '/api/upload?path=' + encodeURIComponent(bs.rel)
-						+ '&name=' + encodeURIComponent(f.name)
-						+ (overwrite ? '&overwrite=1' : '')
-					let res
-					try {
-						res = await api(q, { method: 'PUT', body: f, headers: { 'Content-Type': 'application/octet-stream' } })
-					} catch {
-						failed.push({ name: f.name, why: 'the connection dropped' })
-						continue
-					}
-					if (res.status === 200 && res.json && res.json.ok) written++
-					else failed.push({ name: f.name, why: (res.json && (res.json.message || (res.json.error && res.json.error.message))) || ('HTTP ' + res.status) })
-				}
-			} finally {
-				status.remove()
-				busy = false
-				paint()
-			}
-			// Report honestly. A partial batch says so — reporting "3 files added" for a
-			// batch where one PUT failed is the lie this whole feature must not tell.
-			if (failed.length && written)
-				toast('Added ' + written + ' of ' + files.length + '; could not add ' + failed.map((f) => f.name).join(', ') + '.')
-			else if (failed.length)
-				toast('Could not add ' + failed.map((f) => f.name + ' (' + f.why + ')').join(', ') + '.')
-			else
-				toast('Added ' + written + (written === 1 ? ' file.' : ' files.'))
-			// NO manual tile insertion. The written files hit fs.watch, which broadcasts
-			// `workspace` (150 ms debounce, so a batch coalesces), and the browse view
-			// already refetches /api/dir and diffs BY PATH — syncing in place. Inserting
-			// tiles here would double-render and break the in-place-sync invariant the
-			// tests assert.
-		}
-	}
-	mountDrop()
-
 	await load()
 	buildAll()
 	renderToolbar()
@@ -9474,6 +9304,190 @@ for (const type of ['dragover', 'drop']) {
 			e.dataTransfer.dropEffect = 'none'
 	})
 }
+
+// ------------------------------------------------------------ drop files in
+//
+// Drag files out of Finder/Explorer/Nautilus onto the main pane and they are written
+// into the folder being VIEWED — the reader handing the agent data ("drop the CSV in,
+// then ask for a chart"). The current folder is the only target: no per-tile
+// targeting, no sidebar targeting, so there is never a question about where a drop
+// landed.
+//
+// THE ZONE IS `#main`, NOT THE BROWSE ROOT, and that distinction is the whole
+// correctness of this feature. `.browse` is a block element sized BY ITS CONTENT, so
+// its box stops after the last tile row — dropping in the empty space below it (or
+// anywhere in an empty folder, which has no tiles at all) landed on `.main` instead,
+// missed the zone entirely, and was swallowed by the document guard with no error and
+// no toast. The drop target a reader sees is the whole pane, so the element that
+// listens has to be the one that FILLS the whole pane: `#main` is the flex child that
+// owns the pane's height and its scrolling.
+//
+// It is bound ONCE, here, rather than per render. `#main` is static in index.html and
+// outlives every renderBrowse, so binding inside the render would stack a fresh set of
+// listeners on each navigation, each closing over a stale folder.
+function mountPaneDrop() {
+	const main = $('main')
+	// dragenter/dragleave fire for EVERY descendant the cursor crosses, so a boolean
+	// flickers the highlight off the moment the pointer moves between two tiles.
+	// Count enters against leaves instead.
+	let depth = 0
+	let busy = false
+
+	// A class, never an inline style: the CSP drops `style=""` attributes.
+	const paint = () => main.classList.toggle('pane-dropping', depth > 0 && !busy)
+	const reset = () => { depth = 0; paint() }
+
+	// Only while a browse view is the surface the reader is looking at. With the item
+	// modal open the pane is still mounted BEHIND it, and a drop there is aimed at the
+	// modal, not at the folder.
+	const zoneLive = () => typeof state.browseId === 'string'
+		&& $('docModal').hidden
+		&& !state.presenting
+		&& !document.querySelector('.g-modal')
+
+	// Does this drag carry files at all? A dragged text selection or link is not a
+	// file drop, and highlighting for one promises something we will not do.
+	const hasFiles = (e) => !!e.dataTransfer && Array.from(e.dataTransfer.types || []).includes('Files')
+
+	main.addEventListener('dragenter', (e) => {
+		if (!zoneLive() || !hasFiles(e)) return
+		e.preventDefault(); e.stopPropagation()
+		depth++; paint()
+	})
+	main.addEventListener('dragover', (e) => {
+		if (!zoneLive() || !hasFiles(e)) return
+		// stopPropagation so the document-level guard does not reset dropEffect to
+		// 'none' on the way up and give the reader a "no entry" cursor over a pane
+		// that will happily take the file.
+		e.preventDefault(); e.stopPropagation()
+		if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy'
+	})
+	main.addEventListener('dragleave', (e) => {
+		if (!hasFiles(e)) return
+		depth = Math.max(0, depth - 1); paint()
+	})
+	main.addEventListener('drop', (e) => {
+		if (!zoneLive() || !hasFiles(e)) return
+		e.preventDefault(); e.stopPropagation()
+		reset()
+		if (busy) { toast('Still writing the last drop — try again in a moment.'); return }
+
+		// A FOLDER is refused outright, and the whole drop with it. Recursing into a
+		// directory entry is a separate feature; half-processing one would write some
+		// of what the reader dropped and silently skip the rest.
+		const items = Array.from(e.dataTransfer.items || [])
+		const anyDir = items.some((it) => {
+			if (typeof it.webkitGetAsEntry !== 'function') return false
+			const entry = it.webkitGetAsEntry()
+			return !!(entry && entry.isDirectory)
+		})
+		if (anyDir) { toast('Dropping folders is not supported — drop individual files.'); return }
+
+		const files = Array.from(e.dataTransfer.files || [])
+		if (!files.length) return
+		runDrop(files, state.browseId)
+	})
+
+	async function runDrop(files, rel) {
+		const names = files.map((f) => f.name)
+		const { status, json } = await api('/api/upload/plan', {
+			method: 'POST',
+			body: JSON.stringify({ path: rel, names }),
+		})
+		if (status === 409 && json && json.needsConfirmation) {
+			// CANCEL MEANS NOTHING IS WRITTEN — not "skip the colliding ones". The
+			// reader answered a question about the batch, so the batch is the unit.
+			const go = await confirmOverwrite(json.needsConfirmation.overwrite || [])
+			if (!go) { toast('Nothing was written.'); return }
+			return writeAll(files, rel, true)
+		}
+		if (status !== 200 || !json || !json.ok) {
+			const msg = json && (json.message || (json.error && json.error.message))
+			toast('Cannot drop here' + (msg ? ': ' + msg : '.'))
+			return
+		}
+		return writeAll(files, rel, false)
+	}
+
+	/** Name EVERY colliding file, and let the count be exactly what the writes will do. */
+	function confirmOverwrite(names) {
+		return new Promise((resolve) => {
+			document.body.classList.add('modal-open')
+			const overlay = document.createElement('div'); overlay.className = 'g-modal g-confirm'
+			const card = document.createElement('div'); card.className = 'g-cbox'
+			const h = document.createElement('h2')
+			h.textContent = 'Replace ' + names.length + (names.length === 1 ? ' file?' : ' files?')
+			const listEl = document.createElement('div'); listEl.className = 'g-clist'
+			for (const n of names) { const li = document.createElement('div'); li.className = 'g-cli'; li.textContent = n; listEl.append(li) }
+			const warn = document.createElement('p'); warn.className = 'g-cwarn'
+			warn.textContent = names.length === 1
+				? 'A file with this name is already in this folder. Replacing it overwrites what is on disk.'
+				: 'Files with these names are already in this folder. Replacing them overwrites what is on disk.'
+			const actions = document.createElement('div'); actions.className = 'g-cactions'
+			const done = (answer) => { overlay.remove(); document.body.classList.remove('modal-open'); resolve(answer) }
+			const btn = (cls, label, onClick) => {
+				const b = document.createElement('button')
+				b.type = 'button'; b.className = cls; b.textContent = label
+				b.addEventListener('click', onClick)
+				return b
+			}
+			actions.append(btn('g-btn', 'Cancel', () => done(false)), btn('g-btn g-danger', 'Replace ' + names.length, () => done(true)))
+			card.append(h, listEl, warn, actions)
+			overlay.append(card)
+			document.body.append(overlay)
+			overlay.addEventListener('click', (ev) => { if (ev.target === overlay) done(false) })
+			card.querySelector('.g-danger').focus()
+		})
+	}
+
+	async function writeAll(files, rel, overwrite) {
+		busy = true
+		paint()
+		const status = document.createElement('div')
+		status.className = 'pane-drop-status'
+		main.append(status)
+		const failed = []
+		let written = 0
+		try {
+			// SEQUENTIAL, deliberately. A 40-file parallel blast at a single-threaded
+			// kernel buys nothing and makes honest progress impossible to report.
+			for (let i = 0; i < files.length; i++) {
+				const f = files[i]
+				status.textContent = 'Writing ' + (i + 1) + ' of ' + files.length + ' — ' + f.name
+				const q = '/api/upload?path=' + encodeURIComponent(rel)
+					+ '&name=' + encodeURIComponent(f.name)
+					+ (overwrite ? '&overwrite=1' : '')
+				let res
+				try {
+					res = await api(q, { method: 'PUT', body: f, headers: { 'Content-Type': 'application/octet-stream' } })
+				} catch {
+					failed.push({ name: f.name, why: 'the connection dropped' })
+					continue
+				}
+				if (res.status === 200 && res.json && res.json.ok) written++
+				else failed.push({ name: f.name, why: (res.json && (res.json.message || (res.json.error && res.json.error.message))) || ('HTTP ' + res.status) })
+			}
+		} finally {
+			status.remove()
+			busy = false
+			paint()
+		}
+		// Report honestly. A partial batch says so — reporting "3 files added" for a
+		// batch where one PUT failed is the lie this whole feature must not tell.
+		if (failed.length && written)
+			toast('Added ' + written + ' of ' + files.length + '; could not add ' + failed.map((f) => f.name).join(', ') + '.')
+		else if (failed.length)
+			toast('Could not add ' + failed.map((f) => f.name + ' (' + f.why + ')').join(', ') + '.')
+		else
+			toast('Added ' + written + (written === 1 ? ' file.' : ' files.'))
+		// NO manual tile insertion. The written files hit fs.watch, which broadcasts
+		// `workspace` (150 ms debounce, so a batch coalesces), and the browse view
+		// already refetches /api/dir and diffs BY PATH — syncing in place. Inserting
+		// tiles here would double-render and break the in-place-sync invariant the
+		// tests assert.
+	}
+}
+mountPaneDrop()
 
 async function boot() {
 	const { status, json } = await api('/api/workspace')

@@ -80,9 +80,23 @@ function httpReq({ port, method = 'GET', path: p, headers = {}, body, raw }) {
 	})
 }
 
-/** A PUT whose declared Content-Length is a LIE, so only the byte counter can catch it. */
+/**
+ * A PUT with NO declared Content-Length, so only the kernel's byte counter can catch
+ * an oversized body.
+ *
+ * A write-side error is EXPECTED here and must not fail the test: the kernel refuses
+ * mid-stream and answers `Connection: close`, so the client is still pushing bytes
+ * when the socket goes away and gets EPIPE/ECONNRESET. Rejecting on that made the
+ * test a coin toss decided by whether the response parsed before the write side
+ * noticed — it flaked exactly once, under the extra load of a sabotage run, which is
+ * the classic "breaks when the suite gets heavier, not when the code does" shape
+ * (docs/gotchas/testing.md). The RESPONSE is the outcome; the write side is noise.
+ * A deadline still fails loudly if no response ever arrives, so a genuinely wedged
+ * route cannot pass as "well, the socket died".
+ */
 function putChunked({ port, path: p, headers = {}, buf }) {
 	return new Promise((resolve, reject) => {
+		let settled = false
 		const req = http.request({
 			host: '127.0.0.1',
 			port,
@@ -93,13 +107,22 @@ function putChunked({ port, path: p, headers = {}, buf }) {
 			const chunks = []
 			res.on('data', (c) => chunks.push(c))
 			res.on('end', () => {
+				if (settled) return
+				settled = true
+				clearTimeout(timer)
 				const text = Buffer.concat(chunks).toString('utf8')
 				let json = null
 				try { json = JSON.parse(text) } catch { /* non-JSON */ }
 				resolve({ status: res.statusCode, text, json })
 			})
 		})
-		req.on('error', (e) => { if (!req.destroyed) reject(e) })
+		const timer = setTimeout(() => {
+			if (settled) return
+			settled = true
+			req.destroy()
+			reject(new Error('putChunked: no response within 15s'))
+		}, 15_000)
+		req.on('error', () => { /* expected: the server refused and closed mid-write */ })
 		req.end(buf)
 	})
 }
@@ -492,6 +515,9 @@ test.before(async () => {
 	broot = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'ic-up-browser-')))
 	fs.writeFileSync(path.join(broot, 'keeper.canvas.json'), canvas('Keeper'))
 	fs.writeFileSync(path.join(broot, 'clash.csv'), 'ORIGINAL CONTENT\n')
+	// A SPARSE root (one tile) and an EMPTY folder: both leave most of the pane blank,
+	// which is exactly where the drop zone used to stop existing.
+	fs.mkdirSync(path.join(broot, 'empty'))
 
 	const out = execFileSync(process.execPath, [CLI, 'open', '.', '--workspace', broot, '--no-open'], { cwd: broot, encoding: 'utf8' })
 	const url = JSON.parse(out).url
@@ -523,14 +549,14 @@ test.before(async () => {
 		].join(''))
 
 		// --- the drop highlight is a CLASS, and it counts enter/leave ---------------
-		await evaluate('window.__drop(".browse", [{name: "x.txt", body: "x"}], "dragenter")')
-		res.steps.highlightOn = await evaluate('window.__hasClass(".browse", "browse-dropping")')
+		await evaluate('window.__drop("#main", [{name: "x.txt", body: "x"}], "dragenter")')
+		res.steps.highlightOn = await evaluate('window.__hasClass("#main", "pane-dropping")')
 		// Two nested enters, one leave: a BOOLEAN would go dark here; a counter stays lit.
-		await evaluate('window.__drop(".browse", [{name: "x.txt", body: "x"}], "dragenter")')
-		await evaluate('window.__drop(".browse", [{name: "x.txt", body: "x"}], "dragleave")')
-		res.steps.highlightStillOn = await evaluate('window.__hasClass(".browse", "browse-dropping")')
-		await evaluate('window.__drop(".browse", [{name: "x.txt", body: "x"}], "dragleave")')
-		res.steps.highlightOff = await evaluate('window.__hasClass(".browse", "browse-dropping")')
+		await evaluate('window.__drop("#main", [{name: "x.txt", body: "x"}], "dragenter")')
+		await evaluate('window.__drop("#main", [{name: "x.txt", body: "x"}], "dragleave")')
+		res.steps.highlightStillOn = await evaluate('window.__hasClass("#main", "pane-dropping")')
+		await evaluate('window.__drop("#main", [{name: "x.txt", body: "x"}], "dragleave")')
+		res.steps.highlightOff = await evaluate('window.__hasClass("#main", "pane-dropping")')
 
 		// --- a drop that MISSES the zone must not navigate --------------------------
 		// The sidebar is not a drop zone, so only the document-wide guard stands
@@ -547,12 +573,49 @@ test.before(async () => {
 		// .txt no tile ever appears, so "the old tile survived" would be green even if
 		// the grid never re-synced at all — an unfalsifiable assertion
 		// (docs/gotchas/testing.md, "a negative assertion that could never have failed").
-		res.steps.dropOnPane = await evaluate('window.__drop(".browse", [{name: "dropped-a.md", body: "# AAA"}, {name: "dropped-b.md", body: "# BBB"}], "drop")')
+		res.steps.dropOnPane = await evaluate('window.__drop("#main", [{name: "dropped-a.md", body: "# AAA"}, {name: "dropped-b.md", body: "# BBB"}], "drop")')
 		res.steps.tilesAppeared = await until(evaluate, 'Array.from(document.querySelectorAll(".browse .gt")).filter(function(t){ return /^dropped-[ab][.]md$/.test(t.dataset.rel || "") }).length === 2', 12000)
 		res.steps.keeperSurvived = await evaluate('(function(){ var t = document.querySelector(".browse .gt"); return !!t && t.__keep === 7 && t.isConnected })()')
 
+		// --- THE EMPTY SPACE BELOW THE TILES IS ALSO THE ZONE -----------------------
+		// The reported bug, and the reason the zone is #main rather than .browse:
+		// .browse is sized BY ITS CONTENT, so its box stops after the last tile row.
+		// A reader dropping in the space below the tiles — the obvious place to aim in
+		// a folder holding three images — hit .main instead, missed the zone, and the
+		// document guard swallowed it silently.
+		//
+		// So drop at a POINT near the bottom of the pane and let elementFromPoint
+		// decide what is actually there, rather than naming an element and assuming.
+		// `hitWasBrowse` is what keeps this falsifiable: if the point landed inside
+		// .browse after all, the old code would have handled it too and the test would
+		// prove nothing (docs/gotchas/testing.md — "which declaration does this
+		// assertion distinguish between?").
+		await evaluate([
+			'window.__dropAtPoint = function(fx, fy, files){',
+			'  var r = document.getElementById("main").getBoundingClientRect();',
+			'  var el = document.elementFromPoint(r.left + r.width * fx, r.top + r.height * fy);',
+			'  if (!el) return {missing: true};',
+			'  var dt = new DataTransfer();',
+			'  (files || []).forEach(function(f){ dt.items.add(new File([f.body], f.name, {type: "text/plain"})) });',
+			'  var ev = new DragEvent("drop", {dataTransfer: dt, bubbles: true, cancelable: true});',
+			'  el.dispatchEvent(ev);',
+			'  return {prevented: ev.defaultPrevented, hitWasBrowse: !!el.closest(".browse"), hit: el.id || el.className};',
+			'};',
+		].join(''))
+		res.steps.emptySpaceDrop = await evaluate('window.__dropAtPoint(0.5, 0.97, [{name: "below-tiles.md", body: "# BELOW"}])')
+		res.steps.belowLanded = await until(evaluate, 'Array.from(document.querySelectorAll(".browse .gt")).some(function(t){ return t.dataset.rel === "below-tiles.md" })', 12000)
+
+		// ...and the limit case: an EMPTY folder has no tiles at all, so under the old
+		// code there was barely a .browse box to aim at. Navigate in and drop.
+		await evaluate('location.hash = "#/f/empty"')
+		res.steps.emptyFolderReady = await until(evaluate, 'window.ic.state.browseId === "empty" && document.querySelector(".browse .g-empty") !== null')
+		res.steps.emptyFolderDrop = await evaluate('window.__dropAtPoint(0.5, 0.9, [{name: "into-empty.md", body: "# EMPTY"}])')
+		res.steps.emptyFolderLanded = await until(evaluate, 'Array.from(document.querySelectorAll(".browse .gt")).some(function(t){ return t.dataset.rel === "empty/into-empty.md" })', 12000)
+		await evaluate('location.hash = "#/f/"')
+		await until(evaluate, 'window.ic.state.browseId === ""')
+
 		// --- a colliding drop, CANCELLED, writes nothing ----------------------------
-		await evaluate('window.__drop(".browse", [{name: "clash.csv", body: "OVERWRITTEN"}], "drop")')
+		await evaluate('window.__drop("#main", [{name: "clash.csv", body: "OVERWRITTEN"}], "drop")')
 		res.steps.confirmShown = await until(evaluate, 'document.querySelector(".g-confirm") !== null')
 		res.steps.confirmNames = await evaluate('Array.from(document.querySelectorAll(".g-confirm .g-cli")).map(function(e){ return e.textContent })')
 		res.steps.confirmHeading = await evaluate('(function(){ var h = document.querySelector(".g-confirm h2"); return h ? h.textContent : null })()')
@@ -567,7 +630,7 @@ test.before(async () => {
 		await evaluate('document.querySelectorAll(".toast").forEach(function(t){ t.remove() })')
 		await evaluate('window.__realEntry = DataTransferItem.prototype.webkitGetAsEntry;'
 			+ 'DataTransferItem.prototype.webkitGetAsEntry = function(){ return {isDirectory: true} };')
-		await evaluate('window.__drop(".browse", [{name: "somefolder", body: ""}], "drop")')
+		await evaluate('window.__drop("#main", [{name: "somefolder", body: ""}], "drop")')
 		await sleep(400)
 		res.steps.folderToast = await evaluate('(function(){ var t = document.querySelector(".toast"); return t ? t.textContent : null })()')
 		await evaluate('DataTransferItem.prototype.webkitGetAsEntry = window.__realEntry;')
@@ -611,6 +674,29 @@ test('upload browser: dropping two files writes both, in place, without a rebuil
 	// ...and it re-synced IN PLACE: the surviving tile is the same node, expando intact.
 	// Without the positive control above, this half could not fail.
 	assert.equal(B.steps.keeperSurvived, true, 'the live refresh must diff by path, never rebuild the grid')
+})
+
+test('upload browser: the EMPTY SPACE below the tiles is part of the drop zone', { skip: skipBrowser }, () => {
+	// The regression test for the reported bug. `.browse` is sized by its content, so
+	// a drop aimed below the last tile row landed on `.main` — outside the old zone —
+	// and vanished with no toast and no error.
+	const hit = B.steps.emptySpaceDrop
+	assert.equal(hit.missing, undefined, 'elementFromPoint found nothing at the bottom of the pane')
+	// The load-bearing half: if the point had landed inside .browse, the OLD code
+	// would have handled it too and this test could not fail.
+	assert.equal(hit.hitWasBrowse, false, 'the test point must be OUTSIDE .browse, else it proves nothing — hit: ' + hit.hit)
+	assert.equal(hit.prevented, true)
+	assert.equal(B.steps.belowLanded, true, 'a drop below the tiles must write the file')
+	assert.equal(fs.readFileSync(path.join(broot, 'below-tiles.md'), 'utf8'), '# BELOW')
+})
+
+test('upload browser: an EMPTY folder is a drop zone too', { skip: skipBrowser }, () => {
+	// The limit case of the same bug: no tiles at all, so there was almost no
+	// content-sized box to aim at.
+	assert.equal(B.steps.emptyFolderReady, true, 'the empty folder should render its empty state')
+	assert.equal(B.steps.emptyFolderDrop.prevented, true)
+	assert.equal(B.steps.emptyFolderLanded, true, 'a drop into an empty folder must write the file')
+	assert.equal(fs.readFileSync(path.join(broot, 'empty', 'into-empty.md'), 'utf8'), '# EMPTY')
 })
 
 test('upload browser: a colliding drop names every file and CANCEL writes nothing', { skip: skipBrowser }, () => {

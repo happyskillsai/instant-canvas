@@ -1731,15 +1731,20 @@ audio.m-el{display:none} /* the audio element is never shown — the art card st
    room for its icon + kicker + 2-line title + file name without clipping. */
 .browse .g-tiles{grid-template-columns:repeat(auto-fill,minmax(172px,1fr))}
 .browse .gt-name{font-size:12.5px;color:var(--text);margin-top:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:0 2px}
-/* Drop files in. The highlight is a CLASS and nothing else — the CSP drops `style=""`
-   attributes, and `.browse [style]` is asserted to be 0. `position:relative` gives the
-   dashed ring and the progress line a box to sit in without adding one to the markup. */
-.browse{position:relative}
-.browse.browse-dropping{outline:2px dashed var(--accent);outline-offset:6px;border-radius:10px;
+/* Drop files in. The highlight lives on `.main` — the flex child that OWNS the pane's
+   height — not on `.browse`, which is sized by its content and therefore stops after
+   the last tile row (an empty folder has no box at all). The reader sees the whole
+   pane as the target, so the whole pane is what lights up.
+   An INSET ring rather than an `outline`: `.main` is the scroller (`overflow:auto`),
+   and an outline with a positive offset would be clipped by it. A box-shadow paints
+   on the border box, so it stays put while the content scrolls under it.
+   A class and nothing else — the CSP drops `style=""` attributes. */
+.main{position:relative}
+.main.pane-dropping{box-shadow:inset 0 0 0 2px var(--accent);border-radius:12px;
 	background:color-mix(in srgb,var(--accent) 6%,transparent)}
-/* The sequential write's progress line. Pinned to the pane rather than floated as a
-   toast, so it sits where the files are about to appear. */
-.browse-drop-status{position:sticky;bottom:8px;margin-top:12px;align-self:flex-start;
+/* The sequential write's progress line, pinned to the bottom of the pane rather than
+   floated as a toast, so it sits where the files are about to appear. */
+.pane-drop-status{position:sticky;bottom:8px;z-index:3;margin:12px 0 0 2px;
 	display:inline-block;padding:7px 12px;border-radius:999px;
 	background:var(--panel-2);border:1px solid var(--border);
 	color:var(--muted);font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
