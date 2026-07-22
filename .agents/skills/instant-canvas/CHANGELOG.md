@@ -5,6 +5,19 @@ The agent-facing contract for InstantCanvas. The runtime ships as the
 and LICENSE, and agents drive the CLI through `npx`. Versions track the runtime
 package they were authored alongside.
 
+## [0.23.0] - 2026-07-22
+
+### Changed
+- **Nothing you drive changed — this is a reader-side release, recorded so the version you see matches
+  the runtime you are calling.** No new command, flag, stdout field, exit code or error code; every
+  instruction in SKILL.md holds exactly as written.
+- **The human can now PASTE files into the folder they are browsing** (`⌘V` / `Ctrl+V`), alongside the
+  drag-and-drop that arrived in 0.22.0 — including a screenshot straight off the clipboard, which lands
+  as `pasted-YYYYMMDD-HHMMSS.png`. The consequence for you is the one drop already had: **files can
+  appear in the workspace between your calls, by a gesture you never see.** So when you have asked for a
+  file and the human says they have provided it, list the folder again rather than trusting a listing you
+  took before asking — and expect names you did not choose.
+
 ## [0.20.1] - 2026-07-21
 
 ### Changed
