@@ -176,6 +176,7 @@ const LUCIDE = {
 	'octagon-alert': '<path d="M12 16h.01"/><path d="M12 8v4"/><path d="M15.312 2a2 2 0 0 1 1.414.586l4.688 4.688A2 2 0 0 1 22 8.688v6.624a2 2 0 0 1-.586 1.414l-4.688 4.688a2 2 0 0 1-1.414.586H8.688a2 2 0 0 1-1.414-.586l-4.688-4.688A2 2 0 0 1 2 15.312V8.688a2 2 0 0 1 .586-1.414l4.688-4.688A2 2 0 0 1 8.688 2z"/>',
 	'triangle-alert': '<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/>',
 	'x': '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
+	'ellipsis-vertical': '<circle cx="12" cy="12" r="1"/><circle cx="12" cy="5" r="1"/><circle cx="12" cy="19" r="1"/>',
 }
 
 function icon(name, cls = '') {
@@ -224,6 +225,183 @@ function toast(msg, ms = 2600) {
  *  on every page, so it must be gone before we hand the deck to print (belt-and-suspenders
  *  with the `@media print` rule that hides it). */
 const clearToasts = () => document.querySelectorAll('.toast').forEach((t) => t.remove())
+
+// ------------------------------------------------------------ shared context menu
+//
+// ONE menu, used by every surface that shows a folder (the sidebar tree, the browse
+// view's tiles and breadcrumb, the browse toolbar's ⋮). Two menus that can disagree
+// about what an action does are two different products.
+//
+// It wears the existing `.menu` / `.menu-item` skin the select widget and the media
+// speed popover already use — `.ic-menu` only overrides the position properties, the
+// same way `.m-rate-menu` does. What it does NOT reuse is `openSelectMenu`'s logic:
+// that one is hardwired to a select widget (reads dataset.options, writes a hidden
+// input), builds its rows by string concatenation, and decides outside-clicks in the
+// BUBBLE phase. All three are wrong here.
+
+let ICMENU = null // { el, anchorEl } — one menu at a time
+
+const icMenuOpen = () => !!ICMENU
+
+function closeContextMenu(restoreFocus = true) {
+	if (!ICMENU)
+		return
+	const { el, anchorEl } = ICMENU
+	ICMENU = null
+	el.remove()
+	// Give the keyboard back to whatever opened us, so a menu opened from the toolbar
+	// button does not strand a keyboard user at the top of the document.
+	if (restoreFocus && anchorEl && anchorEl.isConnected && typeof anchorEl.focus === 'function')
+		anchorEl.focus()
+}
+
+/**
+ * Open the shared context menu at (x, y) in viewport coordinates.
+ * `items` is a list of { label, onClick } and { separator: true }.
+ * `anchorEl` (optional) gets focus back when the menu closes.
+ */
+function openContextMenu({ x, y, items, anchorEl = null }) {
+	closeContextMenu(false)
+	const el = document.createElement('div')
+	el.className = 'menu ic-menu'
+	el.setAttribute('role', 'menu')
+
+	// DOM nodes, never an HTML string: a folder name is user data, and string-building
+	// markup around it is how a name containing < or & leaks into the page.
+	for (const it of items) {
+		if (it.separator) {
+			const sep = document.createElement('div')
+			sep.className = 'ic-menu-sep'
+			el.appendChild(sep)
+			continue
+		}
+		const btn = document.createElement('button')
+		btn.type = 'button'
+		btn.className = 'menu-item'
+		btn.setAttribute('role', 'menuitem')
+		const label = document.createElement('span')
+		label.textContent = it.label
+		btn.appendChild(label)
+		btn.addEventListener('click', () => {
+			closeContextMenu()
+			it.onClick()
+		})
+		el.appendChild(btn)
+	}
+
+	document.body.appendChild(el)
+	ICMENU = { el, anchorEl }
+
+	// Position through CSSOM. The CSP drops style="" ATTRIBUTES in markup, but
+	// programmatic el.style assignment is exempt — which is exactly why the geometry
+	// lives here and every other property (spacing, borders, the item layout) is a class.
+	// Clamp into the viewport so a right-click near an edge does not render half off it.
+	const pad = 8
+	const r = el.getBoundingClientRect()
+	const left = x + r.width + pad > window.innerWidth ? Math.max(pad, x - r.width) : x
+	const top = y + r.height + pad > window.innerHeight ? Math.max(pad, y - r.height) : y
+	el.style.left = left + 'px'
+	el.style.top = top + 'px'
+	requestAnimationFrame(() => { if (ICMENU && ICMENU.el === el) el.classList.add('menu-open') })
+
+	const first = el.querySelector('.menu-item')
+	if (first) first.focus()
+
+	// ↑/↓ move, Enter activates (the button's own click), Escape closes and restores focus.
+	el.addEventListener('keydown', (e) => {
+		const btns = [...el.querySelectorAll('.menu-item')]
+		const i = btns.indexOf(document.activeElement)
+		if (e.key === 'ArrowDown') { e.preventDefault(); btns[(i + 1) % btns.length].focus() }
+		else if (e.key === 'ArrowUp') { e.preventDefault(); btns[(i - 1 + btns.length) % btns.length].focus() }
+		else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeContextMenu() }
+	})
+	return el
+}
+
+// Outside-click dismissal, decided in the CAPTURE phase. A surface that re-renders on
+// click cannot identify its own clicks afterwards: by the time a bubble-phase listener
+// runs, the clicked node may already have been replaced and e.target is DETACHED, so
+// .closest('.ic-menu') is null and every click inside the menu reads as a click outside
+// it. That exact bug shipped four times here (date picker, select menu, palette panel,
+// folder browser). Decide on the way DOWN, act on the way up.
+//
+// Be honest about what this currently buys: EVERY item here closes the menu before it
+// acts, so no item survives its own click to be detached, and moving this listener to
+// the bubble phase does not change any observable behaviour today (verified — the
+// suite stays green under that sabotage, so no test in reveal.test.js claims to guard
+// it). It is kept because it costs nothing and it is the shape the next item — one
+// that keeps the menu open and re-renders a row, a checkable option say — would need.
+// The day such an item lands, this is already right; the alternative is rediscovering
+// the same bug a fifth time.
+let clickWasInsideMenu = false
+let lastClickTarget = null
+document.addEventListener('click', (e) => {
+	clickWasInsideMenu = !!(e.target.closest && e.target.closest('.ic-menu'))
+	lastClickTarget = e.target
+}, true)
+document.addEventListener('click', () => {
+	if (!icMenuOpen() || clickWasInsideMenu)
+		return
+	// The click that OPENED the menu must not also close it. A button-opened menu (the
+	// browse toolbar's ⋮) is created inside this very click's bubble phase, so by the
+	// time this listener runs the menu is open and the click landed "outside" it — on
+	// the anchor. Treat the anchor as inside, exactly as the palette panel treats
+	// #paletteBtn. Without this the ⋮ opens and shuts in one gesture, which reads as a
+	// dead button.
+	if (ICMENU.anchorEl && lastClickTarget && ICMENU.anchorEl.contains(lastClickTarget))
+		return
+	closeContextMenu(false)
+})
+// A scroll or a resize moves the anchor out from under a menu positioned in viewport
+// coordinates, so close rather than let it float somewhere meaningless.
+window.addEventListener('resize', () => closeContextMenu(false))
+
+/** POST /api/reveal, turning every outcome into feedback. Never a silent no-op. */
+async function revealFolder(rel, action) {
+	const { status, json } = await api('/api/reveal', {
+		method: 'POST',
+		body: JSON.stringify({ path: rel, action }),
+	})
+	if (status === 200 && json && json.ok) {
+		toast(action === 'terminal' ? 'Opening a terminal…' : 'Opening ' + fileManagerName() + '…')
+		return
+	}
+	toast((json && json.message) || 'Could not open that folder.', 4000)
+}
+
+// The kernel is the authority on the machine it runs on — `navigator.platform`
+// describes the BROWSER. The platform arrives as a shell placeholder, exactly like the
+// token and the extension unions (see serveShell in kernel.js).
+const IC_PLATFORM = document.body.dataset.platform || ''
+const fileManagerName = () => (IC_PLATFORM === 'darwin' ? 'Finder' : IC_PLATFORM === 'win32' ? 'Explorer' : 'your file manager')
+const revealLabel = () => (IC_PLATFORM === 'darwin' ? 'Open in Finder' : IC_PLATFORM === 'win32' ? 'Show in Explorer' : 'Open in file manager')
+
+/** The four actions every folder anchor offers. `rel` is workspace-relative ('' = root). */
+function folderMenuItems(rel) {
+	// A workspace-relative path always uses '/', but the ROOT is whatever the kernel's
+	// OS writes — `C:\Users\me\ws` on Windows. Join with the root's own separator, or a
+	// copied path is unpastable into Explorer and cmd.
+	const root = fullRootPath || ''
+	const sep = IC_PLATFORM === 'win32' && root.includes('\\') ? '\\' : '/'
+	const name = rel
+		? rel.split('/').filter(Boolean).pop()
+		: root.split(/[/\\]/).filter(Boolean).pop() || root
+	const absolute = rel ? root + sep + rel.split('/').join(sep) : root
+	return [
+		{ label: revealLabel(), onClick: () => revealFolder(rel, 'files') },
+		{ label: 'Open in terminal', onClick: () => revealFolder(rel, 'terminal') },
+		{ separator: true },
+		{ label: 'Copy path', onClick: async () => toast(await copyText(absolute) ? 'Path copied' : 'Could not copy the path.') },
+		{ label: 'Copy name', onClick: async () => toast(await copyText(name) ? 'Name copied' : 'Could not copy the name.') },
+	]
+}
+
+/** Open the folder menu from a contextmenu event on `rel`. */
+function openFolderMenu(e, rel, anchorEl = null) {
+	e.preventDefault()  // ONLY on a folder target — Inspect Element must keep working everywhere else
+	e.stopPropagation()
+	openContextMenu({ x: e.clientX, y: e.clientY, items: folderMenuItems(rel), anchorEl })
+}
 
 // Syntax highlighting is the skill's job (presentation of local data), and hljs emits
 // CLASSES, so it survives `style-src 'self'`. Shiki was rejected for the opposite
@@ -1491,6 +1669,17 @@ async function buildTree() {
 	await openInto(rootRow, '')
 	applyTreeActive()
 }
+
+// Right-click a folder row → the shared folder menu. DELEGATED from #tree, which is the
+// one node here that outlives everything: buildTree() empties it on every `workspace`
+// broadcast and openInto() inserts and removes subtrees on every expand, so a listener
+// bound per row would leak on each expand and die on each rebuild.
+treeRoot().addEventListener('contextmenu', (e) => {
+	const row = e.target.closest && e.target.closest('.trow')
+	if (!row || typeof row.dataset.rel !== 'string')
+		return
+	openFolderMenu(e, row.dataset.rel, row)
+})
 
 /** Route change: a class toggle plus an incremental reveal of the active folder's
  *  ancestors — never a rebuild. Navigating into a folder clears a manual collapse on
@@ -6575,28 +6764,52 @@ async function renderBrowse(main, rel) {
 
 	function buildBrowseCrumb() {
 		crumb.textContent = ''
-		const seg = (label, hash, { here, icon: ic } = {}) => {
+		const seg = (label, hash, { here, icon: ic, rel: segRel } = {}) => {
 			const b = document.createElement('button')
 			b.type = 'button'
 			b.className = 'oc-seg' + (here ? ' oc-here' : '')
 			if (ic) b.innerHTML = icon(ic)
 			if (label) { const s = document.createElement('span'); s.textContent = label; b.append(s) }
 			b.title = label || 'Workspace root'
+			// Every segment IS a folder, so every segment answers the folder menu — including
+			// the current one, which is the same folder the toolbar ⋮ acts on.
+			if (typeof segRel === 'string') b.dataset.crumbRel = segRel
 			if (!here) b.addEventListener('click', () => { location.hash = hash })
 			crumb.append(b)
 		}
 		const slash = () => { const s = document.createElement('span'); s.className = 'oc-slash'; s.textContent = '/'; crumb.append(s) }
 		const parts = rel ? rel.split('/') : []
 		const rootName = state.tree ? baseName(state.tree.root) : ''
-		seg(rootName, '#/f/', { icon: 'house', here: parts.length === 0 })
+		seg(rootName, '#/f/', { icon: 'house', here: parts.length === 0, rel: '' })
 		let acc = ''
 		parts.forEach((p, idx) => {
 			acc = acc ? acc + '/' + p : p
 			slash()
-			seg(p, '#/f/' + encodeURIComponent(acc), { here: idx === parts.length - 1 })
+			seg(p, '#/f/' + encodeURIComponent(acc), { here: idx === parts.length - 1, rel: acc })
 		})
 	}
 	buildBrowseCrumb()
+
+	// Right-click a breadcrumb segment → that segment's folder. Delegated from `crumb`,
+	// which survives buildBrowseCrumb() emptying it on every navigation.
+	crumb.addEventListener('contextmenu', (e) => {
+		const b = e.target.closest && e.target.closest('[data-crumb-rel]')
+		if (!b) return
+		openFolderMenu(e, b.dataset.crumbRel, b)
+	})
+
+	// Right-click a FOLDER tile → that folder. Delegated from the browse root for two
+	// reasons: buildAll() rebuilds the tile set on a layout/scope change, and the
+	// `workspace` broadcast SYNCS tiles in place (inserting and removing nodes) rather
+	// than rebuilding — so a listener bound to a tile node is not guaranteed to survive.
+	// Only folder tiles answer: a canvas or an image is not a folder, and suppressing
+	// the native menu over one would cost Inspect Element for nothing.
+	root.addEventListener('contextmenu', (e) => {
+		const tile = e.target.closest && e.target.closest('.gt')
+		if (!tile || tile.dataset.kind !== 'folder' || typeof tile.dataset.rel !== 'string')
+			return
+		openFolderMenu(e, tile.dataset.rel, tile)
+	})
 
 	// ---------- data ----------
 
@@ -7004,6 +7217,16 @@ async function renderBrowse(main, rel) {
 		controls.append(sortSeg, filterBtn)
 		if (selectBtn) controls.append(selectBtn)
 		controls.append(viewSeg())
+		// The ⋮ acts on the CURRENT folder and is the discoverability partner for
+		// right-click: a reader who never thinks to right-click a tile still finds the
+		// folder actions. Always visible — never hover-revealed, which a touch screen
+		// cannot reach — and last, after the grid/list toggle.
+		const moreBtn = makeBtn('g-btn g-icononly g-folder-more', icon('ellipsis-vertical'), (e) => {
+			const r = e.currentTarget.getBoundingClientRect()
+			openContextMenu({ x: r.left, y: r.bottom + 6, items: folderMenuItems(bs.rel), anchorEl: e.currentTarget })
+		}, 'Actions for this folder')
+		moreBtn.setAttribute('aria-haspopup', 'menu')
+		controls.append(moreBtn)
 		toolbar.append(info, controls)
 	}
 
@@ -8504,10 +8727,12 @@ $('infoClose').addEventListener('click', () => closeInfoDrawer())
 document.addEventListener('keydown', (e) => {
 	if ($('docModal').hidden || state.presenting || document.body.classList.contains('nav-open'))
 		return
-	// Yield to any sub-surface that owns the keyboard: ⌘K search, the palette panel, a
-	// gallery-block detail/delete modal (.g-modal), or a gallery block IN selection mode
-	// (.g-selecting) — whose own Escape exits the selection rather than the overlay.
-	if (!$('searchModal').hidden || !$('palettePanel').hidden || document.querySelector('.g-modal, .gallery.g-selecting'))
+	// Yield to any sub-surface that owns the keyboard: ⌘K search, the palette panel, the
+	// shared context menu (its own Escape closes the MENU — without this, Esc would also
+	// navigate the overlay to the parent folder), a gallery-block detail/delete modal
+	// (.g-modal), or a gallery block IN selection mode (.g-selecting) — whose own Escape
+	// exits the selection rather than the overlay.
+	if (!$('searchModal').hidden || !$('palettePanel').hidden || icMenuOpen() || document.querySelector('.g-modal, .gallery.g-selecting'))
 		return
 	const ae = document.activeElement
 	const inField = !!(ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.tagName === 'SELECT' || ae.isContentEditable || ae.closest('form')))

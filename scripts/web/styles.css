@@ -653,6 +653,16 @@ select.inp{appearance:auto}
 .menu-item.on{font-weight:650;color:var(--accent)}
 .menu-item .lucide{width:14px;height:14px;flex:0 0 auto}
 
+/* The shared folder context menu wears the .menu skin and overrides only its geometry
+   — the same thing .m-rate-menu does. POSITION:FIXED is load-bearing: the menu is
+   appended to <body> and placed from a pointer event's clientX/clientY, which are
+   VIEWPORT coordinates; `absolute` would offset them by the document scroll and drop
+   the menu somewhere else entirely on a scrolled page. left/top are written through
+   CSSOM (the CSP drops style="" attributes but exempts programmatic assignment). */
+.ic-menu{position:fixed;top:0;left:0;right:auto;min-width:208px;max-width:280px;z-index:120}
+.ic-menu .menu-item{justify-content:flex-start}
+.ic-menu-sep{height:1px;margin:5px 7px;background:var(--border)}
+
 /* segmented buttons (ui: "buttons") */
 .seg{display:flex;flex-wrap:wrap;gap:8px}
 .seg-btn{padding:9px 16px;border-radius:9px;border:1px solid var(--inp-border);background:var(--inp-bg);
