@@ -23,6 +23,7 @@ const { virtualFormCanvasFor } = require('./lib/envcanvas')
 const { listImages, mediaStat, isStreamableFile, mediaKind, galleryMime, parseByteRange, normalizeRelDir, GALLERY_IMAGE_EXTS, MEDIA_VIDEO_EXTS, MEDIA_AUDIO_EXTS } = require('./lib/gallery')
 const { listDir, itemMeta } = require('./lib/browse')
 const { writeSelection, readSelection } = require('./lib/selection')
+const { safeName, checkTarget, planUpload } = require('./lib/upload')
 const { revealDir, openTerminal } = require('./lib/reveal')
 const { dimensions } = require('./lib/imagemeta')
 const { companionFor, enhancesOf } = require('./lib/companion')
@@ -39,6 +40,18 @@ const { PKG_VERSION } = require('./lib/pkgmeta')
 const WEB_DIR = path.join(__dirname, 'web')
 const VERSION = PKG_VERSION
 const MAX_BODY = 10 * 1024 * 1024
+// The cap on ONE dropped file (PUT /api/upload). A runaway guardrail rather than a
+// researched policy: it exists so a mis-aimed drag cannot fill the reader's disk,
+// not because 2 GiB is a meaningful boundary. If a real file exceeds it, raise it
+// deliberately — do not let a stream decide.
+// INSTANTCANVAS_MAX_UPLOAD shrinks it for tests, exactly as INSTANTCANVAS_*_WAIT_MS
+// shrinks the spawn/lock deadlines: without a knob the only way to exercise the
+// byte-counter (as opposed to the Content-Length shortcut) is to actually send 2 GiB,
+// and a guard nobody can afford to test is a guard nobody has tested.
+const MAX_UPLOAD = Number(process.env.INSTANTCANVAS_MAX_UPLOAD) > 0
+	? Number(process.env.INSTANTCANVAS_MAX_UPLOAD)
+	: 2 * 1024 * 1024 * 1024
+const MAX_UPLOAD_BATCH = 500
 const IDLE_LIMIT_MS = 30 * 60 * 1000
 const WS_GUID = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11'
 
@@ -1092,6 +1105,28 @@ async function route(req, res, url) {
 		return handleGalleryDelete(res, body)
 	}
 
+	// Dropping files from the OS into the browse view — the reader handing the agent
+	// data ("drop a CSV in, then ask the agent to chart it"), which is creation and
+	// squarely on the safe side of the line the removed folder-delete drew. It is
+	// still ARBITRARY bytes at an ARBITRARY name from outside the workspace, so it
+	// carries every guard the writers above use plus a plan step.
+	//
+	// TWO routes, because the collision question must be answered for the WHOLE batch
+	// before any byte moves — one dialog for a 40-file drop, not forty. That is the
+	// same reason GET /api/theme/plan exists, and it is what lets the confirmation's
+	// count be a promise rather than an estimate (docs/gotchas/runtime.md).
+	if (method === 'POST' && p === '/api/upload/plan') {
+		const body = await readBody(req)
+		return handleUploadPlan(res, body)
+	}
+
+	// The gate. The plan above is a COURTESY to the reader and never a token of
+	// authorization — a client can PUT here without ever having called it — so every
+	// check runs again, and the overwrite gate below is the one that actually
+	// protects an existing file.
+	if (method === 'PUT' && p === '/api/upload')
+		return handleUpload(req, res, url)
+
 	// The persisted multi-selection. The browser POSTs the whole set on every
 	// toggle; the agent reads it back with `instant-canvas selection` and acts
 	// with its OWN tools. This surface RECORDS ONLY — writeSelection never unlinks,
@@ -1503,6 +1538,181 @@ function handleGalleryDelete(res, body) {
 	// The fs.watch broadcast repaints the grid for free; the body lets the dialog
 	// report honestly without racing the watcher.
 	return sendJson(res, 200, { ok: true, deleted, failed })
+}
+
+// ---------------------------------------------------------------- upload (drag & drop)
+
+// Quote the cap in a unit that is honest at whatever MAX_UPLOAD actually is — a
+// megabyte figure reads as "0 MB" the moment a test shrinks it, which is a message
+// that tells the reader nothing and a test assertion nobody can trust.
+function tooLargeMessage() {
+	const limit = MAX_UPLOAD >= 1024 * 1024
+		? Math.round(MAX_UPLOAD / (1024 * 1024)) + ' MB'
+		: MAX_UPLOAD + ' bytes'
+	return `That file is larger than the ${limit} limit — nothing was written.`
+}
+
+/**
+ * What a drop WOULD overwrite. Ordinary JSON, so it rides the existing `readBody`
+ * (which is also what makes a non-JSON body a 415 here for free).
+ *
+ * Answers `{ok:true}` when nothing collides, or a 409 carrying the EXACT
+ * `needsConfirmation` shape `writeEnvForm` already uses. One envelope for every
+ * "are you sure" in this kernel — a second one would be a second thing to teach the
+ * browser, and the dialog that renders it is shared.
+ */
+function handleUploadPlan(res, body) {
+	const names = body && Array.isArray(body.names) ? body.names : null
+	if (!names)
+		return sendJson(res, 400, { ok: false, error: { code: 'INVALID_SPEC', message: '"names" must be an array of file names.' } })
+	if (names.length > MAX_UPLOAD_BATCH)
+		return sendJson(res, 413, { ok: false, error: { code: 'TOO_MANY_FILES', message: `At most ${MAX_UPLOAD_BATCH} files can be dropped at once (got ${names.length}).` } })
+
+	// Names first, so the reader is told which file is the problem rather than being
+	// told the folder is fine.
+	for (const name of names) {
+		if (!safeName(name))
+			return sendJson(res, 400, { ok: false, error: { code: 'BAD_NAME', name: typeof name === 'string' ? name : String(name), message: `"${typeof name === 'string' ? name : String(name)}" is not a usable file name — nothing was written.` } })
+	}
+
+	const relDir = String((body && body.path) || '')
+	const dirAbs = path.resolve(ROOT, relDir)
+	if (!insideRoot(ROOT, dirAbs))
+		return sendJson(res, 403, { ok: false, code: 'PATH_OUTSIDE_WORKSPACE', message: 'That folder is outside the workspace.' })
+	let isDir = false
+	try { isDir = fs.lstatSync(dirAbs).isDirectory() } catch { isDir = false }
+	if (!isDir) // lstat, so a SYMLINKED directory is refused too; byte-clean either way
+		return sendJson(res, 404, { ok: false, code: 'NOT_A_FOLDER', message: 'No such folder in this workspace.' })
+
+	const plan = planUpload(ROOT, relDir, names)
+	if (plan.ok)
+		return sendJson(res, 200, { ok: true })
+	return sendJson(res, 409, { ok: false, needsConfirmation: { overwrite: plan.collisions } })
+}
+
+/**
+ * Write ONE dropped file. One file per request with a RAW body, deliberately: the
+ * alternative is a multipart parser, and a hand-rolled one is exactly the kind of
+ * thing this zero-dependency project must not grow. `readBody` cannot serve here
+ * because it rejects every non-JSON content type with a 415 — and that gate stays
+ * exactly as strict as it is, because every other route leans on it.
+ *
+ * The write is temp + rename INTO THE DESTINATION DIRECTORY, so the rename is atomic
+ * on one filesystem — the discipline `lib/fsatomic.js` encodes, extended to a stream.
+ * Every error path unlinks the temp file: a half-written `.part` left in the reader's
+ * repository is litter this feature must not produce.
+ */
+function handleUpload(req, res, url) {
+	const relDir = String(url.searchParams.get('path') || '')
+	const name = String(url.searchParams.get('name') || '')
+	const overwrite = url.searchParams.get('overwrite') === '1'
+
+	// Refuse BEFORE reading a byte, and drain what the client already sent so the
+	// socket is not left wedged mid-body.
+	const refuse = (status, payload) => {
+		req.resume()
+		return sendJson(res, status, payload)
+	}
+
+	const t = checkTarget(ROOT, relDir, name)
+	if (!t.ok) {
+		if (t.code === 'BAD_NAME')
+			return refuse(400, { ok: false, code: 'BAD_NAME', message: `"${name}" is not a usable file name — nothing was written.` })
+		if (t.code === 'PATH_OUTSIDE_WORKSPACE')
+			return refuse(403, { ok: false, code: 'PATH_OUTSIDE_WORKSPACE', message: 'That folder is outside the workspace.' })
+		return refuse(404, { ok: false, code: 'NOT_A_FOLDER', message: 'No such folder in this workspace.' })
+	}
+
+	// The second gate, and the one that actually protects the file. The plan route
+	// asked the same question for the whole batch; this asks it again for this file,
+	// because nothing guarantees the plan was ever called (or that the folder has not
+	// changed since it was).
+	let exists = false
+	try { fs.lstatSync(t.abs); exists = true } catch { exists = false }
+	if (exists && !overwrite)
+		return refuse(409, { ok: false, needsConfirmation: { overwrite: [name] } })
+
+	// A declared Content-Length lets us refuse a 3 GiB file without reading it. It is
+	// a courtesy, not the cap: the byte counter below is what a missing or lying
+	// header runs into.
+	const declared = Number(req.headers['content-length'])
+	if (Number.isFinite(declared) && declared > MAX_UPLOAD)
+		return refuse(413, { ok: false, code: 'FILE_TOO_LARGE', message: tooLargeMessage() })
+
+	const tmp = path.join(path.dirname(t.abs), '.' + path.basename(t.abs) + '.' + crypto.randomBytes(6).toString('hex') + '.part')
+
+	return new Promise((resolve) => {
+		// NOT 0o600. `fsatomic` uses that mode for STATE AND SECRETS — the registry,
+		// the identity file, a written `.env`. A dropped photo is the reader's own
+		// ordinary file and must carry the process umask default like anything else
+		// they put in the folder, or it reads as unreadable to their other tools.
+		// Do not "fix" this toward fsatomic's mode.
+		const out = fs.createWriteStream(tmp)
+		let bytes = 0
+		let settled = false
+
+		const cleanup = () => {
+			try { out.destroy() } catch { /* best effort */ }
+			try { fs.unlinkSync(tmp) } catch { /* already gone, or never created */ }
+		}
+		const fail = (status, payload) => {
+			if (settled)
+				return
+			settled = true
+			cleanup()
+			if (!res.headersSent)
+				sendJson(res, status, payload)
+			else
+				res.end()
+			resolve()
+		}
+
+		req.on('data', (chunk) => {
+			bytes += chunk.length
+			if (bytes > MAX_UPLOAD) {
+				req.unpipe(out)
+				// Answering and then destroying the socket is the obvious move and it is
+				// WRONG: `req.destroy()` re-enters through `aborted` (so the reader gets
+				// UPLOAD_ABORTED instead of a reason), and even ordered after the write it
+				// races the flush — the client reads a socket hang-up rather than the 413.
+				// Instead, close the connection the protocol's own way: the response says
+				// `Connection: close`, so Node tears the socket down once the 413 has
+				// actually reached the client, and the rest of the body is discarded with
+				// it. `resume()` keeps the remainder flowing to nowhere meanwhile, so a
+				// paused stream cannot wedge the socket before that happens.
+				try { res.setHeader('Connection', 'close') } catch { /* headers already sent */ }
+				fail(413, { ok: false, code: 'FILE_TOO_LARGE', message: tooLargeMessage() })
+				req.resume()
+			}
+		})
+		// A client that vanishes mid-body must not leave a `.part` behind either.
+		req.on('aborted', () => fail(400, { ok: false, code: 'UPLOAD_ABORTED', message: 'The upload ended before the file was complete — nothing was written.' }))
+		req.on('error', () => fail(400, { ok: false, code: 'UPLOAD_FAILED', message: 'The upload failed — nothing was written.' }))
+		out.on('error', (err) => fail(500, { ok: false, code: 'WRITE_FAILED', message: 'Could not write the file: ' + (err && err.code ? err.code : 'unknown error') }))
+
+		out.on('finish', () => {
+			if (settled)
+				return
+			settled = true
+			try {
+				fs.renameSync(tmp, t.abs)
+			} catch (err) {
+				cleanup()
+				if (!res.headersSent)
+					sendJson(res, 500, { ok: false, code: 'WRITE_FAILED', message: 'Could not write the file: ' + (err && err.code ? err.code : 'unknown error') })
+				return resolve()
+			}
+			// Counts and the name only — never the bytes. The fs.watch broadcast
+			// repaints the grid for free (150 ms debounce, so a batch coalesces);
+			// the body is what lets the browser report the batch honestly without
+			// racing the watcher.
+			klog('upload:', t.rel, bytes, 'bytes')
+			sendJson(res, 200, { ok: true, name: path.basename(t.abs), path: t.rel, bytes })
+			resolve()
+		})
+
+		req.pipe(out)
+	})
 }
 
 // ---------------------------------------------------------------- websocket (hand-rolled, RFC 6455)
