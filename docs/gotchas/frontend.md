@@ -131,9 +131,11 @@ A two-dimension `splom` (broken, see below) mounted beside a `violin` killed the
 
 `{"data": [...perTraceOverrides], "layout": {...}}`. `applyOptions()` deep-merges `layout`, merges `data` **by trace index**, and lets arrays in the patch replace (so `y: [...]` swaps the data). A hand-rolled merge that treated arrays as scalars once wiped generated series entirely — keep the by-index semantics.
 
-## Never write a literal NUL into `app.js`
+## Never write a literal NUL into a source file
 
 A NUL byte inside a template-literal key separator makes the whole file `data` to `file(1)`, and `grep` silently reports nothing rather than matching — which reads exactly like "the code isn't there." Use `JSON.stringify([a, b])` for composite map keys.
+
+It happened a second time, in `lib/upload.js`, and the second instance is the instructive one: the NUL was **in a comment explaining this very hazard** — prose about how a NUL truncates a filename at the syscall boundary, written with a real NUL in the example. The file stopped being text, `grep` for a phrase plainly visible in the editor returned nothing, and the natural reading was "my edit did not apply." The rule is therefore not about `app.js` and not about code: **no source file may contain a literal control byte, including inside a comment or a string that is discussing one.** Write it as an escape (`\x00`) or spell it (`<NUL>`), and check with `file <path>` — anything but `text` means a byte got in. The character-code loop `safeName` uses to reject control characters exists partly so the rule can be enforced without a regex literal that would have to contain one.
 
 ## Re-rendering on click detaches the element that was clicked
 
@@ -390,3 +392,17 @@ The image stage's zoom bar (`.g-zoombar`) is `position: absolute` inside `.img-s
 Then `createImageStage(metaPanel)` gained a second caller — the item overlay — which passes the shared **info drawer** panel instead. The drawer is `position: absolute` (it overlays the stage and toggles open/closed without reflowing it), so in that context there is no flex sibling: the stage is **full width**, and the `-157px` shoved the bar 157px left of center. The CSS was still present and correct; the layout assumption underneath it had changed. Fix: scope the offset to the surface that still has the panel (`.g-zoombar` default = gallery modal) and center on the stage where the meta is an overlay (`body.image-overlay .g-zoombar { left: 50% }`).
 
 The general rule, and it is the fourth cousin of the specificity-override cluster above: **a hardcoded offset that compensates for another element's size is a hidden coupling to that element's layout.** The day the other element changes how it participates in layout — flex sibling → absolute overlay, shown → hidden, its width retuned — the offset silently mis-centers, with nothing in the console. Key the offset to the *presence of the thing it dodges* (a scoping class, or `:has()`), and assert the control's **computed center against the stage's** in a real browser, never the `left` value in the stylesheet.
+
+## A drop zone sized by its CONTENT is not the drop zone the reader sees
+
+The file-drop zone was bound to the browse root (`.browse`), which reads as the obvious target — it is the grid, and the grid is what the reader is looking at. But `.browse` is an ordinary block element, so **its box ends after the last tile row**. In a folder holding three images the element is about one row tall and the rest of the pane below it belongs to `.main`. Dropping onto the images worked; dropping in the empty space under them did nothing at all, and an *empty* folder had almost no target to hit.
+
+What made it invisible is the safety guard sitting behind it. The document-level `dragover`/`drop` listener calls `preventDefault()` unconditionally, because a drop the page does not handle makes Chrome **navigate to the dropped file** and destroy the reader's session. So a drop that missed the zone was caught by that guard and went nowhere: no navigation, no toast, no console error. **The guard that prevents the catastrophic failure also converts every near-miss into a silent one** — which is correct, and is exactly why the zone's geometry has to be right rather than approximately right.
+
+The fix is to bind the listeners to the element that **fills** the pane rather than the one that describes its contents: `#main`, the flex child that owns the pane's height and its scrolling (`.main{flex:1;overflow:auto}`). Three consequences worth keeping:
+
+- **Bind once, not per render.** `#main` is static in `index.html` and outlives every `renderBrowse`, so binding inside the render stacks a fresh listener set on every navigation, each closing over a stale folder — a drop after a few folder changes could write into the wrong one. The handler reads the live folder from `state.browseId` at drop time instead of a captured `rel`.
+- **The highlight is an inset `box-shadow`, not an `outline`.** `.main` is the scroller, and an outline with a positive `outline-offset` is clipped by `overflow: auto`. A box-shadow paints on the border box, so it stays put while the content scrolls under it. Still a class — the CSP drops `style=""` attributes.
+- **Assert the geometry, never the element.** The regression test drops at a *point* near the bottom of the pane and lets `elementFromPoint` decide what is there, then asserts that point was **outside** `.browse` — because a test that names `.browse` as the target passes against the buggy code too (see [testing.md](testing.md)).
+
+The general rule: **when a pointer target is a region rather than a widget, the listening element must be the one whose box covers the region.** Asking "which element is this feature about?" gives the wrong answer; ask "which element is the reader aiming at, and what are its bounds when the content is empty?"

@@ -121,7 +121,7 @@ Exit 0 clean; exit 1 on `INVALID_THEME`, `INVALID_JSON` (the `--set` string itse
 
 ### selection
 
-**The reader gestures which files; the agent acts.** The browser records the reader's multi-selection of workspace items (canvases, documents, images, video, audio, across folders) to `stateDir()/<key>.selection.json`; this command is the agent's read-only door onto that set. Told "delete / move / rename the selected ones", an agent runs `selection`, parses `items[]`, and performs the operation with its **own** tools — **InstantCanvas never performs the file operation itself** (there is deliberately no `--delete`/`--move`/`--copy`/`--rename` verb, ever).
+**The reader gestures which files; the agent acts.** The browser records the reader's multi-selection of workspace items (canvases, documents, images, video, audio, across folders) to `stateDir()/<key>.selection.json`; this command is the agent's read-only door onto that set. Told "delete / move / rename the selected ones", an agent runs `selection`, parses `items[]`, and performs the operation with its **own** tools — **the `selection` command never performs the file operation itself** (there is deliberately no `--delete`/`--move`/`--copy`/`--rename` verb, ever). The reader's *browser* has since gained one narrow write of its own — dropping files in from the OS file manager — but that is creation, it has no CLI door, and it does not move, rename or delete anything (see [architecture.md](architecture.md)).
 
 ```
 selection                                   # → {"status":"selection","workspace","items":[{path,kind}],"count","updatedAt",...}

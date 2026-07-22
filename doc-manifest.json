@@ -69,7 +69,7 @@
         "Hot reload",
         "Version handshake"
       ],
-      "line_count": 205,
+      "line_count": 208,
       "links_to": [
         "docs/canvas-schema.md",
         "docs/cli.md",
@@ -102,6 +102,7 @@
         "scripts/lib/fsatomic.js",
         "scripts/lib/browser.js",
         "scripts/lib/selection.js",
+        "scripts/lib/upload.js",
         "scripts/lib/reveal.js"
       ],
       "source_unresolved": [],
@@ -250,7 +251,7 @@
         "CSP shim",
         "Icons and vendored assets"
       ],
-      "line_count": 151,
+      "line_count": 152,
       "links_to": [
         "docs/architecture.md",
         "docs/canvas-schema.md",
@@ -337,7 +338,7 @@
         "Fills default to opaque",
         "Plotly has no network or streamgraph trace",
         "The `options` escape hatch is a Plotly figure fragment, merged by index",
-        "Never write a literal NUL into `app.js`",
+        "Never write a literal NUL into a source file",
         "Re-rendering on click detaches the element that was clicked",
         "The click that OPENS a popover will also close it, unless the anchor counts as \"inside\"",
         "Highlighting search matches by string-building is two bugs, not one",
@@ -367,9 +368,10 @@
         "A pane that waits for three misses is OUTRUN by a fast restart",
         "Chrome plays from a 200-only server, so a playback test cannot prove Range works",
         "The ⌘ in a keyboard hint is the wrong glyph off macOS",
-        "A pixel offset that dodges a sibling panel breaks when the panel stops being a sibling"
+        "A pixel offset that dodges a sibling panel breaks when the panel stops being a sibling",
+        "A drop zone sized by its CONTENT is not the drop zone the reader sees"
       ],
-      "line_count": 392,
+      "line_count": 408,
       "links_to": [
         "docs/architecture.md",
         "docs/gotchas/testing.md",
@@ -465,9 +467,10 @@
         "A rejected file leaks its own first bytes through `JSON.parse`",
         "Deleting collections is not `rm -rf`",
         "A route that serves the user's files by extension must refuse a symlink",
-        "The reader's selection is state, not a repo dotfile — and it records, it never acts"
+        "The reader's selection is state, not a repo dotfile — and it records, it never acts",
+        "Refusing a request mid-stream: answer with `Connection: close`, never `req.destroy()`"
       ],
-      "line_count": 151,
+      "line_count": 167,
       "links_to": [
         "docs/architecture.md",
         "docs/security.md"
@@ -533,11 +536,13 @@
         "A timing-fragile browser assertion breaks when the suite gets HEAVIER, not just when the code does",
         "A hash-only `Page.navigate` is a same-document navigation, not a reload",
         "Headless Chrome blocks clipboard *read*, so spy on `writeText` to test a copy feature",
-        "Registering a value as a secret pollutes the whole single-process suite's redaction"
+        "Registering a value as a secret pollutes the whole single-process suite's redaction",
+        "An error the code under test CAUSES ON PURPOSE is not a test failure"
       ],
-      "line_count": 211,
+      "line_count": 219,
       "links_to": [
-        "docs/gotchas/frontend.md"
+        "docs/gotchas/frontend.md",
+        "docs/gotchas/runtime.md"
       ],
       "over_size": false,
       "parse_error": null,
@@ -636,7 +641,7 @@
         "Network perimeter",
         "What this does NOT protect against"
       ],
-      "line_count": 76,
+      "line_count": 78,
       "links_to": [
         "docs/architecture.md",
         "docs/cli.md"
@@ -659,6 +664,7 @@
         "scripts/lib/gallery.js",
         "scripts/lib/browse.js",
         "scripts/lib/selection.js",
+        "scripts/lib/upload.js",
         "scripts/lib/reveal.js",
         "scripts/lib/fsatomic.js",
         "scripts/kernel.js",
@@ -689,7 +695,7 @@
         "Security regressions",
         "Browser verification"
       ],
-      "line_count": 122,
+      "line_count": 123,
       "links_to": [
         "docs/gotchas/frontend.md",
         "docs/gotchas/testing.md",

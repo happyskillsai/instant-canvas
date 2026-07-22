@@ -67,7 +67,7 @@ npx -y @happyskillsai/instant-canvas status
 npx -y @happyskillsai/instant-canvas stop
 ```
 
-Maintainers run the same CLI from the working tree — `node scripts/instantcanvas.js <command>` — and the tests with `npm test` (747 tests, zero deps; the browser tests skip without Chrome; equivalent to `node --test scripts/test/`). `npm run coverage:cli` enforces the CLI's 100% line coverage. `npm run rls <major|minor|patch|x.y.z>` bumps the package version — validated semver, forward-only. Releases are orchestrated end to end by the `/release-cli` project skill — see [docs/releasing.md](docs/releasing.md).
+Maintainers run the same CLI from the working tree — `node scripts/instantcanvas.js <command>` — and the tests with `npm test` (778 tests, zero deps; the browser tests skip without Chrome; equivalent to `node --test scripts/test/`). `npm run coverage:cli` enforces the CLI's 100% line coverage. `npm run rls <major|minor|patch|x.y.z>` bumps the package version — validated semver, forward-only. Releases are orchestrated end to end by the `/release-cli` project skill — see [docs/releasing.md](docs/releasing.md).
 
 ### A guided tour — [`examples/`](examples/README.md)
 
@@ -84,7 +84,7 @@ package.json                     THE PRODUCT — npm package "@happyskillsai/ins
 scripts/                         Ships to npm (scripts/test/ excluded by the files allowlist)
   instantcanvas.js               CLI: open | print | snapshot | stamp | validate | theme | catalog | selection | status | stop
   kernel.js                      Per-workspace localhost server (HTTP + hand-rolled WS)
-  lib/                           schema/validate/catalog, registry, redact, envfile, pkgmeta, mdcanvas
+  lib/                           schema/validate/catalog, registry, redact, envfile, pkgmeta, mdcanvas, upload
                                  (the envelope a markdown file gets for free), companion (the envelope
                                  it can KEEP — a canvas that "enhances" it), skillsconfig, theme,
                                  themestore, jsonedit, a zero-dep CDP client, …
