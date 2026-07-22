@@ -6656,7 +6656,11 @@ async function renderBrowse(main, rel) {
 	// Grouping + sort is shared with the overlay's prev/next (browseSorted, above). The
 	// TYPE filter narrows the raw listing to the SHOWN set everything else renders from.
 	const sortedItems = () => browseSorted(bs.items.filter(typeOK), bs.sort)
-	const sortedRels = () => sortedItems().map((i) => i.rel)
+	// The MOUNTED set is the full listing, filtered or not: a type chip hides and shows
+	// tiles rather than destroying and rebuilding them, so an <img> keeps its decoded
+	// bytes across a toggle. Everything the reader reads — counts, the empty state, the
+	// overlay order — still reads sortedItems() above.
+	const mountedItems = () => browseSorted(bs.items, bs.sort)
 	const itemFor = (r) => bs.items.find((i) => i.rel === r) || null
 
 	/** The overlay's prev/next (§4.6) flips through the openable siblings in the order
@@ -6718,7 +6722,10 @@ async function renderBrowse(main, rel) {
 			}
 			if (bs.selection.has(it.rel)) tile.classList.add('selected')
 			// A renderable video earns a first-frame poster, value-synced onto this tile (§4.8).
-			if (it.kind === 'video' && it.renderable) mountVideoPoster(tile, it.rel, it.mtimeMs)
+			// Only if the filter actually SHOWS it: every item is mounted now, and capturing a
+			// poster for a tile nobody can see is pure waste (applyTypeVisibility does it on
+			// the first reveal instead).
+			if (typeOK(it) && needsPoster(tile, it)) mountVideoPoster(tile, it.rel, it.mtimeMs)
 		} else {
 			// A canvas or a markdown document — an editorial card, never a thumbnail
 			// (§5: no canvas/document previews). A top-anchored vertical stack: the icon
@@ -6782,23 +6789,55 @@ async function renderBrowse(main, rel) {
 			empty.textContent = 'Nothing to show in this folder yet — drop a canvas, a markdown file, or an image in and it appears.'
 	}
 
-	/** Full rebuild — first load, a layout toggle, or a filter change. Never on sort
-	 *  (MOVE) or a live sync (DIFF). */
+	/** The type filter, as VISIBILITY over the mounted tiles — the one code path that
+	 *  decides whether a tile is shown. Iterates the items (each knows its kind) and
+	 *  indexes into bs.tiles; never the other way round, which would be O(n²) via itemFor.
+	 *  A hidden tile is `display: none` (its own [hidden] rules in styles.css, one per
+	 *  layout — an author `display` outranks the UA's), so its lazy <img> never intersects
+	 *  the viewport and never fetches: filtering to Canvases in an image-heavy folder
+	 *  actively STOPS image loading. */
+	function applyTypeVisibility() {
+		for (const it of bs.items) {
+			const tile = bs.tiles.get(it.rel)
+			if (!tile) continue
+			const show = typeOK(it)
+			// A video poster is real network + decode work, and `grabPoster` does it on an
+			// OFF-DOM <video> — which `display: none` cannot reach, unlike a tile's own lazy
+			// <img>. So a filtered-out video would fetch its frame while invisible (measured:
+			// six hidden tiles, six requests, and none left to make once revealed). Defer the
+			// capture to the FIRST reveal instead. Cheap to call again: mountVideoPoster
+			// no-ops once a poster has landed, and capturePoster caches per (rel, mtime).
+			if (show && tile.hidden && needsPoster(tile, it))
+				mountVideoPoster(tile, it.rel, it.mtimeMs)
+			tile.hidden = !show
+		}
+	}
+
+	/** A renderable video whose tile is still showing its film placeholder — i.e. one whose
+	 *  poster has not been captured yet (an image tile never has a `.gt-ph`). */
+	const needsPoster = (tile, it) => it.kind === 'video' && it.renderable && !!tile.querySelector('.gt-ph')
+
+	/** Full rebuild — first load, a layout toggle, or a scope change. Never on sort
+	 *  (MOVE), a live sync (DIFF), or a type change (VISIBILITY). Mounts EVERY loaded
+	 *  item; the filter is applied as visibility on top. */
 	function buildAll() {
 		tilesWrap.textContent = ''
 		bs.tiles.clear()
-		for (const it of sortedItems()) {
+		for (const it of mountedItems()) {
 			const tile = buildTile(it)
 			bs.tiles.set(it.rel, tile)
 			tilesWrap.append(tile)
 		}
+		applyTypeVisibility()
 		updateEmpty()
 		recordOrder()
 	}
 
-	/** Re-order existing nodes into sort order — MOVE, so a selection survives. */
+	/** Re-order existing nodes into sort order — MOVE, so a selection survives. Orders the
+	 *  MOUNTED set, hidden tiles included: a tile revealed by a later chip toggle must
+	 *  already sit in its sorted place. recordOrder() still records the SHOWN set. */
 	function sortNodes() {
-		for (const r of sortedRels()) {
+		for (const r of mountedItems().map((i) => i.rel)) {
 			const tile = bs.tiles.get(r)
 			if (tile) tilesWrap.append(tile)
 		}
@@ -6807,12 +6846,20 @@ async function renderBrowse(main, rel) {
 
 	/** Diff the new listing against the mounted tiles: add fresh at sorted position,
 	 *  drop vanished, bump the ?v of any image whose mtime changed. Surviving nodes
-	 *  are never replaced — a selection may hold references into them. */
-	function syncItems(newItems) {
+	 *  are never replaced — a selection may hold references into them.
+	 *
+	 *  `prune` says what a VANISHED tile means. For the live-refresh caller it means the
+	 *  file is gone, so it leaves the selection too. For a subtree TYPE change it means
+	 *  the file was filtered out — it still exists, and the union is a record that
+	 *  deliberately survives navigation, so pruning it would destroy the reader's work
+	 *  from a view concern. (Deleted files are pruned server-side anyway: restoreSelection
+	 *  re-reads the revalidated set on every `workspace` broadcast.) */
+	function syncItems(newItems, { prune = true } = {}) {
 		const next = new Map(newItems.map((i) => [i.rel, i]))
 		for (const [r, tile] of [...bs.tiles]) {
 			if (!next.has(r)) {
-				tile.remove(); bs.tiles.delete(r); bs.selection.delete(r)
+				tile.remove(); bs.tiles.delete(r)
+				if (prune) bs.selection.delete(r)
 			}
 		}
 		for (const it of newItems) {
@@ -6831,17 +6878,21 @@ async function renderBrowse(main, rel) {
 				const vis = tile.querySelector('.gt-img, .gt-ph')
 				if (vis) vis.replaceWith(mediaPlaceholder('film', it.name))
 				const dur = tile.querySelector('.gt-dur'); if (dur) dur.remove()
-				mountVideoPoster(tile, it.rel, it.mtimeMs)
+				// Same rule as the build path: only re-capture what the filter is showing.
+				// The tile is back to a film placeholder either way, so a later reveal picks
+				// the capture up through applyTypeVisibility.
+				if (typeOK(it)) mountVideoPoster(tile, it.rel, it.mtimeMs)
 			}
 		}
 		bs.items = newItems
-		for (const it of sortedItems()) {
+		for (const it of mountedItems()) {
 			if (!bs.tiles.has(it.rel)) {
 				const tile = buildTile(it)
 				bs.tiles.set(it.rel, tile)
 				tilesWrap.append(tile)
 			}
 		}
+		applyTypeVisibility()
 		sortNodes()
 		updateEmpty()
 		renderToolbar()
@@ -6999,15 +7050,31 @@ async function renderBrowse(main, rel) {
 		return bs.types.size + (bs.scope === 'subtree' ? 1 : 0)
 	}
 
-	/** A TYPE change. Folder scope filters the loaded listing on the client (instant);
-	 *  subtree scope refetches (the server kind-filters recursively, before the cap).
+	/** A TYPE change. Folder scope hides and shows the MOUNTED tiles (instant, and every
+	 *  <img> keeps its decoded bytes); subtree scope refetches (the server kind-filters
+	 *  recursively, BEFORE the cap, so a rare kind is never starved behind a common one)
+	 *  and DIFFS the result in — all subtree tiles share one shape, so the survivors keep
+	 *  their nodes. Either way the selection is untouched: it is a record for the agent,
+	 *  the filter is a view concern, and a selected item the filter hides stays selected
+	 *  exactly like one in a folder you navigated away from.
 	 *  The grid, the toolbar (Filter ring/badge + counts) and the open modal all refresh. */
 	async function applyTypes() {
 		state.browseTypes = [...bs.types]
-		if (bs.scope === 'subtree') { await reload(); return }
-		clearSelection()
-		buildAll()
-		renderToolbar()
+		if (bs.scope === 'subtree') {
+			await load()
+			syncItems(bs.items.slice(), { prune: false }) // repaints + renderToolbar
+		} else {
+			applyTypeVisibility()
+			// recordOrder(), NOT sortNodes(): the mounted order is browseSorted(bs.items)
+			// and never reads bs.types, so a type toggle cannot reorder anything — sortNodes
+			// would re-append every mounted tile to land them exactly where they already are
+			// (measured: 32 of 32 nodes moved, resulting order byte-identical), which is the
+			// churn this whole path exists to remove. Only the SHOWN order needs re-recording,
+			// for the overlay's prev/next.
+			recordOrder()
+			updateEmpty()
+			renderToolbar()
+		}
 		if (filterRepaint) filterRepaint()
 	}
 

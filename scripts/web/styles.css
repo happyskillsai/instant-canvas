@@ -1511,8 +1511,17 @@ body.presenting.cursor-hidden .stage{cursor:none}
 
 /* grid */
 .g-tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+/* A browse/gallery grid can hold thousands of tiles (the 2000-cap subtree listing), and
+   every one of them was costing layout + paint while parked far off screen — so a
+   selection outline or a toast rasterized the whole grid. `content-visibility: auto`
+   skips the contents of a tile that is nowhere near the viewport; the `auto` keyword in
+   `contain-intrinsic-size` makes the browser REMEMBER the last rendered size, so scroll
+   anchoring stays put after first paint. A grid tile's size is definite anyway (width
+   from the track, height from aspect-ratio), so the 150px estimate only matters for
+   layouts that size from content — see the list-mode override below. NOT on .g-tiles:
+   skipping the container would skip the entire grid. See the @media print guard too. */
 .gt{position:relative;aspect-ratio:1;border:1px solid var(--border);border-radius:10px;overflow:hidden;
-	background:var(--panel-2);cursor:pointer}
+	background:var(--panel-2);cursor:pointer;content-visibility:auto;contain-intrinsic-size:auto 150px}
 .gt:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .gt-img{width:100%;height:100%;object-fit:cover;display:block}
 .gt-ph{width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;
@@ -1535,9 +1544,19 @@ body.presenting.cursor-hidden .stage{cursor:none}
 
 /* list */
 .gallery.g-list .g-tiles{display:flex;flex-direction:column;gap:2px}
+/* A list row sizes from its CONTENT (a padded grid row around a 40px thumb, ~54px), so
+   it gets an honest intrinsic estimate — otherwise every never-rendered offscreen row
+   would reserve the grid's 150px and the scrollbar would lie. */
 .gallery.g-list .gt{aspect-ratio:auto;display:grid;
 	grid-template-columns:44px minmax(0,1fr) auto auto auto auto;align-items:center;gap:12px;
-	padding:6px 10px;border-radius:8px;overflow:visible}
+	padding:6px 10px;border-radius:8px;overflow:visible;contain-intrinsic-size:auto 54px}
+/* The type filter hides a tile rather than unmounting it (the mounted <img> keeps its
+   decoded bytes across a chip toggle), and BOTH of these rules are load-bearing: the UA's
+   [hidden]{display:none} is a normal declaration that any author `display` outranks, so
+   `.gallery.g-list .gt{display:grid}` above would otherwise keep a hidden list row
+   visible. Asserted as COMPUTED display in both layouts (docs/gotchas/frontend.md). */
+.gt[hidden]{display:none}
+.gallery.g-list .gt[hidden]{display:none}
 .gallery.g-list .gt-img,.gallery.g-list .gt-ph{width:40px;height:40px;border-radius:6px}
 .gallery.g-list .gt-ph .lucide{width:20px;height:20px}
 .gallery.g-list .gt-ph .gt-fmt{display:none}
@@ -1900,6 +1919,11 @@ button.rr-row:hover{border-color:var(--accent);background:var(--tint)}
 	.doc-html{display:none !important}
 	.doc-mode .deck{display:block !important;position:static !important;padding:0;height:auto !important}
 	.deck-scale{transform:none !important;display:block}
+	/* `content-visibility: auto` decides relevancy from the VIEWPORT, and a printed page
+	   has none — Chromium has a history of printing skipped content blank. Browse tiles
+	   cannot reach a deck (a gallery block is a deckBlocker), but a reader can still Cmd+P
+	   a continuous view holding one, so unskip them belt-and-braces. */
+	.gt{content-visibility:visible}
 	.sheet{box-shadow:none;margin:0}
 	.sheet:not(:last-child){break-after:page;page-break-after:always}
 
