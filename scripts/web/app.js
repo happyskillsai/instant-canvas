@@ -6757,7 +6757,7 @@ async function renderBrowse(main, rel) {
 	const toolbar = document.createElement('div'); toolbar.className = 'g-toolbar'
 	const tilesWrap = document.createElement('div'); tilesWrap.className = 'g-tiles'
 	const empty = document.createElement('div'); empty.className = 'g-empty'; empty.hidden = true
-	empty.textContent = 'Nothing to show in this folder yet — drop a canvas, a markdown file, or an image in and it appears.'
+	empty.textContent = 'Nothing to show in this folder yet — drop or paste a canvas, a markdown file, or an image in and it appears.'
 	root.classList.toggle('bf-subtree', bs.scope === 'subtree')
 	root.append(crumb, toolbar, tilesWrap, empty)
 	main.append(root)
@@ -6994,12 +6994,16 @@ async function renderBrowse(main, rel) {
 	function updateEmpty() {
 		const n = sortedItems().length
 		empty.hidden = n > 0
+		// An empty pane makes the dashed box the whole target: it stretches to fill the
+		// height (styles.css), which is also the honest picture of the drop/paste zone —
+		// `#main` takes a drop anywhere in that space, not just where the box used to end.
+		root.classList.toggle('is-empty', n === 0)
 		if (n > 0)
 			return
 		if (bs.types.size || bs.scope === 'subtree')
 			empty.textContent = 'No matching files ' + (bs.scope === 'subtree' ? 'in this folder or any subfolder.' : 'in this folder.') + ' Try a different type or scope.'
 		else
-			empty.textContent = 'Nothing to show in this folder yet — drop a canvas, a markdown file, or an image in and it appears.'
+			empty.textContent = 'Nothing to show in this folder yet — drop or paste a canvas, a markdown file, or an image in and it appears.'
 	}
 
 	/** The type filter, as VISIBILITY over the mounted tiles — the one code path that
@@ -9325,17 +9329,131 @@ for (const type of ['dragover', 'drop']) {
 // It is bound ONCE, here, rather than per render. `#main` is static in index.html and
 // outlives every renderBrowse, so binding inside the render would stack a fresh set of
 // listeners on each navigation, each closing over a stale folder.
+// THE UPLOAD FLOW IS ONE FUNCTION WITH TWO CALLERS — a drop (below) and a paste
+// (further below). Both are the same operation with a different gesture, and two
+// copies of a plan → confirm → write sequence that can DISAGREE about the overwrite
+// handshake are two different products. The plan route is named exactly ONCE in this
+// file, and that count is the invariant a grep can check (specs 2 and 3).
+let uploadBusy = false
+let repaintPaneDrop = () => {}
+
+/**
+ * Write `files` into the workspace folder `relDir`: ask what would collide, confirm
+ * the whole batch if anything does, then PUT each file in turn and report honestly.
+ */
+async function uploadFiles(files, relDir) {
+	const names = files.map((f) => f.name)
+	const { status, json } = await api('/api/upload/plan', {
+		method: 'POST',
+		body: JSON.stringify({ path: relDir, names }),
+	})
+	if (status === 409 && json && json.needsConfirmation) {
+		// CANCEL MEANS NOTHING IS WRITTEN — not "skip the colliding ones". The
+		// reader answered a question about the batch, so the batch is the unit.
+		const go = await confirmOverwrite(json.needsConfirmation.overwrite || [])
+		if (!go) { toast('Nothing was written.'); return }
+		return writeAll(files, relDir, true)
+	}
+	if (status !== 200 || !json || !json.ok) {
+		const msg = json && (json.message || (json.error && json.error.message))
+		toast('Cannot write here' + (msg ? ': ' + msg : '.'))
+		return
+	}
+	return writeAll(files, relDir, false)
+}
+
+/** Name EVERY colliding file, and let the count be exactly what the writes will do. */
+function confirmOverwrite(names) {
+	return new Promise((resolve) => {
+		document.body.classList.add('modal-open')
+		const overlay = document.createElement('div'); overlay.className = 'g-modal g-confirm'
+		const card = document.createElement('div'); card.className = 'g-cbox'
+		const h = document.createElement('h2')
+		h.textContent = 'Replace ' + names.length + (names.length === 1 ? ' file?' : ' files?')
+		const listEl = document.createElement('div'); listEl.className = 'g-clist'
+		for (const n of names) { const li = document.createElement('div'); li.className = 'g-cli'; li.textContent = n; listEl.append(li) }
+		const warn = document.createElement('p'); warn.className = 'g-cwarn'
+		warn.textContent = names.length === 1
+			? 'A file with this name is already in this folder. Replacing it overwrites what is on disk.'
+			: 'Files with these names are already in this folder. Replacing them overwrites what is on disk.'
+		const actions = document.createElement('div'); actions.className = 'g-cactions'
+		const done = (answer) => { overlay.remove(); document.body.classList.remove('modal-open'); resolve(answer) }
+		const btn = (cls, label, onClick) => {
+			const b = document.createElement('button')
+			b.type = 'button'; b.className = cls; b.textContent = label
+			b.addEventListener('click', onClick)
+			return b
+		}
+		actions.append(btn('g-btn', 'Cancel', () => done(false)), btn('g-btn g-danger', 'Replace ' + names.length, () => done(true)))
+		card.append(h, listEl, warn, actions)
+		overlay.append(card)
+		document.body.append(overlay)
+		overlay.addEventListener('click', (ev) => { if (ev.target === overlay) done(false) })
+		card.querySelector('.g-danger').focus()
+	})
+}
+
+async function writeAll(files, rel, overwrite) {
+	const main = $('main')
+	uploadBusy = true
+	repaintPaneDrop()
+	const status = document.createElement('div')
+	status.className = 'pane-drop-status'
+	main.append(status)
+	const failed = []
+	let written = 0
+	try {
+		// SEQUENTIAL, deliberately. A 40-file parallel blast at a single-threaded
+		// kernel buys nothing and makes honest progress impossible to report.
+		for (let i = 0; i < files.length; i++) {
+			const f = files[i]
+			status.textContent = 'Writing ' + (i + 1) + ' of ' + files.length + ' — ' + f.name
+			const q = '/api/upload?path=' + encodeURIComponent(rel)
+				+ '&name=' + encodeURIComponent(f.name)
+				+ (overwrite ? '&overwrite=1' : '')
+			let res
+			try {
+				res = await api(q, { method: 'PUT', body: f, headers: { 'Content-Type': 'application/octet-stream' } })
+			} catch {
+				failed.push({ name: f.name, why: 'the connection dropped' })
+				continue
+			}
+			if (res.status === 200 && res.json && res.json.ok) written++
+			else failed.push({ name: f.name, why: (res.json && (res.json.message || (res.json.error && res.json.error.message))) || ('HTTP ' + res.status) })
+		}
+	} finally {
+		status.remove()
+		uploadBusy = false
+		repaintPaneDrop()
+	}
+	// Report honestly. A partial batch says so — reporting "3 files added" for a
+	// batch where one PUT failed is the lie this whole feature must not tell.
+	if (failed.length && written)
+		toast('Added ' + written + ' of ' + files.length + '; could not add ' + failed.map((f) => f.name).join(', ') + '.')
+	else if (failed.length)
+		toast('Could not add ' + failed.map((f) => f.name + ' (' + f.why + ')').join(', ') + '.')
+	else
+		toast('Added ' + written + (written === 1 ? ' file.' : ' files.'))
+	// NO manual tile insertion. The written files hit fs.watch, which broadcasts
+	// `workspace` (150 ms debounce, so a batch coalesces), and the browse view
+	// already refetches /api/dir and diffs BY PATH — syncing in place. Inserting
+	// tiles here would double-render and break the in-place-sync invariant the
+	// tests assert.
+}
+
 function mountPaneDrop() {
 	const main = $('main')
 	// dragenter/dragleave fire for EVERY descendant the cursor crosses, so a boolean
 	// flickers the highlight off the moment the pointer moves between two tiles.
 	// Count enters against leaves instead.
 	let depth = 0
-	let busy = false
 
 	// A class, never an inline style: the CSP drops `style=""` attributes.
-	const paint = () => main.classList.toggle('pane-dropping', depth > 0 && !busy)
+	const paint = () => main.classList.toggle('pane-dropping', depth > 0 && !uploadBusy)
 	const reset = () => { depth = 0; paint() }
+	// The write path repaints through this: the highlight belongs to the drop zone,
+	// while `uploadBusy` is shared with the paste caller.
+	repaintPaneDrop = paint
 
 	// Only while a browse view is the surface the reader is looking at. With the item
 	// modal open the pane is still mounted BEHIND it, and a drop there is aimed at the
@@ -9370,7 +9488,7 @@ function mountPaneDrop() {
 		if (!zoneLive() || !hasFiles(e)) return
 		e.preventDefault(); e.stopPropagation()
 		reset()
-		if (busy) { toast('Still writing the last drop — try again in a moment.'); return }
+		if (uploadBusy) { toast('Still writing the last drop — try again in a moment.'); return }
 
 		// A FOLDER is refused outright, and the whole drop with it. Recursing into a
 		// directory entry is a separate feature; half-processing one would write some
@@ -9385,109 +9503,92 @@ function mountPaneDrop() {
 
 		const files = Array.from(e.dataTransfer.files || [])
 		if (!files.length) return
-		runDrop(files, state.browseId)
+		uploadFiles(files, state.browseId)
 	})
-
-	async function runDrop(files, rel) {
-		const names = files.map((f) => f.name)
-		const { status, json } = await api('/api/upload/plan', {
-			method: 'POST',
-			body: JSON.stringify({ path: rel, names }),
-		})
-		if (status === 409 && json && json.needsConfirmation) {
-			// CANCEL MEANS NOTHING IS WRITTEN — not "skip the colliding ones". The
-			// reader answered a question about the batch, so the batch is the unit.
-			const go = await confirmOverwrite(json.needsConfirmation.overwrite || [])
-			if (!go) { toast('Nothing was written.'); return }
-			return writeAll(files, rel, true)
-		}
-		if (status !== 200 || !json || !json.ok) {
-			const msg = json && (json.message || (json.error && json.error.message))
-			toast('Cannot drop here' + (msg ? ': ' + msg : '.'))
-			return
-		}
-		return writeAll(files, rel, false)
-	}
-
-	/** Name EVERY colliding file, and let the count be exactly what the writes will do. */
-	function confirmOverwrite(names) {
-		return new Promise((resolve) => {
-			document.body.classList.add('modal-open')
-			const overlay = document.createElement('div'); overlay.className = 'g-modal g-confirm'
-			const card = document.createElement('div'); card.className = 'g-cbox'
-			const h = document.createElement('h2')
-			h.textContent = 'Replace ' + names.length + (names.length === 1 ? ' file?' : ' files?')
-			const listEl = document.createElement('div'); listEl.className = 'g-clist'
-			for (const n of names) { const li = document.createElement('div'); li.className = 'g-cli'; li.textContent = n; listEl.append(li) }
-			const warn = document.createElement('p'); warn.className = 'g-cwarn'
-			warn.textContent = names.length === 1
-				? 'A file with this name is already in this folder. Replacing it overwrites what is on disk.'
-				: 'Files with these names are already in this folder. Replacing them overwrites what is on disk.'
-			const actions = document.createElement('div'); actions.className = 'g-cactions'
-			const done = (answer) => { overlay.remove(); document.body.classList.remove('modal-open'); resolve(answer) }
-			const btn = (cls, label, onClick) => {
-				const b = document.createElement('button')
-				b.type = 'button'; b.className = cls; b.textContent = label
-				b.addEventListener('click', onClick)
-				return b
-			}
-			actions.append(btn('g-btn', 'Cancel', () => done(false)), btn('g-btn g-danger', 'Replace ' + names.length, () => done(true)))
-			card.append(h, listEl, warn, actions)
-			overlay.append(card)
-			document.body.append(overlay)
-			overlay.addEventListener('click', (ev) => { if (ev.target === overlay) done(false) })
-			card.querySelector('.g-danger').focus()
-		})
-	}
-
-	async function writeAll(files, rel, overwrite) {
-		busy = true
-		paint()
-		const status = document.createElement('div')
-		status.className = 'pane-drop-status'
-		main.append(status)
-		const failed = []
-		let written = 0
-		try {
-			// SEQUENTIAL, deliberately. A 40-file parallel blast at a single-threaded
-			// kernel buys nothing and makes honest progress impossible to report.
-			for (let i = 0; i < files.length; i++) {
-				const f = files[i]
-				status.textContent = 'Writing ' + (i + 1) + ' of ' + files.length + ' — ' + f.name
-				const q = '/api/upload?path=' + encodeURIComponent(rel)
-					+ '&name=' + encodeURIComponent(f.name)
-					+ (overwrite ? '&overwrite=1' : '')
-				let res
-				try {
-					res = await api(q, { method: 'PUT', body: f, headers: { 'Content-Type': 'application/octet-stream' } })
-				} catch {
-					failed.push({ name: f.name, why: 'the connection dropped' })
-					continue
-				}
-				if (res.status === 200 && res.json && res.json.ok) written++
-				else failed.push({ name: f.name, why: (res.json && (res.json.message || (res.json.error && res.json.error.message))) || ('HTTP ' + res.status) })
-			}
-		} finally {
-			status.remove()
-			busy = false
-			paint()
-		}
-		// Report honestly. A partial batch says so — reporting "3 files added" for a
-		// batch where one PUT failed is the lie this whole feature must not tell.
-		if (failed.length && written)
-			toast('Added ' + written + ' of ' + files.length + '; could not add ' + failed.map((f) => f.name).join(', ') + '.')
-		else if (failed.length)
-			toast('Could not add ' + failed.map((f) => f.name + ' (' + f.why + ')').join(', ') + '.')
-		else
-			toast('Added ' + written + (written === 1 ? ' file.' : ' files.'))
-		// NO manual tile insertion. The written files hit fs.watch, which broadcasts
-		// `workspace` (150 ms debounce, so a batch coalesces), and the browse view
-		// already refetches /api/dir and diffs BY PATH — syncing in place. Inserting
-		// tiles here would double-render and break the in-place-sync invariant the
-		// tests assert.
-	}
 }
 mountPaneDrop()
+
+// ----------------------------------------------------------- paste files in
+//
+// ⌘V / Ctrl+V on the browse view writes the clipboard's files into the folder being
+// viewed — the same operation as a drop, through the same uploadFiles() flow, with a
+// different gesture. Two clipboard shapes: files copied in the OS file manager (which
+// Chrome surfaces as clipboardData.files), and a RAW image with no filename at all (a
+// screenshot), which is named here.
+//
+// THE YIELD COMES FIRST, AND preventDefault() COMES LAST. This is a document-level
+// listener, so every ordinary text paste in the app passes through it: the .env form's
+// KEY=value paste, ⌘K's search box, every input in every form. A handler that
+// suppressed the event before deciding it wanted it would break all of them at once.
+// The list below mirrors the overlay's keyboard-yield block — a global handler is only
+// correct once it can name every other surface it must not pre-empt
+// (docs/gotchas/frontend.md).
+function mountPastefiles() {
+	document.addEventListener('paste', (e) => {
+		// A browse view must be the surface the reader is looking at. Anywhere else —
+		// including an item overlay open OVER a still-mounted browse pane — a paste is
+		// aimed at something other than the folder.
+		if (typeof state.browseId !== 'string') return
+		if (!$('docModal').hidden || state.presenting || document.body.classList.contains('nav-open')) return
+		if (!$('searchModal').hidden || !$('palettePanel').hidden || icMenuOpen() || document.querySelector('.g-modal, .gallery.g-selecting')) return
+
+		// Focus in a field (or anywhere inside a form) is a TEXT paste, always. Both
+		// the focused element and the event's own target are checked: a paste
+		// dispatched at an element is targeted there whether or not focus followed.
+		const inField = (el) => !!(el && el.closest && (el.closest('input, textarea, select, form') || el.isContentEditable))
+		if (inField(document.activeElement) || inField(e.target)) return
+
+		const cd = e.clipboardData
+		if (!cd) return
+		let files = Array.from(cd.files || [])
+		if (!files.length) {
+			// No file list: a raw image may still be on the clipboard as an item.
+			const item = Array.from(cd.items || []).find((it) => it.kind === 'file' && /^image\//.test(it.type || ''))
+			const f = item && item.getAsFile()
+			if (f) files = [f]
+		}
+		// SILENCE on a clipboard with no files. Pasting text on the browse view must
+		// feel like nothing happened — an error toast every time somebody pastes prose
+		// would be worse than not having the feature.
+		if (!files.length) return
+
+		files = files.map(namePastedImage)
+		if (!files.length) return
+
+		// Only now, once we have decided to handle it.
+		e.preventDefault()
+		if (uploadBusy) { toast('Still writing the last paste — try again in a moment.'); return }
+		uploadFiles(files, state.browseId)
+	})
+}
+
+/**
+ * A clipboard image has no filename of its own — Chrome hands over an empty name or the
+ * generic `image.png` for every screenshot alike, so writing it under that name would
+ * make the second screenshot collide with the first. A single unnamed image therefore
+ * becomes `pasted-YYYYMMDD-HHMMSS.<ext>`; anything the reader actually named (a file
+ * copied in the OS file manager, or a multi-file paste) keeps its name untouched.
+ *
+ * The extension comes from the clipboard item's MIME type, checked against the image
+ * extension union the page already carries (`<body data-image-exts>`, single-sourced
+ * from lib/gallery.js) — never a second copied list. Two pastes inside one second
+ * produce the same name, and the collision handshake asks about it; that is deliberate,
+ * because a name the reader cannot predict is worse than a question.
+ */
+function namePastedImage(file, _i, all) {
+	if (all.length !== 1) return file
+	const generic = !file.name || file.name === 'image.png'
+	if (!generic || !/^image\//.test(file.type || '')) return file
+	let ext = String(file.type).split('/')[1].split('+')[0].split(';')[0].toLowerCase()
+	if (!ext || !isImagePath('x.' + ext)) ext = pathExt(file.name).replace('.', '')
+	if (!ext) return file
+	const d = new Date()
+	const p2 = (n) => String(n).padStart(2, '0')
+	const stamp = String(d.getFullYear()) + p2(d.getMonth() + 1) + p2(d.getDate())
+		+ '-' + p2(d.getHours()) + p2(d.getMinutes()) + p2(d.getSeconds())
+	return new File([file], 'pasted-' + stamp + '.' + ext, { type: file.type })
+}
+mountPastefiles()
 
 async function boot() {
 	const { status, json } = await api('/api/workspace')

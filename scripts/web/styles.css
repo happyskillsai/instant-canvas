@@ -1724,6 +1724,19 @@ audio.m-el{display:none} /* the audio element is never shown — the art card st
    NEW: the canvas/document CARD tile (glyph + title, never a thumbnail), the count
    line, and the list-mode card row. Image tiles reuse .gt/.gt-img untouched. */
 .browse{margin:0}
+/* AN EMPTY FOLDER: the dashed box FILLS the pane rather than sitting as a thin strip
+   under the toolbar. It is the same argument the drop zone itself settled — `#main`
+   takes a drop (and a paste) anywhere in the pane's height, so a box that stops after
+   one line of text draws the target smaller than it is, and the reader aims at the box.
+   The height chain is scoped by :has() rather than a body class, so it cannot go stale
+   when the route changes; a browser without :has() simply keeps the old thin box.
+   `.main` is a flex item with a definite height, so the percentages resolve.
+   No `[hidden]` companion rule here, unlike every other author `display` in this file:
+   `is-empty` and the box's `hidden` attribute are written from one place and are exact
+   opposites, so the flex rule below can never meet a hidden box. */
+.main:has(.browse.is-empty) > .main-view{height:100%}
+.browse.is-empty{display:flex;flex-direction:column;height:100%}
+.browse.is-empty .g-empty{flex:1;display:flex;align-items:center;justify-content:center}
 /* The folder breadcrumb at the top of the pane (reuses the modal's .oc-seg/.oc-slash). */
 .browse-crumb{display:flex;align-items:center;flex-wrap:wrap;gap:2px;padding-top:6px;min-height:26px}
 .browse .g-toolbar{margin:14px 0}
