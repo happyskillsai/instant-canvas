@@ -358,6 +358,7 @@
         "A responsive `@media` block must sit LAST, or a same-specificity base rule beats it",
         "Printing a presentation, every slide came out on TWO pages — and the culprit was 12px of screen gutter",
         "The `hidden` attribute does NOT hide a `.tbtn` — an author `display` rule outranks it",
+        "Hiding an element stops the work the BROWSER owns, never the work you kicked off yourself",
         "A document-level Esc/arrow handler must yield to EVERY open sub-surface",
         "`captureScreenshot` with `captureBeyondViewport` misses a below-the-fold deck sheet — the deck scrolls inside `.main`, not the page",
         "A detached media element keeps playing",
@@ -366,9 +367,10 @@
         "The ⌘ in a keyboard hint is the wrong glyph off macOS",
         "A pixel offset that dodges a sibling panel breaks when the panel stops being a sibling"
       ],
-      "line_count": 370,
+      "line_count": 384,
       "links_to": [
         "docs/architecture.md",
+        "docs/gotchas/testing.md",
         "docs/security.md"
       ],
       "over_size": false,
@@ -506,6 +508,7 @@
         "Waiting for an element does not mean the app is listening",
         "A throwing `waitFor` in a `before` hook reports the wrong failure",
         "A new test that cannot fail is worse than no test",
+        "An assertion that something did NOT happen is vacuous unless it COULD have happened",
         "A test that asserts the CURRENT rendering PINS it — including the bug in it",
         "Never poll `readAlive` in a before hook — it DELETES the kernel it fails to ping",
         "A fixture that never contains the hard case makes the bug unfailable",
@@ -529,7 +532,7 @@
         "Headless Chrome blocks clipboard *read*, so spy on `writeText` to test a copy feature",
         "Registering a value as a secret pollutes the whole single-process suite's redaction"
       ],
-      "line_count": 193,
+      "line_count": 203,
       "links_to": [
         "docs/gotchas/frontend.md"
       ],
