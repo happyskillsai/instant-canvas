@@ -23,6 +23,7 @@ const { virtualFormCanvasFor } = require('./lib/envcanvas')
 const { listImages, mediaStat, isStreamableFile, mediaKind, galleryMime, parseByteRange, normalizeRelDir, GALLERY_IMAGE_EXTS, MEDIA_VIDEO_EXTS, MEDIA_AUDIO_EXTS } = require('./lib/gallery')
 const { listDir, itemMeta } = require('./lib/browse')
 const { writeSelection, readSelection } = require('./lib/selection')
+const { revealDir, openTerminal } = require('./lib/reveal')
 const { dimensions } = require('./lib/imagemeta')
 const { companionFor, enhancesOf } = require('./lib/companion')
 const { figureMap } = require('./lib/figures')
@@ -1107,6 +1108,50 @@ async function route(req, res, url) {
 		return sendJson(res, 200, { ok: true, count: kept.length, dropped })
 	}
 
+	// Hand a FOLDER to the OS: reveal it in the file manager, or open a terminal in
+	// it. Reader-triggered like the two routes above — no session, no CLI door, no
+	// agent surface (an agent has its own shell). It spawns a viewer, it never
+	// mutates the workspace, which is what keeps it on the safe side of the line the
+	// removed folder-delete drew: the reader's browser records intent and shows
+	// files, the agent performs file operations.
+	//
+	// The validation order below is the whole security of this route, and every step
+	// runs BEFORE anything is spawned:
+	//   - the action is an exact enum, so an unknown verb can never reach a spawn;
+	//   - insideRoot confines the path (it realpaths, so a symlink escape is caught);
+	//   - lstat, NEVER stat — one check refuses a symlinked directory AND a regular
+	//     file, and a symlinked dir that stays inside the root is exactly what
+	//     insideRoot cannot see;
+	//   - a refusal carries none of the target's bytes (a rejected file must not leak
+	//     its own contents through an error message).
+	if (method === 'POST' && p === '/api/reveal') {
+		const body = await readBody(req)
+		const action = body && body.action
+		if (action !== 'files' && action !== 'terminal')
+			return sendJson(res, 400, { ok: false, code: 'BAD_ACTION', message: 'action must be "files" or "terminal".' })
+
+		const rel = relCanvasPath(String((body && body.path) || ''))
+		const abs = path.resolve(ROOT, rel)
+		if (!insideRoot(ROOT, abs))
+			return sendJson(res, 403, { ok: false, code: 'PATH_OUTSIDE_WORKSPACE', message: 'That folder is outside the workspace.' })
+
+		let isDir = false
+		try { isDir = fs.lstatSync(abs).isDirectory() } catch { isDir = false }
+		if (!isDir)
+			return sendJson(res, 404, { ok: false, code: 'NOT_A_FOLDER', message: 'No such folder in this workspace.' })
+
+		// Always a JSON body, success or not: the browser turns a false into a toast,
+		// and a silent 200 on a system with no file manager is the exact failure mode
+		// this route exists to avoid.
+		if (action === 'files')
+			return revealDir(abs)
+				? sendJson(res, 200, { ok: true })
+				: sendJson(res, 200, { ok: false, code: 'NO_FILE_MANAGER', message: 'No file manager available on this system.' })
+		return openTerminal(abs)
+			? sendJson(res, 200, { ok: true })
+			: sendJson(res, 200, { ok: false, code: 'NO_TERMINAL', message: 'No terminal available on this system.' })
+	}
+
 	// The live selection, revalidated — what the browser rehydrates from on load
 	// and on the `workspace` broadcast. A since-moved/deleted item is pruned from
 	// the response (read is pure — the file is not rewritten).
@@ -1288,9 +1333,12 @@ function serveShell(res) {
 	}
 	// CSP forbids inline <script>, so the token, the version, the image/video/audio
 	// extension unions (which let the browser classify a routed path WITHOUT a copied
-	// list) and the date-axis pattern (which the validator's density checks are written
-	// AGAINST, so a second copy in app.js would be a silent hole) reach the page as
-	// placeholder substitutions rather than injected globals.
+	// list), the date-axis pattern (which the validator's density checks are written
+	// AGAINST, so a second copy in app.js would be a silent hole) and the host platform
+	// reach the page as placeholder substitutions rather than injected globals. The
+	// platform is the kernel's own testimony about the machine it runs on: the folder
+	// menu's first label is OS-specific ("Open in Finder" / "Show in Explorer"), and
+	// `navigator.platform` describes the BROWSER, which is the wrong authority.
 	html = html
 		.replaceAll('__IC_TOKEN__', TOKEN)
 		.replaceAll('__IC_VERSION__', VERSION)
@@ -1298,6 +1346,7 @@ function serveShell(res) {
 		.replaceAll('__IC_VIDEO_EXTS__', JSON.stringify(MEDIA_VIDEO_EXTS))
 		.replaceAll('__IC_AUDIO_EXTS__', JSON.stringify(MEDIA_AUDIO_EXTS))
 		.replaceAll('__IC_DATE_RE__', ISO_DATE_RE.source)
+		.replaceAll('__IC_PLATFORM__', process.platform)
 	res.writeHead(200, {
 		'Content-Type': 'text/html; charset=utf-8',
 		'X-Content-Type-Options': 'nosniff',
