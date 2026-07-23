@@ -11,10 +11,10 @@ The same paradigm inverts data *collection*: instead of pasting secrets and sett
 Ordered — when two conflict, the higher one wins.
 
 1. **Separation of concerns over convenience** — the LLM wrangles data into a strict JSON contract; the skill owns all rendering. The two never mix. An agent that styles pixels is doing the wrong job; a renderer that guesses at data is too.
-2. **Lean context over completeness** — the skill is large (a full runtime, 26 chart kinds, 16 field types), but the agent's context window is sacred. Progressive disclosure everywhere: a ~8 KB lean index first, one exact schema on demand, never the full contract unless explicitly requested.
+2. **Lean context over completeness** — the skill is large (a full runtime, 26 chart kinds, 16 field types), but the agent's context window is sacred. Progressive disclosure everywhere: a ~9 KB lean index first, one exact schema on demand, never the full contract unless explicitly requested.
 3. **Deterministic validation over model judgment** — a program, not a prompt, decides whether a canvas is correct, and its errors teach the fix (code, path, message, hint, example). The agent loops against the validator until the canvas is perfect. The same rule governs facts the agent cannot know: the skill's own version is written into each canvas by the skill, never typed by the model, because a value a model can hallucinate is a value nobody can later trust.
 4. **Secrets on disk over secrets in chat** — captured values are written to local files and redacted from every result, log, and error. The agent learns field names, never values.
-5. **Zero dependencies over feature velocity** — plain Node ≥ 20, four vendored browser files, no build step, no npm install. Every feature must earn its place without a dependency.
+5. **Zero dependencies over feature velocity** — plain Node ≥ 20, a handful of vendored browser files, no build step, no npm install. Every feature must earn its place without a dependency.
 
 ## Non-goals
 

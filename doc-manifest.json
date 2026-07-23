@@ -371,9 +371,10 @@
         "Chrome plays from a 200-only server, so a playback test cannot prove Range works",
         "The ⌘ in a keyboard hint is the wrong glyph off macOS",
         "A pixel offset that dodges a sibling panel breaks when the panel stops being a sibling",
-        "A drop zone sized by its CONTENT is not the drop zone the reader sees"
+        "A drop zone sized by its CONTENT is not the drop zone the reader sees",
+        "The packer's orphan rule spun FOREVER when the heading was the sheet's only element"
       ],
-      "line_count": 422,
+      "line_count": 450,
       "links_to": [
         "docs/architecture.md",
         "docs/gotchas/testing.md",
@@ -470,9 +471,10 @@
         "Deleting collections is not `rm -rf`",
         "A route that serves the user's files by extension must refuse a symlink",
         "The reader's selection is state, not a repo dotfile — and it records, it never acts",
-        "Refusing a request mid-stream: answer with `Connection: close`, never `req.destroy()`"
+        "Refusing a request mid-stream: answer with `Connection: close`, never `req.destroy()`",
+        "Narrowing a path is one line; USING the narrowed one is another"
       ],
-      "line_count": 167,
+      "line_count": 185,
       "links_to": [
         "docs/architecture.md",
         "docs/security.md"
@@ -539,9 +541,11 @@
         "A hash-only `Page.navigate` is a same-document navigation, not a reload",
         "Headless Chrome blocks clipboard *read*, so spy on `writeText` to test a copy feature",
         "Registering a value as a secret pollutes the whole single-process suite's redaction",
-        "An error the code under test CAUSES ON PURPOSE is not a test failure"
+        "An error the code under test CAUSES ON PURPOSE is not a test failure",
+        "`cdp.send()` has NO per-command timeout, so a probe against a HUNG page never returns",
+        "A test double with NO idle timeout outlives every interrupted run"
       ],
-      "line_count": 219,
+      "line_count": 256,
       "links_to": [
         "docs/gotchas/frontend.md",
         "docs/gotchas/runtime.md"

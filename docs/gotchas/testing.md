@@ -217,3 +217,40 @@ The 413 test drives `PUT /api/upload` with an oversized, length-less body and as
 It passed three consecutive runs in isolation and failed once inside a sabotage run, under the extra load of six other failing browser tests. That is the same shape this file already records for fixed-time waits: **a test that breaks when the suite gets HEAVIER, not when the code does.** The tell is a failure that names a transport error (`socket hang up`, `ECONNRESET`) rather than an assertion.
 
 The fix is to decide what the *outcome* is and ignore the rest: the **response** is the outcome, a write-side error is expected noise, and a deadline (15 s) still fails loudly if no response ever arrives — so a genuinely wedged route cannot slip through as "well, the socket died." Generalise it: when the behavior under test is *"the server hangs up on you,"* the harness must treat the hang-up as data, not as an exception. And confirm the relaxation did not defeat the test — disabling the byte counter must still turn it red, which is the only reason to trust a loosened assertion.
+
+## `cdp.send()` has NO per-command timeout, so a probe against a HUNG page never returns
+
+The harness half of the packer hang in [frontend.md](frontend.md), and the reason a test for a non-terminating loop is dangerous to write at all. A wedged renderer answers nothing, ever — so `evaluate(...)` does not reject, it simply never settles. Awaiting one in a `test.before` hook hangs the hook, and a top-level hook is a hook on the **root** suite: the whole single-process run stops with no output and the runner parked at ~0 CPU, the same signature as the `execFileSync` stall above. A test written to catch a hang must not itself be able to hang.
+
+So the drive races every probe against a deadline and treats a timeout as **data**, never as an exception:
+
+```js
+const evalOrNull = async (evaluate, expr, ms = 8000) => {
+	let timer = null
+	const bell = new Promise((r) => { timer = setTimeout(() => r(null), ms) })
+	try { return await Promise.race([Promise.resolve(evaluate(expr)).catch(() => null), bell]) }
+	finally { clearTimeout(timer) }
+}
+```
+
+The snapshot then comes back `{packed: false}` and exactly **one** assertion fails, naming the real defect — the discipline this file already states for `until()`, extended from "the step did not happen" to "the page cannot answer at all." Proven by the sabotage run: with the fix reverted the page span forever, the packer test went red on its own message, and the other 60 tests in the file stayed green. `clearTimeout` in the `finally` is load-bearing too — a stray pending timer keeps the runner alive past the last test.
+
+## A test double with NO idle timeout outlives every interrupted run
+
+The real kernel exits after 30 idle minutes (`IDLE_LIMIT_MS`, gated on no WebSocket clients and no pending sessions). `helpers/fakekernel.js` had no such thing: it lived exactly as long as somebody remembered to kill it. The suite does remember — `test.after` kills every fake — but **an interrupted run never reaches that hook.** A Ctrl-C, a crashed runner, or a `kill -9` orphans the whole batch permanently, and nothing ever collects them.
+
+Measured on one developer machine before the fix: **51 orphaned fakes totalling 542 MB, the oldest 5.8 days old** — each still holding a listening socket and a registry entry pointing at it. Nothing failed, which is why it went unnoticed for days; the cost is invisible until you go looking for it with `ps`.
+
+The fix is a watchdog in the fake, and **which signal it watches is the whole lesson**. A fixed timer has to guess a duration that is simultaneously longer than the slowest legitimate run and short enough to be useful — and guessing short converts a silent leak into a **flaky suite**, which is strictly worse. This file already says a fixed wait is a countdown to the suite outgrowing it; that applies to teardown as much as to assertions.
+
+**Parent death is the exact signal.** A fake exists only to serve one test process, so an absent parent means its reason to exist is gone — and it cannot misfire during a healthy run, however slow the machine gets. POSIX reparents an orphan to init/launchd, so a changed `process.ppid` *is* the death notice:
+
+```js
+const PARENT_PID = process.ppid
+setInterval(() => { if (process.ppid !== PARENT_PID) die() }, 15_000).unref()
+setTimeout(die, 30 * 60 * 1000).unref()   // backstop: Windows keeps the original ppid
+```
+
+Three details worth copying. Both timers are **`unref()`'d** — the listening server is what keeps the process alive, and a watchdog must never be the reason it stays up. The exit routes through `die()`, so the fake **deregisters itself**, and a leak no longer strands a registry entry pointing at a dead port. And the absolute cap is deliberately an order of magnitude beyond the ~3-minute full suite, so it can only ever fire on a fake nobody is using. Verified both directions: an orphaned fake self-destructs in ~5 s, and a clean full run leaves **zero** behind.
+
+The rule generalises to any long-lived helper a suite spawns: **teardown that only runs on the happy path is not teardown.** Ask what collects the process when the runner dies, and if the answer is "the `after` hook," the answer is nothing.

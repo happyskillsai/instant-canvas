@@ -35,6 +35,38 @@ function die() {
 	process.exit(0)
 }
 
+// ---------------------------------------------------------------- self-destruct
+//
+// A fake has no idle shutdown of its own — unlike the REAL kernel, which exits after
+// 30 idle minutes — so it lives exactly as long as somebody remembers to kill it. The
+// suite does (`test.after`), but an interrupted run never reaches that hook: a Ctrl-C
+// or a crashed runner orphans the whole batch, permanently. Measured on one developer
+// machine: 51 survivors totalling 542 MB, the oldest 5.8 days old, each still holding
+// a listening socket and a registry entry pointing at it.
+//
+// PARENT DEATH is the primary signal, not a stopwatch. It is exact — the fake exists
+// only to serve one test process, so an absent parent means the reason to exist is
+// gone — and it cannot misfire during a healthy run, however slow the machine or the
+// suite gets. A fixed timer alone would have to guess a duration that is both longer
+// than the slowest legitimate run and short enough to be useful, and guessing short
+// turns a leak into a flaky suite (this file's siblings already teach that a fixed
+// wait is a countdown to the suite outgrowing it — docs/gotchas/testing.md).
+//
+// POSIX reparents an orphan to init/launchd, so a changed ppid IS the death notice.
+// The absolute cap behind it is a backstop for platforms where that does not hold
+// (Windows keeps the original ppid, and the pid can even be reused): 30 minutes, an
+// order of magnitude beyond the ~3-minute full suite, so it can only ever fire on a
+// fake nobody is using. Both timers are unref'd — the listening server is what keeps
+// this process alive, and a watchdog must never be the reason it stays up.
+const PARENT_PID = process.ppid
+const ORPHAN_CHECK_MS = 15 * 1000
+const MAX_LIFETIME_MS = 30 * 60 * 1000
+setInterval(() => {
+	if (process.ppid !== PARENT_PID)
+		die()
+}, ORPHAN_CHECK_MS).unref()
+setTimeout(die, MAX_LIFETIME_MS).unref()
+
 const srv = http.createServer((req, res) => {
 	const url = req.url.split('?')[0]
 	res.setHeader('content-type', 'application/json')

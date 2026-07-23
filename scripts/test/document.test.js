@@ -410,6 +410,23 @@ test.before(async () => {
 			+ '\n\n## Section Two\n\n'
 			+ 'More body content to guarantee the deck spans at least two sheets. '.repeat(45) }],
 	}))
+	// A heading whose next fragment cannot join it on ANY sheet — the shape that made
+	// packFragments spin forever (the orphan rule pulled the sheet's SOLE element back,
+	// `flush` refuses an empty body, and the queue came out identical to what went in).
+	// The paragraph is deliberately TALLER THAN A WHOLE PAGE, so no heading height and no
+	// font metric can make the two fit together and the fixture cannot quietly stop being
+	// the hard case. A `<p>` is atomic (`kind: null`), so `trySplit` never applies.
+	// The canvas that reported this in the wild was a report of captioned figures: each
+	// `##` followed by a portrait image ~95% of the content height. Same branch, but a
+	// height that only holds at one font size — hence the taller-than-a-page stand-in.
+	fs.writeFileSync(path.join(root, 'orphan.canvas.json'), JSON.stringify({
+		instantcanvas: 1,
+		createdWith: '0.1.0',
+		title: 'Orphan heading',
+		document: { footer: { left: 'Orphan', right: '{{pageNumber}} / {{totalPages}}' } },
+		blocks: [{ type: 'markdown', text: '## A heading whose next block cannot join it\n\n'
+			+ 'ORPHANMARKERZZZ ' + 'Body prose that is one atomic paragraph and cannot be split. '.repeat(700) }],
+	}))
 	// A native markdown file with NO companion — the #paperBtn target. Clicking the button
 	// on it must CREATE its companion carrying document.paper, and a fresh load must then
 	// render it as a paper (persistence reaches print).
@@ -462,6 +479,7 @@ test.before(async () => {
 		paperReloadDrive = await drivePaperReload('paperless.md')
 		paperRevertDrive = await drivePaperRevert('paperless.md')
 		printToastDrive = await drivePrintToast('paper.canvas.json')
+		orphanDrive = await driveOrphanHeading()
 	}
 })
 
@@ -1933,4 +1951,92 @@ test('a toast is hidden in print, absent from the PDF, and cleared before printi
 		const text = execFileSync('pdftotext', [saveTmpPdf(d.pdf), '-'], { encoding: 'utf8' })
 		assert.ok(!/TOASTMARKERZZZ/.test(text), 'the toast text appears on NO printed page')
 	}
+})
+
+// ---------------------------------------------------- the packer must TERMINATE
+//
+// A packer that cannot terminate wedges the RENDERER, not just the feature: the loop
+// never yields, so the tab stops answering entirely (no error, no memory growth, and
+// DevTools cannot be opened). That makes it hostile to drive. `cdp.send()` carries NO
+// per-command timeout, so an evaluate against a spinning page never settles — awaiting
+// one here would hang this before hook and take the WHOLE single-process suite with it,
+// the blast radius this file's header already warns about.
+//
+// So every probe races a deadline and a timeout is DATA: the snapshot comes back
+// {packed: false} and exactly one top-level assertion fails, naming the real defect.
+const evalOrNull = async (evaluate, expr, ms = 8000) => {
+	let timer = null
+	const bell = new Promise((r) => { timer = setTimeout(() => r(null), ms) })
+	try { return await Promise.race([Promise.resolve(evaluate(expr)).catch(() => null), bell]) }
+	finally { clearTimeout(timer) }
+}
+
+// (No backticks inside evaluate() — the block is a template literal.)
+const ORPHAN_SNAPSHOT_JS = `
+	(() => {
+		const sheets = [...document.querySelectorAll('.deck .sheet')];
+		const bodyOf = (s) => s.querySelector('.sheet-body');
+		const loneHeading = sheets.filter((s) => {
+			const b = bodyOf(s);
+			return !!b && b.children.length === 1 && b.children[0].classList.contains('doc-h');
+		}).length;
+		return {
+			sheetCount: sheets.length,
+			loneHeadingSheets: loneHeading,
+			clippedSheets: sheets.filter((s) => s.classList.contains('clipped')).length,
+			markerOnPaper: sheets.some((s) => s.textContent.indexOf('ORPHANMARKERZZZ') !== -1),
+			headingOnPaper: sheets.some((s) => s.textContent.indexOf('cannot join it') !== -1),
+			overflowing: sheets
+				.map((s, i) => ({ i, sh: s.scrollHeight, ch: s.clientHeight, clipped: s.classList.contains('clipped') }))
+				.filter((r) => !r.clipped && r.sh > r.ch),
+		};
+	})()
+`
+
+const ORPHAN_FAILED = { packed: false, sheetCount: 0, loneHeadingSheets: 0, clippedSheets: 0, markerOnPaper: false, headingOnPaper: false, overflowing: [] }
+
+let orphanDrive = null
+
+async function driveOrphanHeading() {
+	const url = `http://127.0.0.1:${K.port}/?token=${encodeURIComponent(K.token)}#/c/${encodeURIComponent('orphan.canvas.json')}`
+	return withChrome(CHROME, url, { onNewDocument: PROBE }, async ({ evaluate }) => {
+		const deadline = Date.now() + 30_000
+		let packed = false
+		for (;;) {
+			const ready = await evalOrNull(evaluate,
+				`(() => !!(window.ic && document.querySelectorAll('.deck .sheet').length >= 1))()`, 5000)
+			if (ready) { packed = true; break }
+			if (Date.now() > deadline)
+				break
+			await cdpSleep(250)
+		}
+		if (!packed)
+			return { ...ORPHAN_FAILED }
+		await cdpSleep(400)
+		const snap = await evalOrNull(evaluate, ORPHAN_SNAPSHOT_JS, 10_000)
+		return snap ? { packed: true, ...snap } : { ...ORPHAN_FAILED }
+	})
+}
+
+test('a heading alone on a sheet cannot join its next block: the packer TERMINATES', { skip: browserSkip, timeout: 120_000 }, () => {
+	const d = orphanDrive
+	// THE assertion. Against the pre-fix packer the renderer spins forever, every probe
+	// times out, and this fails — which is the only reason to trust it passing.
+	assert.equal(d.packed, true, 'the deck packed: a non-terminating packer never renders a sheet')
+
+	// The positive control, without which the test above could pass for the wrong reason.
+	// The bug lives in ONE branch — the orphan rule firing when the heading is the sheet's
+	// only element — and that branch is reached only if the two genuinely cannot share a
+	// page. If a font or metric change ever let them fit, this fixture would stop
+	// exercising the branch and the test would go quietly vacuous. It fails loudly instead.
+	assert.equal(d.loneHeadingSheets, 1, 'the heading really was left alone on its own sheet — the branch under test ran')
+	assert.equal(d.clippedSheets, 1, 'the over-long paragraph took the next sheet and was clipped, as an atomic fragment taller than a page must be')
+
+	// Terminating is not enough — nothing may be dropped on the way out.
+	assert.equal(d.headingOnPaper, true, 'the heading reached paper')
+	assert.equal(d.markerOnPaper, true, 'the paragraph reached paper rather than being consumed by the loop')
+
+	// And the invariant every sheet answers to still holds (a clipped sheet is exempt by
+	// construction — overflow:hidden is what preserves it).
+	assert.deepEqual(d.overflowing, [], 'no unclipped sheet overflows its page box')
 })

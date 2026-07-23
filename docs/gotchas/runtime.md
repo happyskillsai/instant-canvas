@@ -165,3 +165,21 @@ The correct move is to let the protocol close the connection: set `Connection: c
 The sibling discipline on the same route: the write goes to a temp file (`.<name>.<random>.part`) **in the destination directory**, so the final `rename` is atomic on one filesystem, and *every* exit — the cap, a client that vanishes, a write error — unlinks it. A half-written `.part` left in the reader's repository is litter this feature must not produce, and it is asserted by scanning the whole tree for `*.part` rather than the one path the test happened to name.
 
 One deliberate non-inheritance from `fsatomic.js`: the dropped file is **not** chmod'd to `0o600`. That mode is for state and secrets — the registry, the identity file, a written `.env`. A dropped photo is the reader's own ordinary file, and writing it owner-only would make it unreadable to the tools they open it with. It carries the process umask default like anything else they create in that folder.
+
+## Narrowing a path is one line; USING the narrowed one is another
+
+`POST /api/reveal` was widened from folders-only to any item, so the browser could offer the same context menu on a canvas or an image (see [../architecture.md](../architecture.md)). The whole safety argument for that widening is a single sentence — *the OS only ever receives a directory* — so a file is resolved to `path.dirname` before any spawn, and `lib/reveal.js` keeps its "the argument is always a directory" contract.
+
+The resolution was added correctly. The two call sites below it were not:
+
+```js
+let dir = null                       // ← the new, resolved, checked value
+// …lstat both halves, refuse symlinks, 404 otherwise…
+if (action === 'files')
+    return revealDir(abs)            // ← still the OLD variable. The FILE goes to the OS.
+return openTerminal(abs)
+```
+
+Everything that made the change safe — the `dirname`, the `lstat` on the parent, the symlinked-ancestor refusal — computed a value that nothing then used. On macOS `open <file>` **launches** the file in whatever application claims it, so the reviewed behavior and the shipped behavior would have differed completely, and the route would still have answered `{ok: true}` either way.
+
+Two things worth keeping. **A guard and the thing it guards are different lines, and adding the guard does not move the use.** When a change introduces a narrowed, validated copy of a value, the edit is not done until every consumer of the original has been re-pointed — grep the old identifier inside the block rather than trusting that the new one reads correctly on its own. And **assert what the OS was handed, not what the route returned**: the test reads the argv-recording shim and requires the parent directory *and* the absence of the filename, because a route that passed the file straight through still returns a 200 and still opens a window. Sabotaging `revealDir(dir)` back to `revealDir(abs)` turns two tests red; asserting only on the status code would have turned none.

@@ -15,7 +15,7 @@ source:
 `package.json` at the repo root is the single version source, read everywhere through `scripts/lib/pkgmeta.js` (see [architecture.md](architecture.md)). Every release moves **two artifacts in lockstep**:
 
 1. **The npm package `@happyskillsai/instant-canvas`** — the runtime (scoped: npm's similarity rule blocks the unscoped name; `publishConfig.access public` keeps `npm publish` flag-free). Published manually from the repo root; the `prepublishOnly` script re-runs the full test suite first, and publishing requires `npm login`. The installed command stays `instant-canvas`.
-2. **The HappySkills skill** at `.agents/skills/instant-canvas/` — the ~87 KB agent-facing contract. Its `skill.json` version is mirrored from `package.json` in the same release commit, and the bundle is republished manually through the `happyskills-publish` flow.
+2. **The HappySkills skill** at `.agents/skills/instant-canvas/` — the ~89 KB agent-facing contract. Its `skill.json` version is mirrored from `package.json` in the same release commit, and the bundle is republished manually through the `happyskills-publish` flow.
 
 ## The version bumper: `npm run rls`
 
@@ -41,6 +41,6 @@ Releases are orchestrated by the project skill at `.agents/skills/release-cli/` 
 
 ## Publishing checklist (manual, after the release commit and tag)
 
-1. `npm login` (once per machine), then `npm publish` from the repo root — `prepublishOnly` runs the suite; expect ~80 s.
+1. `npm login` (once per machine), then `npm publish` from the repo root — `prepublishOnly` runs the suite; expect ~3 minutes.
 2. Smoke the consumer path from any directory: `npx -y @happyskillsai/instant-canvas catalog`.
 3. Republish the skill bundle to HappySkills — its `skill.json` already carries the new version.

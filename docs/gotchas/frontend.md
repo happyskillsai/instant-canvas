@@ -420,3 +420,31 @@ The fix is to bind the listeners to the element that **fills** the pane rather t
 - **Assert the geometry, never the element.** The regression test drops at a *point* near the bottom of the pane and lets `elementFromPoint` decide what is there, then asserts that point was **outside** `.browse` — because a test that names `.browse` as the target passes against the buggy code too (see [testing.md](testing.md)).
 
 The general rule: **when a pointer target is a region rather than a widget, the listening element must be the one whose box covers the region.** Asking "which element is this feature about?" gives the wrong answer; ask "which element is the reader aiming at, and what are its bounds when the content is empty?"
+
+## The packer's orphan rule spun FOREVER when the heading was the sheet's only element
+
+The worst failure in this file, because it takes the whole browser with it. A reader opened a report of captioned figures — each `##` heading followed by a portrait image about 95% of the content height — and the tab froze hard: no error, no memory growth, no CSP violation, and **DevTools would not open**, because the main thread never came back to service it. The only thing in the console was noise from the reader's own wallet extension, which is exactly the wrong place to look.
+
+`packFragments` walks a `pending` queue, and its last resort is the orphan rule — never leave a heading as the last element on a sheet:
+
+```js
+const last = measBody.lastElementChild
+pending.unshift(f)
+if (last && last.classList.contains('doc-h')) {   // WRONG — no "is anything left?" test
+    last.remove()
+    pending.unshift({ el: last, kind: null, heading: true })
+}
+flush()
+```
+
+When that heading is the sheet's **only** child, removing it empties `measBody` — and `flush()` opens with `if (!measBody.children.length) return`. So no sheet is emitted, nothing is consumed, and the queue comes out byte-for-byte what it went in. The next iteration reproduces the state exactly. Three conditions have to coincide: a heading alone at the top of a fresh sheet, a next fragment that is **atomic** (`f.kind` null, so `trySplit` never applies — a paragraph or an image), and too tall to sit beside it.
+
+The fix is to apply the rule only when it leaves something behind (`measBody.children.length > 1`). A heading alone means the sheet is fresh, so a fragment that will not fit beside it cannot share a page under *any* arrangement: the heading keeps this sheet, the fragment takes the next, and the atomic branch clips it there if it is taller than a page. An orphaned heading is a cosmetic loss; the alternative was a hang.
+
+Three lessons, and the first is the one that generalises past pagination:
+
+- **A loop whose progress depends on a function that can silently no-op is not a loop that terminates.** `flush()` refusing an empty body is correct on its own, and the orphan rule is correct on its own; the defect lives in the seam, where one silently cancels the other. Any `while (queue.length)` that consumes through a helper needs the question asked explicitly: *is there an input for which this iteration removes nothing?*
+- **The `heading: true` flag was already there and nothing read it.** Three call sites set it, the loop re-derived the same fact from a class name, and no branch consulted it — a marker for a hazard that was never actually wired up. A flag nobody reads is not a guard; it is a comment that looks like code.
+- **You cannot debug a frozen page from inside it.** The renderer is pinned, so no breakpoint, no console, and no `evaluate` will ever answer. Instrument from **outside** the page instead: CDP's `onNewDocument` runs before any page script, so patching `Element.prototype.remove` to record a bounded tail and throw after N calls turns an invisible hang into a printed cycle — here two fragments, a `doc-h` and an image paragraph, alternating forever.
+
+The regression test lives in `document.test.js` and its harness has a trap of its own, recorded in [testing.md](testing.md): `cdp.send()` carries no per-command timeout, so a probe against a spinning renderer never settles.

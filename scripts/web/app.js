@@ -356,17 +356,22 @@ document.addEventListener('click', () => {
 // coordinates, so close rather than let it float somewhere meaningless.
 window.addEventListener('resize', () => closeContextMenu(false))
 
-/** POST /api/reveal, turning every outcome into feedback. Never a silent no-op. */
-async function revealFolder(rel, action) {
+/** POST /api/reveal, turning every outcome into feedback. Never a silent no-op.
+ *  `rel` may name a FOLDER or any item; the kernel resolves a file to its parent, so
+ *  the toast says which of the two just happened rather than letting "Open in Finder"
+ *  on an image imply the image itself opened. */
+async function revealPath(rel, action, isFolder) {
 	const { status, json } = await api('/api/reveal', {
 		method: 'POST',
 		body: JSON.stringify({ path: rel, action }),
 	})
 	if (status === 200 && json && json.ok) {
-		toast(action === 'terminal' ? 'Opening a terminal…' : 'Opening ' + fileManagerName() + '…')
+		toast(action === 'terminal'
+			? (isFolder ? 'Opening a terminal…' : 'Opening a terminal in the containing folder…')
+			: (isFolder ? 'Opening ' + fileManagerName() + '…' : 'Opening the containing folder in ' + fileManagerName() + '…'))
 		return
 	}
-	toast((json && json.message) || 'Could not open that folder.', 4000)
+	toast((json && json.message) || 'Could not open that location.', 4000)
 }
 
 // The kernel is the authority on the machine it runs on — `navigator.platform`
@@ -376,8 +381,13 @@ const IC_PLATFORM = document.body.dataset.platform || ''
 const fileManagerName = () => (IC_PLATFORM === 'darwin' ? 'Finder' : IC_PLATFORM === 'win32' ? 'Explorer' : 'your file manager')
 const revealLabel = () => (IC_PLATFORM === 'darwin' ? 'Open in Finder' : IC_PLATFORM === 'win32' ? 'Show in Explorer' : 'Open in file manager')
 
-/** The four actions every folder anchor offers. `rel` is workspace-relative ('' = root). */
-function folderMenuItems(rel) {
+/** The four actions every anchor offers — a folder OR any item (canvas, document, env,
+ *  image, video, audio). The four are deliberately identical for both, because the two
+ *  that differ do not differ in what the reader wants: Copy path / Copy name always name
+ *  the thing under the cursor, and the two openers act on the folder that CONTAINS it
+ *  (a terminal cannot open an image, and a file manager showing one is just its folder).
+ *  `rel` is workspace-relative ('' = root); `isFolder` only tunes the toast wording. */
+function itemMenuItems(rel, isFolder) {
 	// A workspace-relative path always uses '/', but the ROOT is whatever the kernel's
 	// OS writes — `C:\Users\me\ws` on Windows. Join with the root's own separator, or a
 	// copied path is unpastable into Explorer and cmd.
@@ -388,19 +398,25 @@ function folderMenuItems(rel) {
 		: root.split(/[/\\]/).filter(Boolean).pop() || root
 	const absolute = rel ? root + sep + rel.split('/').join(sep) : root
 	return [
-		{ label: revealLabel(), onClick: () => revealFolder(rel, 'files') },
-		{ label: 'Open in terminal', onClick: () => revealFolder(rel, 'terminal') },
+		{ label: revealLabel(), onClick: () => revealPath(rel, 'files', isFolder) },
+		{ label: 'Open in terminal', onClick: () => revealPath(rel, 'terminal', isFolder) },
 		{ separator: true },
 		{ label: 'Copy path', onClick: async () => toast(await copyText(absolute) ? 'Path copied' : 'Could not copy the path.') },
 		{ label: 'Copy name', onClick: async () => toast(await copyText(name) ? 'Name copied' : 'Could not copy the name.') },
 	]
 }
 
-/** Open the folder menu from a contextmenu event on `rel`. */
-function openFolderMenu(e, rel, anchorEl = null) {
-	e.preventDefault()  // ONLY on a folder target — Inspect Element must keep working everywhere else
+/** Open the item menu from a contextmenu event on `rel`. */
+function openItemMenu(e, rel, anchorEl = null, isFolder = true) {
+	// ONLY on an anchor that HAS this menu — a folder row/tile/crumb or a browse item
+	// tile. Everywhere else (prose, charts, sheets, the modal's content) the native menu
+	// must survive: this is a developer tool and Inspect Element is not ours to take.
+	// Extending the anchors to item tiles does spend Inspect-Element-over-a-tile, which
+	// is the deliberate trade for the menu being reachable on every item rather than
+	// only on the folders that happen to hold them.
+	e.preventDefault()
 	e.stopPropagation()
-	openContextMenu({ x: e.clientX, y: e.clientY, items: folderMenuItems(rel), anchorEl })
+	openContextMenu({ x: e.clientX, y: e.clientY, items: itemMenuItems(rel, isFolder), anchorEl })
 }
 
 // Syntax highlighting is the skill's job (presentation of local data), and hljs emits
@@ -1678,7 +1694,7 @@ treeRoot().addEventListener('contextmenu', (e) => {
 	const row = e.target.closest && e.target.closest('.trow')
 	if (!row || typeof row.dataset.rel !== 'string')
 		return
-	openFolderMenu(e, row.dataset.rel, row)
+	openItemMenu(e, row.dataset.rel, row)
 })
 
 /** Route change: a class toggle plus an incremental reveal of the active folder's
@@ -2208,13 +2224,23 @@ function dendrogramPath(rows, enc) {
 
 	const leafX = new Map(leaves.map((n, i) => [n, i]))
 	const cache = new Map()
+	// `active` is the same guard `collect` above already carries, for the same reason and
+	// on the same data: a "#i" is supposed to point at an EARLIER merge, but nothing
+	// enforces it — the validator accepts a linkage whose refs form a cycle. The cache is
+	// written AFTER the recursion, so it cannot break one: #0 -> #1 -> #0 recursed until
+	// the stack gave out (RangeError in ~1 ms), and `mountCharts`'s per-chart catch turned
+	// that into a chart that silently never drew. A cycle now resolves to the origin
+	// instead, so the rest of the tree still renders. Acyclic linkages are untouched.
+	const active = new Set()
 	const posOf = (node) => {
 		if (!isRef(node))
 			return { x: leafX.has(node) ? leafX.get(node) : 0, y: 0 }
 		if (cache.has(node)) return cache.get(node)
 		const m = merges[refIdx(node)]
-		if (!m) return { x: 0, y: 0 }
+		if (!m || active.has(node)) return { x: 0, y: 0 }
+		active.add(node)
 		const a = posOf(m.l), b = posOf(m.r)
+		active.delete(node)
 		const q = { x: (a.x + b.x) / 2, y: m.h }
 		cache.set(node, q)
 		return q
@@ -4043,10 +4069,22 @@ function packFragments(fragments, geo, doc, host) {
 			flush(true)
 			continue
 		}
-		// Orphan rule: never leave a heading as the last element on a sheet.
+		// Orphan rule: never leave a heading as the last element on a sheet — but ONLY
+		// when something remains behind it. Pulling back the sheet's SOLE element empties
+		// measBody, and `flush` refuses an empty body, so no sheet is emitted and the
+		// queue comes out byte-for-byte what it went in: the loop spins forever on the
+		// same two fragments and the browser's main thread never comes back (no error,
+		// no memory growth — the tab simply stops, DevTools included).
+		//
+		// A heading alone on the sheet means the sheet is FRESH, so `f` not fitting beside
+		// it proves the two cannot share a page under any arrangement. The heading keeps
+		// this sheet and `f` takes the next one, where the atomic branch above clips it if
+		// it is taller than a page. An orphaned heading is a cosmetic loss; the alternative
+		// was a hang. Reproduced by a `##` heading followed by a portrait image ~95% of the
+		// content height — the shape any report of captioned figures produces.
 		const last = measBody.lastElementChild
 		pending.unshift(f)
-		if (last && (last.classList.contains('doc-h') || last.classList.contains('chapter-head'))) {
+		if (last && measBody.children.length > 1 && (last.classList.contains('doc-h') || last.classList.contains('chapter-head'))) {
 			last.remove()
 			pending.unshift({ el: last, kind: null, heading: true })
 		}
@@ -6795,20 +6833,24 @@ async function renderBrowse(main, rel) {
 	crumb.addEventListener('contextmenu', (e) => {
 		const b = e.target.closest && e.target.closest('[data-crumb-rel]')
 		if (!b) return
-		openFolderMenu(e, b.dataset.crumbRel, b)
+		openItemMenu(e, b.dataset.crumbRel, b)
 	})
 
-	// Right-click a FOLDER tile → that folder. Delegated from the browse root for two
-	// reasons: buildAll() rebuilds the tile set on a layout/scope change, and the
-	// `workspace` broadcast SYNCS tiles in place (inserting and removing nodes) rather
-	// than rebuilding — so a listener bound to a tile node is not guaranteed to survive.
-	// Only folder tiles answer: a canvas or an image is not a folder, and suppressing
-	// the native menu over one would cost Inspect Element for nothing.
+	// Right-click ANY tile → that item. Delegated from the browse root for two reasons:
+	// buildAll() rebuilds the tile set on a layout/scope change, and the `workspace`
+	// broadcast SYNCS tiles in place (inserting and removing nodes) rather than
+	// rebuilding — so a listener bound to a tile node is not guaranteed to survive.
+	//
+	// Every kind answers, not just folders. Copy path / Copy name are exactly as useful
+	// on an image as on the folder holding it, and the two openers resolve a file to its
+	// parent kernel-side — so the menu is uniform and the reader never has to know which
+	// tiles are "special". The cost is the native menu over a tile, which is the price of
+	// having our own there; it survives everywhere else in the app.
 	root.addEventListener('contextmenu', (e) => {
 		const tile = e.target.closest && e.target.closest('.gt')
-		if (!tile || tile.dataset.kind !== 'folder' || typeof tile.dataset.rel !== 'string')
+		if (!tile || typeof tile.dataset.rel !== 'string')
 			return
-		openFolderMenu(e, tile.dataset.rel, tile)
+		openItemMenu(e, tile.dataset.rel, tile, tile.dataset.kind === 'folder')
 	})
 
 	// ---------- data ----------
@@ -7227,7 +7269,7 @@ async function renderBrowse(main, rel) {
 		// cannot reach — and last, after the grid/list toggle.
 		const moreBtn = makeBtn('g-btn g-icononly g-folder-more', icon('ellipsis-vertical'), (e) => {
 			const r = e.currentTarget.getBoundingClientRect()
-			openContextMenu({ x: r.left, y: r.bottom + 6, items: folderMenuItems(bs.rel), anchorEl: e.currentTarget })
+			openContextMenu({ x: r.left, y: r.bottom + 6, items: itemMenuItems(bs.rel, true), anchorEl: e.currentTarget })
 		}, 'Actions for this folder')
 		moreBtn.setAttribute('aria-haspopup', 'menu')
 		controls.append(moreBtn)

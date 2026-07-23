@@ -11,11 +11,11 @@ source:
 
 ## Everything inside the skill folder ships — keep everything else out
 
-`release`/`publish` bundles the **entire** `.agents/skills/instant-canvas/` folder; whatever you drop in there reaches every consumer and competes for their agents' context. This is exactly why the runtime was migrated out (2026-07-11): the skill folder now carries only the agent-facing contract — SKILL.md, skill.json, CHANGELOG.md, LICENSE, ~87 KB — and 100% of the logic ships as the `instant-canvas` npm package instead, fetched lazily by `npx`. Never add scripts, design notes, specs, test tooling, or dev docs to the skill folder; if a consumer needs it, it belongs in the npm package.
+`release`/`publish` bundles the **entire** `.agents/skills/instant-canvas/` folder; whatever you drop in there reaches every consumer and competes for their agents' context. This is exactly why the runtime was migrated out (2026-07-11): the skill folder now carries only the agent-facing contract — SKILL.md, skill.json, CHANGELOG.md, LICENSE, ~89 KB — and 100% of the logic ships as the `instant-canvas` npm package instead, fetched lazily by `npx`. Never add scripts, design notes, specs, test tooling, or dev docs to the skill folder; if a consumer needs it, it belongs in the npm package.
 
 ## The npm tarball is an allowlist — verify with `npm pack --dry-run`
 
-The package publishes only what `package.json` `files` names: `scripts/` minus `scripts/test` (the `!scripts/test` negation), plus the files npm force-includes (package.json, README, LICENSE, CHANGELOG). After touching `files` or adding top-level directories, run `npm pack --dry-run` and read the list — a wrong allowlist either ships the tests or drops `scripts/web/`, leaving a kernel that serves nothing. Shape at migration time: 29 files, ~1.4 MB packed, ~4.3 MB unpacked.
+The package publishes only what `package.json` `files` names: `scripts/` minus `scripts/test` (the `!scripts/test` negation), plus the files npm force-includes (package.json, README, LICENSE, CHANGELOG). After touching `files` or adding top-level directories, run `npm pack --dry-run` and read the list — a wrong allowlist either ships the tests or drops `scripts/web/`, leaving a kernel that serves nothing. Shape at migration time: 29 files, ~1.4 MB packed, ~4.3 MB unpacked. **Current shape: 53 files, 2.3 MB packed, 7.0 MB unpacked** — read that as the sanity reference; the migration figures are kept only to show what the split moved.
 
 ## npm FORCE-INCLUDES anything named `README*`, and a negation cannot take it back
 

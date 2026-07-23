@@ -202,10 +202,14 @@ test.before(async () => {
 	fs.writeFileSync(path.join(root, 'docs', 'guide.md'), '# Guide\n')
 	fs.mkdirSync(path.join(root, 'demos'))
 	fs.writeFileSync(path.join(root, 'top.canvas.json'), canvas('Top'))
-	// A file whose bytes must never appear in a refusal.
+	// A file whose bytes must never appear in a refusal — or reach a spawn.
 	fs.writeFileSync(path.join(root, 'secret.txt'), 'DB_PASSWORD=hunter2-revealtest\n')
-	if (posix)
+	if (posix) {
 		fs.symlinkSync(path.join(root, 'docs'), path.join(root, 'linkdir'))
+		// The file half of the symlink guard: now that a FILE is a legal target, the
+		// link-refusal needs a linked FILE to refuse, not only a linked directory.
+		fs.symlinkSync(path.join(root, 'secret.txt'), path.join(root, 'linkfile'))
+	}
 
 	// Shim the openers so a 200 records a line instead of launching a real file manager
 	// on the machine running the suite. The kernel inherits this PATH from the CLI.
@@ -265,15 +269,45 @@ test('a path outside the workspace root is 403 and spawns nothing', async () => 
 	await assertNothingSpawned()
 })
 
-test('a FILE is a byte-clean 404 that carries none of its contents', async () => {
+// A FILE is now a first-class target — the menu is on every item, not just folders —
+// and the whole safety of that widening rests on ONE property: the file path never
+// reaches a spawn. The opener is handed the containing DIRECTORY, so the route grants
+// nothing the reader could not already do by right-clicking the folder itself.
+test('a FILE opens its CONTAINING folder, and the OS receives the folder — never the file', { skip: posix ? false : 'POSIX only' }, async () => {
+	fs.writeFileSync(revealLog, '')
+	const { status, json } = await post({ path: 'docs/guide.md', action: 'files' })
+	assert.equal(status, 200)
+	assert.deepEqual(json, { ok: true })
+	const inv = await waitForInvocations(revealLog, 1)
+	assert.deepEqual(inv[0], [path.join(root, 'docs')], 'the PARENT directory, as one argv entry')
+	// The assertion that makes the one above mean something: nothing anywhere in the
+	// recorded argv names the file. A route that passed `guide.md` through would still
+	// have opened a window on macOS, so "it returned 200" proves nothing on its own.
+	assert.ok(!JSON.stringify(inv).includes('guide.md'), 'the file itself was never handed to the opener')
+})
+
+test('a file at the ROOT resolves to the root, and a terminal gets the same treatment', { skip: posix ? false : 'POSIX only' }, async () => {
+	fs.writeFileSync(revealLog, '')
+	const { status } = await post({ path: 'top.canvas.json', action: 'terminal' })
+	assert.equal(status, 200)
+	const inv = await waitForInvocations(revealLog, 1)
+	assert.ok(!JSON.stringify(inv).includes('top.canvas.json'), 'the canvas file never reached the terminal spawn')
+	assert.ok(JSON.stringify(inv).includes(root), 'the workspace root did')
+})
+
+// The `.env` line holds from the other side too: reveal never reads a byte of the file
+// it resolves, so a secrets file is neither refused-with-an-echo nor opened — only the
+// folder it sits in is, which the reader can already reach.
+test('resolving a SECRETS file opens its folder and echoes none of its contents', { skip: posix ? false : 'POSIX only' }, async () => {
 	fs.writeFileSync(revealLog, '')
 	const { status, json } = await post({ path: 'secret.txt', action: 'files' })
-	assert.equal(status, 404)
-	assert.equal(json.code, 'NOT_A_FOLDER')
+	assert.equal(status, 200)
 	const body = JSON.stringify(json)
-	assert.ok(!body.includes('DB_PASSWORD'), 'the refusal does not echo the target')
-	assert.ok(!body.includes('hunter2-revealtest'), 'the refusal does not echo the target')
-	await assertNothingSpawned()
+	assert.ok(!body.includes('DB_PASSWORD'), 'the reply does not echo the target')
+	assert.ok(!body.includes('hunter2-revealtest'), 'the reply does not echo the target')
+	const inv = await waitForInvocations(revealLog, 1)
+	assert.deepEqual(inv[0], [root], 'its folder — the workspace root — was opened')
+	assert.ok(!JSON.stringify(inv).includes('hunter2'), 'no byte of the file reached the spawn')
 })
 
 test('a SYMLINKED directory is a 404 — this is what lstat buys over stat', { skip: posix ? false : 'POSIX only' }, async () => {
@@ -282,13 +316,33 @@ test('a SYMLINKED directory is a 404 — this is what lstat buys over stat', { s
 	fs.writeFileSync(revealLog, '')
 	const { status, json } = await post({ path: 'linkdir', action: 'files' })
 	assert.equal(status, 404)
-	assert.equal(json.code, 'NOT_A_FOLDER')
+	assert.equal(json.code, 'NOT_IN_WORKSPACE')
 	await assertNothingSpawned()
 })
 
-test('a traversal that lands on a non-directory is a 404', async () => {
-	const { status } = await post({ path: 'docs/../secret.txt', action: 'files' })
+// Newly reachable now that the named path may be a FILE: the file half of the check
+// admits `linkdir/guide.md` (a real file — lstat follows intermediate components), and
+// only lstat'ing the PARENT it resolves to catches that the parent is a link.
+test('a file reached through a SYMLINKED ancestor is a 404', { skip: posix ? false : 'POSIX only' }, async () => {
+	fs.writeFileSync(revealLog, '')
+	const { status, json } = await post({ path: 'linkdir/guide.md', action: 'files' })
 	assert.equal(status, 404)
+	assert.equal(json.code, 'NOT_IN_WORKSPACE')
+	await assertNothingSpawned()
+})
+
+test('a SYMLINKED file is a 404 — lstat refuses the link itself', { skip: posix ? false : 'POSIX only' }, async () => {
+	fs.writeFileSync(revealLog, '')
+	const { status, json } = await post({ path: 'linkfile', action: 'files' })
+	assert.equal(status, 404)
+	assert.equal(json.code, 'NOT_IN_WORKSPACE')
+	await assertNothingSpawned()
+})
+
+test('a path that does not exist at all is a 404', async () => {
+	const { status, json } = await post({ path: 'docs/../nope.txt', action: 'files' })
+	assert.equal(status, 404)
+	assert.equal(json.code, 'NOT_IN_WORKSPACE')
 })
 
 test('an unknown action is 400 BAD_ACTION and spawns nothing', async () => {
@@ -404,6 +458,24 @@ test.before(async () => {
 		await sleep(150)
 		o.menuAfterOutside = await evaluate(q('.ic-menu'))
 
+		// ---- 3b. a NON-folder tile opens the SAME menu, naming the FILE ----
+		// The point of the widening: an item tile is an anchor too. Copy path / Copy name
+		// must name the item under the cursor, not the folder holding it — the failure
+		// mode a "just reuse the folder menu" implementation would ship silently.
+		o.steps.itemRC = await evaluate(rightClick('.browse .gt[data-kind="canvas"]'))
+		await sleep(150)
+		o.itemLabels = await evaluate(menuLabels)
+		o.itemCopied = await evaluate('(function(){ window.__clip = [];' +
+			'navigator.clipboard.writeText = function(t){ window.__clip.push(t); return Promise.resolve() };' +
+			'var items = Array.from(document.querySelectorAll(".ic-menu .menu-item"));' +
+			'var byName = function(n){ return items.filter(function(b){ return b.textContent === n })[0] };' +
+			'var p = byName("Copy path"), n = byName("Copy name");' +
+			'if (!p || !n) return null; p.click(); n.click(); return true })()')
+		await sleep(300)
+		o.itemClip = await evaluate('(window.__clip || []).slice()')
+		await evaluate('document.body.click()')
+		await sleep(120)
+
 		// ---- 4. the browse toolbar dots ----
 		o.dotsCount = await evaluate(q('.browse .g-folder-more'))
 		o.dotsVisible = await evaluate('(function(){ var b = document.querySelector(".browse .g-folder-more"); if (!b) return false;' +
@@ -469,6 +541,19 @@ test('a folder tile and the breadcrumb open the SAME menu, and an outside click 
 	assert.equal(B.menuAfterOutside, 0, 'an outside click closed it')
 	assert.ok(B.steps.crumbRC, 'a breadcrumb segment was found')
 	assert.deepEqual(B.crumbLabels, B.treeLabels, 'the breadcrumb offers the same menu')
+})
+
+test('a NON-folder item tile opens the same menu, and it names the ITEM', { skip: skipBrowser }, () => {
+	assert.ok(B.steps.itemRC, 'a canvas tile was found in the browse view')
+	assert.deepEqual(B.itemLabels, B.treeLabels,
+		'the same four actions on an item as on a folder — one menu, not a second implementation')
+	assert.equal(B.itemCopied, true, 'both copy items were present and clickable')
+	assert.equal(B.itemClip.length, 2, 'Copy path and Copy name each wrote once')
+	// The whole point: the ITEM, not the folder that holds it. An implementation that
+	// reused the containing folder would still pass every assertion above.
+	assert.ok(B.itemClip[0].endsWith('top.canvas.json'), 'Copy path copied the FILE path, ending in its name: ' + B.itemClip[0])
+	assert.ok(path.isAbsolute(B.itemClip[0]), 'and it is absolute, so it pastes into a terminal')
+	assert.equal(B.itemClip[1], 'top.canvas.json', 'Copy name copied the FILE name')
 })
 
 test('the browse toolbar carries an always-visible dots button for the current folder', { skip: skipBrowser }, () => {

@@ -1168,21 +1168,43 @@ async function route(req, res, url) {
 		const rel = relCanvasPath(String((body && body.path) || ''))
 		const abs = path.resolve(ROOT, rel)
 		if (!insideRoot(ROOT, abs))
-			return sendJson(res, 403, { ok: false, code: 'PATH_OUTSIDE_WORKSPACE', message: 'That folder is outside the workspace.' })
+			return sendJson(res, 403, { ok: false, code: 'PATH_OUTSIDE_WORKSPACE', message: 'That path is outside the workspace.' })
 
-		let isDir = false
-		try { isDir = fs.lstatSync(abs).isDirectory() } catch { isDir = false }
-		if (!isDir)
-			return sendJson(res, 404, { ok: false, code: 'NOT_A_FOLDER', message: 'No such folder in this workspace.' })
+		// An ITEM names its own folder. A file is resolved to its PARENT here and the
+		// opener is handed that directory — the file path itself never reaches a spawn.
+		// So widening this route from folders to every item adds no capability the folder
+		// surface did not already have (the reader could always right-click the folder),
+		// and `lib/reveal.js` keeps its "the argument is always a directory" contract
+		// rather than growing a second, file-shaped code path per platform.
+		//
+		// lstat, never stat, on BOTH halves. On the named path it refuses a symlink that
+		// `insideRoot` admits happily because it resolves back inside the root — the check
+		// this route has always leaned on. On the parent it refuses a symlinked ANCESTOR,
+		// which is newly reachable now that the named path may be a file: `linkdir/x.png`
+		// is a real file whose dirname is a link. Anything that is neither a directory nor
+		// a regular file — a socket, a fifo, a dangling link — falls through to the same
+		// byte-clean 404, which names no part of the target.
+		let dir = null
+		try {
+			const st = fs.lstatSync(abs)
+			if (st.isDirectory())
+				dir = abs
+			else if (st.isFile())
+				dir = path.dirname(abs)
+		} catch { dir = null }
+		let dirOk = false
+		try { dirOk = dir !== null && fs.lstatSync(dir).isDirectory() } catch { dirOk = false }
+		if (!dirOk)
+			return sendJson(res, 404, { ok: false, code: 'NOT_IN_WORKSPACE', message: 'No such file or folder in this workspace.' })
 
 		// Always a JSON body, success or not: the browser turns a false into a toast,
 		// and a silent 200 on a system with no file manager is the exact failure mode
 		// this route exists to avoid.
 		if (action === 'files')
-			return revealDir(abs)
+			return revealDir(dir)
 				? sendJson(res, 200, { ok: true })
 				: sendJson(res, 200, { ok: false, code: 'NO_FILE_MANAGER', message: 'No file manager available on this system.' })
-		return openTerminal(abs)
+		return openTerminal(dir)
 			? sendJson(res, 200, { ok: true })
 			: sendJson(res, 200, { ok: false, code: 'NO_TERMINAL', message: 'No terminal available on this system.' })
 	}
