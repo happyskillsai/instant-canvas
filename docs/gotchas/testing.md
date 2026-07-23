@@ -183,7 +183,9 @@ the file already uses) — which cannot turn a real no-toggle green (a stuck pla
 but absorbs load. When a browser test starts flaking right after you add unrelated load, suspect
 a fixed-time wait before the code under test.
 
-It struck again from the other side when `reconnect.test.js` was added: `palette.test.js`
+It struck a **third** time in the same file, and this one is the sharpest reminder that a fixed wait is never "long enough": the audio-advance check `sleep(950)`-ed and then asserted `currentTime > 0`, a margin that held for months and then failed inside `preflight.sh` — where the full suite and the coverage run go back to back, the heaviest load the tests ever see — while passing 12/12 in isolation minutes later. A gate that fails only on the release path is the worst possible place to discover a fixed wait. Same fix, and the line directly below it was already correct: `until(evaluate, A + '.currentTime > 0', 4000)`. When one assertion in a sequence polls and its neighbour sleeps, the sleeper is the bug.
+
+It struck from the other side when `reconnect.test.js` was added: `palette.test.js`
 budgeted its palette-save subprocess (the ~2 s `npx happyskills skills-config set`) with a fixed
 `sleep(6000)` — generous, until the new file's kernel spawns and extra Chrome pushed the save
 past it, and three palette tests went red with no change to the code they cover. Same fix: poll

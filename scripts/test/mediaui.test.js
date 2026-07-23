@@ -155,8 +155,12 @@ test.before(async () => {
 			await evaluate('(function(){ var b = Array.from(document.querySelectorAll(".m-rate-menu [data-rate]")).find(function(x){ return x.dataset.rate === "3" }); b && b.click() })()')
 			await sleep(120)
 			await evaluate(A + '.currentTime = 0; ' + A + '.play()')
-			await sleep(950)
-			out.audioAdvanced = await evaluate(A + '.currentTime > 0')
+			// A BOUNDED POLL, never a fixed sleep: the old `sleep(950)` + assert encoded an
+			// assumption about machine load, and it broke the day the suite got heavier rather
+			// than the day the player did — failing inside `preflight.sh` (suite + coverage
+			// back to back, the heaviest load there is) while passing in isolation. A stuck
+			// player still times out here, so this cannot turn a real no-play green.
+			out.audioAdvanced = await until(evaluate, A + '.currentTime > 0', 4000)
 			out.audioEndedAt3x = await until(evaluate, A + '.ended === true', 1500)
 
 			// ============ (6) ERROR CARD: broken.mp4 ============
