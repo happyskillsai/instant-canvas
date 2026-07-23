@@ -2,6 +2,57 @@
 
 ## [Unreleased]
 
+## [0.24.0] - 2026-07-23
+
+### Added
+
+- **The context menu is on every item, not just folders.** Right-click any tile in the browse view — a
+  canvas, a document, a `.env`, an image, a video, an audio file — for the same four actions the folder
+  menu has always carried: **Open in Finder / Show in Explorer / Open in file manager**, **Open in
+  terminal**, **Copy path**, **Copy name**. The four are deliberately identical for a file and a folder,
+  because the two that differ do not differ in what you want from them: Copy path and Copy name always
+  name the thing under the cursor, while the two openers act on the folder that *contains* it — a terminal
+  cannot open an image, and a file manager showing one is just its folder. The toast says which of the two
+  happened, so "Open in Finder" on an image reads *"Opening the containing folder in Finder…"* rather than
+  implying the image itself opened.
+
+  **`POST /api/reveal` accepts an item now, and what reaches the OS is still always a directory.** A file
+  is resolved to its parent kernel-side, so the file path never reaches a spawn — the surface grants
+  nothing you could not already do by right-clicking the folder it sits in. That makes `lstat`
+  load-bearing twice: on the named path, where it refuses a symlinked directory *and* a symlinked file,
+  and again on the parent it resolves to, which refuses a file reached through a symlinked ancestor. The
+  route still never reads the file, so naming a `.env` opens its folder and echoes not one byte of it.
+
+  The cost, named plainly: the browser's own menu no longer opens over a browse tile. That is the price of
+  having ours there; Inspect Element still works everywhere else — prose, charts, sheets, the item modal's
+  content.
+
+### Changed
+
+- **`POST /api/reveal`'s 404 is now `NOT_IN_WORKSPACE`, was `NOT_A_FOLDER`.** The route takes a file now,
+  so a code reading "not a folder" for a missing file was a small lie. The surfaces that are genuinely
+  folder-only keep `NOT_A_FOLDER`. No agent-facing behavior moves — reveal has no CLI door and no session.
+
+### Fixed
+
+- **A document could freeze the entire browser tab, and nothing anywhere explained it.** A canvas whose
+  sections are a heading followed by a tall figure — the ordinary shape of a report of captioned images —
+  could pin the main thread forever: no error, no memory growth, and DevTools itself would not open,
+  because nothing was left to service it. The packer's orphan rule ("never leave a heading last on a
+  sheet") pulled the heading back off the sheet, and when that heading was the sheet's *only* element the
+  measuring body came out empty — which `flush()` refuses — so no sheet was emitted, nothing was consumed,
+  and the next iteration began byte-for-byte identical. The rule now applies only when it leaves something
+  behind: a heading alone means the sheet is fresh, so a block that will not fit beside it cannot share a
+  page under any arrangement and takes the next sheet instead. An orphaned heading is a cosmetic loss; the
+  alternative was a hang.
+
+- **A dendrogram whose linkage referred back to itself drew nothing at all.** A `#i` back-reference is
+  meant to point at an *earlier* merge and nothing enforces it — the validator accepts a cycle.
+  `dendrogramPath` wrote its cache *after* recursing, so `#0 → #1 → #0` recursed until the stack gave out,
+  and `mountCharts`'s per-chart catch turned the `RangeError` into a chart that silently never appeared. A
+  cycle now resolves to the origin — the same guard the sibling leaf walk in that function already carried
+  — so the rest of the tree still renders. Acyclic linkages are untouched.
+
 ## [0.23.0] - 2026-07-22
 
 ### Added
