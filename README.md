@@ -1,8 +1,8 @@
-<p align="center"><img src="assets/logo.svg" alt="The InstantCanvas mark — a navy square with a vermilion folded corner" width="96" /></p>
+<p align="center"><img src="assets/readme-hero.jpg" alt="A fox in a patterned shawl stands in a candle-lit attic holding an open grimoire titled SKILLS · Instant Canvas, from which glowing charts — a surface plot, bar charts, a line chart — rise into the air; a wall of dead beige computers and printers on the left, an alchemist's bench with a copper cauldron on the right, and a sunlit doorway behind" /></p>
 
-# InstantCanvas
+# Instant Canvas
 
-> **InstantCanvas is a [HappySkills](https://happyskills.ai) project.** HappySkills is its parent and steward — the project is built, maintained, and shepherded under the HappySkills umbrella.
+> **Instant Canvas is a [HappySkills](https://happyskills.ai) project.** HappySkills is its parent and steward — the project is built, maintained, and shepherded under the HappySkills umbrella.
 
 Death to the admin panel: a local, schema-driven canvas runtime that lets coding agents render data visually (charts, tables, KPIs, markdown) and safely collect user input — forms, secrets, confirmations — in the user's browser, with values written straight to local files and **never entering the chat**.
 
@@ -12,7 +12,7 @@ Death to the admin panel: a local, schema-driven canvas runtime that lets coding
 - [What this repository is](#what-this-repository-is)
 - [Overview](#overview)
 - [Getting Started](#getting-started)
-  - [A guided tour — [`examples/`](examples/README.md)](#a-guided-tour--examplesexamplesreadmemd)
+  - [A guided tour — `examples/`](#a-guided-tour--examples)
 - [Project Structure](#project-structure)
 - [Documentation](#documentation)
 <!-- END toc -->
@@ -27,7 +27,7 @@ Everything else is workbench: this documentation (`docs/`), the specifications (
 
 ## Overview
 
-InstantCanvas's paradigm is a strict separation of concerns: **the LLM wrangles data into a JSON contract; the runtime owns all rendering.** An agent writes a `*.canvas.json` file, runs `open`, and a persistent per-workspace localhost kernel renders it in the default browser with hot reload. Display canvases return immediately; form and confirm canvases block until the human responds in the browser — and the agent receives redacted metadata only (field names, never values).
+Instant Canvas's paradigm is a strict separation of concerns: **the LLM wrangles data into a JSON contract; the runtime owns all rendering.** An agent writes a `*.canvas.json` file, runs `open`, and a persistent per-workspace localhost kernel renders it in the default browser with hot reload. Display canvases return immediately; form and confirm canvases block until the human responds in the browser — and the agent receives redacted metadata only (field names, never values).
 
 A markdown file needs none of that. `.md` / `.mdx` / `.markdown` files are **first-class canvases**: they appear in the sidebar on their own, and `open report.md` renders one directly — the runtime synthesises the envelope in memory, so there is no wrapper for an agent to write and nothing extra on disk. `print report.md --out report.pdf` prints it as paper.
 
@@ -69,9 +69,9 @@ npx -y @happyskillsai/instant-canvas stop
 
 Maintainers run the same CLI from the working tree — `node scripts/instantcanvas.js <command>` — and the tests with `npm test` (792 tests, zero deps; the browser tests skip without Chrome; equivalent to `node --test scripts/test/`). `npm run coverage:cli` enforces the CLI's 100% line coverage. `npm run rls <major|minor|patch|x.y.z>` bumps the package version — validated semver, forward-only. Releases are orchestrated end to end by the `/release-cli` project skill — see [docs/releasing.md](docs/releasing.md).
 
-### A guided tour — [`examples/`](examples/README.md)
+### A guided tour — `examples/`
 
-**[`examples/`](examples/README.md) is one story that exercises 100% of InstantCanvas.** An analyst is handed two years of a city's bike-share ridership (real data — Capital Bikeshare, CC BY 4.0) and, without ever building a dashboard, carries it from a raw CSV to a boardroom deck:
+**[`examples/`](examples/README.md) is one story that exercises 100% of Instant Canvas.** An analyst is handed two years of a city's bike-share ridership (real data — Capital Bikeshare, CC BY 4.0) and, without ever building a dashboard, carries it from a raw CSV to a boardroom deck:
 
 **explore** the data (all 26 chart kinds) → **model** it (PCA, k-means, a fitted demand surface) → **see its structure** (hierarchy & flow) → **communicate** it (an academic white-paper PDF with LaTeX equations, a branded report PDF, a slide deck) → **close the loop** (forms, secrets to `.env`, a confirm) → and the long tail (markdown, math, a media gallery with video & audio).
 
@@ -118,9 +118,9 @@ Start with the mission — it is the decision-making compass for this project, a
 - [CLI](docs/cli.md) — The instant-canvas CLI — commands, flags, exit codes, stdout discipline, the result contract, and the agent workflow it enables.
 - [Frontend](docs/frontend.md) — The browser app — shell, sidebar, canvas search, block renderers, bespoke form widgets, chart mapping, sweeps, theming, and the CSP constraints that shape the code.
 - [Gotchas](docs/gotchas.md)
-- [InstantCanvas — Mission](docs/mission.md)
+- [Instant Canvas — Mission](docs/mission.md)
 - [Releasing](docs/releasing.md) — How instant-canvas releases are cut — the rls version bumper, the release-cli skill's gates and changelog stamping, the v-tag convention, and the two manual publishes (npm, HappySkills).
-- [Security Model](docs/security.md) — The secret-handling model — what InstantCanvas guarantees, how redaction and workspace confinement work, and what it deliberately does not protect against.
+- [Security Model](docs/security.md) — The secret-handling model — what Instant Canvas guarantees, how redaction and workspace confinement work, and what it deliberately does not protect against.
 - [Testing](docs/testing.md) — The zero-dependency node:test suite — layout, isolation patterns, security regressions, and the CDP-driven headless-Chrome tests that verify rendering and UI interaction.
 <!-- END doc-index -->
 
