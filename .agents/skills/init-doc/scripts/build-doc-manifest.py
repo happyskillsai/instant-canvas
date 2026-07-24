@@ -229,8 +229,39 @@ def extract_links(body, doc_relpath):
     return sorted(targets)
 
 
+MD_IMAGE_RE = re.compile(r"!\[([^\]]*)\]\([^)]*\)")
+MD_LINK_RE = re.compile(r"\[([^\]]*)\]\([^)]*\)")
+
+
+def flatten_links(text):
+    """Heading text with inline links and images reduced to their label.
+
+    A heading may legitimately contain a link -- `### A guided tour [examples/](e/R.md)`
+    -- and the raw source must not be used as a TOC entry's own link label, because a
+    link nested inside a link label is invalid CommonMark. Every conforming renderer
+    (GitHub, markdown-it) keeps the INNER link and spills the outer brackets as literal
+    text, so the entry renders as `[A guided tour examples/](#a-guided-tour-examples)`.
+
+    The same flattening fixes the slug, which must be computed from the RENDERED text:
+    slugging the raw source folded the destination URL into the anchor
+    (`...examplesexamplesreadmemd`), so the entry pointed nowhere even once its label
+    was fixed. Two defects, one cause -- heading text is inline markdown, not a string.
+
+    Looped because a label may itself contain one.
+    """
+    prev = None
+    out = text
+    while out != prev:
+        prev = out
+        out = MD_IMAGE_RE.sub(r"\1", out)
+        out = MD_LINK_RE.sub(r"\1", out)
+    return out
+
+
 def github_slug(text):
-    s = text.strip().lower()
+    # Backticks, asterisks and brackets fall out below as non-word characters; only
+    # link DESTINATIONS need removing first, and flatten_links does that.
+    s = flatten_links(text).strip().lower()
     s = re.sub(r"[^\w\s-]", "", s)
     return s.replace(" ", "-")
 
@@ -254,7 +285,9 @@ def toc_entries(headings_with_levels):
         else:
             seen[base] = 0
             slug = base
-        out.append((level, text, slug))
+        # The LABEL keeps its inline formatting (code ticks, emphasis render fine inside
+        # a link label) but never a nested link -- see flatten_links.
+        out.append((level, flatten_links(text), slug))
     return out
 
 
