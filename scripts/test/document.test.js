@@ -584,11 +584,23 @@ async function driveThemedCanvas() {
 			await cdpSleep(250)
 		}
 		await cdpSleep(800)
+		// Sheets are light always: move the app between the two and the document must
+		// not care. The appearance control is a three-state segmented group now, so BOTH
+		// ends are asked for by name. Pinning light explicitly first is load-bearing:
+		// the old code toggled, which always changed something, while "click dark" is a
+		// no-op on a machine whose browser already reports prefers-color-scheme: dark —
+		// and the light/dark comparison below would then compare dark with itself.
+		await evaluate(`(() => { document.querySelector('#appearanceSeg [data-appearance-mode="light"]').click(); return true })()`)
+		await cdpSleep(1200)
 		const light = await evaluate(SNAPSHOT_JS)
-		// Sheets are light always: flip the app dark and the document must not care.
-		await evaluate(`(() => { document.getElementById('themeBtn').click(); return true })()`)
+		await evaluate(`(() => { document.querySelector('#appearanceSeg [data-appearance-mode="dark"]').click(); return true })()`)
 		await cdpSleep(1200)
 		const dark = await evaluate(SNAPSHOT_JS)
+		// The appearance is PERSISTED now, in a state dir this suite shares between
+		// files. Leave it as it was found, or every test that boots a kernel after this
+		// one inherits a dark app — the shared-state-dir trap in gotchas/testing.md.
+		await evaluate(`(() => { document.querySelector('#appearanceSeg [data-appearance-mode="auto"]').click(); return true })()`)
+		await cdpSleep(400)
 
 		// --- deck ⇄ continuous toggle (charts exist once; reparent, never remount)
 		const atDeck = await evaluate(VIEW_SNAPSHOT_JS)

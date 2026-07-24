@@ -275,7 +275,7 @@ test('overlay: the chrome shows with the relocated action cluster; the topbar ke
 	assert.equal(R.steps.opened, true, 'a document opened into the overlay')
 	assert.equal(R.chromeVisible, true, 'the overlay chrome is visible over a document')
 	assert.equal(R.clusterInChrome, true, 'the view/present/TOC/strips/colors cluster lives in the overlay chrome')
-	assert.deepEqual(R.topbarActionIds, ['themeBtn', 'stopBtn'], 'the topbar island keeps only theme + stop')
+	assert.deepEqual(R.topbarActionIds, ['appearanceSeg', 'stopBtn'], 'the topbar island keeps only appearance + stop')
 	assert.equal(R.docRendered, true, 'the document rendered inside the overlay')
 })
 

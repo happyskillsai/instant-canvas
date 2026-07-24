@@ -1,5 +1,5 @@
 ---
-description: The secret-handling model — what InstantCanvas guarantees, how redaction and workspace confinement work, and what it deliberately does not protect against.
+description: The secret-handling model — what Instant Canvas guarantees, how redaction and workspace confinement work, and what it deliberately does not protect against.
 tags: [security, secrets, redaction, csp]
 source:
   - scripts/lib/redact.js
@@ -27,7 +27,7 @@ source:
 
 ## The honest claim
 
-InstantCanvas keeps secrets out of the agent conversation **during capture**: the human types values into a locally served form, the kernel writes them to disk, and the agent receives field names plus `"redacted": true` — never values. Nothing *technically* stops an agent from later running `cat .env`; the skill forbids that behaviorally (SKILL.md's secret rule: never read written secret files back into context unless the user explicitly asks). Do not oversell this boundary — it is a capture-time guarantee plus a behavioral rule, not sandboxing.
+Instant Canvas keeps secrets out of the agent conversation **during capture**: the human types values into a locally served form, the kernel writes them to disk, and the agent receives field names plus `"redacted": true` — never values. Nothing *technically* stops an agent from later running `cat .env`; the skill forbids that behaviorally (SKILL.md's secret rule: never read written secret files back into context unless the user explicitly asks). Do not oversell this boundary — it is a capture-time guarantee plus a behavioral rule, not sandboxing.
 
 ## Secret hygiene pipeline
 

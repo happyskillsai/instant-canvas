@@ -36,36 +36,36 @@
 	color-scheme:light;
 }
 :root[data-theme="dark"]{
-	--bg:#0e1014; --shell:#0a0c10; --panel:#161922; --panel-2:#1b1f29; --text:#e7e9ee; --muted:#98a0ad;
-	--border:#242a35; --border-2:#1f242e; --accent:#eb4a26; --accent-soft:#2a1610;
+	--bg:#171a21; --shell:#14171d; --panel:#1e222b; --panel-2:#252a35; --text:#dde1e8; --muted:#a3abb9;
+	--border:#333a48; --border-2:#2b313d; --accent:#eb4a26; --accent-soft:#2a1610;
 	--green:#34d399; --amber:#fbbf24; --red:#f87171; --shadow:0 1px 2px rgba(0,0,0,.3),0 12px 32px rgba(0,0,0,.35);
 	--scrim:rgba(0,0,0,.6);
 	--c1:#818cf8; --c2:#34d399; --c3:#fbbf24; --c4:#f472b6; --c5:#22d3ee;
-	--inp-bg:#1b1f29; --inp-border:#2d3442; --inp-border-hover:#3c4556;
+	--inp-bg:#252a35; --inp-border:#3a4252; --inp-border-hover:#4a5468;
 	--inp-shadow:none;
-	--fset-border:#2d3442;
+	--fset-border:#3a4252;
 	--logo-base:#2a3a6b; --logo-accent:#eb4a26;
 	--tint:rgba(255,255,255,.06); --tint-strong:rgba(255,255,255,.1);
 	--island:#000000; --island-fg:#ffffff; --island-fg-dim:rgba(255,255,255,.6);
-	--island-hover:rgba(255,255,255,.1); --island-pill:#26262e; --island-pill-fg:#e7e9ee;
+	--island-hover:rgba(255,255,255,.1); --island-pill:#26262e; --island-pill-fg:#dde1e8;
 	--code-kw:#c4b5fd; --code-str:#6ee7b7; --code-num:#fcd34d; --code-fn:#67e8f9;
 	--code-var:#f9a8d4; --code-cmt:#8b93a1; --code-meta:#9aa3b0; --code-add:#6ee7b7; --code-del:#fca5a5;
 	color-scheme:dark;
 }
 @media (prefers-color-scheme:dark){
 	:root:not([data-theme]){
-		--bg:#0e1014; --shell:#0a0c10; --panel:#161922; --panel-2:#1b1f29; --text:#e7e9ee; --muted:#98a0ad;
-		--border:#242a35; --border-2:#1f242e; --accent:#eb4a26; --accent-soft:#2a1610;
+		--bg:#171a21; --shell:#14171d; --panel:#1e222b; --panel-2:#252a35; --text:#dde1e8; --muted:#a3abb9;
+		--border:#333a48; --border-2:#2b313d; --accent:#eb4a26; --accent-soft:#2a1610;
 		--green:#34d399; --amber:#fbbf24; --red:#f87171; --shadow:0 1px 2px rgba(0,0,0,.3),0 12px 32px rgba(0,0,0,.35);
 		--scrim:rgba(0,0,0,.6);
 		--c1:#818cf8; --c2:#34d399; --c3:#fbbf24; --c4:#f472b6; --c5:#22d3ee;
-		--inp-bg:#1b1f29; --inp-border:#2d3442; --inp-border-hover:#3c4556;
+		--inp-bg:#252a35; --inp-border:#3a4252; --inp-border-hover:#4a5468;
 		--inp-shadow:none;
-		--fset-border:#2d3442;
+		--fset-border:#3a4252;
 		--logo-base:#2a3a6b; --logo-accent:#eb4a26;
 		--tint:rgba(255,255,255,.06); --tint-strong:rgba(255,255,255,.1);
 		--island:#000000; --island-fg:#ffffff; --island-fg-dim:rgba(255,255,255,.6);
-		--island-hover:rgba(255,255,255,.1); --island-pill:#26262e; --island-pill-fg:#e7e9ee;
+		--island-hover:rgba(255,255,255,.1); --island-pill:#26262e; --island-pill-fg:#dde1e8;
 		--code-kw:#c4b5fd; --code-str:#6ee7b7; --code-num:#fcd34d; --code-fn:#67e8f9;
 		--code-var:#f9a8d4; --code-cmt:#8b93a1; --code-meta:#9aa3b0; --code-add:#6ee7b7; --code-del:#fca5a5;
 		color-scheme:dark;
@@ -186,6 +186,21 @@ button{font:inherit;cursor:pointer}
    Their `title` says which view they need; the cursor says they are not pressable. */
 .tbtn:disabled{opacity:.35;cursor:not-allowed}
 .tbtn:disabled:hover{background:transparent}
+
+/* Appearance: auto | light | dark, as a segmented group on the island. Three states,
+   not a toggle — a two-state button can pin the theme but can never hand it BACK to
+   the system, and the reader who wants "light tonight, auto tomorrow" has nowhere to
+   click. It wears the island's own pill tokens (the island is black in both themes),
+   so the selected segment reads the same way the sort control does in the pane. */
+.tseg{display:inline-flex;align-items:center;gap:2px;padding:2px;border-radius:999px;
+	background:rgba(255,255,255,.08);flex:0 0 auto}
+.tseg-btn{display:inline-flex;align-items:center;justify-content:center;padding:6px;
+	border:none;background:transparent;border-radius:999px;color:var(--island-fg);
+	opacity:.7;flex:0 0 auto}
+.tseg-btn .lucide{width:15px;height:15px;display:block}
+.tseg-btn:hover{opacity:1;background:var(--island-hover)}
+.tseg-btn.on{background:var(--island-pill);color:var(--island-pill-fg);opacity:1}
+.tseg-btn:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
 
 /* The body sits on the lavender shell; the sidebar and the main pane float on it as
    rounded surfaces with a gap between, HappySkills-style — no hard border seams. */
@@ -930,7 +945,7 @@ body.modal-open .main{overflow:hidden}
 
    Values mirror the app's own :root[data-theme="dark"] block — keep them in step. */
 .doc-mode[data-paper="dark"] .sheet{
-	--bg:#0e1014; --panel-2:#1b1f29; --border-2:#1f242e; --accent-soft:#2a1610;
+	--bg:#171a21; --panel-2:#252a35; --border-2:#2b313d; --accent-soft:#2a1610;
 	--green:#34d399; --amber:#fbbf24; --red:#f87171;
 	--code-kw:#c4b5fd; --code-str:#6ee7b7; --code-num:#fcd34d; --code-fn:#67e8f9;
 	--code-var:#f9a8d4; --code-cmt:#8b93a1; --code-meta:#9aa3b0; --code-add:#6ee7b7; --code-del:#fca5a5;
@@ -1367,7 +1382,7 @@ body.modal-open .main{overflow:hidden}
    mounts a .slide, it applies the theme AND joins this selector. */
 .pres-mode[data-paper="dark"] .slide,
 .stage[data-paper="dark"] .slide{
-	--bg:#0e1014; --panel-2:#1b1f29; --border-2:#1f242e; --accent-soft:#2a1610;
+	--bg:#171a21; --panel-2:#252a35; --border-2:#2b313d; --accent-soft:#2a1610;
 	--green:#34d399; --amber:#fbbf24; --red:#f87171;
 	--code-kw:#c4b5fd; --code-str:#6ee7b7; --code-num:#fcd34d; --code-fn:#67e8f9;
 	--code-var:#f9a8d4; --code-cmt:#8b93a1; --code-meta:#9aa3b0; --code-add:#6ee7b7; --code-del:#fca5a5;

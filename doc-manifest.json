@@ -14,12 +14,12 @@
       "description": null,
       "has_frontmatter": false,
       "headings": [
-        "InstantCanvas",
+        "Instant Canvas",
         "Table of Contents",
         "What this repository is",
         "Overview",
         "Getting Started",
-        "A guided tour — [`examples/`](examples/README.md)",
+        "A guided tour — `examples/`",
         "Project Structure",
         "Documentation"
       ],
@@ -69,7 +69,7 @@
         "Hot reload",
         "Version handshake"
       ],
-      "line_count": 208,
+      "line_count": 211,
       "links_to": [
         "docs/canvas-schema.md",
         "docs/cli.md",
@@ -251,7 +251,7 @@
         "CSP shim",
         "Icons and vendored assets"
       ],
-      "line_count": 152,
+      "line_count": 156,
       "links_to": [
         "docs/architecture.md",
         "docs/canvas-schema.md",
@@ -344,6 +344,8 @@
         "Highlighting search matches by string-building is two bugs, not one",
         "A `> *` rule to make z-index work OVERRODE `position: absolute` on the cover's furniture",
         "`api()` returns `{status, json}`, and reading the body off the wrapper fails SILENTLY",
+        "A dead in-page link did not just fail — it EMPTIED the window, and the router did it",
+        "A dark theme can be hard to read because its contrast is TOO HIGH",
         "Body scroll lock does nothing here",
         "A hover-revealed control does not exist on a touch screen",
         "Native widget chrome ignores your dark theme",
@@ -374,7 +376,7 @@
         "A drop zone sized by its CONTENT is not the drop zone the reader sees",
         "The packer's orphan rule spun FOREVER when the heading was the sheet's only element"
       ],
-      "line_count": 450,
+      "line_count": 504,
       "links_to": [
         "docs/architecture.md",
         "docs/gotchas/testing.md",
@@ -574,7 +576,7 @@
       "description": null,
       "has_frontmatter": false,
       "headings": [
-        "InstantCanvas — Mission",
+        "Instant Canvas — Mission",
         "Vision",
         "Values",
         "Non-goals",
@@ -637,7 +639,7 @@
     },
     {
       "dangling": false,
-      "description": "The secret-handling model — what InstantCanvas guarantees, how redaction and workspace confinement work, and what it deliberately does not protect against.",
+      "description": "The secret-handling model — what Instant Canvas guarantees, how redaction and workspace confinement work, and what it deliberately does not protect against.",
       "has_frontmatter": true,
       "headings": [
         "Security Model",

@@ -57,6 +57,34 @@ const README = [
 	'',
 	'- [x] done',
 	'- [ ] todo',
+	'',
+	// A table of contents, which is what a README actually carries — and the thing that
+	// used to destroy the view. The em-dash entry is the real case from this repo's own
+	// README: its slug keeps BOTH hyphens, because stripping the dash leaves the two
+	// spaces that flanked it. The last entry points at a heading that does not exist.
+	'## Contents',
+	'',
+	'- [Alpha](#alpha)',
+	'- [A guided tour — `examples/`](#a-guided-tour--examples)',
+	'- [Notes](#notes)',
+	'- [Notes again](#notes-1)',
+	'- [Renamed away](#this-heading-no-longer-exists)',
+	'',
+	'## Alpha',
+	'',
+	...Array(40).fill('Prose.'),
+	'',
+	'## A guided tour — `examples/`',
+	'',
+	...Array(40).fill('More prose.'),
+	'',
+	'## Notes',
+	'',
+	...Array(40).fill('Even more prose.'),
+	'',
+	'## Notes',
+	'',
+	...Array(40).fill('Still more prose.'),
 ].join('\n')
 
 const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64')
@@ -100,7 +128,7 @@ test.before(async () => {
 			await sleep(200)
 		}
 		await sleep(400)
-		return evaluate(`
+		const base = await evaluate(`
 			(() => {
 				const md = document.querySelector('.md');
 				return {
@@ -122,6 +150,39 @@ test.before(async () => {
 				};
 			})()
 		`)
+
+		// ---- in-page anchors. Folded into this file rather than given their own,
+		// because a twelfth kernel+Chrome booting at require time wedged the whole
+		// suite (0.15 s of CPU across 15 minutes, every test reporting ✖ in ~0.02 ms).
+		// This file already has a browser with markdown in it.
+		const SNAP = `({
+			hash: location.hash,
+			modalOpen: !document.getElementById('docModal').hidden,
+			hasContent: document.getElementById('docModalView').textContent.trim().length > 0,
+			scrollTop: Math.round(document.getElementById('docModalView').scrollTop),
+		})`
+		const click = (href) => evaluate(`(() => {
+			const a = document.querySelector('#docModalView .md a[href="${href}"]');
+			if (!a) throw new Error('no link ${href}');
+			a.click(); return true;
+		})()`)
+
+		const ids = await evaluate(`[...document.querySelectorAll('#docModalView .md h2')].map(h => h.id)`)
+		const before = await evaluate(SNAP)
+		await click('#a-guided-tour--examples')   // the positive control
+		await sleep(900)
+		const afterLive = await evaluate(SNAP)
+		await click('#this-heading-no-longer-exists') // a stale entry: must do NOTHING
+		await sleep(600)
+		const afterDead = await evaluate(SNAP)
+		await click('#notes-1')                   // the duplicate heading's suffix
+		await sleep(900)
+		const afterDup = await evaluate(SNAP)
+		await evaluate(`location.hash = '#hand-typed-nonsense'`) // route()'s own net
+		await sleep(600)
+		const afterTypedHash = await evaluate(SNAP)
+
+		return { ...base, anchors: { ids, before, afterLive, afterDead, afterDup, afterTypedHash } }
 	})
 })
 
@@ -168,4 +229,56 @@ test('a README renders as a document — HTML gone, badge labeled, content intac
 test('a markdown document is paper on request, like any other display canvas', { skip, timeout: 120_000 }, () => {
 	assert.equal(snap.deckOffered, true, 'the view toggle is offered')
 	assert.equal(snap.deckBlocked, false, 'and the deck is not refused — a document has nothing to submit or drag')
+})
+
+// ---------------------------------------------------------------- in-page anchors
+//
+// A README's table of contents is made ENTIRELY of in-page links, and before headings
+// carried an `id` every one of them was dead — worse, the dead link still set
+// `location.hash`, which matched neither route, and route() read "neither route" as
+// "show nothing": modal closed, both panes blank, document gone. Measured in a real
+// browser before the fix: modalOpen true → false, hasContent true → false.
+
+test('anchors: every heading carries a GitHub-style id, duplicates suffixed', { skip, timeout: 120_000 }, () => {
+	assert.deepEqual(snap.anchors.ids,
+		['contents', 'alpha', 'a-guided-tour--examples', 'notes', 'notes-1'])
+})
+
+test('anchors: the em-dash slug keeps BOTH hyphens, matching the TOC generator', { skip, timeout: 120_000 }, () => {
+	// If this ever reads `a-guided-tour-examples`, the renderer started collapsing
+	// whitespace RUNS and every generated TOC link in every README is off by one
+	// character — dead, with nothing in the console to say so.
+	assert.ok(snap.anchors.ids.includes('a-guided-tour--examples'), 'two hyphens where the em dash was')
+	assert.ok(!snap.anchors.ids.includes('a-guided-tour-examples'), 'not the collapsed form')
+})
+
+test('anchors: clicking a TOC link scrolls the document and leaves the ROUTE alone', { skip, timeout: 120_000 }, () => {
+	const a = snap.anchors
+	assert.equal(a.before.scrollTop, 0, 'starts at the top')
+	assert.ok(a.afterLive.scrollTop > 0, 'it actually scrolled')
+	// The point: the hash belongs to the router. Against the old code this read
+	// '#a-guided-tour--examples' and the two below read false.
+	assert.equal(a.afterLive.hash, a.before.hash, 'the route is untouched')
+	assert.equal(a.afterLive.modalOpen, true, 'the document is still open')
+	assert.equal(a.afterLive.hasContent, true, 'and still has its content')
+})
+
+test('anchors: a stale TOC entry does nothing rather than emptying the window', { skip, timeout: 120_000 }, () => {
+	const a = snap.anchors
+	assert.equal(a.afterDead.modalOpen, true, 'still open')
+	assert.equal(a.afterDead.hasContent, true, 'still rendered')
+	assert.equal(a.afterDead.hash, a.before.hash, 'still on the route')
+	assert.equal(a.afterDead.scrollTop, a.afterLive.scrollTop, 'and it did not move')
+})
+
+test('anchors: a duplicate heading is reachable through its -1 suffix', { skip, timeout: 120_000 }, () => {
+	assert.ok(snap.anchors.afterDup.scrollTop > snap.anchors.afterLive.scrollTop,
+		'scrolled further down, to the second "Notes"')
+	assert.equal(snap.anchors.afterDup.modalOpen, true)
+})
+
+test('anchors: a hand-typed fragment cannot blank the app', { skip, timeout: 120_000 }, () => {
+	// route()'s safety net, independent of the click handler above.
+	assert.equal(snap.anchors.afterTypedHash.modalOpen, true, 'the document survives an unknown hash')
+	assert.equal(snap.anchors.afterTypedHash.hasContent, true)
 })

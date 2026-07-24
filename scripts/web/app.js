@@ -452,6 +452,41 @@ md.validateLink = (url) => DATA_IMAGE_RE.test(String(url).trim()) || defaultVali
 // vendored file, so rewrite the tokens here: "[ ] " / "[x] " at the head of a list
 // item becomes a disabled checkbox. The emitted markup carries classes only — a
 // style="" attribute would be dropped by the CSP without an error.
+/* Heading anchors. Every markdown heading gets a GitHub-style `id`, because without one
+ * an in-page link resolves to nothing — and a README's own table of contents is made
+ * ENTIRELY of in-page links. Measured before this existed: clicking `- [Overview](#overview)`
+ * set a hash that matched neither route, so route() read it as "no route", nulled both
+ * panes and left the reader staring at an empty window with their document gone.
+ *
+ * The slug rule MIRRORS the one the doc-manifest generator writes into README TOCs
+ * (lowercase; drop everything that is not a letter, digit, underscore, whitespace or
+ * hyphen; then EACH whitespace character becomes one hyphen). That last detail is
+ * load-bearing and easy to get wrong: collapsing runs of whitespace would turn
+ * `A guided tour — examples/` into `a-guided-tour-examples` while every generated TOC
+ * points at `a-guided-tour--examples` (the em dash leaves two spaces behind), and the
+ * anchor would be just as dead as having no id at all. */
+function headingSlug(text) {
+	return text.trim().toLowerCase().replace(/[^\p{L}\p{N}_\s-]/gu, '').replace(/\s/g, '-')
+}
+
+function headingAnchors(state) {
+	const tokens = state.tokens
+	// Per render, so one document is one numbering scope. Duplicates take -1, -2 …,
+	// exactly as GitHub and the generator do.
+	const seen = new Map()
+	for (let i = 0; i < tokens.length; i++) {
+		if (tokens[i].type !== 'heading_open') continue
+		const inline = tokens[i + 1]
+		if (!inline || inline.type !== 'inline') continue
+		const base = headingSlug(inline.content)
+		if (!base) continue // a heading of pure punctuation has no usable slug
+		const nth = seen.get(base)
+		seen.set(base, nth === undefined ? 0 : nth + 1)
+		tokens[i].attrSet('id', nth === undefined ? base : `${base}-${nth + 1}`)
+	}
+	return true
+}
+
 const TASK_RE = /^\[([ xX])\](\s+|$)/
 
 function taskLists(state) {
@@ -577,6 +612,7 @@ function mathRule(state) {
 md.core.ruler.after('inline', 'task_lists', taskLists)
 md.core.ruler.after('inline', 'table_align', tableAlign)
 md.core.ruler.after('inline', 'math', mathRule)
+md.core.ruler.after('inline', 'heading_anchors', headingAnchors)
 
 // ---------------------------------------------------------------- theming
 
@@ -728,14 +764,62 @@ function applyDocumentTheme(el, theme) {
 	// then, next to the rule that reads them.
 }
 
-$('themeBtn').addEventListener('click', () => {
-	const next = currentTheme() === 'dark' ? 'light' : 'dark'
-	document.documentElement.setAttribute('data-theme', next)
+/* ------------------------------------------------------------ appearance (auto/light/dark)
+ * The reader's chrome appearance is a THREE-state choice, not a toggle: `auto` follows
+ * the OS (which on a Mac follows the clock), `light` and `dark` pin it. The old
+ * two-state button had no way back to `auto` once clicked, and — worse — wrote its
+ * answer only onto the live `<html>` element, so it was forgotten on every reload and
+ * the OS won again. The mode now lives in the global state dir (lib/appearance.js) and
+ * is stamped into `<html>` server-side, so the FIRST paint is already right.
+ *
+ * The two attributes are not redundant: `data-theme` is what the stylesheet reads and
+ * must be ABSENT for auto (only the browser can see `prefers-color-scheme`), while
+ * `data-appearance` records the stored mode — without it, "auto, currently dark" and
+ * "dark, chosen" would be indistinguishable to the control below. */
+const APPEARANCE_MODES = ['auto', 'light', 'dark']
+
+function currentAppearance() {
+	const m = document.documentElement.getAttribute('data-appearance')
+	return APPEARANCE_MODES.includes(m) ? m : 'auto'
+}
+
+function syncAppearanceSeg() {
+	const mode = currentAppearance()
+	for (const b of document.querySelectorAll('#appearanceSeg .tseg-btn')) {
+		const on = b.dataset.appearanceMode === mode
+		b.classList.toggle('on', on)
+		b.setAttribute('aria-pressed', on ? 'true' : 'false')
+	}
+}
+
+function applyAppearance(mode, { persist = true } = {}) {
+	if (!APPEARANCE_MODES.includes(mode)) return
+	const root = document.documentElement
+	root.setAttribute('data-appearance', mode)
+	if (mode === 'auto') root.removeAttribute('data-theme')
+	else root.setAttribute('data-theme', mode)
+	syncAppearanceSeg()
 	// Retheme in place. Tearing charts down and rebuilding them would allocate a
 	// fresh WebGL context per 3D chart and never release the old one (Plotly
-	// never calls loseContext), so repeated toggles would exhaust the browser's
+	// never calls loseContext), so repeated switches would exhaust the browser's
 	// context ceiling. Everything else follows the CSS variables for free.
 	rethemeCharts()
+	// Fire-and-forget: the page has already repainted, and a preference that fails
+	// to persist must not undo a click the reader can plainly see worked.
+	if (persist) api('/api/appearance', { method: 'POST', body: JSON.stringify({ mode }) })
+}
+
+$('appearanceSeg').addEventListener('click', e => {
+	const btn = e.target.closest('.tseg-btn')
+	if (btn) applyAppearance(btn.dataset.appearanceMode)
+})
+syncAppearanceSeg()
+
+// In `auto`, the OS can flip underneath us. CSS variables follow for free, but Plotly
+// paints to SVG/canvas and cannot read var() at all — so without this the charts keep
+// yesterday's palette until something else re-renders them.
+matchMedia('(prefers-color-scheme:dark)').addEventListener('change', () => {
+	if (currentAppearance() === 'auto') rethemeCharts()
 })
 
 // The sidebar toggle (the topbar hamburger) does two jobs, by breakpoint. BELOW 900px the
@@ -8737,6 +8821,12 @@ function route() {
 	// backdrop. Only a #/f/ route changes what the pane shows.
 	const cm = /^#\/c\/(.+)$/.exec(location.hash)
 	const fm = /^#\/f\/(.*)$/.exec(location.hash)
+	// A hash that is neither route is an IN-PAGE ANCHOR, not a request to show nothing.
+	// The anchor handler below intercepts the ones we render, so reaching here means a
+	// hand-typed fragment or a link outside `.md` — and the old fallthrough (browseId
+	// and activeId both null) blanked the whole window for it. Leave the route alone.
+	if (!cm && !fm && location.hash && location.hash !== '#')
+		return
 	const id = cm ? decodeURIComponent(cm[1]) : null
 	if (id !== state.activeId)
 		state.activePage = 0
@@ -8750,6 +8840,36 @@ function route() {
 	renderCanvas()   // the item in the modal (or closes it)
 }
 window.addEventListener('hashchange', route)
+
+/* In-page links scroll; they never touch the hash. The hash belongs to the ROUTER
+ * (`#/c/…`, `#/f/…`), so letting a `#overview` land in it would throw the route away —
+ * the document would survive the click but not a reload, and the back button would walk
+ * through anchors instead of documents. So the click is handled here and the URL is
+ * left exactly as it was.
+ *
+ * Delegated on the document because the markdown is re-rendered constantly (hot reload,
+ * theme changes, the deck ⇄ continuous move), and a listener bound to a link does not
+ * survive that. Scoped to `.md` so the app's own routing links are untouched.
+ *
+ * preventDefault fires even when the target is MISSING — a stale TOC entry pointing at
+ * a heading that was renamed should do nothing, which is a great deal better than
+ * navigating to a hash that empties the window. */
+document.addEventListener('click', e => {
+	const a = e.target.closest && e.target.closest('.md a[href^="#"]')
+	if (!a) return
+	const href = a.getAttribute('href')
+	if (/^#\/(c|f)\//.test(href)) return // a route the app owns, not an anchor
+	e.preventDefault()
+	let id
+	try { id = decodeURIComponent(href.slice(1)) } catch { id = href.slice(1) }
+	if (!id) return
+	// Look inside the document that owns the link. The modal and the pane can both hold
+	// markdown, and two documents can legitimately carry the same heading slug.
+	const scope = a.closest('#docModalView') || a.closest('#main') || document
+	let target = null
+	try { target = scope.querySelector('#' + CSS.escape(id)) } catch { /* not a valid selector */ }
+	if (target) target.scrollIntoView({ block: 'start', behavior: 'smooth' })
+})
 
 // Relocate the document action cluster from the topbar island into the overlay chrome
 // (§4.6). The nodes keep their ids and element-scoped handlers — syncViewToggle's

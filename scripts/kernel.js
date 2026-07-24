@@ -22,6 +22,7 @@ const { virtualCanvasFor } = require('./lib/mdcanvas')
 const { virtualFormCanvasFor } = require('./lib/envcanvas')
 const { listImages, mediaStat, isStreamableFile, mediaKind, galleryMime, parseByteRange, normalizeRelDir, GALLERY_IMAGE_EXTS, MEDIA_VIDEO_EXTS, MEDIA_AUDIO_EXTS } = require('./lib/gallery')
 const { listDir, itemMeta } = require('./lib/browse')
+const { readAppearance, writeAppearance, MODES: APPEARANCE_MODES } = require('./lib/appearance')
 const { writeSelection, readSelection } = require('./lib/selection')
 const { safeName, checkTarget, planUpload } = require('./lib/upload')
 const { revealDir, openTerminal } = require('./lib/reveal')
@@ -1217,6 +1218,31 @@ async function route(req, res, url) {
 		return sendJson(res, 200, { ok: true, items, count: items.length, updatedAt })
 	}
 
+	// The reader's app-chrome appearance (auto/light/dark). GLOBAL, not per-workspace
+	// — see lib/appearance.js for why it is neither localStorage nor skills-config.
+	// The page reads its boot value from the shell attribute rather than this route
+	// (a fetch would paint the wrong theme first); this GET exists for a page that
+	// wants to re-read after another window changed it.
+	if (method === 'GET' && p === '/api/appearance')
+		return sendJson(res, 200, { ok: true, mode: readAppearance(), modes: APPEARANCE_MODES })
+
+	if (method === 'POST' && p === '/api/appearance') {
+		const body = await readBody(req)
+		const mode = body && body.mode
+		// The enum check is the security of this route: the stored value is later
+		// substituted into the served HTML as an attribute value.
+		if (!APPEARANCE_MODES.includes(mode))
+			return sendJson(res, 400, { ok: false, code: 'INVALID_APPEARANCE', message: 'mode must be one of: ' + APPEARANCE_MODES.join(', ') })
+		try {
+			writeAppearance(mode)
+		} catch {
+			// A preference that cannot be written is not worth failing a click over;
+			// the page has already repainted, and it will simply not persist.
+			return sendJson(res, 200, { ok: true, mode, persisted: false })
+		}
+		return sendJson(res, 200, { ok: true, mode, persisted: true })
+	}
+
 	if (method === 'GET' && p === '/api/theme/presets')
 		return sendJson(res, 200, {
 			ok: true,
@@ -1381,6 +1407,29 @@ function cspHeader() {
 		`connect-src 'self' ws://127.0.0.1:${PORT}`
 }
 
+/**
+ * The `<html>` attributes that carry the reader's appearance into the FIRST paint.
+ *
+ * Two attributes, because they answer different questions. `data-theme` is what the
+ * stylesheet reads, and it must be absent for `auto` so the `prefers-color-scheme`
+ * media query can win — only the browser knows the OS scheme. `data-appearance` is
+ * the stored MODE, which the page needs because `auto` leaves no `data-theme` to
+ * read back: without it the segmented control could not tell "auto, currently dark"
+ * from "dark, chosen".
+ *
+ * Stamped server-side rather than fetched, because a fetch paints the wrong theme
+ * first and then corrects it — the flash this feature exists to remove. The value
+ * is one of three literals (lib/appearance.js validates on the way in AND on the
+ * way out), so it cannot break out of the attribute.
+ */
+function appearanceAttrs() {
+	const mode = readAppearance()
+	const safe = APPEARANCE_MODES.includes(mode) ? mode : 'auto'
+	return safe === 'auto'
+		? 'data-appearance="auto"'
+		: `data-appearance="${safe}" data-theme="${safe}"`
+}
+
 function serveShell(res) {
 	let html
 	try {
@@ -1404,6 +1453,7 @@ function serveShell(res) {
 		.replaceAll('__IC_AUDIO_EXTS__', JSON.stringify(MEDIA_AUDIO_EXTS))
 		.replaceAll('__IC_DATE_RE__', ISO_DATE_RE.source)
 		.replaceAll('__IC_PLATFORM__', process.platform)
+		.replaceAll('__IC_APPEARANCE_ATTRS__', appearanceAttrs())
 	res.writeHead(200, {
 		'Content-Type': 'text/html; charset=utf-8',
 		'X-Content-Type-Options': 'nosniff',

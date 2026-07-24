@@ -1,8 +1,8 @@
-# InstantCanvas — Mission
+# Instant Canvas — Mission
 
 ## Vision
 
-InstantCanvas is death to the admin panel. In the agentic AI era, nobody should build and maintain sprawling dashboards that answer questions somebody asked last year. The agent gathers the data, reasons about it, and delivers the answer **on the fly** — rendered visually, on demand, then discarded or kept as a plain JSON file. We are moving from an **answers warehouse** (pre-built admin panels nobody knows how to use) to **answers delivery** (data-driven views generated the moment a question is asked).
+Instant Canvas is death to the admin panel. In the agentic AI era, nobody should build and maintain sprawling dashboards that answer questions somebody asked last year. The agent gathers the data, reasons about it, and delivers the answer **on the fly** — rendered visually, on demand, then discarded or kept as a plain JSON file. We are moving from an **answers warehouse** (pre-built admin panels nobody knows how to use) to **answers delivery** (data-driven views generated the moment a question is asked).
 
 The same paradigm inverts data *collection*: instead of pasting secrets and settings into a chat window, the human fills a locally rendered form whose values go straight to disk — the agent orchestrates, but never touches the values.
 

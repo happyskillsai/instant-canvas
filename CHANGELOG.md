@@ -2,6 +2,40 @@
 
 ## [Unreleased]
 
+### Added
+
+- **Appearance is a three-way choice now, and it is remembered.** The topbar's theme toggle becomes
+  **Auto / Light / Dark** (`#appearanceSeg`). Auto follows the system appearance; Light and Dark pin
+  it. The old button was two-state, so once you clicked it there was no way back to following the OS —
+  and it wrote its answer onto the live page and nowhere else, so choosing light at night lasted until
+  the next reload and then the clock won again.
+
+  The mode is stored **globally**, in an unkeyed `appearance.json` in the state dir (`lib/appearance.js`),
+  so every workspace agrees. Not `localStorage`, which is per-origin and therefore per-port, i.e. per
+  workspace; and not `skills-config.json`, which is per project and committed — a preference about
+  someone's eyes does not belong in a teammate's diff. It reaches the page as an `<html data-appearance=…>`
+  attribute substituted into the served shell, so the first paint is already correct rather than
+  flashing the wrong theme and correcting itself. New `GET`/`POST /api/appearance`.
+
+- **Markdown headings carry a GitHub-style `id`.** A fourth markdown-it core rule, slugged to match what
+  the `doc-manifest` generator writes into README tables of contents.
+
+### Fixed
+
+- **Clicking an in-page link no longer empties the window.** Headings had no `id`, so every entry in a
+  document's own table of contents was a dead link — and the dead link still set `location.hash`, which
+  matched neither route, and the router read "neither route" as "show nothing": modal closed, both panes
+  blank, document gone. Measured in a real browser. In-page links now scroll the document and leave the
+  hash — which belongs to the router — untouched, and an unrecognised hash is ignored rather than treated
+  as a request to render nothing.
+
+- **The dark theme was hard to read because its contrast was too high.** Body text sat at 14.45:1 against
+  its panel (AAA is 7:1) and every surface lived in the bottom 12% of perceptual lightness, so near-white
+  on near-black bloomed and the sidebar, tiles and shell were indistinguishable. The surface ladder is
+  lifted and the text eased down to 12.14:1 — still AAA, with visible separation between cards
+  (`--border` ΔL\* against `--panel` 8.1 → 11.1). Dark-paper documents and slide decks get the same
+  lift on their code and table surfaces, per the invariant that those blocks mirror the app's.
+
 ## [0.24.0] - 2026-07-23
 
 ### Added

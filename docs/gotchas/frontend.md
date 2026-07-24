@@ -199,6 +199,60 @@ And: **a feature whose only evidence is in the browser must be asserted in the b
 
 `searchLastFocus = document.activeElement` is right when the reader *clicked* the trigger, and wrong for every keyboard path: `⌘K` and `/` fire with `document.body` focused, so closing hands focus back to `<body>` and strands the keyboard user at the top of the document. Fall back to the trigger element whenever the captured node is missing or is `body`. The browser test caught this because a programmatic `.click()` does not focus a button either — the same blind spot, from the other side.
 
+## A dead in-page link did not just fail — it EMPTIED the window, and the router did it
+
+Markdown headings carried no `id`, so every link in a document's own table of contents
+resolved to nothing. That alone would be a cosmetic miss. The damage came one layer
+down: the click still set `location.hash` to `#overview`, which matched neither
+`^#/c/(.+)$` nor `^#/f/(.*)$`, and `route()` read "neither route" as **"show nothing"** —
+`browseId = null`, `activeId = null`, modal closed, both panes blank. Measured in a real
+browser: `hash: "#/c/doc.md" → "#beta-section"`, `modalOpen: true → false`,
+`hasContent: true → false`. The reader clicks the first entry of the contents list and
+their document is gone, with an empty window and no error anywhere.
+
+It survived because nobody clicks their own README inside the app, and because every
+piece of it looks right in isolation: the TOC is valid markdown, the link is a valid
+link, and the router's fallthrough is a reasonable-looking default.
+
+Three parts to the fix, and the third is the one that generalises:
+
+- **Give every heading an `id`** (a fourth markdown-it core rule), slugged to match what
+  the `doc-manifest` generator writes — a slug that disagrees with the link text is
+  exactly as dead as no slug at all, and fails identically silently. **Each whitespace
+  character becomes one hyphen**, never a collapsed run: `A guided tour — examples/` is
+  `a-guided-tour--examples`, because stripping the em dash leaves the two spaces that
+  flanked it. Collapsing is the natural thing to write and misses by one character.
+- **Intercept the click instead of letting it reach the hash.** The hash belongs to the
+  router, so an in-page link `preventDefault()`s and scrolls. It preventDefaults *even
+  when the target does not exist*, because a stale entry doing nothing beats one that
+  blanks the app.
+- **A router's "unrecognised input" branch must not be its destructive branch.** The
+  fallthrough was written for "no hash at all" and silently inherited every hash the app
+  does not own — including ones a reader can type. Unknown now means *leave the state
+  alone*. Whenever a route table ends in an `else`, ask what non-route input reaches it.
+
+Asserted in `anchors.test.js` by clicking a real link in a real browser and reading the
+hash, the modal and the scroll position — with a live link as the positive control for
+the dead-link assertion, since "nothing happened" is only meaningful next to a case
+where something must.
+
+## A dark theme can be hard to read because its contrast is TOO HIGH
+
+Reported as "the dark theme is hard to read, the contrast makes it hard" — and the
+instinct is to raise contrast. The measurement said the opposite: body text was
+**14.45:1** on its panel, double the 7:1 AAA floor, and every surface in the app sat
+inside the bottom **12%** of perceptual lightness (`--shell` L\* 3.3, `--panel` L\* 8.8,
+`--panel-2` L\* 11.8). Near-white on near-black blooms on a bright display, and a
+compressed ladder leaves elevation inexpressible — a window of cards reads as one flat
+black rectangle with things faintly drawn on it.
+
+So the fix runs the "wrong" way: lift the floor, ease the text down. Two lessons worth
+keeping. **Contrast ratio is the wrong metric for two adjacent surfaces** — `--border`
+against `--panel` was 1.22:1, which sounds catastrophic, while its ΔL\* was 8.1, which is
+visible; judge card edges by ΔL\*, and judge text by ratio. And **an accessibility
+number that passes with enormous headroom is not therefore correct**: AAA is a floor, not
+a target, and there is no upper bound in the standard to warn you.
+
 ## Body scroll lock does nothing here
 
 The frosted-glass recipe says `document.body.style.overflow = 'hidden'` on open. In this app `.app` is `height:100vh` and `.main` is the only scroller, so that line is a no-op — the page behind the modal keeps scrolling. Lock the real scroller instead: a `body.modal-open` class plus `body.modal-open .main{overflow:hidden}` (class-based, because CSP drops `style=""` attributes and JS-set `el.style` on `body` would not reach `.main` anyway).
