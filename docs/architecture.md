@@ -24,6 +24,7 @@ source:
   - scripts/lib/selection.js
   - scripts/lib/upload.js
   - scripts/lib/reveal.js
+  - scripts/lib/appearance.js
 ---
 
 # Architecture

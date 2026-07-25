@@ -69,7 +69,7 @@
         "Hot reload",
         "Version handshake"
       ],
-      "line_count": 211,
+      "line_count": 212,
       "links_to": [
         "docs/canvas-schema.md",
         "docs/cli.md",
@@ -103,7 +103,8 @@
         "scripts/lib/browser.js",
         "scripts/lib/selection.js",
         "scripts/lib/upload.js",
-        "scripts/lib/reveal.js"
+        "scripts/lib/reveal.js",
+        "scripts/lib/appearance.js"
       ],
       "source_unresolved": [],
       "tags": [
@@ -536,6 +537,7 @@
         "Fake registry entries in shared state dirs look like leaks",
         "A green suite proves the schemas agree; nobody was testing the prose",
         "A synchronous `execFileSync` in a before hook FREEZES every other file's async test — and hangs the whole single-process suite",
+        "The wedge's OTHER signature: 810 tests failing in ~0.02 ms each, including ones with no browser",
         "Audio never autoplays in headless Chrome without a flag, and `opts.args` REPLACES the defaults",
         "A shim that records argv with `printf '%s\\t' \"$@\"` invents an argument that was never passed",
         "A piped `npm test` reports the PIPE's exit code, not the suite's",
@@ -547,7 +549,7 @@
         "`cdp.send()` has NO per-command timeout, so a probe against a HUNG page never returns",
         "A test double with NO idle timeout outlives every interrupted run"
       ],
-      "line_count": 258,
+      "line_count": 264,
       "links_to": [
         "docs/gotchas/frontend.md",
         "docs/gotchas/runtime.md"
