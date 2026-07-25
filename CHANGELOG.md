@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.25.0] - 2026-07-25
+
 ### Added
 
 - **Appearance is a three-way choice now, and it is remembered.** The topbar's theme toggle becomes
