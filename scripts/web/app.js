@@ -80,6 +80,7 @@ const state = {
 	// on the client (instant, no refetch).
 	browseTypes: [],        // selected item kinds ⊆ ITEM_KINDS; [] = every kind
 	browseScope: 'folder',  // 'folder' (this folder only) | 'subtree' (+ all subfolders)
+	browseQuery: '',        // free-text NAME filter; '' = no name filter
 	browseOrder: [],        // [rel] of the open folder's items, in displayed order
 	browseFolder: null,     // which folder browseOrder belongs to
 	// The persisted multi-selection (§ selection): the reader's cross-folder gesture
@@ -143,6 +144,9 @@ const LUCIDE = {
 	'calendar': '<path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/>',
 	'check': '<path d="M20 6 9 17l-5-5"/>',
 	'list-filter': '<path d="M3 6h18"/><path d="M7 12h10"/><path d="M10 18h4"/>',
+	// The same magnifier the ⌘K search button ships statically in index.html — the filter
+	// modal's name box builds its own, so the glyph needs a map entry here too.
+	'search': '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
 	'pencil': '<path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/><path d="m15 5 4 4"/>',
 	'copy': '<rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>',
 	'chevron-down': '<path d="m6 9 6 6 6-6"/>',
@@ -5270,15 +5274,22 @@ function ocStep(delta) {
 	location.hash = '#/c/' + encodeURIComponent(rels[j])
 }
 
-/** Breadcrumb of the owning folder: a house to the root, then one button per segment,
- *  each navigating to that folder's #/f/. */
-function buildCrumb(folder) {
+/** Breadcrumb of the item on screen: one button per folder segment, each navigating to
+ *  that folder's #/f/, then the FILE ITSELF as the last, non-navigating segment.
+ *
+ *  The file name earns its place because the bar is the only chrome the modal has: the
+ *  content below it can be a chart deck, a photo or a video, none of which say what they
+ *  are called, and the reader arrived here from a grid of tiles. So the trail ends where
+ *  the reader is, exactly like the browse pane's own crumb — which is also why `oc-here`
+ *  moved onto it: every FOLDER segment (the last one included) is a real way back out of
+ *  the modal, and only the file is genuinely "you are here", so only the file is inert. */
+function buildCrumb(folder, rel) {
 	const crumb = $('ocCrumb')
 	crumb.textContent = ''
 	const seg = (label, hash, opts = {}) => {
 		const b = document.createElement('button')
 		b.type = 'button'
-		b.className = 'oc-seg' + (opts.here ? ' oc-here' : '')
+		b.className = 'oc-seg' + (opts.here ? ' oc-here' : '') + (opts.cls ? ' ' + opts.cls : '')
 		if (opts.icon)
 			b.innerHTML = icon(opts.icon)
 		if (label) {
@@ -5288,20 +5299,29 @@ function buildCrumb(folder) {
 		}
 		if (opts.title)
 			b.title = opts.title
-		b.addEventListener('click', () => { location.hash = hash })
+		// The file segment has nowhere to go — it IS the current route — so it is left
+		// unwired rather than navigating to the hash it is already on.
+		if (hash)
+			b.addEventListener('click', () => { location.hash = hash })
 		crumb.append(b)
 	}
 	const slash = () => { const s = document.createElement('span'); s.className = 'oc-slash'; s.textContent = '/'; crumb.append(s) }
-	// Just the owning folder's path — no leading house (the × already returns to the folder,
-	// so a separate "go to root" was redundant). A root-level item shows an empty breadcrumb.
+	// No leading house — the × already returns to the folder, so a separate "go to root"
+	// was redundant. A root-level item therefore shows just its own name.
 	const parts = folder ? folder.split('/') : []
 	let acc = ''
 	parts.forEach((p, idx) => {
 		acc = acc ? acc + '/' + p : p
 		if (idx > 0)
 			slash()
-		seg(p, '#/f/' + encodeURIComponent(acc), { here: idx === parts.length - 1, title: p })
+		seg(p, '#/f/' + encodeURIComponent(acc), { title: p })
 	})
+	const name = typeof rel === 'string' ? rel.split('/').pop() : ''
+	if (!name)
+		return
+	if (parts.length)
+		slash()
+	seg(name, null, { here: true, cls: 'oc-file', title: name })
 }
 
 /** Populate the modal's chrome (breadcrumb + prev/next) for the routed item. The modal's
@@ -5310,7 +5330,7 @@ function syncOverlayChrome() {
 	if (typeof state.activeId !== 'string')
 		return
 	const folder = ocDirname(state.activeId)
-	buildCrumb(folder)
+	buildCrumb(folder, state.activeId)
 	// prev/next enable once the folder's order is known (async — a stale token is ignored).
 	$('ocPrev').disabled = true
 	$('ocNext').disabled = true
@@ -6857,6 +6877,13 @@ async function renderBrowse(main, rel) {
 		sort: state.browseSort,
 		types: new Set((Array.isArray(state.browseTypes) ? state.browseTypes : []).filter((k) => FILTER_TYPES.some((t) => t.kind === k))),
 		scope: state.browseScope === 'subtree' ? 'subtree' : 'folder',
+		// The NAME filter, sticky like the types and the scope. `query` is what the reader
+		// typed (it goes back into the input verbatim); `qnorm` is the trimmed, lowercased
+		// needle every match runs against — normalized ONCE per keystroke rather than once
+		// per item per repaint.
+		query: typeof state.browseQuery === 'string' ? state.browseQuery : '',
+		qnorm: (typeof state.browseQuery === 'string' ? state.browseQuery : '').trim().toLowerCase(),
+		qseq: 0,              // guards a stale subtree refetch from landing after a newer one
 		selecting: state.selecting, // Select mode is sticky across folders (§ selection)
 		// The workspace-wide selection is a Map<rel → kind> owned by `state` and shared
 		// by reference here, so selecting in folder A stays selected when you navigate to
@@ -6939,12 +6966,18 @@ async function renderBrowse(main, rel) {
 
 	// ---------- data ----------
 
-	async function load() {
+	/** Fetch the listing for the current scope into `bs`.
+	 *
+	 *  `stale` is an optional predicate asked AFTER the round trip: a caller that can
+	 *  issue overlapping requests (the name box, one per keystroke) passes one so a
+	 *  slow early response cannot overwrite a fast later one. Without it, nothing
+	 *  changes — every other caller is serialized by the gesture that triggers it. */
+	async function load(stale) {
 		// Folder scope fetches this folder's immediate listing (folders + items) and
-		// filters KIND on the client — instant, no refetch per chip. Subtree scope asks
-		// the server to walk recursively and filter by kind BEFORE the cap (so a rare
-		// kind is never starved), and carries NO folder items — you are locating files,
-		// not navigating (§ path caption).
+		// filters KIND and NAME on the client — instant, no refetch per chip or keystroke.
+		// Subtree scope asks the server to walk recursively and apply BOTH filters BEFORE
+		// the cap (so a rare kind or a rare name is never starved), and carries NO folder
+		// items — you are locating files, not navigating (§ path caption).
 		let path = '/api/dir?path=' + encodeURIComponent(rel)
 		if (bs.scope === 'subtree') {
 			path += '&recursive=1'
@@ -6953,8 +6986,12 @@ async function renderBrowse(main, rel) {
 			const serverTypes = [...bs.types].filter((k) => k !== 'folder')
 			if (serverTypes.length)
 				path += '&types=' + encodeURIComponent(serverTypes.join(','))
+			if (bs.qnorm)
+				path += '&q=' + encodeURIComponent(bs.qnorm)
 		}
 		const { status, json } = await api(path)
+		if (stale && stale())
+			return false // a newer request already answered — leave `bs` alone
 		if (status === 200 && json && json.ok) {
 			// Child FOLDERS are items too — a second way to navigate the tree, right in
 			// the pane. They render first (GROUP_ORDER), look distinct, and open at #/f/.
@@ -6969,6 +7006,7 @@ async function renderBrowse(main, rel) {
 			bs.items = []
 			bs.truncated = false
 		}
+		return true
 	}
 
 	// EVERY renderable kind is selectable now — canvases, documents, images, videos and
@@ -6992,13 +7030,39 @@ async function renderBrowse(main, rel) {
 		return bs.types.size === 0 || bs.types.has(it.kind)
 	}
 
+	/** The NAME filter, applied on the client in BOTH scopes — a free-text,
+	 *  case-insensitive SUBSTRING, never a pattern. Two deliberate choices:
+	 *
+	 *  The query is DATA. It is lowercased and handed to `includes()`, so a reader
+	 *  typing `c++` or `.*` matches those characters — where a `new RegExp(q)` would
+	 *  have thrown an unhandled SyntaxError on the first one (the trap `escRe` exists
+	 *  for in ⌘K search).
+	 *
+	 *  It matches the file NAME **and** the displayed TITLE, because those are the two
+	 *  strings a tile actually shows: a canvas card leads with its title in bold and
+	 *  carries the file name under it in mono, so a reader typing the words in front of
+	 *  them must match either one. `lib/browse.js` `nameMatches` mirrors this exactly —
+	 *  it is the same filter, applied before the cap when the server does the walking. */
+	function nameOK(it) {
+		if (!bs.qnorm)
+			return true
+		const base = String(it.rel || '').split('/').pop().toLowerCase()
+		return base.includes(bs.qnorm) || String(browseTitleOf(it)).toLowerCase().includes(bs.qnorm)
+	}
+
+	/** The ONE predicate that decides whether an item is part of the shown set — type
+	 *  AND name. Everything downstream (the grid's visibility, the counts, the empty
+	 *  state, the overlay's prev/next order, and the video-poster gate) reads this, so
+	 *  the filters can never disagree about what is on screen. */
+	const showOK = (it) => typeOK(it) && nameOK(it)
+
 	// Grouping + sort is shared with the overlay's prev/next (browseSorted, above). The
-	// TYPE filter narrows the raw listing to the SHOWN set everything else renders from.
-	const sortedItems = () => browseSorted(bs.items.filter(typeOK), bs.sort)
-	// The MOUNTED set is the full listing, filtered or not: a type chip hides and shows
-	// tiles rather than destroying and rebuilding them, so an <img> keeps its decoded
-	// bytes across a toggle. Everything the reader reads — counts, the empty state, the
-	// overlay order — still reads sortedItems() above.
+	// filter narrows the raw listing to the SHOWN set everything else renders from.
+	const sortedItems = () => browseSorted(bs.items.filter(showOK), bs.sort)
+	// The MOUNTED set is the full listing, filtered or not: a type chip or a keystroke in
+	// the name box hides and shows tiles rather than destroying and rebuilding them, so an
+	// <img> keeps its decoded bytes across a toggle. Everything the reader reads — counts,
+	// the empty state, the overlay order — still reads sortedItems() above.
 	const mountedItems = () => browseSorted(bs.items, bs.sort)
 	const itemFor = (r) => bs.items.find((i) => i.rel === r) || null
 
@@ -7062,9 +7126,11 @@ async function renderBrowse(main, rel) {
 			if (bs.selection.has(it.rel)) tile.classList.add('selected')
 			// A renderable video earns a first-frame poster, value-synced onto this tile (§4.8).
 			// Only if the filter actually SHOWS it: every item is mounted now, and capturing a
-			// poster for a tile nobody can see is pure waste (applyTypeVisibility does it on
-			// the first reveal instead).
-			if (typeOK(it) && needsPoster(tile, it)) mountVideoPoster(tile, it.rel, it.mtimeMs)
+			// poster for a tile nobody can see is pure waste (applyFilterVisibility does it
+			// on the first reveal instead). `showOK`, not `typeOK`: the gate must be the
+			// same predicate that decides visibility, or a name-filtered-out video fetches
+			// a frame nobody can see.
+			if (showOK(it) && needsPoster(tile, it)) mountVideoPoster(tile, it.rel, it.mtimeMs)
 		} else {
 			// A canvas or a markdown document — an editorial card, never a thumbnail
 			// (§5: no canvas/document previews). A top-anchored vertical stack: the icon
@@ -7126,24 +7192,25 @@ async function renderBrowse(main, rel) {
 		root.classList.toggle('is-empty', n === 0)
 		if (n > 0)
 			return
-		if (bs.types.size || bs.scope === 'subtree')
-			empty.textContent = 'No matching files ' + (bs.scope === 'subtree' ? 'in this folder or any subfolder.' : 'in this folder.') + ' Try a different type or scope.'
+		if (bs.types.size || bs.qnorm || bs.scope === 'subtree')
+			empty.textContent = 'No matching files ' + (bs.scope === 'subtree' ? 'in this folder or any subfolder.' : 'in this folder.')
+				+ ' Try a different ' + (bs.qnorm ? 'name, type or scope.' : 'type or scope.')
 		else
 			empty.textContent = 'Nothing to show in this folder yet — drop or paste a canvas, a markdown file, or an image in and it appears.'
 	}
 
-	/** The type filter, as VISIBILITY over the mounted tiles — the one code path that
-	 *  decides whether a tile is shown. Iterates the items (each knows its kind) and
-	 *  indexes into bs.tiles; never the other way round, which would be O(n²) via itemFor.
-	 *  A hidden tile is `display: none` (its own [hidden] rules in styles.css, one per
-	 *  layout — an author `display` outranks the UA's), so its lazy <img> never intersects
-	 *  the viewport and never fetches: filtering to Canvases in an image-heavy folder
-	 *  actively STOPS image loading. */
-	function applyTypeVisibility() {
+	/** The filter (type AND name), as VISIBILITY over the mounted tiles — the one code
+	 *  path that decides whether a tile is shown. Iterates the items (each knows its kind
+	 *  and its name) and indexes into bs.tiles; never the other way round, which would be
+	 *  O(n²) via itemFor. A hidden tile is `display: none` (its own [hidden] rules in
+	 *  styles.css, one per layout — an author `display` outranks the UA's), so its lazy
+	 *  <img> never intersects the viewport and never fetches: filtering to Canvases — or
+	 *  typing a name — in an image-heavy folder actively STOPS image loading. */
+	function applyFilterVisibility() {
 		for (const it of bs.items) {
 			const tile = bs.tiles.get(it.rel)
 			if (!tile) continue
-			const show = typeOK(it)
+			const show = showOK(it)
 			// A video poster is real network + decode work, and `grabPoster` does it on an
 			// OFF-DOM <video> — which `display: none` cannot reach, unlike a tile's own lazy
 			// <img>. So a filtered-out video would fetch its frame while invisible (measured:
@@ -7161,8 +7228,8 @@ async function renderBrowse(main, rel) {
 	const needsPoster = (tile, it) => it.kind === 'video' && it.renderable && !!tile.querySelector('.gt-ph')
 
 	/** Full rebuild — first load, a layout toggle, or a scope change. Never on sort
-	 *  (MOVE), a live sync (DIFF), or a type change (VISIBILITY). Mounts EVERY loaded
-	 *  item; the filter is applied as visibility on top. */
+	 *  (MOVE), a live sync (DIFF), or a type/name change (VISIBILITY). Mounts EVERY
+	 *  loaded item; the filter is applied as visibility on top. */
 	function buildAll() {
 		tilesWrap.textContent = ''
 		bs.tiles.clear()
@@ -7171,7 +7238,7 @@ async function renderBrowse(main, rel) {
 			bs.tiles.set(it.rel, tile)
 			tilesWrap.append(tile)
 		}
-		applyTypeVisibility()
+		applyFilterVisibility()
 		updateEmpty()
 		recordOrder()
 	}
@@ -7223,8 +7290,8 @@ async function renderBrowse(main, rel) {
 				const dur = tile.querySelector('.gt-dur'); if (dur) dur.remove()
 				// Same rule as the build path: only re-capture what the filter is showing.
 				// The tile is back to a film placeholder either way, so a later reveal picks
-				// the capture up through applyTypeVisibility.
-				if (typeOK(it)) mountVideoPoster(tile, it.rel, it.mtimeMs)
+				// the capture up through applyFilterVisibility.
+				if (showOK(it)) mountVideoPoster(tile, it.rel, it.mtimeMs)
 			}
 		}
 		bs.items = newItems
@@ -7235,7 +7302,7 @@ async function renderBrowse(main, rel) {
 				tilesWrap.append(tile)
 			}
 		}
-		applyTypeVisibility()
+		applyFilterVisibility()
 		sortNodes()
 		updateEmpty()
 		renderToolbar()
@@ -7335,7 +7402,7 @@ async function renderBrowse(main, rel) {
 		// toolbar stays uncluttered. An active ring + a count badge say a filter is on
 		// even while the modal is closed.
 		const nActive = filterActiveCount()
-		const filterBtn = makeBtn('g-btn g-filter' + (nActive ? ' on' : ''), icon('list-filter') + '<span>Filter</span>' + (bs.types.size ? '<span class="g-badge">' + bs.types.size + '</span>' : ''), () => openFilterDialog(), 'Filter what shows')
+		const filterBtn = makeBtn('g-btn g-filter' + (nActive ? ' on' : ''), icon('list-filter') + '<span>Filter</span>' + (bs.types.size ? '<span class="g-badge">' + bs.types.size + '</span>' : ''), () => openFilterDialog(), 'Filter what shows — by name, type or scope')
 		// Selection covers EVERY renderable kind (a record an agent acts on), so the
 		// affordance appears whenever the folder shows at least one selectable item —
 		// a canvas or document counts now, not just media. Only a folder is never selectable.
@@ -7381,6 +7448,12 @@ async function renderBrowse(main, rel) {
 	// The open modal's repaint hook, or null when it is closed — so a live toggle
 	// updates BOTH the grid behind and the modal's own controls/result line.
 	let filterRepaint = null
+	// The name box is the one control the repaint must NOT rebuild — the reader is
+	// typing in it, and re-rendering the node under a live gesture is how this app has
+	// lost a picker, a folder row and a chip grid before (gotchas/frontend.md: render
+	// the shape, sync the values). So it is built once, lives OUTSIDE the repainted
+	// body, and this hook writes its value back only when something else changed it.
+	let filterSyncName = null
 
 	function toggleType(kind) {
 		if (bs.types.has(kind)) bs.types.delete(kind)
@@ -7395,12 +7468,16 @@ async function renderBrowse(main, rel) {
 	function resetFilter() {
 		const wasSubtree = bs.scope === 'subtree'
 		bs.types.clear()
+		setQueryState('')
 		if (wasSubtree) setScope('folder') // reloads + repaints
 		else applyTypes()
+		if (filterSyncName) filterSyncName()
 	}
-	/** How many filters are active — drives the toolbar Filter button's ring + badge. */
+	/** How many filters are active — drives the toolbar Filter button's ring. (The badge
+	 *  stays the TYPE count: a number beside the label reads as "how many kinds", and the
+	 *  ring is what says "a filter is on" for the scope and the name alike.) */
 	function filterActiveCount() {
-		return bs.types.size + (bs.scope === 'subtree' ? 1 : 0)
+		return bs.types.size + (bs.qnorm ? 1 : 0) + (bs.scope === 'subtree' ? 1 : 0)
 	}
 
 	/** A TYPE change. Folder scope hides and shows the MOUNTED tiles (instant, and every
@@ -7417,7 +7494,7 @@ async function renderBrowse(main, rel) {
 			await load()
 			syncItems(bs.items.slice(), { prune: false }) // repaints + renderToolbar
 		} else {
-			applyTypeVisibility()
+			applyFilterVisibility()
 			// recordOrder(), NOT sortNodes(): the mounted order is browseSorted(bs.items)
 			// and never reads bs.types, so a type toggle cannot reorder anything — sortNodes
 			// would re-append every mounted tile to land them exactly where they already are
@@ -7430,6 +7507,56 @@ async function renderBrowse(main, rel) {
 		}
 		if (filterRepaint) filterRepaint()
 	}
+
+	/** Record what the reader typed. Split out from `setQuery` because Reset changes the
+	 *  query as part of a bigger change and must not fire a second repaint of its own. */
+	function setQueryState(q) {
+		bs.query = typeof q === 'string' ? q : ''
+		bs.qnorm = bs.query.trim().toLowerCase()
+		state.browseQuery = bs.query
+	}
+
+	/** A NAME change, on every keystroke.
+	 *
+	 *  It repaints IMMEDIATELY from what is already loaded — the filter is pure
+	 *  visibility over the mounted tiles, so folder scope is complete after this and
+	 *  subtree scope has narrowed to the matches within the listing it holds. Typing
+	 *  never waits on the network.
+	 *
+	 *  Subtree scope then refetches, DEBOUNCED, because only the server can apply the
+	 *  name before the 2000-item cap — a subtree whose first 2000 items are all
+	 *  canvases would otherwise hide a matching image that was never sent. The refetch
+	 *  is guarded by a sequence number: keystrokes overlap, and a slow early response
+	 *  landing after a fast later one would show the wrong set with nothing to explain
+	 *  it. */
+	function setQuery(q) {
+		if ((typeof q === 'string' ? q : '') === bs.query)
+			return
+		setQueryState(q)
+		applyFilterVisibility()
+		// recordOrder(), not sortNodes() — same reasoning as applyTypes(): the mounted
+		// order never reads the filter, so nothing can have moved.
+		recordOrder()
+		updateEmpty()
+		renderToolbar()
+		if (filterRepaint) filterRepaint()
+		if (bs.scope !== 'subtree')
+			return
+		clearTimeout(qTimer)
+		qTimer = setTimeout(() => {
+			const seq = ++bs.qseq
+			load(() => seq !== bs.qseq).then((fresh) => {
+				if (!fresh)
+					return
+				syncItems(bs.items.slice(), { prune: false }) // repaints + renderToolbar
+				if (filterRepaint) filterRepaint()
+			})
+		}, 200)
+	}
+	let qTimer = null
+	// A pending refetch must not outlive the view that asked for it: renderBrowse's
+	// cleanup runs when the reader navigates away.
+	bs.cleanup.push(() => clearTimeout(qTimer))
 
 	/** A SCOPE change always refetches — folder⇄subtree are different listings. */
 	async function setScope(scope) {
@@ -7452,7 +7579,7 @@ async function renderBrowse(main, rel) {
 	function filterResultText() {
 		const n = sortedItems().length
 		const scope = bs.scope === 'subtree' ? ' · all subfolders' : ''
-		if (bs.types.size === 0)
+		if (bs.types.size === 0 && !bs.qnorm)
 			return 'Showing everything' + scope
 		return (n === 1 ? '1 match' : n + ' matches') + scope
 	}
@@ -7468,12 +7595,18 @@ async function renderBrowse(main, rel) {
 		return b
 	}
 
-	/** The filter MODAL — a frosted card: a Type section (Folders + the five kinds, plus
-	 *  a Media row that subsumes image/video/audio), a Scope segmented control with a
-	 *  hint, a live result line, and Reset / Done. Everything applies LIVE (the grid
+	/** The filter MODAL — a frosted card: a Name box, a Type section (Folders + the five
+	 *  kinds, plus a Media row that subsumes image/video/audio), a Scope segmented control
+	 *  with a hint, a live result line, and Reset / Done. Everything applies LIVE (the grid
 	 *  updates behind; the result line counts as you go). Class-based only (the CSP drops
 	 *  inline styles). A `.g-modal`, so the overlay's Esc/arrow handler already yields to
-	 *  it (§ the cross-surface keyboard rule). */
+	 *  it (§ the cross-surface keyboard rule) — and its input is why the document-level
+	 *  paste handler yields to `.g-modal` too.
+	 *
+	 *  The Name box is built HERE, once, and sits above the repainted `body` rather than
+	 *  inside it: `paint()` empties its container on every keystroke, and re-creating the
+	 *  input the reader is typing into would drop the caret, the selection and any IME
+	 *  composition mid-word. Structure is rendered; values are synced. */
 	function openFilterDialog() {
 		document.body.classList.add('modal-open')
 		const overlay = document.createElement('div'); overlay.className = 'g-modal filter-modal'
@@ -7482,14 +7615,55 @@ async function renderBrowse(main, rel) {
 		const h = document.createElement('h2'); h.textContent = 'Filter'
 		const xBtn = makeBtn('filter-x', icon('x'), () => teardown(), 'Close')
 		head.append(h, xBtn)
+
+		// ---- Name (persistent; never rebuilt by paint) ----
+		const nameSec = document.createElement('div'); nameSec.className = 'filter-sec filter-name-sec'
+		const nlab = document.createElement('div'); nlab.className = 'filter-sec-label'; nlab.textContent = 'Name'
+		const nbox = document.createElement('div'); nbox.className = 'filter-name'
+		const nic = document.createElement('span'); nic.className = 'filter-name-ic'; nic.innerHTML = icon('search')
+		const nameInput = document.createElement('input')
+		nameInput.type = 'text'
+		nameInput.className = 'filter-name-input'
+		nameInput.placeholder = 'Filter by file name…'
+		nameInput.value = bs.query
+		nameInput.setAttribute('autocomplete', 'off')
+		nameInput.setAttribute('autocapitalize', 'off')
+		nameInput.setAttribute('spellcheck', 'false')
+		nameInput.setAttribute('aria-label', 'Filter by file name')
+		const nclear = makeBtn('filter-name-x', icon('x'), () => { setQuery(''); nameInput.value = ''; nameInput.focus() }, 'Clear the name filter')
+		nclear.hidden = !bs.query
+		nbox.append(nic, nameInput, nclear)
+		const nhelp = document.createElement('p'); nhelp.className = 'filter-help'
+		nhelp.textContent = 'Any file whose name or title contains what you type. Case-insensitive.'
+		nameSec.append(nlab, nbox, nhelp)
+		nameInput.addEventListener('input', () => {
+			setQuery(nameInput.value)
+			nclear.hidden = !nameInput.value
+		})
+		// Enter is not a submit here — everything is already live — so it just closes,
+		// which is what a reader who has finished typing means by pressing it.
+		nameInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); teardown() } })
+
 		const body = document.createElement('div'); body.className = 'filter-body'
 		const foot = document.createElement('div'); foot.className = 'filter-foot'
 		const reset = makeBtn('g-btn', 'Reset', () => resetFilter(), 'Clear the filter')
 		const done = makeBtn('g-btn g-primary', 'Done', () => teardown(), 'Close')
 		foot.append(reset, done)
-		card.append(head, body, foot)
+		card.append(head, nameSec, body, foot)
 		overlay.append(card)
 		document.body.append(overlay)
+
+		/** Value-sync for the one control paint() cannot touch. It runs only when something
+		 *  OTHER than the input changed the query — Reset today — so it does NOT skip a
+		 *  focused field: Reset is a command, and a focused box that keeps showing a query
+		 *  the grid has already dropped is the worst of both (measured: the drive typed
+		 *  "song", pressed Reset, and the box still read "song" over an unfiltered grid).
+		 *  Writing only on a difference is what keeps it from moving a live caret. */
+		function syncName() {
+			nclear.hidden = !bs.query
+			if (nameInput.value !== bs.query)
+				nameInput.value = bs.query
+		}
 
 		function paint() {
 			body.textContent = ''
@@ -7537,16 +7711,21 @@ async function renderBrowse(main, rel) {
 			res.textContent = filterResultText()
 			body.append(res)
 
-			reset.disabled = bs.types.size === 0 && bs.scope === 'folder'
+			reset.disabled = bs.types.size === 0 && bs.scope === 'folder' && !bs.qnorm
 		}
 
 		filterRepaint = paint
+		filterSyncName = syncName
 		paint()
-		done.focus()
+		// The Name box takes focus: it is the only control here that needs a keyboard, and
+		// the reader who opened this modal to type a name should not have to click first.
+		nameInput.focus()
+		nameInput.select()
 
 		function onKey(e) { if (e.key === 'Escape') { e.stopPropagation(); teardown() } }
 		function teardown() {
 			filterRepaint = null
+			filterSyncName = null
 			document.removeEventListener('keydown', onKey, true)
 			overlay.remove()
 			document.body.classList.remove('modal-open')
@@ -7715,7 +7894,15 @@ async function renderBrowse(main, rel) {
 				tile.classList.toggle('selected', bs.selection.has(r))
 			renderToolbar()
 		},
-		dispose() { cancelPress() },
+		// `bs.cleanup` holds everything this view started that outlives its DOM — a pending
+		// debounced refetch today. Draining it here is what makes the field a guard rather
+		// than a comment that looks like code: it was declared and never read until the
+		// name filter's timer needed collecting.
+		dispose() {
+			cancelPress()
+			for (const fn of bs.cleanup) fn()
+			bs.cleanup = []
+		},
 	}
 
 	await load()

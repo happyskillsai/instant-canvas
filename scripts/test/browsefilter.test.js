@@ -49,8 +49,11 @@ test.before(async () => {
 	if (skip)
 		return
 	root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'ic-bfilter-')))
-	// root: one canvas + one image, and a subfolder
+	// root: two canvases + one image, and a subfolder. `q3.canvas.json` carries a TITLE
+	// that shares no substring with its file name — the only way to tell "the name filter
+	// reads the title too" from "it happens to match the name as well".
 	fs.writeFileSync(path.join(root, 'top.canvas.json'), canvas('Top'))
+	fs.writeFileSync(path.join(root, 'q3.canvas.json'), canvas('Quarterly Budget'))
 	fs.writeFileSync(path.join(root, 'logo.png'), pngOf(0))
 	// sub/: an image + a video
 	fs.mkdirSync(path.join(root, 'sub'))
@@ -96,6 +99,10 @@ test.before(async () => {
 		const clickMedia = () => evaluate('(function(){ var m = document.querySelector(".filter-media"); if (m) m.click() })()')
 		const clickScope = (label) => evaluate('(function(){ var b = Array.from(document.querySelectorAll(".filter-scope .g-segbtn")).find(function(x){ return x.textContent === ' + JSON.stringify(label) + ' }); if (b) b.click() })()')
 		const clickReset = () => evaluate('(function(){ var r = Array.from(document.querySelectorAll(".filter-foot .g-btn")).find(function(x){ return x.textContent === "Reset" }); if (r) r.click() })()')
+		// The name box: type into it the way a reader does — write the value and fire the
+		// real `input` event the handler listens for.
+		const typeName = (v) => evaluate('(function(){ var i = document.querySelector(".filter-name-input"); if (!i) return 0; i.value = ' + JSON.stringify(v) + '; i.dispatchEvent(new Event("input", { bubbles: true })); return 1 })()')
+		const clickNameClear = () => evaluate('(function(){ var b = document.querySelector(".filter-name-x"); if (b && !b.hidden) b.click() })()')
 		const clickDone = () => evaluate('(function(){ var d = document.querySelector(".filter-foot .g-primary"); if (d) d.click() })()')
 
 		// Boot: the toolbar Filter button exists once app.js has rendered the browse view.
@@ -353,6 +360,100 @@ test.before(async () => {
 		await sleep(300) // let the debounce coalesce the SECOND toggle into the record too
 		snap.steps.selectionAfterNarrow = await evaluate(selectionPaths)
 
+		// (15) The NAME filter — a free-text, case-insensitive substring over the file name
+		//      AND the displayed title. Reset first: the drive arrives here in subtree scope
+		//      with a type filter on, and every assertion below is about folder scope.
+		await leaveSelect()
+		await untilSelecting(false)
+		await openModal()
+		await until(evaluate, 'document.querySelector(".filter-modal") ? 1 : 0')
+		await clickReset()
+		await until(evaluate, 'document.querySelectorAll("' + SHOWN + '.bt-folder").length > 0 ? 1 : 0')
+		await clickDone()
+		await until(evaluate, 'document.querySelector(".filter-modal") ? 0 : 1')
+		// Reopen so the focus check reads the state a reader actually gets: the box that
+		// needs a keyboard is the one that has it, with no click first.
+		await openModal()
+		snap.steps.modalOpenForName = await until(evaluate, 'document.querySelector(".filter-name-input") ? 1 : 0')
+		snap.steps.nameFocusedOnOpen = await evaluate('(function(){ var a = document.activeElement; return !!(a && a.classList && a.classList.contains("filter-name-input")) })()')
+		snap.steps.nameBaselineRels = await evaluate(rels)
+		// Hold a reference to the live input: paint() empties the modal body on every
+		// keystroke, and rebuilding the field somebody is typing into drops the caret,
+		// the selection and any IME composition. It survives only by living outside the
+		// repainted body (docs/gotchas/frontend.md: render the shape, sync the values).
+		snap.steps.nameNodeCaptured = await evaluate('(function(){ window.__nameEl = document.querySelector(".filter-name-input"); return window.__nameEl ? 1 : 0 })()')
+
+		// (15a) A name match on the FILE NAME. The folder tile goes too — "sub" does not
+		//       contain "logo" — so this is not a kind filter wearing a new hat.
+		await typeName('logo')
+		await until(evaluate, 'document.querySelectorAll("' + SHOWN + '").length === 1 ? 1 : 0')
+		snap.steps.nameLogoRels = await evaluate(rels)
+		snap.steps.nameLogoFolders = await evaluate(folderTiles)
+		// The ring reflects a name-only filter (no types are on, so the badge stays empty).
+		snap.steps.nameRingOn = await evaluate('document.querySelector(".browse .g-btn.g-filter.on") ? 1 : 0')
+		snap.steps.nameBadge = await evaluate('(function(){ var b = document.querySelector(".browse .g-filter .g-badge"); return b ? b.textContent : "" })()')
+		snap.steps.nameResultLine = await evaluate('(function(){ var r = document.querySelector(".filter-result"); return r ? r.textContent : "" })()')
+
+		// (15b) Case-insensitive, in both directions: an uppercase needle against a
+		//       lowercase name, and a lowercase needle against a capitalised title.
+		await typeName('LOGO')
+		await until(evaluate, 'document.querySelectorAll("' + SHOWN + '").length === 1 ? 1 : 0')
+		snap.steps.nameUpperRels = await evaluate(rels)
+
+		// (15c) The TITLE half. "quarterly" appears nowhere in q3.canvas.json's NAME, so
+		//       this can only pass by reading the title the card shows in bold.
+		await typeName('quarterly')
+		await until(evaluate, 'document.querySelectorAll("' + SHOWN + '").length === 1 ? 1 : 0')
+		snap.steps.nameTitleRels = await evaluate(rels)
+
+		// (15d) The query is DATA, not a pattern. As a RegExp ".*" matches everything;
+		//       as a substring it matches nothing here. Paired with a positive control so
+		//       "0 matches" cannot pass by the filter simply being broken.
+		await typeName('.*')
+		await until(evaluate, 'document.querySelectorAll("' + SHOWN + '").length === 0 ? 1 : 0')
+		snap.steps.nameRegexShown = await evaluate('document.querySelectorAll("' + SHOWN + '").length')
+		snap.steps.nameRegexEmptyMsg = await evaluate('(function(){ var e = document.querySelector(".browse .g-empty"); return e && !e.hidden ? e.textContent : "" })()')
+		await typeName('canvas')       // the control: a plain substring still matches
+		await until(evaluate, 'document.querySelectorAll("' + SHOWN + '").length === 2 ? 1 : 0')
+		snap.steps.nameControlRels = await evaluate(rels)
+
+		// (15e) The input is still the SAME node after all of that repainting — and a type
+		//       chip toggle (a full paint) does not replace it either.
+		await clickType('Canvases')
+		await sleep(150)
+		await clickType('Canvases')
+		await sleep(150)
+		snap.steps.nameSameNode = await evaluate('(function(){ var i = document.querySelector(".filter-name-input"); return !!(window.__nameEl && i && window.__nameEl.isSameNode(i)) })()')
+		snap.steps.nameValueKept = await evaluate('(function(){ var i = document.querySelector(".filter-name-input"); return i ? i.value : "" })()')
+
+		// (15f) The clear × empties the box and brings everything back.
+		await clickNameClear()
+		await until(evaluate, 'document.querySelectorAll("' + SHOWN + '").length > 2 ? 1 : 0')
+		snap.steps.nameClearedRels = await evaluate(rels)
+		snap.steps.nameClearedValue = await evaluate('(function(){ var i = document.querySelector(".filter-name-input"); return i ? i.value : "x" })()')
+		snap.steps.nameClearedRing = await evaluate('document.querySelector(".browse .g-btn.g-filter.on") ? 1 : 0')
+
+		// (15g) SUBTREE scope sends the query to the SERVER, which applies it before the
+		//       2000-item cap — the client cannot filter a file it was never sent. Asserted
+		//       on the wire (a real resource timing), because a client-side match alone
+		//       would produce the same grid and prove nothing about the request.
+		await evaluate('performance.clearResourceTimings()')
+		await clickScope('All subfolders')
+		await until(evaluate, 'document.querySelectorAll("' + SHOWN + ' .bt-path").length > 0 ? 1 : 0')
+		await typeName('song')
+		await until(evaluate, 'document.querySelectorAll("' + SHOWN + '").length === 1 ? 1 : 0')
+		await sleep(600) // the subtree refetch is debounced (200 ms) — let it land
+		snap.steps.subtreeNameRels = await evaluate(rels)
+		snap.steps.dirReqWithQ = await evaluate('performance.getEntriesByType("resource").filter(function(e){ return e.name.indexOf("/api/dir") >= 0 && e.name.indexOf("q=song") >= 0 }).length')
+		// Class-based only, name box included (the CSP drops inline styles).
+		snap.steps.nameInlineStyles = await evaluate('document.querySelectorAll(".browse [style], .filter-modal [style]").length')
+		await clickReset()
+		await until(evaluate, 'document.querySelectorAll("' + SHOWN + '.bt-folder").length > 0 ? 1 : 0')
+		snap.steps.resetClearedName = await evaluate('(function(){ var i = document.querySelector(".filter-name-input"); return i ? i.value : "x" })()')
+		snap.steps.resetRels = await evaluate(rels)
+		await clickDone()
+		await until(evaluate, 'document.querySelector(".filter-modal") ? 0 : 1')
+
 		snap.jsErrors = await evaluate('window.__err || []')
 		return snap
 	})
@@ -364,8 +465,8 @@ test('browse filter: boots with a Filter button, no modal until opened', { skip 
 	assert.deepEqual(R.jsErrors, [], 'no page errors during the drive')
 })
 
-test('browse filter: baseline shows folder + canvas + image', { skip }, () => {
-	assert.deepEqual(R.steps.baseKinds.slice().sort(), ['canvas', 'folder', 'image'])
+test('browse filter: baseline shows folder + canvases + image', { skip }, () => {
+	assert.deepEqual(R.steps.baseKinds.slice().sort(), ['canvas', 'canvas', 'folder', 'image'])
 })
 
 test('browse filter: Images filters to images — folders are now their own type, not auto-shown', { skip }, () => {
@@ -456,6 +557,57 @@ test('browse filter: a filtered-out video captures NO poster until it is reveale
 	assert.equal(R.steps.mp4ReqsWhileHidden, 0, 'a hidden video fetched nothing — the off-DOM capture is gated, not just the tile')
 	assert.ok(R.steps.mp4ReqsAfterReveal > 0, 'revealing it DOES capture — the poster feature still works')
 	assert.equal(R.steps.posterLandedAfterReveal, true, 'and the captured frame actually landed on the tile')
+})
+
+test('browse name filter: the box opens focused and filters by FILE NAME', { skip }, () => {
+	assert.equal(R.steps.modalOpenForName, true, 'the modal really opened with a name box in it')
+	assert.equal(R.steps.nameFocusedOnOpen, true, 'the name box takes focus — the only control here that needs a keyboard')
+	assert.ok(R.steps.nameBaselineRels.length > 1, 'the baseline really did show more than the one match below')
+	assert.deepEqual(R.steps.nameLogoRels, ['logo.png'], 'only the file whose name contains the query')
+	assert.equal(R.steps.nameLogoFolders, 0, 'the folder goes too — "sub" does not contain "logo"')
+	assert.equal(R.steps.nameResultLine, '1 match', 'the modal counts the matches live')
+})
+
+test('browse name filter: the ring counts a name-only filter (the badge stays the TYPE count)', { skip }, () => {
+	assert.equal(R.steps.nameRingOn, 1, 'the toolbar Filter button rings with only a name typed')
+	assert.equal(R.steps.nameBadge, '', 'and the badge is empty — no types are selected')
+	assert.equal(R.steps.nameClearedRing, 0, 'clearing the name puts the ring out again')
+})
+
+test('browse name filter: case-insensitive, and it matches the TITLE as well as the name', { skip }, () => {
+	assert.deepEqual(R.steps.nameUpperRels, ['logo.png'], 'an uppercase query matches a lowercase file name')
+	// "quarterly" is nowhere in q3.canvas.json's NAME — only in the title the card shows.
+	assert.deepEqual(R.steps.nameTitleRels, ['q3.canvas.json'], 'a canvas matches on the title it leads with')
+})
+
+test('browse name filter: the query is DATA, never a pattern', { skip }, () => {
+	// As a RegExp ".*" matches every item; as a substring it matches none of these files.
+	assert.equal(R.steps.nameRegexShown, 0, 'a wildcard is matched literally, not compiled')
+	assert.match(R.steps.nameRegexEmptyMsg, /Try a different name/, 'the empty state names the filter that emptied it')
+	// The control: without it, "0 shown" would also be satisfied by a filter that simply
+	// hides everything.
+	assert.deepEqual(R.steps.nameControlRels.slice().sort(), ['q3.canvas.json', 'top.canvas.json'],
+		'a plain substring still matches both canvases')
+	assert.deepEqual(R.jsErrors, [], 'no page errors — a metacharacter never reached a RegExp')
+})
+
+test('browse name filter: the input survives every repaint — it is value-synced, never rebuilt', { skip }, () => {
+	assert.equal(R.steps.nameNodeCaptured, 1, 'there was a node to hold a reference to')
+	assert.equal(R.steps.nameSameNode, true, 'the same <input> node after keystrokes AND a chip toggle repainted the modal')
+	assert.equal(R.steps.nameValueKept, 'canvas', 'and it still carries what the reader typed')
+})
+
+test('browse name filter: the clear × empties the box, Reset clears it too', { skip }, () => {
+	assert.equal(R.steps.nameClearedValue, '', 'the × emptied the input')
+	assert.ok(R.steps.nameClearedRels.length > 2, 'and every tile came back')
+	assert.equal(R.steps.resetClearedName, '', 'Reset clears the name alongside the types and the scope')
+	assert.ok(R.steps.resetRels.length > 0, 'the grid is back to the unfiltered folder')
+})
+
+test('browse name filter: subtree scope sends the query to the SERVER (before the cap)', { skip }, () => {
+	assert.deepEqual(R.steps.subtreeNameRels, ['sub/deep/song.mp3'], 'the nested match, found from the root')
+	assert.ok(R.steps.dirReqWithQ > 0, 'a real /api/dir request carried q=song — the client cannot filter what it was never sent')
+	assert.equal(R.steps.nameInlineStyles, 0, 'the name box adds no inline styles (CSP)')
 })
 
 test('browse filter: narrowing the subtree filter never prunes the selection', { skip }, () => {

@@ -252,7 +252,7 @@
         "CSP shim",
         "Icons and vendored assets"
       ],
-      "line_count": 156,
+      "line_count": 158,
       "links_to": [
         "docs/architecture.md",
         "docs/canvas-schema.md",
@@ -365,6 +365,7 @@
         "Printing a presentation, every slide came out on TWO pages — and the culprit was 12px of screen gutter",
         "The `hidden` attribute does NOT hide a `.tbtn` — an author `display` rule outranks it",
         "Hiding an element stops the work the BROWSER owns, never the work you kicked off yourself",
+        "A value-sync that \"does not argue with the person typing\" also swallows their RESET",
         "A document-level Esc/arrow handler must yield to EVERY open sub-surface",
         "A document-level `paste` handler must YIELD before it PREVENTS — it sits under every input in the app",
         "Two guards that both protect one surface are each individually unfalsifiable",
@@ -377,7 +378,7 @@
         "A drop zone sized by its CONTENT is not the drop zone the reader sees",
         "The packer's orphan rule spun FOREVER when the heading was the sheet's only element"
       ],
-      "line_count": 504,
+      "line_count": 528,
       "links_to": [
         "docs/architecture.md",
         "docs/gotchas/testing.md",

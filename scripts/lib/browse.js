@@ -49,6 +49,42 @@ function normalizeTypes(types) {
 	return set.size ? set : null
 }
 
+// A name query is truncated rather than refused: it arrives from an untrusted query
+// string and is only ever used as a lowercased SUBSTRING (never a pattern), so the
+// only thing worth bounding is how much of it we carry around.
+const MAX_QUERY = 200
+
+/**
+ * Normalize a caller-supplied name query to a lowercase needle, or `null` ("no
+ * name filter"). Untrusted input, so it is trimmed, case-folded and capped — and
+ * it stays a plain substring: a query is DATA, never a pattern. Nothing here ever
+ * reaches a `RegExp`, so a query of `c++` or `.*` matches those characters and
+ * cannot throw or scan the tree.
+ */
+function normalizeQuery(q) {
+	if (typeof q !== 'string')
+		return null
+	const s = q.trim().toLowerCase().slice(0, MAX_QUERY)
+	return s ? s : null
+}
+
+/**
+ * Does one built item match the name query? The file NAME and the displayed TITLE
+ * both count, because a canvas card leads with its title and a reader typing the
+ * words in front of them must match. This predicate is mirrored EXACTLY in the
+ * browser (`nameOK` in `app.js`), which applies it to the loaded listing in folder
+ * scope — two rules that disagree would show a different set depending on which
+ * scope the reader happened to be in.
+ */
+function nameMatches(item, q) {
+	if (!q)
+		return true
+	const base = String(item.name || item.rel || '').split('/').pop().toLowerCase()
+	if (base.includes(q))
+		return true
+	return typeof item.title === 'string' && item.title.toLowerCase().includes(q)
+}
+
 /**
  * The kind of a renderable path, decided from the EXTENSION alone and NEVER by
  * opening the file: `'image'`/`'video'`/`'audio'` (via the shared `mediaKind`),
@@ -143,7 +179,7 @@ function mediaItem(root, rel) {
  * enhanced document carries `enhanced`), dot-FILES never appear, and a symlink is
  * refused by mediaStat's lstat / the dirent's lstat-based isFile().
  */
-function collectFiles(root, relDir, index, want, buckets, cc) {
+function collectFiles(root, relDir, index, want, buckets, cc, q) {
 	let dirents
 	try {
 		dirents = fs.readdirSync(relDir ? path.resolve(root, relDir) : path.resolve(root), { withFileTypes: true })
@@ -160,9 +196,17 @@ function collectFiles(root, relDir, index, want, buckets, cc) {
 		.sort((a, b) => a.localeCompare(b))
 	const relOf = (name) => (relDir ? path.join(relDir, name) : name)
 	// A silent cap reads as "covered everything", so a DROPPED item (not merely a
-	// non-item, and not a filtered-out kind) is what sets `truncated`.
+	// non-item, and not a filtered-out kind or name) is what sets `truncated`.
 	const add = (group, item) => {
 		if (!item)
+			return
+		// The NAME filter runs here rather than beside the kind checks above, because it
+		// reads the item's title — which only exists once the entry is built. It still
+		// runs BEFORE the cap is charged, which is the whole point: a subtree of 2000
+		// canvases holding three files named "budget" returns the three, never a
+		// truncated wall of everything else. A non-match is not a drop, so it must not
+		// set `truncated` either.
+		if (!nameMatches(item, q))
 			return
 		if (cc.total >= cc.cap) {
 			cc.truncated = true
@@ -206,8 +250,8 @@ function collectFiles(root, relDir, index, want, buckets, cc) {
  * dot-folders for explicit navigation). A symlinked directory is never followed:
  * a dirent's isDirectory() is lstat-based.
  */
-function walkTree(root, relDir, index, want, buckets, cc) {
-	collectFiles(root, relDir, index, want, buckets, cc)
+function walkTree(root, relDir, index, want, buckets, cc, q) {
+	collectFiles(root, relDir, index, want, buckets, cc, q)
 	if (cc.truncated || cc.total >= cc.cap)
 		return
 	let dirents
@@ -223,7 +267,7 @@ function walkTree(root, relDir, index, want, buckets, cc) {
 	for (const name of subdirs) {
 		if (cc.truncated || cc.total >= cc.cap)
 			return
-		walkTree(root, relDir ? path.join(relDir, name) : name, index, want, buckets, cc)
+		walkTree(root, relDir ? path.join(relDir, name) : name, index, want, buckets, cc, q)
 	}
 }
 
@@ -248,13 +292,17 @@ function walkTree(root, relDir, index, want, buckets, cc) {
  *              filter runs BEFORE the cap, so a folder of 2000 canvases and 5
  *              nested images, filtered to `image`, returns the five — not a
  *              truncated wall of canvases with the images starved out.
+ *   q          a free-text name query — a case-insensitive SUBSTRING (never a
+ *              pattern) matched against each item's file name and its displayed
+ *              title. Like `types`, it runs before the cap, for the same
+ *              starvation reason. Empty/absent = no name filter.
  *
  * Returns `null` when `dirRel` is not a real directory inside the root — the
  * caller turns that into a byte-clean 404. Security is the gallery discipline:
  * `insideRoot` confinement, decide-from-extension, and `lstat` so a symlink is
  * refused (the requested dir, the child dirents, and every media file).
  */
-function listDir(root, dirRel, { cap = DEFAULT_CAP, dirsOnly = false, recursive = false, types = null } = {}) {
+function listDir(root, dirRel, { cap = DEFAULT_CAP, dirsOnly = false, recursive = false, types = null, q = null } = {}) {
 	const relDir = normalizeRelDir(dirRel)
 	const abs = relDir ? path.resolve(root, relDir) : path.resolve(root)
 	if (!insideRoot(root, abs))
@@ -294,17 +342,18 @@ function listDir(root, dirRel, { cap = DEFAULT_CAP, dirsOnly = false, recursive 
 		return { dir: toPosix(relDir), dirs, items: [], truncated: false, recursive: false }
 
 	const want = normalizeTypes(types)
+	const needle = normalizeQuery(q)
 	const index = companionIndex(root)
 	const buckets = { canvas: [], env: [], document: [], image: [], video: [], audio: [] }
 	const cc = { total: 0, truncated: false, cap }
 
 	if (recursive)
-		walkTree(root, relDir, index, want, buckets, cc)
+		walkTree(root, relDir, index, want, buckets, cc, needle)
 	else
-		collectFiles(root, relDir, index, want, buckets, cc)
+		collectFiles(root, relDir, index, want, buckets, cc, needle)
 
 	const items = [...buckets.canvas, ...buckets.env, ...buckets.document, ...buckets.image, ...buckets.video, ...buckets.audio]
 	return { dir: toPosix(relDir), dirs, items, truncated: cc.truncated, recursive: !!recursive }
 }
 
-module.exports = { listDir, itemMeta, classifyKind, ITEM_KINDS }
+module.exports = { listDir, itemMeta, classifyKind, nameMatches, ITEM_KINDS }

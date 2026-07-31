@@ -116,13 +116,25 @@ test.before(async () => {
 			out.lastPrevDisabled = await evaluate('document.getElementById("ocPrev").disabled')
 			out.lastNextDisabled = await evaluate('document.getElementById("ocNext").disabled')
 
-			// ---- breadcrumb: a nested doc shows its folder path (NO house), each segment
-			// navigating to that folder ----
+			// ---- breadcrumb: the folder path (NO house) and then THE FILE ITSELF as the
+			// last segment. The folder segments navigate; the file is where you already
+			// are, so it is inert — the pair is what makes either half falsifiable ----
 			await openC('sub/inner.md')
 			await sleep(200)
 			out.crumbSegs = await evaluate('Array.from(document.querySelectorAll("#ocCrumb .oc-seg span")).map(function(s){ return s.textContent })')
 			out.crumbHere = await evaluate('(document.querySelector("#ocCrumb .oc-here span")||{}).textContent || ""')
 			out.crumbNoHouse = await evaluate('!document.querySelector("#ocCrumb .oc-seg .lucide")')
+			// The file segment leads nowhere: clicking it must leave the route alone.
+			await evaluate('(function(){ var f = document.querySelector("#ocCrumb .oc-file"); if (f) f.click() })()')
+			await sleep(200)
+			out.hashAfterFileSeg = await evaluate('location.hash')
+			// A ROOT-level item has no folder above it, so the crumb is just its name —
+			// where it used to be empty entirely.
+			await openC('guide.md')
+			await sleep(200)
+			out.rootCrumbSegs = await evaluate('Array.from(document.querySelectorAll("#ocCrumb .oc-seg span")).map(function(s){ return s.textContent })')
+			await openC('sub/inner.md')
+			await sleep(200)
 			await evaluate('document.querySelector("#ocCrumb .oc-seg").click()') // the folder segment
 			out.steps.crumbNav = await until(evaluate, 'location.hash === "#/f/sub"', 4000)
 
@@ -302,10 +314,13 @@ test('overlay: prev/next traverses siblings and disables at the boundaries', { s
 	assert.equal(R.lastNextDisabled, true, 'the last item disables next')
 })
 
-test('overlay: the breadcrumb is the owning folder path (no house) and navigates to it', { skip }, () => {
-	assert.deepEqual(R.crumbSegs, ['sub'], 'a nested document shows its folder segment')
-	assert.equal(R.crumbHere, 'sub', 'the owning folder is the current (here) crumb')
+test('overlay: the breadcrumb is the folder path (no house) THEN the file, and only the folders navigate', { skip }, () => {
+	assert.deepEqual(R.crumbSegs, ['sub', 'inner.md'], 'the trail ends at the file the modal is showing')
+	assert.equal(R.crumbHere, 'inner.md', 'the FILE is the current (here) crumb — every folder above it is a way out')
 	assert.equal(R.crumbNoHouse, true, 'there is no house segment (the × already returns to the folder)')
+	assert.equal(R.hashAfterFileSeg, '#/c/' + encodeURIComponent('sub/inner.md'),
+		'clicking the file segment changes nothing — it is the route you are already on')
+	assert.deepEqual(R.rootCrumbSegs, ['guide.md'], 'a root-level item shows its own name (the crumb used to be empty)')
 	assert.equal(R.steps.crumbNav, true, "a folder segment navigates to that folder's browse view")
 })
 

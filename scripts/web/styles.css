@@ -336,6 +336,13 @@ body.modal-open .doc-modal-view{overflow:hidden}
 .oc-seg:hover{background:var(--tint);color:var(--text)}
 .oc-seg.oc-here{color:var(--text);font-weight:600;cursor:default}
 .oc-seg.oc-here:hover{background:transparent}
+/* The FILE the modal is showing is the last crumb, and the segment that must survive a
+   squeeze: the folders above it are context, the name is what the reader came for. So the
+   folder segments shrink (min-width:0 lets a flex item go below its content width, which
+   `overflow:hidden` + the span's ellipsis then render honestly) while the file keeps its
+   width and a wider ceiling of its own. */
+.oc-crumb .oc-seg{min-width:0}
+.oc-seg.oc-file{flex:0 0 auto;max-width:min(320px,46vw)}
 .oc-seg .lucide{width:14px;height:14px;flex:0 0 auto}
 .oc-slash{flex:0 0 auto;color:var(--muted);opacity:.45;font-size:12px}
 .oc-nav{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;padding:0;
@@ -1849,6 +1856,29 @@ audio.m-el{display:none} /* the audio element is never shown — the art card st
 .filter-x:hover{background:var(--tint);color:var(--text)}
 .filter-x .lucide{width:18px;height:18px}
 .filter-body{padding:4px 20px 8px;overflow:auto}
+/* The Name box sits ABOVE the scrolling body, because it is built once and must survive
+   every repaint of the sections below it (app.js: render the shape, sync the values). */
+.filter-name-sec{flex:0 0 auto;padding:4px 20px 0;margin-bottom:14px}
+.filter-name{display:flex;align-items:center;gap:9px;height:40px;padding:0 10px 0 12px;
+	border:1px solid var(--border);border-radius:10px;background:var(--panel-2);
+	transition:border-color .12s,background .12s}
+.filter-name:focus-within{border-color:var(--accent);background:var(--panel)}
+.filter-name-ic{flex:0 0 auto;display:inline-flex;color:var(--muted)}
+.filter-name-ic .lucide{width:16px;height:16px}
+.filter-name:focus-within .filter-name-ic{color:var(--accent)}
+.filter-name-input{flex:1 1 auto;min-width:0;background:none;border:none;outline:none;
+	color:var(--text);font-family:inherit;font-size:14px;font-weight:500;line-height:1.3}
+.filter-name-input::placeholder{color:var(--muted);opacity:1}
+/* Its own explicit [hidden] rule: an author `display` on a button outranks the UA's
+   [hidden]{display:none} (docs/gotchas/frontend.md), so without this the clear × is
+   visible on an empty box. */
+.filter-name-x{flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;
+	width:24px;height:24px;padding:0;border:none;border-radius:6px;background:transparent;
+	color:var(--muted);cursor:pointer}
+.filter-name-x:hover{background:var(--tint);color:var(--text)}
+.filter-name-x .lucide{width:15px;height:15px}
+.filter-name-x[hidden]{display:none}
+.filter-name-sec .filter-help{margin-top:7px}
 .filter-sec{margin-bottom:20px}
 .filter-sec-label{font-size:10.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:10px}
 .filter-chips{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}

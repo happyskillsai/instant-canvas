@@ -369,6 +369,30 @@ The rule generalises past posters: **when you switch a surface from "not built" 
 
 A neighbouring guard from the same change, recorded because the failure mode is invisible rather than because it bit us: `.gt` carries `content-visibility: auto` so offscreen tiles cost no layout or paint, and relevancy for that property is **viewport-based** — a printed page has no viewport, and Chromium has a history of printing skipped content blank. The `@media print` block therefore sets `.gt { content-visibility: visible }`. Browse tiles cannot reach a deck today (a gallery block is a `deckBlocker`), but a reader can still Cmd+P a continuous view holding one.
 
+## A value-sync that "does not argue with the person typing" also swallows their RESET
+
+The corollary of the render-the-shape/sync-the-values rule above, and it arrives the moment
+a *text* input joins a panel that repaints. The browse filter's Name box is built outside
+the repainted body for the usual reason — `paint()` empties that body on every keystroke,
+and rebuilding the field mid-word drops the caret, the selection and any IME composition.
+The value half was then written with the palette panel's lesson copied verbatim: *skip the
+input the reader is currently inside.*
+
+Which is right for an **incidental** sync and wrong for a **commanded** one. The reader
+types `song`, then clicks Reset. `resetFilter()` clears the query, the grid comes back
+unfiltered — and the box still reads `song`, because focus never left it. The state is
+correct, the screen is a lie, and the reader's next keystroke edits a query they thought
+they had thrown away. The browser drive caught it (`'song' !== ''`) only because the
+assertion was written for the *outcome* — "Reset clears the name" — rather than for the
+call.
+
+So the guard belongs on the *reason*, not the *element*: `syncName()` runs only when
+something **other than the input** changed the query, so it writes unconditionally, and
+writes **only on a difference** so it can never move a live caret if a future caller does
+run it mid-typing. Generalise it: **"never overwrite a focused field" is a rule about
+uninvited writes.** A write the reader just asked for is not one — and the failure mode is
+silent, because a stale value in a focused box looks exactly like something they typed.
+
 ## A document-level Esc/arrow handler must yield to EVERY open sub-surface
 
 The overlay's keyboard (§4.6: Esc → leave to the folder, ←/→ → prev/next) is a `document`-level bubble listener, and so are several others — the gallery block's modal keys, its selection-mode Escape (exit select), the palette panel, `⌘K` search, the drawer. The first wiring guarded only the gallery *modal* (`.g-modal`); it missed selection mode. So opening a gallery-block canvas, entering selection, and pressing Escape ran the overlay handler *before* the gallery's own — and `ocClose()` navigated away to `#/f/` instead of exiting the selection. Every one of `galleryui.test.js`'s modifier-click/long-press/deck-toggle assertions then failed downstream, none naming the real cause. The fix is to **enumerate every surface that owns the keyboard and yield to all of them**: the guard now bails on `.g-modal, .gallery.g-selecting`, the presenting stage (`state.presenting` — its capture handler also `stopPropagation`s), the search modal, the palette panel, `body.nav-open`, and focus inside a form. The rule: a global key handler is only correct once it can name every other handler it must not pre-empt — and a cross-surface conflict surfaces as a *downstream* failure in the surface it stole the key from, never where the new handler lives.

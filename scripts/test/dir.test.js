@@ -223,6 +223,72 @@ test('browse: the type filter runs BEFORE the cap — a filtered kind is never s
 	assert.equal(r.truncated, false, 'the cap is spent on matches, not on filtered-away canvases')
 })
 
+// ---------------------------------------------------------------------------
+// The NAME filter (`q`). A free-text, case-insensitive SUBSTRING over the file
+// name AND the displayed title — the same predicate the browser applies to a
+// loaded listing, which is why it has to match here too (a server rule that
+// disagreed would show a different set in subtree scope than in folder scope).
+
+test('browse: q filters by file NAME, case-insensitively, in both directions', () => {
+	const root = nested()
+	assert.deepEqual(relsOf(listDir(root, '', { recursive: true, q: 'pic' }).items), ['sub/pic.png'])
+	// The needle case and the name case are independent — both halves must fold.
+	assert.deepEqual(relsOf(listDir(root, '', { recursive: true, q: 'PIC' }).items), ['sub/pic.png'])
+	assert.deepEqual(relsOf(listDir(root, '', { recursive: true, q: 'CANVAS' }).items).sort(),
+		['sub/a.canvas.json', 'top.canvas.json'], 'an uppercase needle matches lowercase names')
+})
+
+test('browse: q matches the TITLE too — a canvas card leads with it', () => {
+	const root = mkroot()
+	// The name and the title share no substring, so each assertion below can only
+	// pass through the field it names.
+	fs.writeFileSync(path.join(root, 'q3.canvas.json'), canvas('Quarterly Budget'))
+	fs.writeFileSync(path.join(root, 'plain.md'), '# Revenue Model\n')
+	assert.deepEqual(relsOf(listDir(root, '', { q: 'budget' }).items), ['q3.canvas.json'], "a canvas matches on its title")
+	assert.deepEqual(relsOf(listDir(root, '', { q: 'revenue' }).items), ['plain.md'], "a document matches on its H1 title")
+	assert.deepEqual(relsOf(listDir(root, '', { q: 'q3' }).items), ['q3.canvas.json'], 'and the file name still matches')
+})
+
+test('browse: q is DATA, never a pattern — a regex metacharacter matches itself', () => {
+	const root = mkroot()
+	fs.writeFileSync(path.join(root, 'a.canvas.json'), canvas('A'))
+	fs.writeFileSync(path.join(root, 'b.canvas.json'), canvas('B'))
+	// As a RegExp these would match everything (or throw); as a substring they match
+	// nothing, because no file is literally named ".*" or "c++".
+	assert.deepEqual(listDir(root, '', { q: '.*' }).items, [], 'a wildcard is a literal, not a pattern')
+	assert.deepEqual(listDir(root, '', { q: 'c++' }).items, [], 'an unbalanced quantifier does not throw')
+	assert.equal(listDir(root, '', { q: 'canvas' }).items.length, 2, 'the control: a plain substring still matches')
+})
+
+test('browse: the name filter runs BEFORE the cap — a rare name is never starved', () => {
+	const root = mkroot()
+	// Three canvases and one nested image: a cap that counted the non-matches would
+	// exhaust before ever reaching the file the reader asked for.
+	fs.writeFileSync(path.join(root, 'c1.canvas.json'), canvas('C1'))
+	fs.writeFileSync(path.join(root, 'c2.canvas.json'), canvas('C2'))
+	fs.writeFileSync(path.join(root, 'c3.canvas.json'), canvas('C3'))
+	fs.mkdirSync(path.join(root, 'sub'))
+	fs.writeFileSync(path.join(root, 'sub', 'needle.png'), PNG)
+
+	const r = listDir(root, '', { recursive: true, q: 'needle', cap: 2 })
+	assert.deepEqual(relsOf(r.items), ['sub/needle.png'])
+	assert.equal(r.truncated, false, 'a non-match costs no cap slot and is not a truncation')
+})
+
+test('browse: q composes with types, and an empty/blank q is no filter at all', () => {
+	const root = nested()
+	// Both filters apply: an image whose name carries "pic", nothing else.
+	assert.deepEqual(relsOf(listDir(root, '', { recursive: true, types: ['image'], q: 'pic' }).items), ['sub/pic.png'])
+	assert.deepEqual(listDir(root, '', { recursive: true, types: ['canvas'], q: 'pic' }).items, [],
+		'a name match of the wrong kind is still filtered out')
+
+	const all = relsOf(listDir(root, '', { recursive: true }).items)
+	assert.deepEqual(relsOf(listDir(root, '', { recursive: true, q: '' }).items), all)
+	assert.deepEqual(relsOf(listDir(root, '', { recursive: true, q: '   ' }).items), all, 'whitespace only is not a filter')
+	assert.deepEqual(relsOf(listDir(root, '', { recursive: true, q: null }).items), all)
+	assert.deepEqual(relsOf(listDir(root, '', { recursive: true, q: 7 }).items), all, 'a non-string is ignored, never thrown on')
+})
+
 test('browse: an unknown or empty type filter behaves like no filter', () => {
 	const root = nested()
 	const bogus = listDir(root, '', { types: ['nonsense'] })
