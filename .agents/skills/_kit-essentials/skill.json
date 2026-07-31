@@ -1,7 +1,7 @@
 {
 	"name": "_kit-essentials",
-	"version": "0.1.0",
-	"description": "Essential skills to manage any project regardless of purpose — manage memory, write specs, version control, reframe answers, verify work. Bundles Doc Essentials, Reframe Last Answer, and Scrutinize.",
+	"version": "0.4.0",
+	"description": "Essential skills for any project — perpetual memory, specs, conventional commits, reframing, pre-implementation audits, self-review, session status, and a one-glance list of what is still open.",
 	"keywords": [
 		"essentials",
 		"kit",
@@ -17,6 +17,15 @@
 		"scrutinize",
 		"review",
 		"verification",
+		"second-opinion",
+		"audit",
+		"session-status",
+		"status",
+		"ledger",
+		"handover",
+		"open-items",
+		"blockers",
+		"todo",
 		"claude-code",
 		"cursor"
 	],
@@ -28,6 +37,9 @@
 	"dependencies": {
 		"nicolasdao/_kit-doc-essentials": "*",
 		"nicolasdao/reframe-last-answer": "*",
-		"nicolasdao/scrutinize": "*"
+		"nicolasdao/scrutinize": "*",
+		"nicolasdao/second-opinion": "*",
+		"nicolasdao/session-status": "*",
+		"nicolasdao/print-open-items": "*"
 	}
 }
