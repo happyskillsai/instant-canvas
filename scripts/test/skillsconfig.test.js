@@ -192,3 +192,31 @@ test('skillsconfig: the schema shipped in skill.json is GENERATED from lib/theme
 	assert.equal(skill.config.theme.prompt, false)
 	assert.equal(skill.config.palettes.prompt, false)
 })
+
+// ---------------------------------------------- the path the CLI reports back
+
+test('skillsconfig: the CLI\'s reported file is testimony about WHICH file, not a path to do arithmetic on', () => {
+	const root = tmpRoot()
+	const mine = skillsconfig.projectConfigPath(root)
+
+	// `skills-config set --json` answers with a path relative to ITS OWN cwd, which is
+	// not our workspace: resolving it against `root` used to climb out of the root and
+	// land on the same file under a different name, so a caller reporting
+	// path.relative(ROOT, …) printed `../../../../../../private/var/…/skills-config.json`
+	// to a human where the answer was `skills-config.json`.
+	const fromCliCwd = path.join('..', '..', '..', '..', '..', '..', 'var', 'somewhere', 'else', 'skills-config.json')
+	assert.equal(skillsconfig.cliFilePath(root, fromCliCwd), mine,
+		'a relative answer is never anchored to our root — the contract is "the config at --root"')
+
+	// An absolute answer naming the same file we would have written is OUR path, even
+	// when it arrives under an equivalent name. This is the symlink case stated without
+	// needing a symlinked filesystem: the file exists, so realpath collapses the two.
+	fs.writeFileSync(mine, '{}')
+	const noisy = path.join(root, '.', 'sub', '..', 'skills-config.json')
+	assert.equal(skillsconfig.cliFilePath(root, noisy), mine, 'the same file under another name is reported as ours')
+
+	// A genuinely DIFFERENT absolute file is reported verbatim — the CLI is still the
+	// authority on where it wrote, and collapsing that answer would be a lie.
+	const elsewhere = path.join(tmpRoot(), 'skills-config.json')
+	assert.equal(skillsconfig.cliFilePath(root, elsewhere), elsewhere, 'a different file is not rewritten to ours')
+})

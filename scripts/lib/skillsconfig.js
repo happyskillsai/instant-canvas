@@ -214,10 +214,44 @@ function writeViaCli(root, key, value) {
 	try {
 		const parsed = JSON.parse(out.stdout)
 		const file = parsed && parsed.data && parsed.data.file
-		return file ? path.resolve(root, file) : projectConfigPath(root)
+		return typeof file === 'string' && file ? cliFilePath(root, file) : projectConfigPath(root)
 	} catch {
 		return null
 	}
+}
+
+/**
+ * Re-express the path the CLI reports in OUR root's namespace.
+ *
+ * `data.file` comes back **relative to the CLI's own cwd**, not to the `--root` we
+ * passed — e.g. `../../../../../../var/folders/…/skills-config.json`. Resolving that
+ * against `root` (which is what this used to do) is right only while the two cwds
+ * coincide, which is the ordinary case and precisely why it went unnoticed. When they
+ * differ — a workspace reached through a symlink (macOS `/var` → `/private/var`), or a
+ * kernel spawned from somewhere else — the `..` chain climbs out of the root and lands
+ * on the *other name for the same file*, so a caller reporting `path.relative(ROOT, …)`
+ * shows a human `../../../../../../private/var/…/skills-config.json` where the answer
+ * is `skills-config.json`.
+ *
+ * So the CLI's answer is treated as testimony about WHICH file, never as a path we can
+ * arithmetic on: if it names the same file we would have written (`realpath`-compared,
+ * which is what collapses the symlink twins), the answer is OUR path. Only a genuinely
+ * different absolute file is reported verbatim; a relative one we cannot anchor falls
+ * back to our own, because "it wrote the project config at --root" is the contract.
+ */
+function cliFilePath(root, file) {
+	const mine = projectConfigPath(root)
+	if (!path.isAbsolute(file))
+		return mine
+	return sameFile(file, mine) ? mine : file
+}
+
+/** Do two paths name the same file? `realpath` is the point — it is what makes a
+ *  symlinked ancestor and its target compare equal. A path that does not exist yet
+ *  cannot be resolved, so fall back to a literal comparison. */
+function sameFile(a, b) {
+	const real = (p) => { try { return fs.realpathSync(p) } catch { return path.resolve(p) } }
+	return real(a) === real(b)
 }
 
 /**
@@ -279,7 +313,7 @@ function setPalette(root, name, theme) {
 
 module.exports = {
 	CONFIG_NAME, SKILL_KEY, ConfigError,
-	projectConfigPath, globalConfigPath,
+	projectConfigPath, globalConfigPath, cliFilePath,
 	read, themeFor, readPalettes,
 	setWorkspaceTheme, setPalette, setKey,
 }
