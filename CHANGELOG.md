@@ -2,6 +2,45 @@
 
 ## [Unreleased]
 
+## [0.26.0] - 2026-07-31
+
+### Added
+
+- **The browse filter takes a name.** The Filter modal now opens with a **Name** box already
+  focused: type any part of a file's name and the grid narrows as you go, case-insensitively.
+  It matches the file name **and the title the tile shows** — a canvas card leads with its title
+  in bold and carries the file name under it in mono, so a reader typing the words in front of
+  them has to match either one. The query is data, never a pattern: it is lowercased and handed
+  to `includes()`, so `c++` and `.*` match those characters instead of throwing or matching
+  everything.
+
+  In **This folder** it costs no request — the name joins the type chips on the single visibility
+  path (`showOK = typeOK && nameOK`), so tiles hide and return without a rebuild and an `<img>`
+  keeps its decoded bytes. In **All subfolders** it also rides a debounced `GET /api/dir?q=`,
+  because only the server can apply a name *before* the 2000-item cap — the same starvation the
+  `types=` filter exists to prevent. It is sticky across folders like the types and the scope,
+  lights the Filter button's ring, and clears from the box's × or from Reset.
+
+### Changed
+
+- **The item view's breadcrumb ends at the file you are looking at.** It used to stop at the
+  owning folder — `reports / 2026` — which is the one thing already visible behind the modal,
+  while the content below it can be a chart deck, a photo or a video, none of which say what
+  they are called. It now reads `reports / 2026 / annual-report.md`, and a root-level item shows
+  its own name where the crumb used to be empty. Every folder segment still navigates out; the
+  file is the "you are here" segment and is deliberately inert.
+
+### Fixed
+
+- **A saved palette reported a path that had climbed out of the workspace.**
+  `POST /api/theme/palette` answered `wrote: "../../../../../../private/var/…/skills-config.json"`
+  where the answer is `skills-config.json`. `skills-config set --json` reports its file relative
+  to **its own cwd**, and we resolved that against the *workspace root* — correct only while the
+  two coincide, which is the ordinary case and precisely why it went unseen. The CLI's answer is
+  now testimony about *which* file rather than a path to do arithmetic on: the same file as ours
+  (realpath-compared, which collapses a symlinked ancestor and its target) reports as our path; a
+  genuinely different absolute file is reported verbatim.
+
 ## [0.25.0] - 2026-07-25
 
 ### Added
