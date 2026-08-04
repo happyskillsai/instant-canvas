@@ -109,7 +109,7 @@ Project Memory ships as one core skill plus five satellite skills, each owning o
 
 ### Bootstrap satellites (one-time setup)
 
-- **`nicolasdao/init-doc`** — **Bootstrap** verb. Generates the README hub + `docs/` folder from source code analysis. Used when a project has no docs, has legacy docs to replace, or needs a fresh documentation baseline. Invokes `init-mission` transitively.
+- **`nicolasdao/init-doc`** — **Bootstrap** verb. Generates the README hub + `docs/` folder from source code analysis. Used when a project has no docs, has legacy docs to replace, or needs a fresh documentation baseline. Invokes `init-mission` transitively. Since **1.10.0** it also runs **session-native** — when the *same* session created the project, it documents from the session rather than re-scanning, which is the only way the reasoning behind the build (rejected alternatives, errors hit) survives the session closing.
 
 - **`nicolasdao/init-mission`** — **Compass** verb. Interviews the user to produce `docs/mission.md` — vision, values, non-goals, users, UX compass. Loaded in every session by `init-context` as the decision-making lens. Transitively used by `init-doc`.
 
@@ -161,6 +161,7 @@ When a user invokes `/project-memory` (or speaks an intent the core matches), us
 | User intent / phrasing | Route to | Reason |
 |---|---|---|
 | *"set up project memory"* / *"add project memory to this codebase"* / *"give my AI agent persistent memory"* | `/init-doc` (transitively invokes `/init-mission`) | Bootstrap — generate README + docs/ from source |
+| *"document what we just built"* / *"write the docs before we close this session"* / *"capture what we did while building this"* — where **this session created the project** | `/init-doc` (session-native mode) | Bootstrap from the session — the build's reasoning is in context and nowhere on disk. Route here even when a scaffolder already left a `README.md` |
 | *"create a mission document"* / *"add a decision-making compass"* / *"capture project vision"* | `/init-mission` | Compass-only flow when docs already exist |
 | *"load context"* / *"what does this project do?"* / starting any new work session | `/init-context` | Recall — load docs into working context |
 | *"update docs"* / *"remember what I did this session"* / *"sync docs to code"* / end-of-session | `/update-doc` | Maintain — sync docs to code changes |
@@ -181,6 +182,7 @@ When a user wants to set up Project Memory for a project that has no documentati
 1. **Determine the project root** via `git rev-parse --show-toplevel`. If not a git repo, use the current working directory and warn the user.
 2. **Check current state**: look for `README.md` at the root, `docs/` directory, `docs/mission.md`, `docs/gotchas.md`, `docs/gotchas/`, and `doc-manifest.json`. Report what exists.
 3. **Recommend the right entry point**:
+   - **This session created the project** → recommend `/init-doc`, which runs **session-native**. This branch takes precedence over every state check below, because they misroute here: a scaffolder routinely leaves a `README.md` behind, which matches the "README exists" branch and would send a birth session to `/init-mission` — losing the build history the session is holding. init-doc still checks disk for existing docs itself and backs them up before replacing anything.
    - **No `README.md`, no `docs/`** → recommend `/init-doc` for full bootstrap. Inform the user that init-doc will optionally invoke `/init-mission` mid-flow for the mission document.
    - **`README.md` exists but no `docs/mission.md`** → recommend `/init-mission` to add the decision-making compass.
    - **Both exist but `docs/gotchas/` is monolithic and over 750 lines** → recommend `/refactor-doc` to convert to hub+domain.

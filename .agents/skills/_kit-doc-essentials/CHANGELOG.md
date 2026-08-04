@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.1.1] - 2026-07-30
+
+### Fixed
+- **README described `init-doc` as source-analysis-only**, which stopped being true at `nicolasdao/init-doc` 1.10.0. Both the "What's Included" entry and step 1 of the lifecycle now name the **session-native** path — documenting from the session that built the project, so the decisions and dead ends behind the build survive the session closing. Documentation only. Kit composition is unchanged, so this is a patch, not a minor.
+
 ## [1.1.0] - 2026-06-02
 
 ### Added

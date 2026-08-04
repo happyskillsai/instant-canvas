@@ -156,9 +156,12 @@ npx happyskills list --all-scopes --json    # BOTH scopes, tagged local/global +
 ## check
 
 ```bash
-npx happyskills check --json                         # all
+npx happyskills check --json                         # all, this project
 npx happyskills check owner/name --json              # specific skill
+npx happyskills check -g --json                      # globally installed skills
 ```
+
+`check` reports on **one scope at a time**, project-local by default. Pass `-g` for the machine-wide scope — the skills `setup` installs live there, so a question about "my global skills" needs the flag. Requires `happyskills@2.0.1+`; older CLIs accept `-g` and silently report the project scope anyway, so if the answer lists skills the user never installed globally, check the CLI version before believing it.
 
 **JSON shape:**
 
@@ -366,9 +369,12 @@ npx happyskills whoami --json
 **Setup — install the `happyskills` skill (no auth required):**
 
 ```bash
-happyskills setup --json           # project-level (default)
-happyskills setup -g --json        # global
+happyskills setup --json           # always machine-wide
 ```
+
+`setup` installs the constellation machine-wide, unconditionally — HappySkills is the tool that installs skills, so it has to exist before a project does. There is no local variant. `-g` is still accepted and does nothing.
+
+To pin the constellation inside one project instead, treat it as an ordinary skill: `happyskills install happyskillsai/happyskills`. Never describe `setup` to the user as project-level.
 
 Idempotent — reports `already_up_to_date` if current. If newly installed, tell user: "Restart Claude Code to activate the skill."
 

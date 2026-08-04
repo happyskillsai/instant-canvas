@@ -1,6 +1,6 @@
 {
 	"name": "project-memory",
-	"version": "0.7.1",
+	"version": "0.8.0",
 	"description": "Perpetual project memory for Claude Code, Cursor, Codex. Defeats LLM amnesia, context rot, hallucination with living agent-recallable docs. Project-scoped alternative to Karpathy LLM Wiki.",
 	"keywords": [
 		"ai",
@@ -25,7 +25,7 @@
 	],
 	"license": "BSD-3-Clause",
 	"dependencies": {
-		"nicolasdao/init-doc": "*",
+		"nicolasdao/init-doc": ">=1.10.0",
 		"nicolasdao/update-doc": "*",
 		"nicolasdao/refactor-doc": "*",
 		"nicolasdao/init-context": "*",

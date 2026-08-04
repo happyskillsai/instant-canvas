@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.10.0] - 2026-07-30
+
+### Added
+- **Session-native bootstrap — documenting the session that gave birth to the project.** init-doc's standard path assumes a session arriving at a project it did not build, so it reconstructs understanding by scanning. When the *same* session created the project, that reconstruction re-derives decisions already in context — and the knowledge worth capturing (why a choice was made, what was rejected, which errors were hit) exists nowhere on disk and evaporates when the session closes. A new **§ Session-Native Bootstrap** section defines the mode: Phases 1 and 2 are **replaced by** the session rather than supplemented by it, with an explicit authority split — **disk is authoritative for what exists** (files, routes, schema, `source` globs), **the session for why it is that way and what went wrong building it** — and a conflict between them treated as a finding to surface, not a tie to break silently.
+- **`docs/decisions.md` in the Topic Catalog** — non-obvious choices with rationale and rejected alternatives. Warranted mainly in session-native mode; legitimately carries no `source` under the existing abstract-doc carve-out (`references/source-mapping.md` step 5), so no schema change was needed.
+- **Four constraints** — session-native mode requires explicit confirmation (it cannot be inferred from a repo, since fresh files and a single commit look identical whether authored or cloned); greenfield is never concluded from the session; a rejected or deferred decision is never written as though it shipped; and an uncertain claim about code is checked by opening the file rather than trusting recall.
+- **`Existing Documentation` is exempt from the session substitution and always determined from disk.** Creating a project does not mean authoring every file in it — a scaffolder emits `README.md` files nobody in the session wrote — and this is the field that gates the Phase 3 decision and the Phase 4 backup. Sourcing it from the session lets a birth session skip the backup and overwrite real documentation with no primary source to prove the loss against, which is the exact failure `references/doc-review.md` exists to prevent.
+
+### Changed
+- **Constraint "NEVER write documentation for code you haven't read"** now states that authoring the code in this session satisfies it, while reading nothing never does. As written, the rule forbade the new mode outright — an agent would have hit it and silently fallen back to full reconnaissance.
+- **Phase 1** gains a session-native check before the reconnaissance run; **Phase 2** notes that steps 1–6 and 8 are replaced by the session while steps 7 and 9 (gotchas and their domain classification) get richer; **Phase 3** requires the session-derived understanding to be presented alongside the plan, since the user never saw a reconnaissance output and no cold reader can audit a conversation it was not part of; **Phase 5** step 6 weights spot-checks toward low-confidence files and session-sourced claims — the main defense against a stale memory of a file edited several times since.
+- **SKILL.md and skill.json descriptions** name the birth-session trigger, so the mode is reachable by description rather than only by an explicit `/init-doc`. The SKILL.md description sits at 243 chars against the 250-char soft cap, leaving little room for a future trigger.
+
+### Compatibility
+Backward compatible. The mode is off unless affirmed, so absent an explicit yes every phase runs exactly as in 1.9.0. `scripts/build-doc-manifest.py` and all three shared `references/` files (`standards.md`, `doc-review.md`, `source-mapping.md`) are **unchanged** — the latter are shared with `update-doc`, `refactor-doc`, `init-mission`, `init-context`, and `project-memory`, and everything the new mode needs was already permitted by them. The generator being untouched means the manifest format and the `--check` / `--drift` / `--affects` contracts cannot regress. Phase 6 needed no edit because it gates on whether Phase 4 took a backup, not on which mode ran — a birth session that scaffolded a `README.md` along the way is *not* greenfield, so it backs up and runs the review exactly as before.
+
 ## [1.9.0] - 2026-06-18
 
 ### Changed

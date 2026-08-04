@@ -88,7 +88,8 @@ For exact syntax, all flags, and JSON shapes, read [references/cli-reference.md]
 | List installed skills (local + global, default) | `npx happyskills list --all-scopes --json` |
 | List project-local skills only | `npx happyskills list --json` |
 | List global skills only | `npx happyskills list -g --json` |
-| Check updates | `npx happyskills check --json` |
+| Check updates — project-local (default) | `npx happyskills check --json` |
+| Check updates — global scope | `npx happyskills check -g --json` (requires CLI `2.0.1+`) |
 | Update all — project-local (default) | `npx happyskills update --all -y --json` |
 | Update all — global scope only | `npx happyskills update --all -g -y --json` |
 | Update all — local AND global | `npx happyskills update --all --all-scopes -y --json` (requires CLI `1.13.0+`; returns a per-scope `data.scopes[]` report) |

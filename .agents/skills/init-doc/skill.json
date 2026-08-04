@@ -1,7 +1,7 @@
 {
 	"name": "init-doc",
-	"version": "1.9.0",
-	"description": "Bootstrap codebase documentation from source code. Part of the ProjectMemory constellation. Creates README.md hub and docs/ folder for projects with no docs or legacy docs to replace.",
+	"version": "1.10.0",
+	"description": "Bootstrap codebase documentation from source code, or from the session that created the project. Part of the ProjectMemory constellation. Creates README.md hub and docs/ folder.",
 	"keywords": [
 		"documentation",
 		"docs",

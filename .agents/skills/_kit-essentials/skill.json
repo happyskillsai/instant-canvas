@@ -1,6 +1,6 @@
 {
 	"name": "_kit-essentials",
-	"version": "0.4.0",
+	"version": "0.5.0",
 	"description": "Essential skills for any project — perpetual memory, specs, conventional commits, reframing, pre-implementation audits, self-review, session status, and a one-glance list of what is still open.",
 	"keywords": [
 		"essentials",
@@ -40,6 +40,6 @@
 		"nicolasdao/scrutinize": "*",
 		"nicolasdao/second-opinion": "*",
 		"nicolasdao/session-status": "*",
-		"nicolasdao/print-open-items": "*"
+		"nicolasdao/open-items": "*"
 	}
 }

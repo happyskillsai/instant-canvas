@@ -1,6 +1,6 @@
 {
 	"name": "happyskills-help",
-	"version": "0.9.0",
+	"version": "0.10.0",
 	"type": "skill",
 	"description": "HappySkills concierge — explain how HappySkills works, list and install its optional opt-in skills, route any request to the right family skill, sign in, and send feedback. Hands off skill discovery, versions, and changelogs to happyskills-search.",
 	"authors": [
@@ -19,6 +19,8 @@
 		"bug-report",
 		"feature-request",
 		"documentation",
+		"readme",
+		"onboarding",
 		"ai"
 	],
 	"dependencies": {},
@@ -59,6 +61,18 @@
 			"commands": [
 				"feedback"
 			]
+		},
+		{
+			"id": "document-project-readme",
+			"summary": "compose the README note telling cloners this project's skills are HappySkills-managed and what to run after cloning (the calling agent writes the file)",
+			"intents": [
+				"document HappySkills in my README",
+				"add a HappySkills section to the README",
+				"tell people how to install the skills for this project",
+				"how do new developers set up the skills after cloning",
+				"note in the README that this project uses HappySkills"
+			],
+			"commands": []
 		}
 	],
 	"systemDependencies": {

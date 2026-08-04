@@ -1,6 +1,15 @@
 # Changelog
 
-## [2.8.0] - 2026-07-21
+## [2.8.1] - 2026-08-02
+
+Catches the skill's CLI reference up to `happyskills@2.0.0` / `2.0.1`. Both changes are about **scope** — which one a command acts on, and whether the agent can tell.
+
+### Changed
+- **`setup` is documented as machine-wide, unconditionally.** As of CLI `2.0.0` it installs the constellation into `~/.agents/skills/` rather than the current project — HappySkills is the tool that installs skills, so it has to exist before a project does, the same reason node and npm live outside your projects. The reference previously showed `setup --json # project-level (default)` and `setup -g --json # global`; both lines were false the moment 2.0.0 shipped. There is no `--local`: a project-scoped constellation is `install happyskillsai/happyskills`, which is the identical call plus a lock entry. `-g` is still accepted and now does nothing, so published `setup -g` instructions keep working.
+- **Never describe `setup` to the user as project-level.** Added as an explicit instruction, because the old wording was the kind an agent repeats verbatim.
+
+### Added
+- **`check -g` documented, with a version guard.** CLI `2.0.1` fixed `check` silently reading the project lock while reporting the global scope — it returned 41 rows where the global lock held 9, with `ok: true` and no signal that the flag had been ignored. The reference now shows the flag, states that `check` reports on one scope at a time, and warns that CLIs before `2.0.1` accept `-g` and answer about the project anyway — so an implausible result should be checked against the CLI version before it is believed. `SKILL.md`'s quick-reference table gained the matching row.
 
 ### Added
 - **Section 11 — Install by Bare Name.** "Install skill xyz" is the most common phrasing a user produces, and it was a guaranteed dead end: `install` needs an `owner/name` coordinate, so core refused and asked the principal for the owner slug — the one thing they don't know and would have had to search for. Core now resolves the name itself, with a mandatory pre-flight: **lock first** (`list --all-scopes`, free and deterministic — covers "reinstall X" / "update X"), then an exact-name registry lookup.

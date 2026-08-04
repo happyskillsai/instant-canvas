@@ -1,6 +1,15 @@
 # Changelog
 
-## [0.7.1] - 2026-06-18
+## [0.8.0] - 2026-07-30
+
+### Added
+- **Routing for `init-doc`'s session-native bootstrap (requires `nicolasdao/init-doc` ≥ 1.10.0).** A new Routing Table row sends *"document what we just built"*, *"write the docs before we close this session"*, and *"capture what we did while building this"* to `/init-doc` when the same session created the project. The satellite roster entry for `init-doc` now names the mode. Without this the core advertised init-doc as source-analysis-only, so a birth-session intent had no route — the capability existed and the router that exists to reach it did not know.
+
+### Changed
+- **`nicolasdao/init-doc` dependency tightened from `*` to `>=1.10.0`.** The router now routes to a mode that does not exist before 1.10.0, so `*` would let this version install alongside 1.9.0 and promise a capability the satellite cannot deliver. This makes the constellation's existing publish order (satellites before the core) load-bearing rather than conventional — release `init-doc` first.
+
+### Fixed
+- **Set-Up Procedure misrouted a birth session to `/init-mission`.** Step 3's state checks are evaluated in order, and a project scaffolded in-session routinely has a `README.md` (emitted by `npm create`, `cargo new`, or a template) but no `docs/`. That matched the "`README.md` exists but no `docs/mission.md`" branch and recommended the compass-only flow, skipping the bootstrap entirely and losing the build reasoning the session was holding. A new first branch — "this session created the project" — takes precedence over the state checks. State alone cannot distinguish a birth session from a clone, which is why the branch is ordered ahead of it rather than folded into it.
 
 ### Changed
 - Anti-pattern wording updated for the new README-only TOC policy: the "Bypassing the satellites" row now reads "README doc-index + TOC regeneration" (TOC regeneration is README-only and generator-owned). No behavior change.

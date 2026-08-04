@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.10.0] - 2026-08-04
+
+### Added
+- **Document HappySkills in the project README (Section 3.6).** A maintainer can ask for a note telling future cloners that the project's skills are HappySkills-managed and what to run after cloning. This closes a gap opened by CLI 2.0.0: `setup` now installs the constellation machine-wide and skills are never committed, so `skills-lock.json` is the only tracked trace — and it means nothing to someone who has never heard of HappySkills. They clone, run the project's normal setup, get a working build, and silently work without any of the skills the project was designed around.
+- **The concierge composes; it never writes.** `allowed-tools` stays `Bash, Read, AskUserQuestion` — no `Write`, no `Edit`. Section 3.6 reads the README, classifies it, confirms via AskUserQuestion, and hands the calling agent an exact instruction (verdict, target file and anchor, literal text, one-line rationale) to apply with the write permission it already holds. Four new constraints pin this shut, including never reporting a file as changed when an instruction was handed off.
+- **`references/readme-block.md`** — the canonical block text, the three-part gate (lockfile exists, README exists, user asked), the placement rules, and the four merge cases: absent, our marked block present, an unmarked section already doing the job in the maintainer's own words, and a stale mention (e.g. one still claiming `setup` is project-scoped). Cases 3 and 4 default to the least invasive action; the maintainer's prose is never silently overwritten.
+- **`document-project-readme` capability** in `skill.json`, making the flow reachable through `npx happyskills resolve` and `schema --json`.
+
+### Changed
+- The intro now describes five kinds of requests rather than four, and the Section 1 routing table carries the README trigger phrases.
+
+### Notes
+- The frontmatter `description` is **deliberately unchanged**. It is already 100 chars over the 250-char soft cap and is now billed against every project on the machine since the constellation went global, so the capability is routed through the `skill.json` capability registry and core's post-install `next_step` instead of through description characters.
+- The README block points at `install.happyskills.ai` rather than restating the install procedure. That URL is the canonical contract, served as `text/plain` with a 5-minute cache, so a correction reaches every repo in minutes — whereas procedure copied into a README is frozen there permanently. This matters because skills update lazily, so a stale copy of this skill must not be able to emit stale instructions.
+
 ## [0.9.0] - 2026-07-19
 
 ### Added

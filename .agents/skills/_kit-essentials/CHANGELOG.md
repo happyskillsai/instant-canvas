@@ -2,6 +2,14 @@
 
 All notable changes to the Essentials kit are documented here.
 
+## [0.5.0] - 2026-08-02
+
+### Changed
+- Swap `nicolasdao/print-open-items` for `nicolasdao/open-items`. Same skill under a shorter name — the behaviour is byte-for-byte identical, so nothing about what the kit does changes. HappySkills has no rename primitive, so carrying a name change means publishing a new coordinate and repointing the kit at it.
+
+### Removed
+- `nicolasdao/print-open-items` is no longer a member and has been deleted from the registry. Installs of this kit at 0.4.0 or earlier resolved that coordinate; upgrade to 0.5.0 to pick up `nicolasdao/open-items` in its place.
+
 ## [0.4.0] - 2026-07-31
 
 ### Added

@@ -1,18 +1,18 @@
 ---
-name: print-open-items
-description: Session — print only the still-open items, ranked by dependency, under a headline count. Use when asking what is open, what is left, what is blocking, or are we done. Not for a ledger of done plus left — that is session-status.
-allowed-tools: Bash, Read, Grep
+name: open-items
+description: Session — list what is still open ranked by dependency, then ask you to decide the ones waiting on you. Use when asking what is open, what is left, what is blocking, or are we done. Not for a ledger of done plus left — that is session-status.
+allowed-tools: Bash, Read, Grep, AskUserQuestion
 ---
 
-# Print open items
+# Open items
 
-Answer one question — **what is still open?** — for a reader who is busy and impatient. The count is visible at a glance, every row says why it is not closed, and the order is the order the work must happen in.
+Answer one question — **what is still open?** — for a reader who is busy and impatient. The count is visible at a glance, every row says why it is not closed, and the order is the order the work must happen in. Then close the loop: for the items that are waiting on *this reader*, ask for the decision instead of leaving them to type a second prompt.
 
 This skill never recaps completed work. `session-status` owns that — the full ledger of done, left and waiting, for someone re-orienting after time away. This one owns the impatient question asked mid-flight: **what is still open, right now.** Finished work is invisible here; only what is left appears.
 
 ## When this runs
 
-Manually as `/print-open-items`, or automatically on any phrasing of the same question:
+Manually as `/open-items`, or automatically on any phrasing of the same question:
 
 > "any open items?" · "what's left?" · "what's still open?" · "are we done?" · "are we waiting on anything?" · "anything blocking?" · "what's outstanding?" · "is this finished?"
 
@@ -98,11 +98,58 @@ When everything is closed, print exactly:
 *Clear: <the verified list>*
 ```
 
+## Step 5 — Ask for the decisions that are yours to make
+
+The table tells the reader what is open. It does not move anything. For the rows that are stuck **on this reader specifically**, finish the job: ask, in one batched `AskUserQuestion`, so a decision costs a click instead of a second prompt.
+
+**Print the table first, always.** Step 4 stands on its own — a reader who ignores the question still got the full answer. Never withhold the table until the question is answered.
+
+### Which rows earn a question
+
+The `Blocked by` column already classifies this. Do not invent a second taxonomy.
+
+| `Blocked by` | Ask? |
+|---|---|
+| `you (decide)` **and not waiting on another open row** | **Yes** — this is the whole point |
+| `you (decide)` but blocked by `#N` | **No.** Its premise may evaporate once `#N` is decided — asking now buys an answer to a question that may not survive |
+| `you (run it)` | No. Nothing to decide; they simply have not run it |
+| `#N` | No — `#N` is the decision |
+| an external name | No — it is not theirs to decide |
+| `—` | No — nothing is blocking it |
+
+**If no row qualifies, ask nothing and stop after the table.** A glance-check must not summon a modal. This is the throttle that keeps the skill usable mid-flight.
+
+### Shape of the ask
+
+- **One batched call, not a sequence.** `AskUserQuestion` takes up to 4 questions at once; four modals in a row is the opposite of quick.
+- **Same order as the table** — most-blocking first, so the first answer is the one that unblocks the most.
+- **More than four qualify?** Ask the top four and add one line under the table naming what is deferred and why: *"3 more surface once #1 lands."* Never silently drop the rest.
+- **Never spend an option slot on "something else."** The tool appends a free-text **Other** choice automatically. Burning a slot to re-create it costs a real recommendation.
+- Lead each question with the row it belongs to, so the modal and the table are obviously the same thing.
+
+### What the options must be
+
+Options are recommendations, and a wrong one that gets clicked is worse than no option at all — it turns a reporting tool into a source of bad decisions. The rule that governs rows governs options too.
+
+- **Ground every option in something verified this turn.** If the evidence is not there, do not manufacture a path.
+- **Put the recommended option first** and mark it `(Recommended)` — but only when there is a real reason to prefer it. If two paths are genuinely even, say so and do not fake a winner.
+- **State the cost of each option, not just the action.** "Ship it as a patch" is a label; "ship as patch — consumers on `^1.x` auto-upgrade into the change" is a decision.
+- **When you cannot responsibly recommend anything**, do not skip the row and do not invent two fake paths. Offer to lay out the trade-off: an option like *"Walk me through it"* is honest; a fabricated fork is not.
+
+### What happens with the answers
+
+**Record the decisions and stop. This skill does not execute them.**
+
+Restate each answer against its row number in one line — `#1 → publish as 0.2.0` — so the decision is captured in plain sight, then end. Acting on it belongs to the session that invoked this skill, which has the answers in context and can proceed immediately. That boundary is what keeps a command you run to *check* state from becoming one that *changes* state on a mis-click.
+
 ## Constraints
 
 - **Never** recap completed work, list what changed, or narrate the session. Rows are open items only.
 - **Never** exceed two lines in a `Why` cell. Cut the reasoning, keep the consequence.
-- **Never** open with a preamble ("Here's what I found...") or close with an offer ("Let me know if..."). The table is the whole answer.
+- **Never** open with a preamble ("Here's what I found...") or close with an offer ("Let me know if..."). The table, then the question, is the whole answer.
 - **Never** invent an item to look thorough, and never omit one because it is awkward — a wrong count is worse than a long one.
+- **Never** invent an option to look helpful. An ungrounded recommendation that gets clicked is worse than asking nothing.
 - **Never** mark something closed you did not verify this turn.
-- **Never** write files, change state, or fix anything while reporting. This skill is read-only. If the user wants an item actioned, that is a separate request.
+- **Never** ask about a row that is not `you (decide)`, and never ask about one still blocked by another open row.
+- **Never** hold back the table until the question is answered — Step 4 is complete on its own.
+- **Never** write files, change state, or fix anything. This skill reports and elicits; it does not execute. `AskUserQuestion` collects a decision without mutating anything, which is why it is the only tool added — acting on the answer belongs to the session that invoked this skill.

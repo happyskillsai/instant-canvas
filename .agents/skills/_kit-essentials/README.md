@@ -11,7 +11,7 @@ The most essential skills to manage any project, regardless of what the project 
 - **Scrutinize** (`nicolasdao/scrutinize`) — self-review and fix your own just-finished work in the same session, for when a project needs the work being done verified.
 - **Second Opinion** (`nicolasdao/second-opinion`) — audit a just-delivered analysis and fix plan *before* anyone implements it: re-verify its claims at primary sources, test rival explanations, sweep the proposed changes for side effects, and return an UPHELD, AMENDED or OVERTURNED verdict. Where Scrutinize scopes by diff after the work is done, Second Opinion scopes by argument structure before it starts.
 - **Session Status** (`nicolasdao/session-status`) — a manually-invoked ledger showing what is done, what is left, what is waiting and why, and what only you can unblock, for when you return to a session and cannot remember where things stand.
-- **Print Open Items** (`nicolasdao/print-open-items`) — the impatient counterpart to Session Status: only what is still open, as a headline count over a table of item, why it is not closed, and what blocks it, ordered so each item unblocks the next. Session Status is the ledger you read after time away; this is the answer to "what's left?" asked mid-flight.
+- **Open Items** (`nicolasdao/open-items`) — the impatient counterpart to Session Status: only what is still open, as a headline count over a table of item, why it is not closed, and what blocks it, ordered so each item unblocks the next. Session Status is the ledger you read after time away; this is the answer to "what's left?" asked mid-flight.
 
 ## When to Use
 
