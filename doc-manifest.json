@@ -19,11 +19,12 @@
         "What this repository is",
         "Overview",
         "Getting Started",
+        "Skills used to work on this repo",
         "A guided tour — `examples/`",
         "Project Structure",
         "Documentation"
       ],
-      "line_count": 153,
+      "line_count": 176,
       "links_to": [
         "docs/architecture.md",
         "docs/canvas-schema.md",
@@ -427,8 +428,10 @@
         "`npx` with a bare spec runs the LOCAL project inside this repo — and pins everyone else to its cache",
         "DO NOT hand-write the skill bundle's CHANGELOG — the publish step owns it"
       ],
-      "line_count": 106,
-      "links_to": [],
+      "line_count": 108,
+      "links_to": [
+        "docs/releasing.md"
+      ],
       "over_size": false,
       "parse_error": null,
       "path": "docs/gotchas/packaging.md",
@@ -550,10 +553,11 @@
         "`cdp.send()` has NO per-command timeout, so a probe against a HUNG page never returns",
         "A test double with NO idle timeout outlives every interrupted run"
       ],
-      "line_count": 264,
+      "line_count": 266,
       "links_to": [
         "docs/gotchas/frontend.md",
-        "docs/gotchas/runtime.md"
+        "docs/gotchas/runtime.md",
+        "docs/releasing.md"
       ],
       "over_size": false,
       "parse_error": null,
@@ -612,9 +616,10 @@
         "The release workflow: the `release-cli` skill",
         "Publishing checklist (manual, after the release commit and tag)"
       ],
-      "line_count": 46,
+      "line_count": 50,
       "links_to": [
         "docs/architecture.md",
+        "docs/gotchas/packaging.md",
         "docs/testing.md"
       ],
       "over_size": false,

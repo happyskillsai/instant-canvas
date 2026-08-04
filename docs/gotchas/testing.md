@@ -95,7 +95,9 @@ An in-runner `http` server answers in-process clients normally, but a spawned su
 
 ## An outer npm lifecycle leaks `npm_config_*` into nested npm calls
 
-`npm publish --dry-run` exports `npm_config_dry_run=true` to its lifecycle scripts, so when `prepublishOnly` runs the suite, the e2e test's nested `npm pack` inherits it, packs as a dry-run, and writes no tarball — the install step then dies ENOENT on a file that was never created. Any `npm_config_*` flag leaks the same way (`--tag`, `--registry`, …). Nested npm invocations in tests must scrub `npm_*` from their env (`e2e.test.js` does).
+`npm publish --dry-run` exports `npm_config_dry_run=true` to its lifecycle scripts, so when `prepublishOnly` runs, the e2e test's nested `npm pack` inherits it, packs as a dry-run, and writes no tarball — the install step then dies ENOENT on a file that was never created. Any `npm_config_*` flag leaks the same way (`--tag`, `--registry`, …). Nested npm invocations in tests must scrub `npm_*` from their env (`e2e.test.js` does).
+
+**Since 0.26.0 that scrub is load-bearing on every publish.** `prepublishOnly` no longer runs the whole suite — it runs `e2e.test.js` *directly*, precisely because packaging is the failure mode a publish can introduce ([releasing.md](../releasing.md)). So the one test standing between a mistake and the registry is also the one test that shells out to a nested `npm`, under the one lifecycle that poisons its environment. If the scrub regresses, the symptom is not a quiet red test somewhere inside a three-minute run — it is `npm publish` itself dying ENOENT on a tarball nobody wrote. Verified both ways on the swap: `npm publish --dry-run` now clears the gate in ~3 s and packs a real tarball.
 
 ## Faking `process.platform` splits workspace identity
 

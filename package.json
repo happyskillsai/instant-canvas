@@ -38,7 +38,7 @@
 		"!scripts/test"
 	],
 	"scripts": {
-		"prepublishOnly": "node --test scripts/test/",
+		"prepublishOnly": "node --test scripts/test/e2e.test.js",
 		"test": "node --test scripts/test/",
 		"rls": "node tools/rls.js",
 		"coverage": "node --test --experimental-test-coverage scripts/test/",

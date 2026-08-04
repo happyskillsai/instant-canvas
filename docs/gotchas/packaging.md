@@ -15,7 +15,9 @@ source:
 
 ## The npm tarball is an allowlist — verify with `npm pack --dry-run`
 
-The package publishes only what `package.json` `files` names: `scripts/` minus `scripts/test` (the `!scripts/test` negation), plus the files npm force-includes (package.json, README, LICENSE, CHANGELOG). After touching `files` or adding top-level directories, run `npm pack --dry-run` and read the list — a wrong allowlist either ships the tests or drops `scripts/web/`, leaving a kernel that serves nothing. Shape at migration time: 29 files, ~1.4 MB packed, ~4.3 MB unpacked. **Current shape: 53 files, 2.3 MB packed, 7.0 MB unpacked** — read that as the sanity reference; the migration figures are kept only to show what the split moved.
+The package publishes only what `package.json` `files` names: `scripts/` minus `scripts/test` (the `!scripts/test` negation), plus the files npm force-includes (package.json, README, LICENSE, CHANGELOG). After touching `files` or adding top-level directories, run `npm pack --dry-run` and read the list — a wrong allowlist either ships the tests or drops `scripts/web/`, leaving a kernel that serves nothing. Shape at migration time: 29 files, ~1.4 MB packed, ~4.3 MB unpacked. **Current shape: 54 files, 2.3 MB packed, 7.1 MB unpacked** — read that as the sanity reference; the migration figures are kept only to show what the split moved.
+
+Since 0.26.0 the allowlist is also checked **automatically on every publish**: `prepublishOnly` runs `scripts/test/e2e.test.js`, which packs the real tarball and asserts what is in it (see [releasing.md](../releasing.md)). That is a gate, not a replacement for reading the list — the test asserts the invariants it was taught (the runtime ships, `scripts/test/` never does, no `*.canvas.json` ships), so a *new* category of mistake still reaches consumers unless someone looks at `npm pack --dry-run` output with their own eyes.
 
 ## npm FORCE-INCLUDES anything named `README*`, and a negation cannot take it back
 

@@ -14,7 +14,7 @@ source:
 
 `package.json` at the repo root is the single version source, read everywhere through `scripts/lib/pkgmeta.js` (see [architecture.md](architecture.md)). Every release moves **two artifacts in lockstep**:
 
-1. **The npm package `@happyskillsai/instant-canvas`** — the runtime (scoped: npm's similarity rule blocks the unscoped name; `publishConfig.access public` keeps `npm publish` flag-free). Published manually from the repo root; the `prepublishOnly` script re-runs the full test suite first, and publishing requires `npm login`. The installed command stays `instant-canvas`.
+1. **The npm package `@happyskillsai/instant-canvas`** — the runtime (scoped: npm's similarity rule blocks the unscoped name; `publishConfig.access public` keeps `npm publish` flag-free). Published manually from the repo root; the `prepublishOnly` script runs the **packaging** test first (not the full suite — see the checklist below), and publishing requires `npm login`. The installed command stays `instant-canvas`.
 2. **The HappySkills skill** at `.agents/skills/instant-canvas/` — the ~89 KB agent-facing contract. Its `skill.json` version is mirrored from `package.json` in the same release commit, and the bundle is republished manually through the `happyskills-publish` flow.
 
 ## The version bumper: `npm run rls`
@@ -41,6 +41,10 @@ Releases are orchestrated by the project skill at `.agents/skills/release-cli/` 
 
 ## Publishing checklist (manual, after the release commit and tag)
 
-1. `npm login` (once per machine), then `npm publish` from the repo root — `prepublishOnly` runs the suite; expect ~3 minutes.
+1. `npm login` (once per machine), then `npm publish` from the repo root — `prepublishOnly` runs `scripts/test/e2e.test.js` only; expect ~3 seconds.
+
+   **Why the publish gate is the packaging test and not the whole suite.** `prepublishOnly` used to run all 810 tests, which took ~3 minutes and could not tell you anything new: preflight already ran `npm test` *and* `npm run coverage:cli` on a clean tree, and the release commit is those exact bytes. What `npm publish` uniquely risks is not a logic regression but a **packaging** one — a `files` allowlist that ships `scripts/test/`, drops `scripts/web/` and leaves a kernel serving nothing, or force-includes a new `README*` past the allowlist ([gotchas/packaging.md](gotchas/packaging.md)). `e2e.test.js` is the only test that can see any of that: it packs the real tarball, installs it into a scratch prefix, and drives the agentic loop through the installed bin. So the gate now guards the failure mode that belongs to this step, and the code gates stay where a red result still costs nothing — *before* a commit and a tag exist.
+
+   The consequence to respect: **publishing without going through `/release-cli` no longer runs the suite.** If you ever publish off-workflow, run `npm test` yourself first.
 2. Smoke the consumer path from any directory: `npx -y @happyskillsai/instant-canvas catalog`.
 3. Republish the skill bundle to HappySkills — its `skill.json` already carries the new version.
