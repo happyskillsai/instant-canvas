@@ -2,6 +2,33 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **`npm publish` now gates on the packaging test alone, rather than the whole suite.**
+  `prepublishOnly` ran all 823 tests — roughly three minutes, most of it headless Chrome — and
+  could not report anything new: `/release-cli`'s preflight already runs `npm test` *and*
+  `npm run coverage:cli` on a clean tree, and the release commit is those exact bytes. What
+  `npm publish` uniquely risks is not a logic regression but a **packaging** one — a `files`
+  allowlist that ships `scripts/test/`, drops `scripts/web/` and leaves a kernel serving nothing,
+  or force-includes a new `README*` past the allowlist — and `e2e.test.js` is the only test that
+  can see any of it, because it packs the real tarball, installs it into a scratch prefix and
+  drives the agentic loop through the installed bin. So the gate now guards the failure mode that
+  belongs to this step, in ~3 s instead of ~3 min, and the code gates stay where a red result
+  still costs nothing: *before* a commit and a tag exist. One consequence to respect — publishing
+  without going through `/release-cli` no longer runs the suite.
+
+- **The README states what this project's HappySkills dependency actually is, in both
+  directions.** A cloner now gets the restore block — the skills are not committed,
+  `skills-lock.json` pins them, `npx happyskills install` brings them back — which nothing in the
+  README previously said, because every existing mention was aimed at *consumers* installing
+  Instant Canvas rather than at someone cloning this repo to work on it. And the "Zero
+  dependencies" bullet no longer implies the runtime never leaves its own process: a theme or
+  palette Save prefers `npx happyskills skills-config set`, so the write lands in the hands of the
+  tool that owns `skills-config.json`, and falls back to the same atomic, key-scoped write when
+  that CLI is unreachable — offline, a cold npx cache, or Windows, where a bare `npx` ENOENTs. The
+  claim now reads as what it always was: no npm dependencies, and HappySkills preferred at runtime
+  but never required.
+
 ## [0.26.0] - 2026-07-31
 
 ### Added
