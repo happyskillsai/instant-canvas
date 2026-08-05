@@ -5,6 +5,19 @@ The agent-facing contract for InstantCanvas. The runtime ships as the
 and LICENSE, and agents drive the CLI through `npx`. Versions track the runtime
 package they were authored alongside.
 
+## [0.27.1] - 2026-08-05
+
+### Changed
+- **Read and write `skills-config.json` through the commands below — never resolve or edit it
+  yourself.** The contract declared config (the workspace default theme, the palette library) without
+  ever saying how to reach it, which left you to invent a lookup. Inventing one is specifically wrong
+  here: the runtime walks up to the nearest config, stops at a `.git` boundary and deep-merges the
+  user-level one, and the CLI is launched from arbitrary directories — so a walk against *your own*
+  working directory works from the project root and **fails silently from every subfolder**. Use
+  `theme --list` / `theme <file>` to read, `theme --all --set` / `--save` to write, and
+  `skills-config get` for the raw block. Nothing you drive changed — no new command, flag, stdout
+  field, exit code or error code.
+
 ## [0.27.0] - 2026-08-05
 
 ### Changed

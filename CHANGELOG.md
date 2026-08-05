@@ -2,6 +2,24 @@
 
 ## [Unreleased]
 
+## [0.27.1] - 2026-08-05
+
+### Changed
+
+- **SKILL.md now tells agents that the runtime owns `skills-config.json` resolution, instead of
+  leaving them to invent one.** The skill declares config (the workspace default theme, the palette
+  library) but the contract never said how to resolve it, so the publish validator flagged that an
+  agent would improvise — and improvising is specifically wrong here: `lib/skillsconfig.js` walks up
+  to the nearest config, stops at a `.git` boundary and deep-merges the user-level one, while the
+  CLI is launched from arbitrary directories. An agent resolving against *its own* cwd would work
+  from the project root and fail silently from every subfolder.
+
+  The fix deliberately is **not** the generic hand-resolver the authoring guidance offers, because
+  that would teach agents to duplicate logic the runtime already owns and contradict the one-write-
+  path rule. It names the doors instead — `theme --list` / `theme <file>` to read, `theme --all
+  --set` / `--save` to write (the same single path the browser's Save uses), and
+  `skills-config get`/`set` for the raw block. No command, flag, stdout field or exit code changed.
+
 ## [0.27.0] - 2026-08-05
 
 ### Added
