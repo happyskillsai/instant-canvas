@@ -5,6 +5,28 @@ The agent-facing contract for InstantCanvas. The runtime ships as the
 and LICENSE, and agents drive the CLI through `npx`. Versions track the runtime
 package they were authored alongside.
 
+## [0.27.0] - 2026-08-05
+
+### Changed
+- **Nothing you drive changed.** No new command, flag, stdout field, exit code or error code; every
+  instruction below holds exactly as written. Versions 0.24–0.26 shipped runtime work that did not
+  touch this contract, which is why this entry follows 0.23.0 directly.
+- **⚠️ A new advisory line can now appear on STDERR, and it is not an error.** When the installed
+  skill — or the CLI itself, which a bare `npx` spec pins to whatever it cached — has fallen behind
+  the registry, the CLI writes one line like `1 installed skill(s) behind the registry (…). Run: …`
+  before the command's own output. **Do not read it as a failure.** The contract is unchanged and it
+  is the only thing to trust: **the exit code, and the single JSON document on stdout.** stdout is
+  untouched by this — still exactly one JSON document per run — so a parser reading stdout sees
+  nothing new. Only a caller that treats *any* stderr output as a failed command would misread it,
+  and that caller was already wrong, because every log and progress line in this CLI has always gone
+  to stderr.
+- **If it is noise for your setup, switch it off** with `INSTANTCANVAS_NO_DRIFT_CHECK=1` in the
+  environment. Nothing else about the run changes.
+- **What it is telling the human is worth passing on.** A skill pinned on disk does not update itself,
+  and a bare `npx` spec reuses its cache indefinitely — so the line means the human is driving a
+  current tool through a stale contract, or an old runtime through a current one. The command it
+  prints is the fix; surface it rather than swallowing it.
+
 ## [0.23.0] - 2026-07-22
 
 ### Changed

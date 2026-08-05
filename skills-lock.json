@@ -1,6 +1,6 @@
 {
 	"lockVersion": 2,
-	"generatedAt": "2026-08-04T08:09:23.398Z",
+	"generatedAt": "2026-08-05T06:54:47.216Z",
 	"skills": {
 		"happyskillsai/happyskills": {
 			"version": "2.8.1",
@@ -282,12 +282,12 @@
 			"type": "skill"
 		},
 		"happyskillsai/instant-canvas": {
-			"version": "0.23.0",
-			"ref": "refs/tags/v0.23.0",
-			"commit": "7199c4ed4e2f0edad7a5862f803296325730dbee30db7221e7d9c5d033928fc6",
-			"integrity": "sha256-8dd57d4543b149f627d76634468c9bcba29deb5646125049727a8efb57cd2f54",
-			"base_commit": "7199c4ed4e2f0edad7a5862f803296325730dbee30db7221e7d9c5d033928fc6",
-			"base_integrity": "sha256-8dd57d4543b149f627d76634468c9bcba29deb5646125049727a8efb57cd2f54",
+			"version": "0.27.0",
+			"ref": "refs/tags/v0.27.0",
+			"commit": "646b9741666145517ec885a1ffaedc16a8a37414b7f13bb98975bcf9103309a9",
+			"integrity": "sha256-73a33c69cad2216177ccd44b45959a9e3ca5e838466ae42e741178b85554546c",
+			"base_commit": "646b9741666145517ec885a1ffaedc16a8a37414b7f13bb98975bcf9103309a9",
+			"base_integrity": "sha256-73a33c69cad2216177ccd44b45959a9e3ca5e838466ae42e741178b85554546c",
 			"requested_by": [
 				"__root__"
 			],
