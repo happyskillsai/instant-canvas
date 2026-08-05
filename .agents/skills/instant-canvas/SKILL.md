@@ -400,7 +400,9 @@ The workspace default and the palette library live in the project's **own commit
 
 `palettes` is a **library, not a set of new preset names.** Applying one copies its colors into the document's `theme`, so a canvas never carries a `"preset": "Acme"` reference it cannot resolve on its own — and never repaints itself against someone else's workspace.
 
-If the file is ever corrupt, **fix the syntax in place — never delete it.** It holds every skill's settings. `npx -y happyskills skills-config validate --json` reports the exact line and a fix.
+**Never resolve or hand-edit this file — improvising the lookup IS the bug.** The runtime already walks up to the nearest `skills-config.json` (stopping at `.git`) and deep-merges the user-level `~/.agents/skills-config.json`, nearest wins; because it is launched from arbitrary directories, a hand-rolled walk against *your* cwd works from the project root and silently fails from every subfolder. Read config with `$IC theme --list`, or `$IC theme <file>` for what one document resolves to and which level decided it; write it with `$IC theme --all --set` / `--save`, the same single path the browser's Save uses. For the raw block use `npx -y happyskills skills-config get happyskillsai/instant-canvas --json` — the canonical read, with `skills-config set` its canonical write, atomic and key-scoped so every other skill's settings survive.
+
+If the file is ever corrupt, **fix the syntax in place — never delete it.** It holds every skill's settings. `npx -y happyskills skills-config validate --json` reports the exact line and a fix. A *missing* file is not corrupt — it simply means nothing is configured, and the defaults apply.
 
 ## Block quick reference
 
