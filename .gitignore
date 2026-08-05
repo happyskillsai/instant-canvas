@@ -14,8 +14,10 @@ deploy.config.json
 demos/*.output.json
 
 # ─── Dependencies and build artifacts ──────────────────────────────────────
-# The skill ships zero dependencies, but rebuilding the vendored Plotly bundle
-# (scripts/web/vendor/VENDORED.md) needs a throwaway npm install.
+# The package declares one first-party dependency (see docs/mission.md value 5),
+# so `npm install` is now a real step for maintainers rather than a throwaway one
+# — it is still never needed to REBUILD anything, only to run the suite. Rebuilding
+# the vendored Plotly bundle (scripts/web/vendor/VENDORED.md) needs its own.
 node_modules/
 dist/
 build/

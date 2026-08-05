@@ -4,6 +4,78 @@
 
 ### Changed
 
+### Added
+
+- **The CLI now says when your pinned skill — or your npx-cached CLI — has fallen behind.**
+  A `npx` run is latest by construction; the skills it installs are pinned on disk *on purpose*
+  and stay pinned until somebody updates them, so users end up driving current tooling with stale
+  expertise and nothing says so. `lib/drift.js` wires `@happyskillsai/skill-drift-check` to two
+  adapters that know this ecosystem: `skills-lock.json` for what is installed (its `commit` is the
+  revision token that catches a republish under an unchanged version string), and
+  `npx happyskills check --json` for what the registry has — the same "ask the tool that owns the
+  file" posture the `skills-config` write path already takes, and equally optional: unreachable
+  means no verdict, never a false all-clear.
+
+  **It costs nothing by construction.** The check is synchronous against a cache — no network on
+  the hot path — and `catalog` still returns in tens of milliseconds. The refresh is
+  fire-and-forget and `unref`'d, so a command that finishes first simply kills it and the cache
+  fills on a longer run instead. The banner goes to **stderr** through the same `log()` every
+  other line uses, because stdout carries exactly one JSON document per run. Two scopes (the
+  project, resolved by climbing to the lock rather than trusting the cwd, and `~/.agents`); we
+  watch **only** `happyskillsai/instant-canvas`, so a user's other skills are never named in a
+  registry request. `INSTANTCANVAS_NO_DRIFT_CHECK=1` turns it off.
+
+  Two things it does that its own upstream docs would not predict. The **CLI self-check is
+  load-bearing here** rather than the no-op upstream calls it under `npx`, because a *bare* npx
+  spec pins the cache indefinitely and SKILL.md still teaches agents that spec. And because we
+  never write `skills-lock.json` — HappySkills does — cache invalidation is *detected* by the
+  lock's modification time rather than announced at a write site we do not own.
+
+- **The dependency guard is now a trust-set guard rather than a count.** `hardening.test.js` used
+  to allow only `node:` builtins and relative paths; it now carries a literal one-entry allowlist
+  and additionally asserts that `package.json`'s declared dependencies and that allowlist agree in
+  both directions. Deliberately not a wildcard on the `@happyskillsai` scope — the value of the
+  test is that adding a dependency has to be something somebody typed on purpose.
+
+### Changed
+
+- **The "zero dependencies" rule became a trust-set rule.** The old rule was defended for the wrong reason — leanness
+  — and the number was never what it protected. What it protects is the list of publishers who
+  can push code onto a machine at the moment somebody is typing a credential into one of our
+  forms, which makes the test *whose* dependency rather than *how many*: first-party
+  (`@happyskillsai`) adds nobody to that set, third-party is a new party in the secret-capture
+  path and must earn its place against vendoring. Mission value 5 and the README bullet now say
+  that; the count stays small and countable, because a set nobody counts is a set nobody defends.
+
+- **The security model has stopped claiming "the runtime never fetches", because that is no
+  longer true — and the half that still is gets stated more precisely than before.** The *kernel's*
+  claim survives intact and unsoftened (its only outbound request is its own `127.0.0.1/healthz`;
+  remote markdown assets are still refused rather than proxied), because that claim is what
+  deletes **SSRF** and it must not be blurred into the new one. The drift check is a **CLI**
+  concern, outbound to a fixed registry, carrying only our own skill coordinates and package name
+  — never a path, a workspace, a canvas or anything about the person — and switchable off with
+  `INSTANTCANVAS_NO_DRIFT_CHECK=1`. The mission's "no phone-home of any kind" non-goal is
+  reframed on direction: telemetry reports the user outward; this asks the registry about our own
+  artifacts and reports nothing.
+
+- **The skill bundle drops its two "zero npm dependencies" claims, so the agent-facing contract
+  does not ship a promise the runtime no longer keeps.** `SKILL.md`'s npx line and
+  `skill.json`'s `systemDependencies` description both stated it; both now simply say npx fetches
+  and runs the CLI. The clause was removed rather than corrected because an agent gains nothing
+  from a dependency count and mission value 2 says the context window is sacred. **This is a
+  skill-bundle change and therefore needs a HappySkills republish** alongside the npm publish, on
+  the same version ([docs/releasing.md](docs/releasing.md)). The other two "the runtime never
+  fetches" lines in SKILL.md are scoped to *remote assets* and stay true and unchanged.
+
+- **`gotchas/packaging.md` records that the npx-cache pin is what makes the drift check's
+  self-check load-bearing here, contrary to its upstream docs.** The package documents its CLI
+  self-check as a no-op under `npx`; that assumes `npx` is latest by construction, and this
+  repo's own cache-pin gotcha is the evidence that a *bare* spec is not — so under the spec
+  SKILL.md still teaches agents, the self-check is the half that does the work. Also written down
+  before it bites: the first `dependencies` entry silently gives `e2e.test.js` — the publish gate
+  — a network install it never had, and the transitive floor of `semver@^7.6.0` makes "one
+  dependency" one direct and up to three resolved.
+
 - **`npm publish` now gates on the packaging test alone, rather than the whole suite.**
   `prepublishOnly` ran all 823 tests — roughly three minutes, most of it headless Chrome — and
   could not report anything new: `/release-cli`'s preflight already runs `npm test` *and*

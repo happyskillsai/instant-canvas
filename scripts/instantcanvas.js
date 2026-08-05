@@ -33,6 +33,7 @@ const themestore = require('./lib/themestore')
 const skillsconfig = require('./lib/skillsconfig')
 const { companionFor } = require('./lib/companion')
 const { readSelection, clearSelection } = require('./lib/selection')
+const { driftLines } = require('./lib/drift')
 
 const VERSION = PKG_VERSION
 const KERNEL = path.join(__dirname, 'kernel.js')
@@ -1276,6 +1277,24 @@ async function cmdStop(args) {
 
 // ---------------------------------------------------------------- main
 
+/**
+ * Say — once, on stderr — that a pinned skill or an npx-cached CLI has fallen behind.
+ *
+ * **stdout is untouchable here.** It carries exactly one JSON document per run, so a
+ * banner on it would corrupt the agent's only structured channel; every line goes
+ * through `log()` and is therefore redacted like every other stderr line in the CLI.
+ *
+ * It is synchronous and reads a cache — no network, no await, no measurable latency on
+ * the command it rode in on (see lib/drift.js). Anything it cannot answer, it does not
+ * say: silence is the common case by an enormous margin.
+ */
+function reportDrift() {
+	try {
+		for (const line of driftLines())
+			log('  ' + line)
+	} catch { /* never let a courtesy break the command it rode in on */ }
+}
+
 async function main() {
 	const args = parseArgs(process.argv.slice(3))
 	const command = process.argv[2]
@@ -1285,6 +1304,8 @@ async function main() {
 	}
 	if (args.result)
 		resultFile = path.resolve(args.result)
+
+	reportDrift()
 
 	switch (command) {
 		case 'open': return cmdOpen(args)

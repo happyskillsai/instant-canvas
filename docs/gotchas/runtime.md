@@ -11,6 +11,7 @@ source:
   - scripts/lib/companion.js
   - scripts/lib/gallery.js
   - scripts/lib/selection.js
+  - scripts/lib/drift.js
 ---
 
 # Gotchas — Runtime (kernel & CLI)
@@ -165,6 +166,20 @@ The correct move is to let the protocol close the connection: set `Connection: c
 The sibling discipline on the same route: the write goes to a temp file (`.<name>.<random>.part`) **in the destination directory**, so the final `rename` is atomic on one filesystem, and *every* exit — the cap, a client that vanishes, a write error — unlinks it. A half-written `.part` left in the reader's repository is litter this feature must not produce, and it is asserted by scanning the whole tree for `*.part` rather than the one path the test happened to name.
 
 One deliberate non-inheritance from `fsatomic.js`: the dropped file is **not** chmod'd to `0o600`. That mode is for state and secrets — the registry, the identity file, a written `.env`. A dropped photo is the reader's own ordinary file, and writing it owner-only would make it unreadable to the tools they open it with. It carries the process umask default like anything else they create in that folder.
+
+## The FIRST run in a fresh state dir clears the drift cache it is about to read
+
+`invalidateOnLockChange` compares each scope's `skills-lock.json` mtime against a remembered one in `drift-locks.json`. On the very first run that stamp file does not exist, so **every scope reads as changed** and the cached verdict is invalidated.
+
+In production this is harmless and self-correcting — on a first run the cache is empty anyway, so there is nothing to lose, and the stamp is written immediately afterwards. It matters in exactly one place: **a demo or a test that populates the cache before the first CLI run gets silence**, and the silence looks identical to a broken feature. It cost a working end-to-end demo one confusing round trip: the cache visibly held an `outdated` entry, the CLI printed nothing, and everything about the wiring looked wrong.
+
+The sequence a test or demo must follow is the real one: **run once to establish the stamp, populate the cache, then run again.** The general lesson is the one this file keeps relearning from the other direction — *a first sighting is not a change, but code that remembers nothing cannot tell the difference*, and any invalidator built on "compare against what I remember" is at its most destructive on the run where it remembers nothing.
+
+## A destructured `require` cannot be intercepted, and the test fails in a way that blames the subject
+
+`lib/drift.js` opens `const childProcess = require('node:child_process')` and calls `childProcess.execFile(...)` — deliberately, and it is not style. The natural form, `const { execFile } = require('node:child_process')`, captures the function reference **at require time**, so `t.mock.method(require('node:child_process'), 'execFile', …)` replaces a property nothing subsequently reads. The mock installs cleanly, reports itself as called zero times, and the real `npx happyskills` spawns anyway — so the test either hangs for seconds, or fails against a live registry, and every symptom points at the code under test rather than at the seam.
+
+The rule: **any module whose function a test must stand in for is required as the module object, never destructured.** For everything else destructuring is fine and clearer — the distinction is testability, so make it deliberately and say why in the file, or the next refactor will "tidy" it back.
 
 ## Narrowing a path is one line; USING the narrowed one is another
 

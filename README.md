@@ -37,7 +37,9 @@ Instead of maintaining an answers *warehouse* (pre-built admin panels), agents d
 Two design commitments run through everything:
 
 - **Progressive disclosure.** The contract is large (26 chart kinds, 16 field types, a full form-layout system), but agents never load it wholesale: `catalog` returns a ~9 KB lean index; `catalog <name>` returns exactly one schema; the deterministic validator turns mistakes into self-explanatory fixes.
-- **Zero dependencies.** The published package declares no npm dependencies — npx installs `instant-canvas` itself and nothing else. Plain Node ≥ 20, built-in `http`, a hand-rolled WebSocket server, a handful of vendored browser files (a custom strict Plotly.js build, its stylesheet, markdown-it, a full highlight.js, and the self-hosted Inter webfont for the app chrome). No build step — rebuilding the Plotly and highlight.js bundles is a maintainer-only task, documented in `scripts/web/vendor/VENDORED.md`.
+- **A minimal trust set.** Plain Node ≥ 20, built-in `http`, a hand-rolled WebSocket server, a handful of vendored browser files (a custom strict Plotly.js build, its stylesheet, markdown-it, a full highlight.js, and the self-hosted Inter webfont for the app chrome). No build step — rebuilding the Plotly and highlight.js bundles is a maintainer-only task, documented in `scripts/web/vendor/VENDORED.md`.
+
+  This used to read *"zero dependencies"*, and the number was never the point. **The rule is whose code runs on a machine at the moment somebody is typing a credential into one of our forms** — so what the package declares is first-party (`@happyskillsai`) or nothing, and a third-party dependency has to earn its place against vendoring or reimplementing it. See [docs/mission.md](docs/mission.md) for the reasoning; the count is still small enough to read in one line of `package.json`, which is the point of keeping it countable.
 
   The one thing the runtime ever shells out to is **optional**: saving a theme or palette first tries `npx happyskills skills-config set`, so the write to `skills-config.json` lands in the hands of the tool that owns that file and every other skill's block in it. When that CLI is unreachable — offline on a cold npx cache, too slow, or on Windows, where a bare `npx` ENOENTs — the call returns nothing and the runtime performs the same atomic, key-scoped write itself. **HappySkills is never required at runtime**; it is preferred when present, and its absence costs a saved palette nothing.
 
@@ -96,7 +98,7 @@ npx -y @happyskillsai/instant-canvas status
 npx -y @happyskillsai/instant-canvas stop
 ```
 
-Maintainers run the same CLI from the working tree — `node scripts/instantcanvas.js <command>` — and the tests with `npm test` (823 tests, zero deps; the browser tests skip without Chrome; equivalent to `node --test scripts/test/`). `npm run coverage:cli` enforces the CLI's 100% line coverage. `npm run rls <major|minor|patch|x.y.z>` bumps the package version — validated semver, forward-only. Releases are orchestrated end to end by the `/release-cli` project skill — see [docs/releasing.md](docs/releasing.md).
+Maintainers run the same CLI from the working tree — `node scripts/instantcanvas.js <command>` — and the tests with `npm test` (849 tests; run `npm install` once first, since the package now declares one dependency; the browser tests skip without Chrome; equivalent to `node --test scripts/test/`). `npm run coverage:cli` enforces the CLI's 100% line coverage. `npm run rls <major|minor|patch|x.y.z>` bumps the package version — validated semver, forward-only. Releases are orchestrated end to end by the `/release-cli` project skill — see [docs/releasing.md](docs/releasing.md).
 
 <!-- BEGIN happyskills -->
 ### Skills used to work on this repo

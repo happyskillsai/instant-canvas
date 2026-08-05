@@ -202,7 +202,7 @@
 	},
 	"systemDependencies": {
 		"node": {
-			"description": "Node.js >= 20 with npx — fetches and runs the instant-canvas CLI and its per-workspace kernel (the CLI itself has zero npm dependencies).",
+			"description": "Node.js >= 20 with npx — fetches and runs the instant-canvas CLI and its per-workspace kernel.",
 			"check": "node --version",
 			"install": {
 				"darwin": "brew install node",

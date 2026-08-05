@@ -38,15 +38,45 @@ function sourceFiles() {
 	return out
 }
 
-test('hardening: no non-node, non-relative require anywhere (acceptance 10 intent)', () => {
+/**
+ * The dependency guard, and it is a TRUST-SET guard rather than a count.
+ *
+ * This used to allow only `node:` builtins and relative paths, because the package
+ * declared no dependencies at all. The rule it enforces has since been stated more
+ * precisely (docs/mission.md value 5): what matters is not how many packages we take
+ * but **whose code runs on a machine at the moment somebody is typing a credential
+ * into one of our forms**. So the scan still refuses every third-party require — it
+ * just carries an explicit allowlist of first-party ones.
+ *
+ * Keep the allowlist literal and short. A wildcard on the `@happyskillsai` scope would
+ * turn a decision into a default, and the whole value of this test is that adding a
+ * dependency has to be a thing somebody typed on purpose.
+ */
+const ALLOWED_PACKAGES = new Set(['@happyskillsai/skill-drift-check'])
+
+test('hardening: no third-party require anywhere — only node:, relative, and the first-party allowlist', () => {
 	for (const file of sourceFiles()) {
 		const src = fs.readFileSync(file, 'utf8')
 		for (const m of src.matchAll(/require\(\s*['"]([^'"]+)['"]\s*\)/g)) {
 			const spec = m[1]
-			assert.ok(spec.startsWith('node:') || spec.startsWith('.'),
-				`${path.relative(SCRIPTS, file)} requires "${spec}" — only node: builtins and relative modules are allowed`)
+			assert.ok(spec.startsWith('node:') || spec.startsWith('.') || ALLOWED_PACKAGES.has(spec),
+				`${path.relative(SCRIPTS, file)} requires "${spec}" — only node: builtins, relative modules, and the first-party allowlist are permitted`)
 		}
 	}
+})
+
+/** The allowlist above is only meaningful if `package.json` agrees with it: a package
+ *  we require but never declare breaks on a consumer's install, and one we declare but
+ *  never require is an unearned publisher in the trust set. */
+test('hardening: every declared dependency is first-party, and matches the require allowlist', () => {
+	const declared = Object.keys(require('../../package.json').dependencies || {})
+	for (const dep of declared) {
+		assert.ok(dep.startsWith('@happyskillsai/'),
+			`package.json declares "${dep}" — a third-party dependency needs an explicit decision, not a silent add (docs/mission.md value 5)`)
+		assert.ok(ALLOWED_PACKAGES.has(dep), `package.json declares "${dep}" but the require allowlist does not name it`)
+	}
+	for (const allowed of ALLOWED_PACKAGES)
+		assert.ok(declared.includes(allowed), `the require allowlist names "${allowed}" but package.json does not declare it`)
 })
 
 test('hardening: kernel binds the literal 127.0.0.1 and the wildcard bind address appears nowhere', () => {

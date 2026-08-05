@@ -5,6 +5,7 @@ source:
   - scripts/instantcanvas.js
   - scripts/lib/cdp.js
   - scripts/lib/themestore.js
+  - scripts/lib/drift.js
 ---
 
 # CLI
@@ -14,6 +15,8 @@ Entry point: `npx -y @happyskillsai/instant-canvas <command>`, run from any dire
 ## Output discipline
 
 **stdout carries exactly one JSON document per run; every log or progress line goes to stderr**, routed through `lib/redact.js`. The one stdout document is flushed before exit — `process.exit` alone truncates piped output, so `out()` exits in the write callback and stops the caller with a sentinel throw. Exit codes: **0** clean outcome (including `cancelled` and `timeout` — respect the user's choice), **1** spec error, **2** internal error.
+
+**The drift banner is the one thing printed before any command runs, and it obeys that rule rather than bending it.** `reportDrift()` sits at the top of `main()` and writes through the same `log()` every other stderr line uses — so it is redacted like everything else and it can never touch the agent's one structured channel. It is synchronous and reads a cache (see [architecture.md](architecture.md)), so it adds no measurable latency: `catalog` still returns in tens of milliseconds. Silence is the overwhelmingly common case, which is what lets it sit in front of *every* command rather than a chosen few, and the whole path is wrapped so that a courtesy can never break the command it rode in on. `INSTANTCANVAS_NO_DRIFT_CHECK=1` switches it off.
 
 ## Commands
 

@@ -14,7 +14,7 @@ Ordered — when two conflict, the higher one wins.
 2. **Lean context over completeness** — the skill is large (a full runtime, 26 chart kinds, 16 field types), but the agent's context window is sacred. Progressive disclosure everywhere: a ~9 KB lean index first, one exact schema on demand, never the full contract unless explicitly requested.
 3. **Deterministic validation over model judgment** — a program, not a prompt, decides whether a canvas is correct, and its errors teach the fix (code, path, message, hint, example). The agent loops against the validator until the canvas is perfect. The same rule governs facts the agent cannot know: the skill's own version is written into each canvas by the skill, never typed by the model, because a value a model can hallucinate is a value nobody can later trust.
 4. **Secrets on disk over secrets in chat** — captured values are written to local files and redacted from every result, log, and error. The agent learns field names, never values.
-5. **Zero dependencies over feature velocity** — plain Node ≥ 20, a handful of vendored browser files, no build step, no npm install. Every feature must earn its place without a dependency.
+5. **A minimal trust set over feature velocity** — plain Node ≥ 20, a handful of vendored browser files, no build step. This rule used to read *zero dependencies*, and it was defended for the wrong reason: leanness. What it actually protects is value 4 — the list of publishers who can push code onto a machine at the moment somebody is typing a credential into one of our forms. So the test is not *how many* dependencies but **whose**: a first-party `@happyskillsai` package adds nobody to that set; a third-party one is a new party in the secret-capture path and must earn its place against vendoring or reimplementing it. The count still matters, because a set nobody counts is a set nobody defends — it is just no longer the whole rule.
 
 ## Non-goals
 
@@ -22,7 +22,7 @@ Ordered — when two conflict, the higher one wins.
 - **Not a hosted or multi-user service.** One kernel per workspace on 127.0.0.1, one human at the browser. No network mode, no HTTPS, no auth tiers.
 - **Not a BI warehouse.** No data storage, no query engine, no connectors — the agent brings the data already wrangled.
 - **Not a general web framework.** The rendering surface is the fixed block vocabulary; agents extend expressiveness through data and the schema, never through custom code.
-- **No telemetry, analytics, or phone-home of any kind.**
+- **No telemetry or analytics — nothing about the user, their workspace, or their data is ever reported outward.** This used to say "or phone-home of any kind", and the skill/CLI drift check is the one narrow exception, defined by its *direction*: it asks the registry about **our own artifacts** — is this CLI, is this skill, behind? — and sends nothing about the person asking. Anything that reports usage, contents, or identity remains out permanently, and is not what this exception opens the door to.
 
 ## Users
 

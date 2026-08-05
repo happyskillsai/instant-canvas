@@ -25,6 +25,7 @@ source:
   - scripts/lib/upload.js
   - scripts/lib/reveal.js
   - scripts/lib/appearance.js
+  - scripts/lib/drift.js
 ---
 
 # Architecture
@@ -58,7 +59,9 @@ The registry (`lib/registry.js`) is a global **state-only** directory mapping wo
 - `acquireSpawnLock()` serializes concurrent spawns per workspace with a `wx`-created lock file; locks older than 15 s are broken. A second contender polls `readAlive` while waiting and returns the winner's entry instead of spawning.
 - Registry entries, `.env` files, and state files are written via `lib/fsatomic.js` — temp file + rename, mode `0o600` on non-Windows.
 
-Test hooks: `INSTANTCANVAS_STATE_DIR` overrides the state dir; `INSTANTCANVAS_LOCK_WAIT_MS` shortens the lock wait; `INSTANTCANVAS_SPAWN_WAIT_MS` shortens the CLI's kernel-spawn deadline; `INSTANTCANVAS_PRINT_WAIT_MS` shortens `print`'s render-readiness deadline; `INSTANTCANVAS_MAX_UPLOAD` shrinks the upload cap, so the streaming byte counter is reachable without sending 2 GiB.
+- **The drift check keeps two files here too** (`lib/drift.js`, below): `instant-canvas-drift-check.json`, the cached verdict, and `drift-locks.json`, the remembered modification time of each scope's `skills-lock.json`. Both are per-*machine* rather than per-workspace, so like `appearance.json` they are unkeyed — and like every other file in this directory they are state, never a repo dotfile.
+
+Test hooks: `INSTANTCANVAS_STATE_DIR` overrides the state dir; `INSTANTCANVAS_LOCK_WAIT_MS` shortens the lock wait; `INSTANTCANVAS_SPAWN_WAIT_MS` shortens the CLI's kernel-spawn deadline; `INSTANTCANVAS_PRINT_WAIT_MS` shortens `print`'s render-readiness deadline; `INSTANTCANVAS_MAX_UPLOAD` shrinks the upload cap, so the streaming byte counter is reachable without sending 2 GiB. `INSTANTCANVAS_NO_DRIFT_CHECK=1` turns the drift check off — a user switch first, a test hook second.
 
 ## Request perimeter
 
@@ -210,3 +213,24 @@ The WebSocket server is hand-rolled RFC 6455 inside `kernel.js` (~100 lines: acc
 This process-level handshake is unrelated to a canvas's `createdWith` stamp: the handshake keeps two *running processes* in step, while the stamp records what wrote a *file* and is expected to fall behind it (see [canvas-schema.md](canvas-schema.md)).
 
 The CLI compares `/healthz` `version` against its own. On mismatch with no pending sessions it restarts the kernel; with pending sessions it warns on stderr. **Same-version code changes do not trigger a restart** — after editing kernel/validator code in development, run `stop` yourself (see [gotchas/runtime.md](gotchas/runtime.md)).
+
+## Drift check — `lib/drift.js`
+
+The handshake above keeps two *running processes* in step. This keeps the user's **installed artifacts** in step with the registry, and it is a CLI concern with no kernel involvement at all.
+
+The asymmetry it exists for: a CLI run through `npx` is latest by construction, while the skills it installs are pinned on disk **on purpose** and stay pinned until somebody updates them. Two properties of this project sharpen it. A **bare** npx spec pins the CLI too — `npm exec` reuses whatever it cached and never re-resolves, and SKILL.md still teaches agents the bare spec (see [gotchas/packaging.md](gotchas/packaging.md)), so the version this process reports *is* the pinned one. And **one version ships as two artifacts** that publish separately, so a user can drive a current CLI from a months-old skill contract.
+
+The machinery is `@happyskillsai/skill-drift-check` — the project's one dependency, and a first-party one, which is the whole reason it clears mission value 5. It owns the cache, scopes, scheduling and expiry; we supply the two adapters that know this ecosystem:
+
+| | |
+|---|---|
+| `list_installed` | reads a scope's `skills-lock.json` → `{version, revision: commit}`. The lock's `commit` is HappySkills' content hash, which is exactly the opaque revision token that catches a **republish under the same version string**. A missing lock returns `{}` and **never throws** — a throwing scope reads as *unable to report*, which permanently suppresses the missing-skill nudge. |
+| `check_registry` | shells out to `npx -y happyskills check --json` (`-g` for the global scope). Same posture as `skillsconfig.js`'s write path: HappySkills owns the lock and the registry, so we ask it rather than reimplementing a client. Unreachable — offline, cold cache, or Windows where a bare `npx` ENOENTs — yields no verdict, leaves the previous one standing, and retries next run. |
+
+Two scopes: `local`, whose root is resolved by **climbing to the lock file** (then `.git`, then the directory itself) and realpath'd — never the bare cwd, which would mint a scope per subdirectory the user stands in, each reporting zero skills — and `global` at `~/.agents`. We watch **only `happyskillsai/instant-canvas`**; the filter runs before the probe, so a user's other forty skills are never named in a request.
+
+**`check()` is synchronous and reads a cache** — no network, no await, no measurable latency on the command it rode in on. A stale cache schedules a fire-and-forget probe whose result is used on the *next* run, and the child is `unref`'d so it can never hold the process open: if the command finishes first, the probe dies unfinished and that counts as *no verdict*, not as an all-clear. The honest consequence is that short commands rarely complete a refresh; the cache fills during the long ones (`print`, an interactive `open`), which is the design working as intended rather than a bug to chase.
+
+Upstream asks for `invalidate()` in the one place that writes the lock. **We never write it** — HappySkills does, from a process we do not observe — so the change is *detected* rather than announced: one `stat` per scope against a remembered mtime in `drift-locks.json`. Without it, someone who just ran `npx happyskills update` would be told to update the skill they had already updated, for up to a day.
+
+`INSTANTCANVAS_NO_DRIFT_CHECK=1` disables it. Where the banner goes, and why it can never touch stdout, is in [cli.md](cli.md); what it does and does not send, in [security.md](security.md).

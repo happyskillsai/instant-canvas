@@ -24,7 +24,7 @@
         "Project Structure",
         "Documentation"
       ],
-      "line_count": 176,
+      "line_count": 178,
       "links_to": [
         "docs/architecture.md",
         "docs/canvas-schema.md",
@@ -68,14 +68,16 @@
         "The workspace's own palettes",
         "Sessions",
         "Hot reload",
-        "Version handshake"
+        "Version handshake",
+        "Drift check — `lib/drift.js`"
       ],
-      "line_count": 212,
+      "line_count": 236,
       "links_to": [
         "docs/canvas-schema.md",
         "docs/cli.md",
         "docs/frontend.md",
         "docs/gotchas/frontend.md",
+        "docs/gotchas/packaging.md",
         "docs/gotchas/runtime.md",
         "docs/security.md"
       ],
@@ -105,7 +107,8 @@
         "scripts/lib/selection.js",
         "scripts/lib/upload.js",
         "scripts/lib/reveal.js",
-        "scripts/lib/appearance.js"
+        "scripts/lib/appearance.js",
+        "scripts/lib/drift.js"
       ],
       "source_unresolved": [],
       "tags": [
@@ -207,7 +210,7 @@
         "Result contract (stdout of `open`)",
         "The agent workflow"
       ],
-      "line_count": 168,
+      "line_count": 171,
       "links_to": [
         "docs/architecture.md",
         "docs/canvas-schema.md",
@@ -221,7 +224,8 @@
       "source": [
         "scripts/instantcanvas.js",
         "scripts/lib/cdp.js",
-        "scripts/lib/themestore.js"
+        "scripts/lib/themestore.js",
+        "scripts/lib/drift.js"
       ],
       "source_unresolved": [],
       "tags": [
@@ -419,6 +423,7 @@
         "npm FORCE-INCLUDES anything named `README*`, and a negation cannot take it back",
         "The size caps that blocked skill publishing are solved by relocation, not shrinking",
         "Testing a packed tarball with npx needs `-p`, or npx executes the file",
+        "The first dependency changes what `e2e.test.js` is testing, and the change is silent",
         "A 404 on `npm view` does not mean the name is publishable",
         "The vendored Plotly build is not interchangeable with a published dist",
         "Description validators are strict and double-layered",
@@ -428,7 +433,7 @@
         "`npx` with a bare spec runs the LOCAL project inside this repo — and pins everyone else to its cache",
         "DO NOT hand-write the skill bundle's CHANGELOG — the publish step owns it"
       ],
-      "line_count": 108,
+      "line_count": 137,
       "links_to": [
         "docs/releasing.md"
       ],
@@ -479,9 +484,11 @@
         "A route that serves the user's files by extension must refuse a symlink",
         "The reader's selection is state, not a repo dotfile — and it records, it never acts",
         "Refusing a request mid-stream: answer with `Connection: close`, never `req.destroy()`",
+        "The FIRST run in a fresh state dir clears the drift cache it is about to read",
+        "A destructured `require` cannot be intercepted, and the test fails in a way that blames the subject",
         "Narrowing a path is one line; USING the narrowed one is another"
       ],
-      "line_count": 185,
+      "line_count": 200,
       "links_to": [
         "docs/architecture.md",
         "docs/security.md"
@@ -498,7 +505,8 @@
         "scripts/lib/themestore.js",
         "scripts/lib/companion.js",
         "scripts/lib/gallery.js",
-        "scripts/lib/selection.js"
+        "scripts/lib/selection.js",
+        "scripts/lib/drift.js"
       ],
       "source_unresolved": [],
       "tags": [
@@ -657,7 +665,7 @@
         "Network perimeter",
         "What this does NOT protect against"
       ],
-      "line_count": 78,
+      "line_count": 88,
       "links_to": [
         "docs/architecture.md",
         "docs/cli.md"
@@ -684,7 +692,8 @@
         "scripts/lib/reveal.js",
         "scripts/lib/fsatomic.js",
         "scripts/kernel.js",
-        "scripts/instantcanvas.js"
+        "scripts/instantcanvas.js",
+        "scripts/lib/drift.js"
       ],
       "source_unresolved": [],
       "tags": [
@@ -711,9 +720,11 @@
         "Security regressions",
         "Browser verification"
       ],
-      "line_count": 123,
+      "line_count": 126,
       "links_to": [
+        "docs/architecture.md",
         "docs/gotchas/frontend.md",
+        "docs/gotchas/runtime.md",
         "docs/gotchas/testing.md",
         "docs/releasing.md"
       ],

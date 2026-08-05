@@ -37,6 +37,26 @@ Against `happyskills@1.20.1` (`MAX_FILE_SIZE` 1 MB, `MAX_TOTAL_SIZE` 2 MB) the o
 
 `npx /path/to/happyskillsai-instant-canvas-<v>.tgz <cmd>` does not install the tarball — an argument containing `/` is treated as the command itself, so npx tries to *execute the .tgz* and dies with `Permission denied`. A relative spec (`npx -y ../foo.tgz`) fails differently: npm resolves it against its computed prefix, not the shell's cwd, producing ENOENT from a surprise directory. The working form is `npx -y -p /abs/path/happyskillsai-instant-canvas-<v>.tgz instant-canvas <command>`. Only a bare registry name works as a direct spec: `npx -y @happyskillsai/instant-canvas <command>`.
 
+## The first dependency changes what `e2e.test.js` is testing, and the change is silent
+
+Written down before it bites, on the `skills-config set` precedent above. `e2e.test.js` packs the
+real tarball, installs it into a scratch prefix and drives the agentic loop through the installed
+bin — and for a zero-dependency package that install resolved **nothing** from the network, which
+is why the gate runs in ~3 s and never flakes. The moment `package.json` declares a dependency,
+that same `npm install` starts resolving it (and its own transitive tree) from the registry, so a
+test whose whole value is *"the tarball we are about to publish actually works"* silently gains a
+network dependency and a new failure mode that has nothing to do with packaging: a slow registry,
+an offline CI box, or a rate limit now fails the **publish gate**.
+
+Two consequences to keep in step. The tarball's *contents* are unchanged — `dependencies` is
+metadata, not files — so `npm pack --dry-run` still tells the truth and the allowlist assertions
+still hold. But the install step no longer proves what it used to, and the shape of the fix is to
+decide deliberately whether that e2e installs offline (a pre-populated cache, `--offline`) or is
+allowed to reach the network — not to discover the answer from a red publish. **And check the
+transitive tree, not just the direct entry**: `@happyskillsai/skill-drift-check` declares
+`semver@^7.6.0`, whose floor version *itself* pulls `lru-cache` → `yallist`, so the honest count
+of "one first-party dependency" is one direct and up to three resolved.
+
 ## A 404 on `npm view` does not mean the name is publishable
 
 npm's typosquat protection rejects a new **unscoped** name at publish time when it is "too similar" to an existing package — similarity is punctuation-insensitive, so `instant-canvas` is blocked forever by the squatted `instantcanvas` (a dead `0.0.1-dev` stub from 2022) even though `npm view instant-canvas` 404s. Check the de-punctuated name too before betting on an unscoped name, or publish scoped from the start — scoped names (`@happyskillsai/...`) are exempt, which is why this package is scoped. First scoped publish needs `--access=public` (or `publishConfig.access` in package.json, which this repo sets).
@@ -95,9 +115,18 @@ never receive a fixed kernel (a cache dig on the machine that hit this found coe
 installs from 0.3.1 through 0.14.0). Both traps are solved by the same seven characters:
 **`@latest` forces registry resolution**, past the local-project short-circuit and past the
 sticky cache. Every restart command the app hands a human (the Reconnect dialog, the stopped
-pane) says `@latest` for this reason, and `reconnect.test.js` pins the string. Open question
-this bug raises: SKILL.md's agent-facing commands still teach the bare spec — an agent's
-long-lived npx cache pins the CLI version just the same.
+pane) says `@latest` for this reason, and `reconnect.test.js` pins the string.
+
+The open question this bug raised — *SKILL.md's agent-facing commands still teach the bare spec,
+so an agent's long-lived npx cache pins the CLI version just the same* — is what the **drift
+check** answers, and it is worth being precise about how, because the upstream package says the
+opposite. `@happyskillsai/skill-drift-check` documents its CLI self-check as *"only useful for a
+globally installed CLI — under `npx` it's always a no-op"*, on the reasonable assumption that
+`npx` is latest by construction. **That assumption is false here, and this section is the
+evidence**: a bare spec reuses the cache indefinitely, so the version the running process reports
+*is* the pinned one, and comparing it against the registry is the only thing that will ever tell
+that user. Do not "optimize away" the `self:` half of the drift check as redundant under npx —
+under a *bare* npx spec it is the half that does the work.
 
 ## DO NOT hand-write the skill bundle's CHANGELOG — the publish step owns it
 
