@@ -2,6 +2,23 @@
 
 ## [Unreleased]
 
+### Added
+
+- **The Share menu can now set your chat handles, which is what makes the one-click case reachable.**
+  0.28.0 shipped `GET/POST /api/share/config` and the `whatsapp://send?phone=…` deep link behind it,
+  and then referenced that route **zero times** in `app.js` — so landing in your own "Message
+  Yourself" / "Saved Messages" chat was available to `curl` and to nothing a reader could click. A
+  route with no caller is not a feature. An image's Share menu now ends in **Chat handles…**, which
+  opens a small dialog reusing the delete confirmation's card. Handles are optional and stored on
+  the machine, never in the project; without them Share still just opens the app and you pick a chat.
+
+  The dialog deliberately does **not** re-implement the validation: the kernel decides what is safe
+  to concatenate into a URL an OS protocol handler will execute, so a refusal is rendered inline
+  against the field it names and the dialog stays open to be corrected. A second copy of that rule
+  in the browser is a copy that drifts. The browser test asserts *reachability* specifically —
+  clicking the row must open the dialog — because that is the exact thing the route-level tests
+  could not see, and deleting the menu row turns it red.
+
 ### Fixed
 
 - **`npm test` ran the whole suite in one process, and a single stalled hook failed all 868 tests

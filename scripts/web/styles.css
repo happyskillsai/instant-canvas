@@ -1742,6 +1742,19 @@ audio.m-el{display:none} /* the audio element is never shown — the art card st
 .g-cwarn{font-size:13px;color:var(--muted);margin:0 0 16px}
 .g-cactions{display:flex;justify-content:flex-end;gap:8px}
 
+/* The chat-handle dialog reuses the confirm shell (.g-modal.g-confirm > .g-cbox) and adds
+   only the two labelled fields. Inputs wear the shared --inp-* tokens so they follow the
+   app theme like every other field, and the error line is `hidden` by default with its own
+   explicit rule — an author `display` on a sibling would otherwise outrank the UA's. */
+.share-cfg{max-width:420px}
+.share-cfg-row{display:flex;flex-direction:column;gap:5px;margin:0 0 12px}
+.share-cfg-label{font-size:12.5px;color:var(--muted)}
+.share-cfg-input{height:34px;padding:0 10px;font:inherit;font-size:13.5px;color:var(--inp-text,var(--text));
+	background:var(--inp-bg,var(--panel-2));border:1px solid var(--inp-border,var(--border));border-radius:8px}
+.share-cfg-input:focus{outline:none;border-color:var(--accent)}
+.share-cfg-err{margin:0 0 12px;font-size:12.5px;color:var(--red)}
+.share-cfg-err[hidden]{display:none}
+
 /* ------------------------------------------------------------------- browse view (#/f/)
    The browse root carries `.gallery` too, so it inherits the grid, toolbar, tiles,
    selection, list, and delete-dialog styles wholesale. These rules add only what is

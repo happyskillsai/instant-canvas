@@ -522,10 +522,126 @@ function openShareMenu(anchorEl) {
 	if (items.length)
 		items.push({ separator: true })
 	items.push({ label: revealLabel(), onClick: () => revealPath(rel, 'files', false) })
+	// The way in to the deep-link config. Listed on the IMAGE menu only, because it is
+	// the chat rows above that it changes — offering it beside a video's reveal-only menu
+	// would advertise a setting that alters nothing the reader can see from there.
+	if (isImagePath(rel))
+		items.push({ label: 'Chat handles…', onClick: () => openShareConfigDialog() })
 
 	// Anchor under the button, in viewport coordinates (what openContextMenu positions in).
 	const r = anchorEl.getBoundingClientRect()
 	openContextMenu({ x: Math.max(8, r.right - 190), y: r.bottom + 6, items, anchorEl })
+}
+
+/**
+ * The reader's own chat handles — the thing that turns "open the app and pick a chat"
+ * into "land in my own chat and paste". Without this dialog the feature exists only as
+ * a route: `/api/share/config` is reachable by curl and by nothing the reader can click.
+ *
+ * A `.g-modal.g-confirm` card, the same shell the delete confirmation uses, built as DOM
+ * nodes with class-based layout (the CSP drops `style=""`). It is deliberately NOT
+ * repainted while open — the two fields hold what the reader is typing, and a panel that
+ * re-renders under a live caret is the bug the browse filter's Name box already taught.
+ *
+ * Values are validated server-side and the 400 is rendered inline: the kernel is the
+ * authority here, because what it accepts is exactly what is safe to concatenate into a
+ * `whatsapp://` URL. Mirroring that rule in the browser would be a second copy that
+ * drifts, so the field simply shows what the server said.
+ */
+async function openShareConfigDialog() {
+	const { json } = await api('/api/share/config')
+	const cur = (json && json.ok) ? json : { whatsappPhone: null, telegramUser: null }
+
+	document.body.classList.add('modal-open')
+	const overlay = document.createElement('div')
+	overlay.className = 'g-modal g-confirm'
+	const card = document.createElement('div')
+	card.className = 'g-cbox share-cfg'
+
+	const h = document.createElement('h2')
+	h.textContent = 'Your chat handles'
+	const blurb = document.createElement('p')
+	blurb.className = 'g-cwarn'
+	blurb.textContent = 'Optional. With these set, Share opens your own chat — "Message Yourself" on WhatsApp, "Saved Messages" on Telegram — so you can paste straight away. Stored on this machine only, never in the project.'
+
+	const err = document.createElement('p')
+	err.className = 'share-cfg-err'
+	err.hidden = true
+
+	/** One labelled field. Returns the input so the caller can read it at submit time. */
+	const field = (labelText, hint, value) => {
+		const row = document.createElement('label')
+		row.className = 'share-cfg-row'
+		const lab = document.createElement('span')
+		lab.className = 'share-cfg-label'
+		lab.textContent = labelText
+		const inp = document.createElement('input')
+		inp.type = 'text'
+		inp.className = 'share-cfg-input'
+		inp.value = value || ''
+		inp.placeholder = hint
+		row.append(lab, inp)
+		card.append(row)
+		return inp
+	}
+
+	card.append(h, blurb, err)
+	const waIn = field('WhatsApp number', '+61 412 345 678', cur.whatsappPhone)
+	const tgIn = field('Telegram username', '@yourname', cur.telegramUser)
+
+	const actions = document.createElement('div')
+	actions.className = 'g-cactions'
+	const mkBtn = (cls, text, onClick) => {
+		const b = document.createElement('button')
+		b.type = 'button'
+		b.className = cls
+		b.textContent = text
+		b.addEventListener('click', onClick)
+		return b
+	}
+	const cancel = mkBtn('g-btn', 'Cancel', () => teardown())
+	const save = mkBtn('g-btn g-primary', 'Save', () => doSave())
+	actions.append(cancel, save)
+	card.append(actions)
+	overlay.append(card)
+	document.body.append(overlay)
+
+	// A stray click on the scrim closes it — nothing here is destructive, and an
+	// unsaved handle is not worth trapping the reader for.
+	overlay.addEventListener('click', (e) => { if (e.target === overlay) teardown() })
+	// Esc closes THIS surface. The overlay's own Esc handler already stands down for
+	// `.g-modal`, so it will not navigate to the parent folder underneath us.
+	overlay.addEventListener('keydown', (e) => {
+		if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); teardown() }
+		if (e.key === 'Enter') { e.preventDefault(); doSave() }
+	})
+	waIn.focus()
+
+	function teardown() {
+		overlay.remove()
+		document.body.classList.remove('modal-open')
+	}
+
+	async function doSave() {
+		err.hidden = true
+		save.disabled = true
+		const { status, json: res } = await api('/api/share/config', {
+			method: 'POST',
+			body: JSON.stringify({ whatsappPhone: waIn.value, telegramUser: tgIn.value }),
+		})
+		save.disabled = false
+		if (status === 200 && res && res.ok) {
+			teardown()
+			const set = [res.whatsappPhone ? 'WhatsApp' : null, res.telegramUser ? 'Telegram' : null].filter(Boolean)
+			toast(set.length ? `Saved — Share will open your own ${set.join(' and ')} chat.` : 'Chat handles cleared.')
+			return
+		}
+		// A refusal names the field it refused, so the reader can see which one to fix.
+		err.textContent = (res && res.message) || 'Could not save those handles.'
+		err.hidden = false
+		if (res && res.field === 'telegramUser') tgIn.focus()
+		else waIn.focus()
+	}
 }
 
 /** The four actions every anchor offers — a folder OR any item (canvas, document, env,

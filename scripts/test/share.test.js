@@ -395,3 +395,107 @@ test('the config route refuses a handle that would alter the URL', async () => {
 	assert.equal(json.code, 'INVALID_SHARE_CONFIG')
 	assert.equal(json.field, 'whatsappPhone')
 })
+
+// ------------------------------------------------------------------------- browser
+//
+// The route half above proves the config CAN be set. This half proves a reader can
+// REACH it — which is the defect that made the feature ship inert the first time: the
+// kernel answered `/api/share/config` and nothing in app.js ever called it, so the
+// zero-click deep link existed only for curl. A route with no caller is not a feature,
+// and only a browser drive can tell the two apart.
+
+const { withChrome, findChrome } = require('./helpers/cdp')
+const CHROME = findChrome()
+const skipBrowser = CHROME ? false : 'Chrome not found — set CHROME_PATH to run the share UI test'
+const ARGS = ['--headless=new', '--no-sandbox', '--disable-gpu', '--use-angle=swiftshader', '--enable-unsafe-swiftshader']
+const PROBE = 'window.__csp = []; document.addEventListener("securitypolicyviolation", function(e){ window.__csp.push(e.effectiveDirective || e.violatedDirective) }); window.__err = []; window.addEventListener("error", function(e){ window.__err.push(String(e.message)) });'
+
+async function until(evaluate, expr, ms = 8000) {
+	const deadline = Date.now() + ms
+	for (;;) {
+		const ok = await evaluate(expr).catch(() => false)
+		if (ok) return true
+		if (Date.now() > deadline) return false
+		await sleep(120)
+	}
+}
+
+test('the Share control is reachable, media-only, and its dialog round-trips a handle', { skip: skipBrowser }, async () => {
+	const broot = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'ic-shareui-')))
+	fs.writeFileSync(path.join(broot, 'pic.png'), PNG_1X1)
+	fs.writeFileSync(path.join(broot, 'note.md'), '# Note\n')
+	const shims = makeShims(posix ? ['sips', 'osascript', 'open', 'wl-copy', 'xclip', 'xdg-open'] : [])
+	const out = execFileSync(process.execPath, [CLI, 'open', '.', '--workspace', broot, '--no-open'], {
+		cwd: broot,
+		encoding: 'utf8',
+		env: { ...process.env, PATH: shims.dir + path.delimiter + process.env.PATH, DISPLAY: ':99' },
+	})
+	const url = JSON.parse(out).url
+
+	const R = await withChrome(CHROME, url, { args: ARGS, onNewDocument: PROBE }, async ({ evaluate }) => {
+		const o = {}
+		const q = (sel) => 'document.querySelectorAll(' + JSON.stringify(sel) + ').length'
+		await until(evaluate, 'window.ic && location.hash === "#/f/"', 20000)
+
+		// An IMAGE shows the control. Assert the COMPUTED display, never the attribute —
+		// an author `display` on a .oc-nav outranks the UA's [hidden] (gotchas/frontend.md),
+		// so `hidden` being present proves nothing about whether it is on screen.
+		await evaluate('location.hash = "#/c/pic.png"')
+		o.shownOnImage = await until(evaluate, 'getComputedStyle(document.getElementById("ocShare")).display !== "none"', 10000)
+
+		// A MARKDOWN document hides it — the positive control for the check above, without
+		// which "media only" could be satisfied by a button that is simply always visible.
+		await evaluate('location.hash = "#/c/note.md"')
+		o.hiddenOnDoc = await until(evaluate, 'getComputedStyle(document.getElementById("ocShare")).display === "none"', 10000)
+
+		// Back to the image, open the menu, read its rows.
+		await evaluate('location.hash = "#/c/pic.png"')
+		await until(evaluate, 'getComputedStyle(document.getElementById("ocShare")).display !== "none"', 8000)
+		await evaluate('document.getElementById("ocShare").click()')
+		o.menuOpened = await until(evaluate, q('.ic-menu .menu-item') + ' > 0', 5000)
+		o.rows = await evaluate('JSON.stringify([...document.querySelectorAll(".ic-menu .menu-item")].map(function(b){ return b.textContent }))')
+
+		// The reachability assertion: click the row and the dialog must appear.
+		await evaluate('[...document.querySelectorAll(".ic-menu .menu-item")].filter(function(b){ return b.textContent.indexOf("Chat handles") === 0 })[0].click()')
+		o.dialogOpened = await until(evaluate, q('.share-cfg .share-cfg-input') + ' === 2', 6000)
+
+		// An invalid number is refused INLINE rather than silently dropped.
+		await evaluate('(function(){ var i = document.querySelectorAll(".share-cfg-input"); i[0].value = "12&text=pwned"; })()')
+		await evaluate('[...document.querySelectorAll(".share-cfg .g-btn")].filter(function(b){ return b.textContent === "Save" })[0].click()')
+		o.errShown = await until(evaluate, '(function(){ var e = document.querySelector(".share-cfg-err"); return !!e && getComputedStyle(e).display !== "none" && e.textContent.length > 0 })()', 6000)
+		o.dialogStillOpen = await evaluate(q('.share-cfg') + ' === 1')
+
+		// A valid one saves, closes the dialog, and persists to the kernel.
+		await evaluate('(function(){ var i = document.querySelectorAll(".share-cfg-input"); i[0].value = "+61 412 345 678"; })()')
+		await evaluate('[...document.querySelectorAll(".share-cfg .g-btn")].filter(function(b){ return b.textContent === "Save" })[0].click()')
+		o.dialogClosed = await until(evaluate, q('.share-cfg') + ' === 0', 8000)
+
+		o.styleAttrs = await evaluate(q('.share-cfg [style]'))
+		o.csp = await evaluate('JSON.stringify(window.__csp || [])')
+		o.errs = await evaluate('JSON.stringify(window.__err || [])')
+		return o
+	})
+
+	assert.equal(R.shownOnImage, true, 'the Share control is visible on an image')
+	assert.equal(R.hiddenOnDoc, true, 'and hidden on a markdown document — media only')
+	assert.equal(R.menuOpened, true, 'the button opens the shared context menu')
+	const rows = JSON.parse(R.rows)
+	assert.ok(rows.some((r) => r === 'WhatsApp'), 'the image menu offers WhatsApp: ' + R.rows)
+	assert.ok(rows.some((r) => r === 'Telegram'), 'and Telegram: ' + R.rows)
+	assert.ok(rows.some((r) => r.indexOf('Chat handles') === 0), 'and the way in to the config: ' + R.rows)
+	assert.equal(R.dialogOpened, true, 'the config dialog is REACHABLE from the UI — the defect this test exists for')
+	assert.equal(R.errShown, true, 'an injection-shaped number is refused inline, not silently dropped')
+	assert.equal(R.dialogStillOpen, true, 'and the dialog stays open so the reader can fix it')
+	assert.equal(R.dialogClosed, true, 'a valid number saves and closes')
+	assert.equal(R.styleAttrs, 0, 'the dialog carries zero inline style attributes (CSP)')
+	assert.equal(R.csp, '[]', 'zero CSP violations')
+	assert.equal(R.errs, '[]', 'zero page errors')
+
+	// The handle actually reached disk, read back through the kernel the browser talked to.
+	const u = new URL(url)
+	const res = await fetch(u.origin + '/api/share/config?token=' + u.searchParams.get('token'))
+	const cfg = await res.json()
+	assert.equal(cfg.whatsappPhone, '61412345678', 'the browser Save persisted, normalized')
+
+	try { execFileSync(process.execPath, [CLI, 'stop', '--workspace', broot], { encoding: 'utf8' }) } catch { /* best effort */ }
+})
