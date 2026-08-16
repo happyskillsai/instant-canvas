@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.28.1] - 2026-08-16
+
 ### Added
 
 - **The Share menu can now set your chat handles, which is what makes the one-click case reachable.**
