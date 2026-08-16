@@ -2,6 +2,35 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **`npm test` ran the whole suite in one process, and a single stalled hook failed all 868 tests
+  at once.** `node --test <dir>` cannot expand a directory — it `require`s it as a module — so
+  `scripts/test/index.js` exists to load every `*.test.js` and make the directory form work. The
+  cost was invisible until the suite grew: one process, one event loop, ~20 files spawning a kernel
+  through a *synchronous* `execFileSync` in a before hook, and 19 more driving a headless Chrome
+  whose launch poll carries a 30-second **wall-clock** deadline. A blocked loop cannot advance that
+  poll while its deadline keeps running, so a hook eventually threw `Chrome never reported a
+  DevTools port` — and in a shared process that one throw marked **every** test failed, in
+  milliseconds, including pure filesystem tests that touch neither kernel nor browser. It read as a
+  catastrophic regression and was a harness stall; the pass count of **zero** is the tell.
+
+  `test`, `coverage` and `coverage:cli` now run `node --test --test-concurrency=4
+  "scripts/test/*.test.js"`. The glob is **quoted so Node expands it**, not the shell — Windows
+  `cmd` does no globbing — and gives each file its own process. The concurrency cap is the second
+  half: isolation removes the wedge but not the contention between ~20 kernels and 19 Chromes, and
+  two uncapped runs each failed a *different* test, which is contention rather than breakage. Same
+  868 tests: **0 pass / 868 fail → 868 pass.** `index.js` is kept — the directory form still needs
+  it — and now carries a warning against pointing the scripts back at it.
+
+- **An upload test asserted its cleanup once instead of waiting for it.** `over MAX_UPLOAD is 413
+  with NO .part left behind` read the directory immediately, but the refusal answers with
+  `Connection: close` and drains the body, so the server can still be unwinding when the client
+  holds the 413 — the unlink lands microseconds later on an idle box and measurably later on a
+  loaded one. It passed alone and failed inside a full suite. It now polls for the temp file to
+  disappear against a deadline, per the house rule that a test waits on the observable outcome and
+  never on the clock. Sabotage-verified: suppressing the server's unlink still turns it red.
+
 ## [0.28.0] - 2026-08-16
 
 ### Added

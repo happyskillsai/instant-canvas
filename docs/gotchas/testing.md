@@ -103,13 +103,22 @@ An in-runner `http` server answers in-process clients normally, but a spawned su
 
 `normalizeRoot` case-folds on macOS/Windows and not on Linux, so a `-r` preload that sets `platform = 'linux'` computes a different workspace key than the real-platform kernel it spawns whenever the path has an uppercase character — macOS temp dirs (`/var/folders/.../T/…`) always do. The CLI then waits 10 s for a kernel registered under the other key and dies `KERNEL_UNREACHABLE`. Keep such a test's workspace all-lowercase ON DISK (`/private/tmp/...`), and do not "fix" it by lowercasing a path string — `realpathSync` restores the on-disk case.
 
-## `node --test <dir>` does not expand the directory
+## `node --test <dir>` does not expand the directory — and the workaround is what made the suite a single process
 
-On the pinned Node version, passing a directory to `--test` tries to *require* it as a module and fails. `scripts/test/index.js` makes the directory itself a valid test entry by requiring every sibling `*.test.js` — keep it updated-free (it globs) and don't delete it, or the documented `node --test scripts/test/` invocation breaks.
+On the pinned Node version, passing a directory to `--test` tries to *require* it as a module and fails (verified on 24.0.1: a bare directory throws `MODULE_NOT_FOUND` naming the directory itself). `scripts/test/index.js` makes the directory a valid entry by requiring every sibling `*.test.js`. **Don't delete it** — the `node --test scripts/test/` invocation breaks outright without it.
+
+**But do not let `npm test` point at the directory, because that file is the single-process runner.** Requiring all 55 files into one module puts them in ONE process and ONE event loop, which is the precondition for every wedge in this file: the `execFileSync` stall below, the 810-instant-✖ flood below that, and the cross-file secret pollution further down. All of them are symptoms of *sharing a loop*, and none of them can happen when each file owns its own process.
+
+The scripts therefore run **`node --test --test-concurrency=4 "scripts/test/*.test.js"`**, and both halves are load-bearing:
+
+- **The quoted glob** gives every file its own process. Quoted so **Node** expands it rather than the shell — Windows `cmd` does no globbing, and an unquoted pattern would also break under any shell that leaves it unexpanded (zsh errors rather than passing it through). Measured: the same 868 tests go from **0 pass / 868 fail** (directory, one process) to **868 pass** (glob, one process per file).
+- **The concurrency cap.** Process isolation removes the wedge but not the resource contention — ~20 files spawn a kernel and 19 drive a headless Chrome, so at Node's default (one per core, 8 here) enough kernels and Chromes coexist to make *some* test fail. Two uncapped runs failed 2 and then 1 test, and **a different test each time**, which is the signature of contention rather than breakage. At 4 the same suite is green. Do not read a lone failure at high concurrency as a regression until it reproduces at 4.
+
+The trap for a future maintainer is that the directory form still *works* — it runs, it prints, it takes minutes — so reverting the script looks harmless right up until the suite fails as a unit and blames 868 innocent tests.
 
 ## Set the state dir with `||=`, before requiring the registry
 
-Via `index.js` the whole suite runs in **one process**, so every test file's module-level `process.env.INSTANTCANVAS_STATE_DIR = mkdtemp()` overwrites the previous file's. The symptom was maddening: the kernel test's spawned kernel registered into one state dir while the test polled another, so the kernel "never came up." Rule: `process.env.INSTANTCANVAS_STATE_DIR = process.env.INSTANTCANVAS_STATE_DIR || mkdtemp()` — first loader wins — and always set it *before* `require('../lib/registry')`.
+Under the `index.js` entry the whole suite runs in **one process**, so every test file's module-level `process.env.INSTANTCANVAS_STATE_DIR = mkdtemp()` overwrites the previous file's. (`npm test` no longer uses that entry — see the directory gotcha above — so each file now gets its own state dir. The `||=` rule stays: the directory form still exists, and a file that assumes it owns the variable breaks the moment anyone uses it.) The symptom was maddening: the kernel test's spawned kernel registered into one state dir while the test polled another, so the kernel "never came up." Rule: `process.env.INSTANTCANVAS_STATE_DIR = process.env.INSTANTCANVAS_STATE_DIR || mkdtemp()` — first loader wins — and always set it *before* `require('../lib/registry')`.
 
 ## A security scan can trip over its own test file
 

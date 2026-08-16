@@ -39,10 +39,10 @@
 	],
 	"scripts": {
 		"prepublishOnly": "node --test scripts/test/e2e.test.js",
-		"test": "node --test scripts/test/",
+		"test": "node --test --test-concurrency=4 \"scripts/test/*.test.js\"",
 		"rls": "node tools/rls.js",
-		"coverage": "node --test --experimental-test-coverage scripts/test/",
-		"coverage:cli": "node --test --experimental-test-coverage --test-coverage-include=scripts/instantcanvas.js --test-coverage-lines=100 --test-coverage-branches=77 --test-coverage-functions=96 scripts/test/"
+		"coverage": "node --test --test-concurrency=4 --experimental-test-coverage \"scripts/test/*.test.js\"",
+		"coverage:cli": "node --test --test-concurrency=4 --experimental-test-coverage --test-coverage-include=scripts/instantcanvas.js --test-coverage-lines=100 --test-coverage-branches=77 --test-coverage-functions=96 \"scripts/test/*.test.js\""
 	},
 	"dependencies": {
 		"@happyskillsai/skill-drift-check": "^0.1.0"

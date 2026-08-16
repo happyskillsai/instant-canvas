@@ -546,7 +546,7 @@
         "A server inside the test-runner process is invisible to subprocesses (Node 24.0.x)",
         "An outer npm lifecycle leaks `npm_config_*` into nested npm calls",
         "Faking `process.platform` splits workspace identity",
-        "`node --test <dir>` does not expand the directory",
+        "`node --test <dir>` does not expand the directory — and the workaround is what made the suite a single process",
         "Set the state dir with `||=`, before requiring the registry",
         "A security scan can trip over its own test file",
         "Fake registry entries in shared state dirs look like leaks",
@@ -564,7 +564,7 @@
         "`cdp.send()` has NO per-command timeout, so a probe against a HUNG page never returns",
         "A test double with NO idle timeout outlives every interrupted run"
       ],
-      "line_count": 266,
+      "line_count": 275,
       "links_to": [
         "docs/gotchas/frontend.md",
         "docs/gotchas/runtime.md",

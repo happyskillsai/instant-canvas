@@ -446,7 +446,22 @@ test('upload route: over MAX_UPLOAD is 413 with NO .part left behind', async () 
 	assert.equal(fs.existsSync(path.join(K.root, 'big2.bin')), false)
 	// The litter check: a half-written temp file left in the reader's repository is
 	// exactly what this feature must not produce.
-	const leftovers = Object.keys(snapshotDir(K.root)).filter((f) => f.endsWith('.part'))
+	//
+	// POLL the outcome, never read once. The refusal answers with `Connection: close`
+	// and drains the rest of the body, so the client can hold the 413 while the server
+	// is still unwinding — the unlink lands microseconds later on an idle box and
+	// measurably later on a loaded one. A single read therefore passes alone and fails
+	// inside a full suite, which is the "a timing-fragile assertion breaks when the
+	// suite gets HEAVIER, not when the code does" shape in gotchas/testing.md. This can
+	// still fail: a route that truly never unlinks exhausts the deadline and the
+	// assertion reports the litter it found.
+	const partsLeft = () => Object.keys(snapshotDir(K.root)).filter((f) => f.endsWith('.part'))
+	const deadline = Date.now() + 5000
+	let leftovers = partsLeft()
+	while (leftovers.length && Date.now() < deadline) {
+		await sleep(50)
+		leftovers = partsLeft()
+	}
 	assert.deepEqual(leftovers, [])
 
 	// The positive control: just under the cap still lands, so the assertions above
