@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.28.0] - 2026-08-16
+
 ### Added
 
 - **A Share control in the item overlay, for media.** Viewing an image, video or audio file, a
