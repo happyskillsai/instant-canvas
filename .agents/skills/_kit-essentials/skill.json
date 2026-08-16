@@ -1,7 +1,7 @@
 {
 	"name": "_kit-essentials",
-	"version": "0.5.0",
-	"description": "Essential skills for any project — perpetual memory, specs, conventional commits, reframing, pre-implementation audits, self-review, session status, and a one-glance list of what is still open.",
+	"version": "0.6.0",
+	"description": "Essential skills for any project \u2014 perpetual memory, specs, conventional commits, decision briefs, plain-English re-explanations, pre-implementation audits, self-review, and session status.",
 	"keywords": [
 		"essentials",
 		"kit",
@@ -13,7 +13,6 @@
 		"version-control",
 		"git",
 		"commit",
-		"reframe",
 		"scrutinize",
 		"review",
 		"verification",
@@ -27,7 +26,12 @@
 		"blockers",
 		"todo",
 		"claude-code",
-		"cursor"
+		"cursor",
+		"decision-brief",
+		"concision",
+		"clarity",
+		"explanation",
+		"unconfuse"
 	],
 	"type": "kit",
 	"authors": [
@@ -36,10 +40,11 @@
 	"license": "BSD-3-Clause",
 	"dependencies": {
 		"nicolasdao/_kit-doc-essentials": "*",
-		"nicolasdao/reframe-last-answer": "*",
+		"nicolasdao/decision-brief": "*",
+		"nicolasdao/open-items": "*",
 		"nicolasdao/scrutinize": "*",
 		"nicolasdao/second-opinion": "*",
 		"nicolasdao/session-status": "*",
-		"nicolasdao/open-items": "*"
+		"nicolasdao/unconfuse": "*"
 	}
 }

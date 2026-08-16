@@ -5,6 +5,11 @@ All notable changes to this skill are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com),
 and this skill adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.4.1] - 2026-08-08
+
+### Fixed
+- **Dependency range no longer pins to a superseded version.** `happyskillsai/happyskills-design` was declared `^0.9.0`, written when design was at 0.9.x. On a `0.x` version `^` is narrow (`^0.9.0` means `>=0.9.0 <0.10.0`), so once semver ranges are actually evaluated (spec 260808-01) this resolved to `design@0.9.8` rather than the current `0.14.1` — a silent downgrade, with no warning, because the range was satisfiable. Now `>=0.14.1`, which states the tested floor and permits forward movement instead of going stale on the next minor.
+
 ## [Unreleased]
 
 ## [0.4.0] - 2026-06-23

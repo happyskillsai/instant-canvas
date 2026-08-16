@@ -1,13 +1,14 @@
 ---
 name: init-context
 description: ProjectMemory — Load project docs into context at session start. Use when starting work on a project, asking how something works, or before any task in a documented area. Not for modifying or generating docs (update-doc / init-doc).
+allowed-tools: Read, Grep, Glob, Bash
 argument-hint: optional question or topic
 ---
 
 You are being asked to load context about this project to help answer a specific question or explore a particular topic.
 
 **IMPORTANT:**
-**1. During the documentation loading phase (Steps 1–8), you are ONLY gathering information. DO NOT modify any files or make any changes during this phase.**
+**1. During the documentation loading phase (Steps 1–6), you are ONLY gathering information. DO NOT modify any files or make any changes during this phase.**
 **2. Two files under `docs/` MUST be loaded regardless of the topic or question, if they exist:**
 **   - `docs/gotchas.md` — critical project-specific pitfalls and edge cases (see [Step 3: Mandatory File Loading](#step-3-mandatory-file-loading) for hub+domain handling)**
 **   - `docs/mission.md` — project vision, values, and decision-making compass**
@@ -41,14 +42,25 @@ Read the `README.md` file at the project root (if it exists). This is your entry
 2. Its main features and capabilities
 3. Links to other documentation files (the doc graph you will traverse in Steps 4–6)
 
-If no `README.md` exists at the project root, proceed to Step 3 but note this in your summary — the project is missing its documentation hub and the user may want to run `/init-doc`.
+If no `README.md` exists at the project root, proceed to Step 3 but flag it in the Step 7 doc-health line — the project is missing its documentation hub and the user may want to run `/init-doc`.
 
-**Then load `doc-manifest.json` if it exists** (at the project root). This is the **derived machine-first retrieval index** (see [../init-doc/references/standards.md § Documentation Manifest](../init-doc/references/standards.md#documentation-manifest)) — a single complete record of every doc's `description`, `tags`, `source`, `headings`, cross-links, and (in a monorepo) its `group`. It is the **index, not content**: loading it does not replace the mandatory *content* reads in Step 3 (`docs/mission.md`, the gotchas hub) — those are still read in full. The manifest is what makes triage (Step 4) a single reasoning pass instead of a header-peek-per-file traversal.
+**Then load the retrieval index.** Run:
+
+```
+python3 "${CLAUDE_SKILL_DIR}/scripts/manifest-query.py" --root <project_root> --index
+```
+
+`${CLAUDE_SKILL_DIR}` resolves to this skill's installed directory at runtime — the script lives there, not in the user's project. Always pass `--root` with the project root you established in Step 1; without it the script re-derives the root itself and can disagree with the skill in a non-git checkout or a subdirectory invocation. This matches how every sibling skill invokes its script.
+
+This reads the committed `doc-manifest.json` (at the project root) and prints the **lean index** — every doc's `path`, `description`, `tags`, `source` globs and cross-links, plus the gotchas format and, in a monorepo, the groups block. It omits only the fields recall never reads, which makes it roughly **a quarter the size** of the raw manifest with no loss of triage signal. Do **not** read `doc-manifest.json` directly when the script is available; the raw file is mostly per-doc heading dumps that exist for the maintenance skills, and loading them burns context this skill exists to conserve.
+
+The index is the **index, not content**: loading it does not replace the mandatory *content* reads in Step 3 (`docs/mission.md`, the gotchas hub) — those are still read in full. It is what makes triage (Step 4) a single reasoning pass instead of a header-peek-per-file traversal. (Schema: [../init-doc/references/standards.md § Documentation Manifest](../init-doc/references/standards.md#documentation-manifest).)
+
+**If the script cannot run** (no `python3`, script missing), read `doc-manifest.json` directly instead — same information, larger. Note it in the Step 7 doc-health line. If there is no manifest at all, fall back to the README-link triage in Step 4.
 
 - **Trust it as-is.** The manifest is kept fresh by the producer skills and `project-memory` Inspect; do **not** re-scan the corpus to re-verify it — re-scanning would defeat its purpose. Freshness is their job, not recall's.
-- **Graceful degradation.** If `doc-manifest.json` is absent, fall back to the per-file frontmatter-header triage described in Step 4 and **note in your summary** that no manifest was present (the user may want to run a producer skill to generate one).
-- **Stale-pointer caution.** If the manifest lists a node whose file does not exist on disk, do not silently trust it: note the discrepancy in your summary and fall back to direct inspection for that entry only.
-- **Low-confidence metadata.** Some nodes flag that their own header is unreliable — `parse_error` (frontmatter unparseable, so `description`/`tags` may be wrong or empty), `has_frontmatter: false` (no header at all — score by `headings`, not the null `description`), or `dangling: true` (the doc's `source` no longer resolves, so its code→doc map is stale). Don't rank these on `description`/`tags` alone: fall back to `headings`, and when one still looks relevant, open the file rather than trust the header. Surface any `dangling` doc you relied on in your summary.
+- **Stale-pointer caution.** If the manifest lists a node whose file does not exist on disk, do not silently trust it: flag the discrepancy in the Step 7 doc-health line and fall back to direct inspection for that entry only.
+- **Low-confidence metadata.** Some nodes flag that their own header is unreliable — `parse_error` (frontmatter unparseable, so `description`/`tags` may be wrong or empty), `has_frontmatter: false` (no header at all — score by `headings`, not the null `description`), or `dangling: true` (the doc's `source` no longer resolves, so its code→doc map is stale). Don't rank these on `description`/`tags` alone: fall back to `headings`, and when one still looks relevant, open the file rather than trust the header. Surface any `dangling` doc you relied on in the Step 7 doc-health line.
 
 ### Step 3: Mandatory File Loading
 
@@ -58,7 +70,7 @@ Two files are loaded unconditionally before any topic-driven traversal, because 
 
 If `docs/mission.md` exists, read it in full. This is the project's decision-making compass — vision, values, non-goals, users, UX compass. It should inform every subsequent decision in the conversation, even ones not obviously connected to "business context."
 
-If `docs/mission.md` does not exist, note this in the summary (the user can run `/init-mission` later) and move on.
+If `docs/mission.md` does not exist, flag it in the Step 7 doc-health line (the user can run `/init-mission` later) and move on.
 
 #### 3b. Gotchas
 
@@ -66,7 +78,7 @@ Gotchas are project-specific pitfalls — things that WILL bite you if ignored. 
 
 **Detection.** Determine which gotchas format this project uses:
 
-**If the manifest was loaded (Step 2), read the format from it** — `diagnostics.gotchas.format` is `hub+domain`, `monolithic`, or `missing`, computed deterministically. Trust it; do not re-scan. Only **without** a manifest, fall back to Glob:
+**If the index was loaded (Step 2), read the format from its header** — `diagnostics.gotchas.format` is `hub+domain`, `monolithic`, or `missing`, computed deterministically. Trust it; do not re-scan. Fall back to the Glob detection below **only** when there was no index at all, or when the value is `unknown` (a legacy manifest with no diagnostics block):
 
 1. **Check for `docs/gotchas/` directory** using Glob: `docs/gotchas/*.md`
 2. **Check for `docs/gotchas.md`**
@@ -75,17 +87,19 @@ Gotchas are project-specific pitfalls — things that WILL bite you if ignored. 
 
 1. **Read the hub file** (`docs/gotchas.md`). This is a small index (~30–50 lines) listing all gotcha domains with descriptions and links to `docs/gotchas/<domain>.md` files. Always read it in full.
 2. **Select relevant domain files**. From the hub, identify which `docs/gotchas/<domain>.md` files are relevant to the user's question/topic. Use the same frontmatter-first triage as Step 4 — gotchas domain files declare `source` for their subsystem, so when the user's work touches that subsystem's code, the `source` match flags the domain file to load (the strongest signal). Read only the relevant domain file(s).
-3. **Record unloaded domains**. Note which domain files you did NOT load. Include them in your summary (Step 7) as a progressive discovery reminder.
+3. **Leave the rest unloaded — silently.** Do not list the domain files you skipped in your output; [Step 8](#step-8-ongoing-progressive-documentation-loading) picks them up if the conversation moves into their subsystem. How it finds them depends on the branch you took above:
+   - **With a manifest** — they are nodes in it. Match by `source` where they declare it; a source-blind producer (`refactor-doc` in structural mode) may leave `source` absent, in which case fall back to their `description`/`tags`.
+   - **Without a manifest** (you reached Format A via the Glob fallback) — nothing on disk records which domains you skipped, so re-glob `docs/gotchas/*.md` and re-read the hub when work moves to a new area. Do not rely on having remembered them.
 
 **Format B — Monolithic file** (no `docs/gotchas/` directory, only `docs/gotchas.md`):
 
 Read `docs/gotchas.md` in full. This is the legacy format — the entire file is loaded regardless of size.
 
-**Attention framing**: When you encounter gotchas content (from either format), treat each gotcha as a warning. These are not reference documentation — they are lessons learned from production incidents. In your summary, present gotchas prominently under their own heading, not buried inside general findings.
+**Attention framing**: When you encounter gotchas content (from either format), treat each gotcha as a warning. These are not reference documentation — they are lessons learned from production incidents. Present them prominently under their own heading (Step 7, part 2), never buried inside the answer.
 
 ### Step 4: Triage candidate docs from the manifest
 
-**When `doc-manifest.json` was loaded (Step 2), triage from it — a single reasoning pass over the whole corpus, not a header-peek per file.** Every node already carries what the frontmatter header would tell you (`description`, `tags`, `source`) plus its headings, cross-links, and group — so you can score every doc at once without opening any of them. The manifest *is* the retrieval index; this is exactly what it exists for.
+**When the index was loaded (Step 2), triage from it — a single reasoning pass over the whole corpus, not a header-peek per file.** Every row carries what the frontmatter header would tell you (`description`, `tags`, `source`) plus `links_to` and, in a monorepo, its `group` — so you can score every doc at once without opening any of them. `headings` rides along only for rows carrying a `!` flag, where the header is unreliable and headings are the only signal left; for every other row `description`/`tags` outrank it, so it is omitted deliberately. **Do not go read `doc-manifest.json` to recover them** — that re-read is exactly what Step 2 avoids.
 
 **(Monorepo) Scope by group first.** If the manifest has a `groups` block, decide which group(s) the user's question/topic belongs to — by the code area it names (match against each group's `roots`) or by sub-project name — and **restrict triage to nodes in those group(s)** before per-doc scoring. This prunes unrelated sub-projects up front. Widen to other groups only if the in-group docs don't answer the topic. **Exception — cross-cutting concerns:** when the question is about a theme that deliberately spans sub-projects (e.g. `auth`, `security`, `logging`), don't let group-scoping prune it — also scan **all** groups for nodes whose `tags` match the theme. `tags` is the cross-cutting axis that `group`/`source` intentionally don't capture (see [../init-doc/references/standards.md § Groups](../init-doc/references/standards.md#groups)).
 
@@ -97,7 +111,7 @@ Read `docs/gotchas.md` in full. This is the legacy format — the entire file is
 
 A node that scores relevant on any signal goes on the reading list. When `source` or `description`/`tags` disagree with the README link text, trust the manifest — it is derived from the docs and kept current by the writer skills.
 
-**Fallback when there is no manifest.** If Step 2 found no `doc-manifest.json`, triage the legacy way: from the README, identify links to `docs/` files and read **only** each candidate's frontmatter header (the leading `---` block, not the body), scoring by the same 1‑2‑3 priority. Note in the summary that triage ran without a manifest.
+**Fallback when there is no manifest.** If Step 2 found no `doc-manifest.json`, triage the legacy way: from the README, identify links to `docs/` files and read **only** each candidate's frontmatter header (the leading `---` block, not the body), scoring by the same 1‑2‑3 priority. Flag the missing manifest in the Step 7 doc-health line.
 
 **Track what you've read:**
 - Keep a mental list of all files you've already read to avoid infinite loops. `docs/mission.md` and the gotchas files loaded in Step 3 already count as read — don't re-load them.
@@ -129,80 +143,85 @@ Continue the process:
 - Limit to documentation files in the project (don't follow external URLs)
 - Do not traverse into `docs/manual/` — that directory is human-authored content excluded from automated loading by framework convention
 
-### Step 7: Summarize your findings
+### Step 7: Respond
 
-After completing the recursive documentation discovery, provide:
+Your output has **at most four parts, in this order, and nothing else**. The first three are each conditional — omit any that does not apply, and in the common case you will omit the first. The answer always comes last, so it is the last thing on the user's screen.
 
-1. **Gotchas (WARNINGS)**: If any gotchas were loaded, present them FIRST under a dedicated heading. These are not suggestions — they are hard-won lessons. Frame them as: "The following gotchas are directly relevant to this work and must be respected." List each gotcha with its title and a one-line summary of the risk.
+**1. Doc health** — one line, **only** when something is actually broken.
 
-2. **Mission context** (if `docs/mission.md` was loaded): A 2–3 line summary of the vision and the most relevant values for this task. State explicitly that you will use the mission as the decision-making lens.
+Emit this only if a step above hit an anomaly: not a git repository (Step 1), no `README.md`, no `doc-manifest.json`, a manifest node whose file is missing, a `dangling` doc you relied on, or no `docs/mission.md`. This line is the *only* place such warnings appear — no step above emits its own. State the anomaly and the fix in a single line (e.g. *"No doc-manifest.json — triaged from README links; run `/init-doc` to generate one."*). When the docs are healthy, this part does not appear at all.
 
-3. **List of files read**: Show which documentation files you read and in what order.
+**2. Gotchas that bear on this** — omit the section entirely if none do.
 
-4. **Why each was relevant**: Brief explanation of why you chose to read each file.
+Only the gotchas that actually touch the question, not everything you loaded. One line each, stated as a warning, under their own heading — never folded into the answer. These are lessons from production incidents, not reference material.
 
-5. **Key findings**: Summarize the information relevant to the user's question/topic.
+**3. Mission lens** — one line; omit if the mission does not bear on the question.
 
-6. **Context loaded**: Confirm that you now have sufficient context to help with their question.
+The single value or non-goal from `docs/mission.md` that should steer this work.
 
-7. **Progressive discovery reminder** (hub+domain gotchas format only): If the project uses the `docs/gotchas/` directory structure and some domain files were NOT loaded, include this notice:
+**4. The answer** — the bulk of the response, always last.
 
-   > **Additional gotcha domains available:** [list the unloaded domain names with one-line descriptions from the hub]. If the conversation shifts to any of these areas, load the relevant `docs/gotchas/<domain>.md` file before proceeding — these contain critical warnings that could prevent mistakes.
+**Ground it in the corpus.** Name the doc a substantive claim rests on, inline and in passing (*"per `docs/deployment.md`…"*) — never as a trailing list of sources. If the answer is not in the documentation you loaded, say so plainly instead of filling the gap from general knowledge. This replaces the traceability the removed file list used to provide, at a fraction of the cost: an ungrounded answer that *looks* grounded is the exact failure this skill exists to prevent.
 
-   Omit this notice if all domain files were loaded, or if the project uses the monolithic gotchas format (Format B).
+**Always end with a direct response to the prompt. This is unconditional — do not classify the prompt to decide whether to answer it.** What "answer" means simply follows the prompt's shape:
 
-### Step 8: Document the unread documentation index
+| The prompt was… | The last section is… |
+|---|---|
+| A question | The answer, grounded in what you just loaded |
+| A topic or bare area name | A short orientation on that area: what it is, how it is structured, where the risk sits |
+| An action request ("add endpoint X") | What you would do and why — **not done**. End with: *"Say go and I'll implement it."* |
+| Empty | A short orientation on the project as a whole |
 
-In your summary, include a section called **"Documentation not yet loaded."**
+**Do not emit any of the following.** Each one wastes output tokens and buries the answer:
 
-**With a manifest, this set is exact:** it is the manifest's `nodes` **minus** the files you actually read this session (README, mission, the gotchas hub + any domain files, and every doc from Steps 4–6). No approximation, no guessing what the README "might" link to — the manifest is the complete corpus, so the complement is precise. For each unloaded node list its `path`, its `description`, and its `source` globs (and its `group`, in a monorepo) — all read straight from the manifest.
+- **A list of files you read**, or why each was relevant. That is the skill's internals. The files are already in your context; narrating them tells the user nothing they can act on.
+- **A "Documentation not yet loaded" index**, or a progressive-discovery reminder for unloaded gotcha domains. This is machine state, not user-facing information, and it does not belong in the output channel. You do not need it: [Step 8](#step-8-ongoing-progressive-documentation-loading) looks docs up by file path on demand, so there is no read-set to record.
+- **A "Context loaded" confirmation**, or any *content-free* sign-off such as "ready for your next instruction". The answer is the last thing on screen; an empty closing line after it only hides it. (The action-request hand-off — *"Say go and I'll implement it."* — is not a sign-off. It is the operative last line of that answer, and it stays.)
 
-**Without a manifest**, fall back to the approximate set: every documentation file referenced in the README (or in any file you read) that you did NOT read, with its path, a brief description, and — if it declares frontmatter — its `source` globs (seen during the Step 4 header-peek triage).
+### Step 8: Ongoing progressive documentation loading
 
-This index is critical — it enables the ongoing progressive loading behavior described below. Capturing each unloaded doc's `source` is what makes that loading *precise*: when later work touches a specific file, you can match that path against the unloaded docs' `source` and know exactly which one to pull, instead of guessing from titles.
+**This step applies for the entire conversation, not just this turn.** It is what lets the initial load stay small: you do not have to load everything now, because you will load the rest exactly when it becomes relevant.
 
-### Step 9: Stop and wait — always
+**The trigger is an action you take, never a judgment you make.**
 
-After completing Steps 1–8, **stop**. Present the summary and wait for the user's next instruction. This is unconditional.
+> **Before your first `Edit` or `Write` to any file this session, run:**
+> ```
+> python3 "${CLAUDE_SKILL_DIR}/scripts/manifest-query.py" --root <project_root> --affects <path>
+> ```
+> **Read every doc it names that you have not already read. Then make the change.**
 
-**This applies regardless of how the prompt is phrased.** Even if the prompt looks like a clear, unambiguous action request ("add endpoint X", "fix bug Y", "run command Z and check output"), you MUST NOT proceed to implementation in the same turn as the context load. The user will tell you to proceed in their next message.
+**Why an action and not a judgment.** Earlier versions of this skill asked you to notice when the conversation had moved to a new area, and *then* check. That fails silently and by construction: not having noticed something is self-concealing — the very state you would need to detect is the state that prevents you detecting it. Editing a file is different. It is something you are unambiguously about to do, so the trigger cannot be missed, and the answer comes from a command rather than from recall.
+
+**Why `Edit`/`Write` and not `Read`.** In a typical corpus roughly half of all source files are covered by some doc, so firing on every file you open would flood the context with documentation — the exact waste this skill exists to prevent. Firing on the first *modification* is rare, and lands precisely where being wrong is expensive.
+
+**You do not need to track what you have already read.** The lookup answers "what documents this file?", not "what have you missed?". If it names a doc you have read, skip it; if you have forgotten, re-reading costs one cheap read. There is no ledger to maintain and no complement to compute — that is why nothing about the read-set appears in your Step 7 output.
+
+**Load on demand outside edits too.** The same lookup applies whenever work turns toward unfamiliar code — the user names a path, you grep into a subsystem you have not touched, or a stack trace points somewhere new. Run it on that path.
+
+**Do not ask permission to load a doc.** Read it and carry on; this is expected behavior, not a decision for the user.
+
+**Make a miss visible.** If the lookup names a doc and you proceed *without* reading it, say so in one line. A skipped load that nobody sees never gets corrected.
+
+**When unsure, load it.** Reading one unnecessary doc is cheap. Missing a gotcha is not.
+
+**Degraded paths.**
+- **Script unavailable** (no `python3`, script missing) — match the path yourself against the `source` globs in the index you loaded in Step 2. Same rule, done by hand.
+- **No manifest at all** — re-read the project `README.md`, and for the area you are about to touch, peek the frontmatter of the `docs/` files it links. Less precise and it costs a re-read, but **do not skip this step because the manifest is missing**: a project with no manifest is more likely, not less, to hold documentation you have not seen.
+
+### Step 9: Never act — no exceptions
+
+This turn is read-only end to end — Steps 1–6 gather, Step 7 responds, and neither writes anything. Reaching the end of Step 7 means you have *answered* the prompt, not started work on it. **Stop there.** This is unconditional.
+
+**It applies regardless of how the prompt is phrased.** Even if the prompt looks like a clear, unambiguous action request ("add endpoint X", "fix bug Y", "run command Z and check output"), you MUST NOT implement it in the same turn as the context load. Describe what you would do (Step 7, part 4) and wait for the user to say go.
+
+**Concretely:** use only read-only tools — the same ones Steps 1–6 require (Read, Grep, Glob, and read-only commands such as the `git rev-parse` in Step 1). Do not edit, create, or delete files. Do not run any command that changes state.
 
 **Why this is non-negotiable:**
 - Confident-sounding action prompts are exactly where unloaded gotchas cause the most damage. The more concrete the task, the stronger your prior that "I don't need the docs" — and that prior is usually wrong.
+- **Never let a judgment about the prompt change what you load, and never let one license action.** A rule of the form "*if* this is an action request, skip ahead and implement" is the specific failure mode this step exists to defeat. Deciding up front that you will implement contaminates the load behind it: you triage toward the plan you already hold, read fewer docs, and skip gotchas that do not fit it.
+
+  To be precise, since Step 7 does read the prompt's shape: the prohibited branch is one that runs **before or during the load**, or whose arms differ in **whether you act**. Step 7's table is neither — it runs after the load is complete, it changes only the *shape* of a response that is produced unconditionally, and every one of its rows stops short of acting. **Answering is safe because it is downstream of the load; acting is not.** That distinction is the whole design — if you are editing this skill, preserve it rather than resolving the apparent tension by loosening this rule.
 - A single extra turn is cheap. Skipping context to look responsive is not.
-- This step exists specifically to defeat the failure mode where a concrete prompt convinces the model the skill is satisfied by jumping straight to action. There is no "fast path." There is no "obvious case." Stop and wait, every time.
-
-**What to output:**
-1. The findings summary (gotchas, mission context, files read, key findings, documentation not yet loaded — per Steps 7 and 8).
-2. A final line: *"Context loaded. Ready for your next instruction."*
-
-Do not begin the task. Do not suggest the first step of the task. Do not call any non-Read tools. Wait.
-
----
-
-## Ongoing Progressive Documentation Loading
-
-**This instruction applies for the entire conversation, not just during the initial context-loading phase.**
-
-After the initial context load, you will continue working with the user on various tasks throughout the conversation. As the conversation progresses and the user's requests shift to new areas, you MUST follow this rule:
-
-**Before starting work on a new task or topic area, pause and ask yourself:**
-> "Does the work I'm about to do touch an area of the project for which documentation exists but was not loaded during the initial context phase?"
-
-To answer this, refer back to:
-1. The **"Documentation not yet loaded"** list from your initial summary
-2. The **progressive discovery reminder** for unloaded gotcha domains (if applicable)
-
-**Use `source` to make this precise, not a guess.** When the work is about to touch specific files or a code area, match those paths against the `source` globs you recorded for the unloaded docs (Step 8). A `source` match is a near-certain signal to load that doc first — this is the same deterministic code→doc map `update-doc` uses, applied to recall. Fall back to title/description matching only for unloaded docs that carry no `source`.
-
-**If the answer is yes — load the relevant documentation BEFORE proceeding with the task.** Read the file(s), absorb the context, and factor it into your work. Do not ask the user for permission to do this — it is expected behavior.
-
-**If you are unsure whether a piece of unloaded documentation is relevant**, err on the side of loading it. The cost of reading an unnecessary file is negligible compared to the cost of missing critical context.
-
-This is not optional. Skipping this step risks:
-- Contradicting established patterns documented in the project
-- Missing gotchas that could lead to bugs or regressions
-- Duplicating work or approaches that were already tried and rejected
 
 ---
 
@@ -211,69 +230,50 @@ This is not optional. Skipping this step risks:
 ```
 User question: "How does the deployment pipeline work?"
 
-1. Determine project root
-   → `git rev-parse --show-toplevel` returns /Users/dev/myproject
-   → All paths resolve from there.
+1  Root      → git rev-parse --show-toplevel → /Users/dev/myproject
 
-2. Read README.md, then load the index
-   → README gives the project's shape and entry points.
-   → doc-manifest.json exists → load it. This is the retrieval index: every doc's
-     description, tags, source, headings, links_to (+ group in a monorepo) in one
-     record set. Trust it as-is; do NOT re-scan the corpus to re-verify it.
+2  Index     → Read README.md.
+              → python3 "${CLAUDE_SKILL_DIR}/scripts/manifest-query.py" --root . --index
+                One lean record set: path :: description :: tags :: source :: links,
+                plus "gotchas format: hub+domain". Trust it; do not re-scan.
 
-3. Mandatory File Loading
-   3a. Mission:
-       → docs/mission.md exists → read it in full
-       → "Ship reliable infra over fast iteration" is the top value — relevant
-   3b. Gotchas:
-       → manifest diagnostics.gotchas.format = "hub+domain" (read from the index, no re-globbing)
-       → Read docs/gotchas.md (hub — always read)
-       → In the manifest, gotchas/deployment.md has source: [deploy/**, .github/workflows/**]
-         → deployment question → source match ✓ → read it
-       → Skip gotchas/database.md (source: db/**), gotchas/frontend.md (source: web/**) — no match
-       → Record unloaded domains: database, frontend
+3  Mandatory → docs/mission.md in full ("reliable infra over fast iteration").
+              → docs/gotchas.md hub in full. Format came from the index, no re-globbing.
+                gotchas/deployment.md source [deploy/**, .github/workflows/**] → match → read.
+                gotchas/database.md [db/**], gotchas/frontend.md [web/**] → no match →
+                leave unloaded, silently. Step 8 will find them by path if needed.
 
-4. Triage candidate docs FROM THE MANIFEST — one reasoning pass, no per-file header peek
-   → Reason over the manifest nodes; score each by source → description/tags → headings:
-       • docs/deployment.md   source: [deploy/**, .github/workflows/**]  → source match ✓ (strongest)
-       • docs/architecture.md description: "...incl. the deploy pipeline"  → description match ✓
-       • docs/api.md          source: [src/api/**]                        → no match ✗
-       • docs/data-model.md   source: [db/**, models/**]                  → no match ✗
-   → Confidence check: none of these carry parse_error / dangling / has_frontmatter:false
-   → Reading list: docs/deployment.md, docs/architecture.md
+4  Triage    → Score every index row at once: source → description/tags → headings.
+                docs/deployment.md   [deploy/**, .github/workflows/**]  → source match ✓
+                docs/architecture.md "...incl. the deploy pipeline"      → description ✓
+                docs/api.md [src/api/**], docs/data-model.md [db/**]     → no match ✗
 
-5–6. Read the selected docs
-   → Read docs/deployment.md and docs/architecture.md.
-   → Recursion is a fallback here: glance at each node's links_to to confirm nothing
-     closely related was missed — none scores newly relevant, so stop.
+5-6 Read      → docs/deployment.md, docs/architecture.md. Check their links_to;
+                nothing new scores relevant, so stop.
 
-7. Summarize findings
-   → Present deployment gotchas as WARNINGS first
-   → Surface mission's "reliable infra over fast iteration" value as the decision lens
-   → List files read and key findings
-   → Include progressive discovery reminder:
-     "Additional gotcha domains available: database, frontend.
-      If work shifts to these areas, load the relevant gotcha file first."
+7  Respond   → Doc health: omitted, nothing was broken.
+              → Deployment gotchas, as warnings.
+              → Mission lens, one line.
+              → THE ANSWER — the bulk of the response, and the last thing on screen.
+                Nothing after it: no file list, no unloaded-docs index, no sign-off.
 
-8. Document "Documentation not yet loaded" = manifest nodes − files read (exact complement)
-   → "- docs/api.md — API endpoint reference — source: [src/api/**]
-      - docs/data-model.md — database schema and relationships — source: [db/**, models/**]"
+9  Never act → It was a question, so answering completes the turn. Had it been
+                "add a deploy step for X", the turn would end with the plan and
+                "Say go and I'll implement it." — never the edit.
 
-9. Stop and wait
-   → Final line: "Context loaded. Ready for your next instruction."
+--- Later in the session, Step 8 fires -------------------------------------------
 
-Later in the conversation...
-   User: "Now let's update the data model to add a new table in db/schema.sql"
-   → The work touches db/schema.sql → match it against the unloaded docs' source globs:
-       • docs/data-model.md       source: [db/**, models/**]  → db/schema.sql matches ✓
-       • docs/gotchas/database.md source: [db/**]             → matches ✓
-   → Load both before starting — a deterministic code→doc hit, not a guess
-   → Now proceed with the task, informed by both documents
+   User: "Add a table to db/schema.sql"
+   → About to Edit a file → run the lookup FIRST, before touching it:
 
-(No doc-manifest.json? Fall back to the legacy path: discover docs via README links,
- peek ONLY each candidate's frontmatter header — not its body — score by the same
- source → description/tags → link-text priority, and traverse cross-links recursively.
- Note in the summary that triage ran without a manifest.)
+       python3 "${CLAUDE_SKILL_DIR}/scripts/manifest-query.py" --root . --affects db/schema.sql
+
+       db/schema.sql -> docs/data-model.md, docs/gotchas/database.md
+       READ THESE: docs/data-model.md, docs/gotchas/database.md
+
+   → Read both, then edit. Note what did NOT happen: no "have I changed topic?"
+     judgment, no recall of what was loaded hours ago, no ledger. The edit itself
+     was the trigger, and a command gave the answer.
 ```
 
-Remember: Steps 1–8 are a context-loading phase — no modifications during documentation discovery. Step 9 always stops and waits for the user's next instruction, regardless of how the original prompt was phrased. The progressive loading behavior applies for the entire conversation.
+Remember: Steps 1–6 are a context-loading phase — no modifications during documentation discovery. Step 7 always ends with a direct answer to the prompt and nothing after it. Step 8 keeps loading docs for the rest of the session, triggered by the files you are about to change rather than by noticing a topic shift. Step 9 never acts on the prompt, regardless of how it was phrased.

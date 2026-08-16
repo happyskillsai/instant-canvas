@@ -180,7 +180,7 @@ For each area, note the file, location, and specific recommendation.
 
 9. **Anti-pattern scan** — Check against the full anti-pattern list in [skill-authoring.md](skill-authoring.md): vague description, oversized files, missing constraints section, missing gotchas section (on a knowledge- or domain-heavy skill), missing verification steps, executable code in markdown, restating obvious default behavior, deeply nested references, etc.
 
-10. **skill.json completeness** (if HappySkills-managed) — Are `description`, `dependencies`, and `systemDependencies` set correctly? Does the skill.json `description` differ from the SKILL.md `description` (they serve different purposes)?
+10. **skill.json completeness** (if HappySkills-managed) — Are `description`, `dependencies`, and `systemDependencies` set correctly? The skill.json `description` (registry search) and the SKILL.md `description` (agent auto-invocation) serve different purposes and **can differ** — do not check one against the other, and never report a difference between them as a defect.
 
 11. **Config-drift check** (if the skill declares `config`/`env`) — Cross-check the declared schema against how the skill actually reads its configuration. There is no `happyskills audit` CLI command, so run this as a text scan yourself. Flag two mismatches as **warnings** (heuristic, non-blocking):
     - **Declared-but-unused** — a `config` field or `env` variable named in `skill.json` that never appears anywhere in `SKILL.md` or `references/`. Either the skill forgot to read it, or the declaration is stale.

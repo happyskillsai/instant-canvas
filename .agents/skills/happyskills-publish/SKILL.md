@@ -69,6 +69,10 @@ When the user wants to ship a skill update — bare publish, full release with b
 - Under `data.drafts` (scaffolded, never published) → this is a first publish. Proceed with the steps below using `release` — it claims the workspace atomically. **Do NOT mention "convert", "external", or "claim" to the user.** Narrate it as a publish, because that's what it is.
 - Under `data.external` (genuinely foreign, no HappySkills-shaped `skill.json`) → route to Section 7 (`convert`) first; this is the only case where conversion is the correct path.
 
+**`skill.json` and `SKILL.md` descriptions are independent by design — never reconcile them.** They feed two different systems: the `skill.json` description goes to the registry for search and discovery; the `SKILL.md` frontmatter description drives agent auto-invocation. They are *expected* to differ, often completely. HappySkills validates neither against the other — the only cross-file rule is `name_match` (names must match; the two descriptions are never compared) — so a difference is **not a finding**. Do not surface it, and never ask the user to merge, pick between, or align them.
+
+> **Scope.** This forbids *parity* between the two files, nothing else. Description **quality** remains in scope and mandatory — a missing, placeholder, or over-cap `SKILL.md` description is a real publish blocker that the CLI does validate, and you must still fix it (Section 11).
+
 1. **Confirm intent** with AskUserQuestion: present skill name, target workspace, and (if known) intended bump type. Get confirmation before proceeding.
 2. **Invoke release**:
 

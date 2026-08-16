@@ -6,7 +6,7 @@ allowed-tools: Bash, Read, Grep, AskUserQuestion
 
 # Open items
 
-Answer one question — **what is still open?** — for a reader who is busy and impatient. The count is visible at a glance, every row says why it is not closed, and the order is the order the work must happen in. Then close the loop: for the items that are waiting on *this reader*, ask for the decision instead of leaving them to type a second prompt.
+Answer one question — **what is still open?** — for a reader who is busy and impatient. The count is visible at a glance, every row says why it is not closed, and the order is the order the work must happen in. Then close the loop properly: for the items that are waiting on *this reader*, ask for the decision instead of leaving them to type a second prompt — and once answered, re-check the world and carry it out.
 
 This skill never recaps completed work. `session-status` owns that — the full ledger of done, left and waiting, for someone re-orienting after time away. This one owns the impatient question asked mid-flight: **what is still open, right now.** Finished work is invisible here; only what is left appears.
 
@@ -100,7 +100,7 @@ When everything is closed, print exactly:
 
 ## Step 5 — Ask for the decisions that are yours to make
 
-The table tells the reader what is open. It does not move anything. For the rows that are stuck **on this reader specifically**, finish the job: ask, in one batched `AskUserQuestion`, so a decision costs a click instead of a second prompt.
+The table tells the reader what is open; on its own it moves nothing. For the rows that are stuck **on this reader specifically**, finish the job: ask, in one batched `AskUserQuestion`, so a decision costs a click instead of a second prompt. Step 6 then carries the answers out in the same turn.
 
 **Print the table first, always.** Step 4 stands on its own — a reader who ignores the question still got the full answer. Never withhold the table until the question is answered.
 
@@ -136,11 +136,37 @@ Options are recommendations, and a wrong one that gets clicked is worse than no 
 - **State the cost of each option, not just the action.** "Ship it as a patch" is a label; "ship as patch — consumers on `^1.x` auto-upgrade into the change" is a decision.
 - **When you cannot responsibly recommend anything**, do not skip the row and do not invent two fake paths. Offer to lay out the trade-off: an option like *"Walk me through it"* is honest; a fabricated fork is not.
 
-### What happens with the answers
+## Step 6 — Re-verify, then carry the decisions out
 
-**Record the decisions and stop. This skill does not execute them.**
+**Record the answers, re-check the world, then act — in the same turn.** A decision that is only written down has moved nothing, and making the reader type a second prompt to start the work is exactly the friction this skill exists to remove.
 
-Restate each answer against its row number in one line — `#1 → publish as 0.2.0` — so the decision is captured in plain sight, then end. Acting on it belongs to the session that invoked this skill, which has the answers in context and can proceed immediately. That boundary is what keeps a command you run to *check* state from becoming one that *changes* state on a mis-click.
+Restate each answer against its row number in one line first — `#1 → publish as 0.2.0` — so the decision is captured in plain sight before anything runs.
+
+### Re-verify immediately before executing — the answer is about a snapshot
+
+**The table was true when it printed. Time passed while the modal was open, and in a shared working tree other agents keep committing.** So before executing a row, re-run the same check from Step 1 that produced it.
+
+- **Matches the table → execute.**
+- **Drifted → stop, report the drift, re-ask.** Do not execute the old answer against the new world, and never round a mismatch off as close enough.
+
+> **Why this rule exists.** A real run printed *"4 commits unpushed"*, the reader approved *"push all 4"*, and a fifth commit landed from a concurrent session between the print and the push. Five went. Nothing broke, but the reader authorized four and got five — the approval no longer described what happened. One re-check would have caught it.
+
+### What may be executed
+
+- **Only the option that was picked, exactly as its label described it.** The click authorizes *that action at that scope* — not adjacent tidying, not the obvious next step, not a widened version of it.
+- **The option text is what makes the click authorization.** This is why Step 5 requires options to name the action and its cost. An option that hid its cost has not been consented to; if you find yourself about to run something the label did not describe, that is drift.
+- **A free-text `Other` answer is an instruction, not licence to improvise past it.** Do what it says; if it is ambiguous, ask rather than guess.
+- **Execute in table order** — the rows are already dependency-sorted, so #1 clears the way for #2.
+
+### Report what actually happened
+
+Close each row with its outcome, not its intention — `#1 → pushed 5 commits (4 expected, see drift note)`. If a step failed, say so plainly with the error; if you skipped one, say why. **Never report an action as done that you did not verify**, which is the same rule Step 1 applies to the rows themselves.
+
+Anything still open after execution keeps its row for next time.
+
+### The tool grant is the second gate, by design
+
+`allowed-tools` stays narrow on purpose. Most open-item actions are shell work and run without friction; an approved action that reaches for a tool outside the grant raises a permission prompt instead. **That prompt is the intended backstop, not a malfunction** — the action set here is unbounded, so a final confirmation on file-mutating work is worth the interruption. Surface it and let the reader answer.
 
 ## Constraints
 
@@ -152,4 +178,7 @@ Restate each answer against its row number in one line — `#1 → publish as 0.
 - **Never** mark something closed you did not verify this turn.
 - **Never** ask about a row that is not `you (decide)`, and never ask about one still blocked by another open row.
 - **Never** hold back the table until the question is answered — Step 4 is complete on its own.
-- **Never** write files, change state, or fix anything. This skill reports and elicits; it does not execute. `AskUserQuestion` collects a decision without mutating anything, which is why it is the only tool added — acting on the answer belongs to the session that invoked this skill.
+- **Never** execute anything the reader did not pick, or at a scope wider than the option they picked described. Unprompted action is the one failure mode worse than inaction here.
+- **Never** execute without re-running the check that produced the row. State drifts between the print and the click, and an approval describes the world it was given.
+- **Never** report an action as done without verifying it landed, and never quietly swallow a failure — a false "done" is worse than an open row.
+- **Never** act on rows nobody was asked about (`—`, `#N`, `you (run it)`, an external name). They stay open; only answered rows execute.

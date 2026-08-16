@@ -2,6 +2,19 @@
 
 All notable changes to the Essentials kit are documented here.
 
+## [0.6.0] - 2026-08-13
+
+### Added
+- `nicolasdao/decision-brief` — successor to `reframe-last-answer`. Same engine (one filter: does this sentence change the decision; one inversion: a thorough answer runs in discovery order, a decision needs the reverse) with far harder output discipline: verdict on top, bullet-first, a ten-device compression arsenal beyond bullets, and an explicit rule that a hedge is never dropped to save words, because "probably fixed" and "fixed" are different decisions.
+- `nicolasdao/unconfuse` — the counterpart for readers who did not follow the answer rather than needing to choose. Diagnoses which of five confusion types is present before writing, kills the misconception, states the collapsed distinction as a two-line contrast, then strips the result to the shortest version that still lands.
+
+### Removed
+- **BREAKING — `nicolasdao/reframe-last-answer` is no longer a member.** Upgrading to 0.6.0 removes it. It is superseded by `decision-brief`, which owns the same job with a sharper output standard and an explicit boundary telling the reader when to reach for `unconfuse` instead.
+- **The skill itself is NOT deleted.** `nicolasdao/reframe-last-answer` remains published and installable — anyone who wants it back can install it directly. It is no longer developed.
+
+### Why the two new skills rather than one
+They optimise for opposite things and their instructions conflict. `decision-brief` minimises reading time — the reader knows the domain and every word is friction, so process is cut and the build-up deleted. `unconfuse` minimises obstacles to understanding — the reader lacks context, so words are spent on a metaphor and a contrast, then everything not carrying the click is stripped. Merging them would produce a skill with contradictory guidance and a mode switch that routes wrong under exactly the conditions where it matters. Each names the other in its `Not for` clause: "what should we do?" is a decision, "I don't get it" is the other one.
+
 ## [0.5.0] - 2026-08-02
 
 ### Changed

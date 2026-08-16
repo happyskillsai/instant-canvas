@@ -150,7 +150,7 @@ The system fails silently if either side is skipped. The user takes responsibili
 
 ### When recall is needed mid-session
 
-If the conversation shifts to a topic area not loaded during the initial recall, `init-context`'s "Ongoing Progressive Documentation Loading" rule applies: the agent loads the relevant unloaded docs before proceeding, without asking permission.
+As work moves into code that was not covered by the initial recall, `init-context`'s "Ongoing progressive documentation loading" rule (its Step 8, **≥ 1.10.0**) applies: immediately before the first `Edit`/`Write` to any file, the agent looks that path up against the docs' `source` globs and reads any match before proceeding, without asking permission. Earlier versions triggered on the agent *noticing* a topic shift; that was replaced because it fired unreliably.
 
 ---
 
@@ -224,10 +224,10 @@ When a user asks a specific question that should be answered from existing proje
 
 | | Core Query | init-context Recall |
 |---|---|---|
-| **When** | Mid-session, in response to a specific question | At session start (or topic-shift mid-session) |
+| **When** | Mid-session, in response to a specific question | At session start; then again automatically before the first edit to any file (init-context Step 8) |
 | **Scope** | Targeted — answer one question | Broad — prime the agent for working in an area |
 | **Loading style** | Lazy — minimum needed (≤ 3-5 files) | Eager — README + mandatory (mission/gotchas) + relevant topic docs |
-| **Output** | An answer with citations | A summary of loaded context |
+| **Output** | An answer with citations | An answer with citations, preceded by any relevant gotcha warnings |
 | **Mandatory files** | None — only what answers the question | `docs/mission.md` + `docs/gotchas.md` always |
 
 The two operations are **orthogonal**. Query is the precision instrument; init-context is the bulk loader.

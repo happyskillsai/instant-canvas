@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.8.1] - 2026-08-07
+
+### Fixed
+- **The mid-session loading trigger is described correctly (requires `nicolasdao/init-context` ≥ 1.10.0).** Two places still described `init-context`'s ongoing rule as firing when *"the conversation shifts to a topic area"* — the topic-shift judgment 1.10.0 removed for firing unreliably. Both now state the real trigger: the lookup runs immediately before the first `Edit`/`Write` to any file, keyed on the path. The core skill was documenting a mechanism its own satellite had deleted.
+- **Routing table's `Output` row for init-context corrected (requires `nicolasdao/init-context` ≥ 1.10.0).** It read *"A summary of loaded context"*, contrasted against Query's *"An answer with citations"*. As of init-context 1.10.0 Recall ends with a grounded answer rather than a load summary, so the stated contrast was false and would misroute a user to Query for questions Recall now answers directly. The row now describes what Recall actually emits. The two operations remain orthogonal on the axes that still separate them — scope, loading style, and mandatory files.
+
 ## [0.8.0] - 2026-07-30
 
 ### Added

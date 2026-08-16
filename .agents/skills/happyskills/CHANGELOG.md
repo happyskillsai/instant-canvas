@@ -1,5 +1,11 @@
 # Changelog
 
+## [2.8.2] - 2026-08-08
+
+### Fixed
+- **Declared satellite dependency ranges now describe reality.** Every satellite was pinned at `^0.1.0`, written when they were at `0.1.x` and never updated since — because nothing evaluated them. The server coerced each range into a tag name (`refs/tags/v^0.1.0`), matched nothing, and fell back to "newest", so the stale ranges were invisible. Once range resolution actually runs (spec 260808-01), `^0.1.0` on a `0.x` version means `>=0.1.0 <0.2.0` — which **is** satisfiable, by the long-superseded `0.1.x` releases. The constellation would have silently resolved to `design@0.1.1`, `publish@0.1.1`, `search@0.1.0`, and so on: a downgrade of thirteen-plus releases, with no warning, because a satisfiable range raises none.
+- Ranges are now `>=<current>` (`design >=0.14.1`, `publish >=0.6.3`, `sync >=0.6.4`, `search >=0.4.2`, `help >=0.10.0`) rather than `^`. On `0.x` versions `^` is narrow — `^0.14.0` excludes `0.15.0` — so a caret would go stale again on the very next satellite minor, which is the exact mechanism that produced this bug. `>=` states the tested floor, permits forward movement, and makes post-fix resolution identical to the pre-fix behaviour for a constellation released in lockstep.
+
 ## [2.8.1] - 2026-08-02
 
 Catches the skill's CLI reference up to `happyskills@2.0.0` / `2.0.1`. Both changes are about **scope** — which one a command acts on, and whether the agent can tell.

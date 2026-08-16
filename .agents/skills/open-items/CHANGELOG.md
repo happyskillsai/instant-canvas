@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.3.0] - 2026-08-15
+
+### Changed
+- **Answered decisions are now carried out, not just recorded.** 0.2.0 collected the decision and stopped, on the reasoning that a command you run to *check* state should never *change* it. In practice that reproduced the friction the skill exists to remove: the reader clicked an option, saw it echoed back, and still had to type a second prompt to make anything happen. A decision that is only written down has moved nothing.
+- The safety intent is preserved rather than dropped. What made 0.2.0 cautious was the mis-click risk, and the answer to that is not inaction — it is that **the option text is what turns a click into authorization**. Step 5 already required every option to name its action and its cost; Step 6 now leans on that, and executes only the option that was picked, at exactly the scope its label described.
+
+### Added
+- **Step 6 — re-verify immediately before executing.** The table is a snapshot, and time passes while the modal is open. Before acting on a row, the skill re-runs the Step 1 check that produced it: matching state executes, drifted state stops and re-asks. A decision approves the world it was shown, not whatever the world became.
+- The rule is drawn from a real failure, recorded in the skill so it is not re-learned: a table printed "4 commits unpushed", the reader approved "push all 4", a concurrent session committed a fifth before the push ran, and five went. Nothing broke, but the approval no longer described what happened.
+- **Outcome reporting per row** — each answered row closes with what actually happened rather than what was intended, failures stated plainly with their error, and anything still open keeps its row. This extends the existing "never mark something closed you did not verify" rule from the table to the execution.
+- **The tool grant is documented as the second gate.** `allowed-tools` stays narrow deliberately: shell work runs without friction, while an approved action reaching for a file-mutating tool raises a permission prompt. Because the action set here is unbounded, that prompt is the intended backstop and not a malfunction.
+
+### Fixed
+- Two framing lines still promised the old contract — the opening summary and Step 5's "it does not move anything" — and would have contradicted the new behaviour.
+
 ## [0.2.0] - 2026-08-02
 
 ### Added

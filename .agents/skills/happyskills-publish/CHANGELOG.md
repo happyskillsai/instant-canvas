@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.6.3] - 2026-08-07
+
+### Fixed
+- **Stop asking the user to reconcile the `skill.json` and `SKILL.md` descriptions.** On a first publish of a draft, the flow could "detect" that the two descriptions differed, treat it as a defect, and escalate it to the user via AskUserQuestion — offering to merge them, pick one, or leave them. Nothing asked for that check: there is no description-parity rule in the CLI (`cli/src/validation/cross_rules.js` compares **names** only, via `name_match`), and `docs/skill-format.md` § 6 (Content Opacity) makes the divergence architecturally mandated — the two fields feed two different systems (registry search vs agent auto-invocation) and are *expected* to differ. Section 3 now states the independence rule inline, on the draft first-publish path. The fact already existed in `references/workflows.md`, but that file loads only on the convert/fork enrichment paths, so it never reached the agent on the path that actually failed. Pinned by `test/skill-description-independence.guard.test.js`; recorded as `docs/gotchas/skills.md` § 2.7.
+- **Scoped the new rule to *parity* only, explicitly.** Description **quality** stays mandatory — a missing, placeholder, or over-cap `SKILL.md` description is a real publish blocker the CLI does validate (`docs/gotchas/skills.md` § 1.3, where a missing description silently breaks auto-invocation). Without the carve-out the fix would risk trading a visible annoyance for a silent failure.
+
 ## [0.6.2] - 2026-07-08
 
 ### Added

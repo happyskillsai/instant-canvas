@@ -1,6 +1,6 @@
 {
 	"name": "happyskills",
-	"version": "2.8.1",
+	"version": "2.8.2",
 	"requires": {
 		"happyskills": ">=0.49.0"
 	},
@@ -21,11 +21,11 @@
 		"ai"
 	],
 	"dependencies": {
-		"happyskillsai/happyskills-design": "^0.1.0",
-		"happyskillsai/happyskills-publish": "^0.1.0",
-		"happyskillsai/happyskills-sync": "^0.1.0",
-		"happyskillsai/happyskills-search": "^0.1.0",
-		"happyskillsai/happyskills-help": "^0.1.0"
+		"happyskillsai/happyskills-design": ">=0.14.1",
+		"happyskillsai/happyskills-publish": ">=0.6.3",
+		"happyskillsai/happyskills-sync": ">=0.6.4",
+		"happyskillsai/happyskills-search": ">=0.4.2",
+		"happyskillsai/happyskills-help": ">=0.10.0"
 	},
 	"capabilities": [
 		{

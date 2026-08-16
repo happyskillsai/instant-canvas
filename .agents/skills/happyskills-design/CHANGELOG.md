@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.14.1] - 2026-08-07
+
+### Fixed
+- **Audit step 11 no longer reads as an instruction to flag differing descriptions.** `SKILL.md` step 11 said *"skill.json description differs from SKILL.md description (different purposes)"* and `references/workflows.md` step 10 asked it outright — *"Does the skill.json `description` differ from the SKILL.md `description`?"*. As a checklist **item**, "X differs from Y" reads as a condition to verify and report, and the interrogative form invites a yes/no the agent then acts on. `references/happyskills-conventions.md` already had it right (*"they serve different purposes and can differ"*); the three disagreed. Both now state that the two descriptions serve different purposes (registry search vs agent auto-invocation), **can differ**, and that a difference is **not a finding** — never flag it, never ask the user to reconcile them. Same defect class that produced `docs/gotchas/skills.md` § 2.7 in `happyskills-publish@0.6.3`. Pinned by `test/skill-description-independence.guard.test.js`.
+
 ## [0.14.0] - 2026-07-13
 
 ### Added
