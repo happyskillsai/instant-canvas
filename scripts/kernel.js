@@ -26,6 +26,8 @@ const { readAppearance, writeAppearance, MODES: APPEARANCE_MODES } = require('./
 const { writeSelection, readSelection } = require('./lib/selection')
 const { safeName, checkTarget, planUpload } = require('./lib/upload')
 const { revealDir, openTerminal } = require('./lib/reveal')
+const { copyImage, openChatApp } = require('./lib/share')
+const { readShareCfg, writeShareCfg } = require('./lib/sharecfg')
 const { dimensions } = require('./lib/imagemeta')
 const { companionFor, enhancesOf } = require('./lib/companion')
 const { figureMap } = require('./lib/figures')
@@ -1212,6 +1214,88 @@ async function route(req, res, url) {
 		return openTerminal(dir)
 			? sendJson(res, 200, { ok: true })
 			: sendJson(res, 200, { ok: false, code: 'NO_TERMINAL', message: 'No terminal available on this system.' })
+	}
+
+	// Hand ONE image to a chat app: copy it to the clipboard, bring the app to the
+	// front, and let the reader paste. `{ path, target }` where target is `whatsapp`
+	// or `telegram`. Reader-triggered like /api/reveal above — no session, no CLI
+	// door, no agent surface (an agent has its own tools).
+	//
+	// It sits on the safe side of the same line reveal does: this READS one file the
+	// reader is already looking at, spawns a viewer, and mutates nothing in the
+	// workspace. What it does that reveal deliberately does not is hand the OS the
+	// FILE rather than its parent directory — so the validation is reveal's, plus an
+	// extension gate, and every step still runs before anything is spawned:
+	//   - the target is an exact enum, so an unknown verb never reaches a spawn;
+	//   - insideRoot confines the path (it realpaths, so a symlink escape is caught);
+	//   - lstat, NEVER stat — the extension gate reads the LINK name, so a `clip.png`
+	//     symlinked at `.env` would otherwise be copied onto the clipboard verbatim;
+	//   - the extension must be in the IMAGE union. Not decoration: `copyImage` has no
+	//     honest video/audio path (no OS carries video bytes on a clipboard), so a
+	//     non-image is refused HERE with a code the browser turns into the reveal
+	//     fallback, rather than silently copying nothing and opening a chat window;
+	//   - a refusal carries none of the target's bytes, and the file is never opened
+	//     by this route at all — `copyImage` hands the PATH to an OS tool.
+	if (method === 'POST' && p === '/api/share') {
+		const body = await readBody(req)
+		const target = body && body.target
+		if (target !== 'whatsapp' && target !== 'telegram')
+			return sendJson(res, 400, { ok: false, code: 'BAD_TARGET', message: 'target must be "whatsapp" or "telegram".' })
+
+		const rel = relCanvasPath(String((body && body.path) || ''))
+		const abs = path.resolve(ROOT, rel)
+		if (!insideRoot(ROOT, abs))
+			return sendJson(res, 403, { ok: false, code: 'PATH_OUTSIDE_WORKSPACE', message: 'That path is outside the workspace.' })
+
+		let isFile = false
+		try { isFile = fs.lstatSync(abs).isFile() } catch { isFile = false }
+		if (!isFile)
+			return sendJson(res, 404, { ok: false, code: 'NOT_IN_WORKSPACE', message: 'No such file in this workspace.' })
+
+		// The image union, not the media union. `mediaKind` is the shared classifier the
+		// browse listing and the gallery routes use, so there is no second list here.
+		if (mediaKind(abs) !== 'image')
+			return sendJson(res, 200, {
+				ok: false,
+				code: 'NOT_SHAREABLE_MEDIA',
+				message: 'Only images can be copied to a chat. Reveal the file and drag it in instead.',
+			})
+
+		const cfg = readShareCfg()
+		if (!(await copyImage(abs, galleryMime(abs))))
+			return sendJson(res, 200, { ok: false, code: 'CLIPBOARD_UNAVAILABLE', message: 'Could not copy the image to the clipboard on this system.' })
+		if (!openChatApp(target, cfg))
+			return sendJson(res, 200, { ok: false, code: 'NO_CHAT_APP', message: 'Copied the image, but could not open the app.' })
+
+		// `deepLinked` tells the browser whether the reader will land in their OWN chat
+		// or on whatever the app last had open, so the toast can say which — "paste in
+		// your chat" and "pick a chat, then paste" are different instructions.
+		return sendJson(res, 200, {
+			ok: true,
+			target,
+			deepLinked: !!(target === 'whatsapp' ? cfg.whatsappPhone : cfg.telegramUser),
+		})
+	}
+
+	// The reader's own chat handles, for the deep link above. GLOBAL and unkeyed, beside
+	// appearance.json — a personal phone number is a fact about a person, not a project,
+	// and must never land in a committed skills-config.json (see lib/sharecfg.js).
+	if (method === 'GET' && p === '/api/share/config')
+		return sendJson(res, 200, { ok: true, ...readShareCfg() })
+
+	if (method === 'POST' && p === '/api/share/config') {
+		const body = await readBody(req)
+		try {
+			// Validated at the boundary AND again on write: these values are concatenated
+			// into a URL handed to an OS protocol handler.
+			return sendJson(res, 200, { ok: true, ...writeShareCfg(body || {}) })
+		} catch (err) {
+			if (err && err.code === 'INVALID_SHARE_CONFIG')
+				return sendJson(res, 400, { ok: false, code: err.code, field: err.field, message: err.message })
+			// A handle that cannot be written is not worth failing a click over — the same
+			// posture /api/appearance takes. The reader is told it did not persist.
+			return sendJson(res, 200, { ok: true, ...readShareCfg(), persisted: false })
+		}
 	}
 
 	// The live selection, revalidated — what the browser rehydrates from on load

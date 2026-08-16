@@ -350,11 +350,13 @@ body.modal-open .doc-modal-view{overflow:hidden}
 .oc-nav:hover:not(:disabled){background:var(--tint);border-color:var(--muted)}
 .oc-nav:disabled{opacity:.35;cursor:not-allowed}
 .oc-nav .lucide{width:16px;height:16px}
-/* #ocInfo's OWN explicit [hidden] rule is load-bearing — an author display rule on a
-   .oc-nav beats the UA [hidden] (docs/gotchas/frontend.md). Its open-state ring reuses
-   the .tbtn.active accent treatment. */
-.oc-info[hidden]{display:none}
-.oc-info.active{background:var(--accent-soft);color:var(--accent);border-color:var(--accent)}
+/* An explicit [hidden] rule here is load-bearing — an author `display` rule on a .oc-nav
+   beats the UA [hidden] (docs/gotchas/frontend.md). Scoped to the SURFACE (.oc-nav), not
+   to one element: it was written as `.oc-info[hidden]` when #ocInfo was the only hideable
+   button in this bar, and #ocShare then needed exactly the same rule under a second name.
+   One rule per surface is the form that does not need re-deriving per button. */
+.oc-nav[hidden]{display:none}
+.oc-info.active,.oc-share.active{background:var(--accent-soft);color:var(--accent);border-color:var(--accent)}
 .oc-sep{flex:0 0 auto;width:1px;align-self:stretch;margin:3px 2px;background:var(--border)}
 .oc-cluster{display:flex;align-items:center;gap:6px}
 /* Re-skin the relocated island buttons for the LIGHT bar. Element-scoped handlers are

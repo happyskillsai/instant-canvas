@@ -79,6 +79,19 @@
 				<button class="oc-nav" id="ocNext" type="button" title="Next item (→)" aria-label="Next item"><svg class="lucide" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg></button>
 				<span class="oc-sep" aria-hidden="true"></span>
 				<span class="oc-cluster" id="ocCluster"></span>
+				<!-- Share: media only (image / video / audio), so it ships hidden and
+				     syncOverlayChrome reveals it per item. Opens the shared context menu rather
+				     than acting directly, because what "share" can DO depends on the file and the
+				     platform — see openShareMenu in app.js. -->
+				<span class="oc-sep" aria-hidden="true"></span>
+				<button class="oc-nav oc-share" id="ocShare" type="button" hidden
+						title="Share this file" aria-label="Share this file" aria-haspopup="menu">
+					<svg class="lucide" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+						 stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+						<circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>
+						<path d="m8.59 13.51 6.83 3.98"/><path d="m15.41 6.51-6.82 3.98"/>
+					</svg>
+				</button>
 				<!-- Info drawer toggle: the LAST control in the chrome bar, for every kind the
 				     modal opens. Ships hidden; renderCanvas reveals it per item (app.js). Its own
 				     explicit [hidden] rule lives in CSS — the UA [hidden] loses to an author

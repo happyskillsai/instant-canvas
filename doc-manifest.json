@@ -71,7 +71,7 @@
         "Version handshake",
         "Drift check — `lib/drift.js`"
       ],
-      "line_count": 236,
+      "line_count": 241,
       "links_to": [
         "docs/canvas-schema.md",
         "docs/cli.md",
@@ -107,6 +107,8 @@
         "scripts/lib/selection.js",
         "scripts/lib/upload.js",
         "scripts/lib/reveal.js",
+        "scripts/lib/share.js",
+        "scripts/lib/sharecfg.js",
         "scripts/lib/appearance.js",
         "scripts/lib/drift.js"
       ],
@@ -257,7 +259,7 @@
         "CSP shim",
         "Icons and vendored assets"
       ],
-      "line_count": 158,
+      "line_count": 159,
       "links_to": [
         "docs/architecture.md",
         "docs/canvas-schema.md",
@@ -381,9 +383,10 @@
         "The ⌘ in a keyboard hint is the wrong glyph off macOS",
         "A pixel offset that dodges a sibling panel breaks when the panel stops being a sibling",
         "A drop zone sized by its CONTENT is not the drop zone the reader sees",
-        "The packer's orphan rule spun FOREVER when the heading was the sheet's only element"
+        "The packer's orphan rule spun FOREVER when the heading was the sheet's only element",
+        "`navigator.canShare()` does NOT check the file-type allow-list it is asked about"
       ],
-      "line_count": 528,
+      "line_count": 540,
       "links_to": [
         "docs/architecture.md",
         "docs/gotchas/testing.md",
@@ -665,7 +668,7 @@
         "Network perimeter",
         "What this does NOT protect against"
       ],
-      "line_count": 88,
+      "line_count": 92,
       "links_to": [
         "docs/architecture.md",
         "docs/cli.md"
@@ -690,6 +693,8 @@
         "scripts/lib/selection.js",
         "scripts/lib/upload.js",
         "scripts/lib/reveal.js",
+        "scripts/lib/share.js",
+        "scripts/lib/sharecfg.js",
         "scripts/lib/fsatomic.js",
         "scripts/kernel.js",
         "scripts/instantcanvas.js",
@@ -720,7 +725,7 @@
         "Security regressions",
         "Browser verification"
       ],
-      "line_count": 126,
+      "line_count": 127,
       "links_to": [
         "docs/architecture.md",
         "docs/gotchas/frontend.md",

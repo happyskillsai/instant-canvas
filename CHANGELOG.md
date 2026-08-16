@@ -2,6 +2,43 @@
 
 ## [Unreleased]
 
+### Added
+
+- **A Share control in the item overlay, for media.** Viewing an image, video or audio file, a
+  share button beside the info drawer offers the destinations that can actually take it. Sharing a
+  photo to WhatsApp or Telegram is now one click and a paste, where before it was reveal the file,
+  find the window, drag it in.
+
+  **The shape is dictated by what the platforms allow, not by preference**, and the research behind
+  it is worth stating because the obvious design does not exist. No chat app's URL scheme carries a
+  file: `whatsapp://send` takes `phone` and `text` and nothing else, and there is no media parameter
+  in any of them — WhatsApp has exactly three media ingress paths (the OS share sheet, its own file
+  picker, the Business Cloud API) and a URL is not one. macOS closes the first of those too, since
+  WhatsApp registers no `com.apple.share-services` extension and therefore never appears in the
+  system share sheet; `open -a WhatsApp <file>` is a no-op, its `public.image` claim inherited from
+  the Catalyst build and not honoured by LaunchServices. So the feature is **three tiers**, chosen
+  by feature-detection rather than by an OS branch: `navigator.share({files})` where it exists
+  (which reaches WhatsApp on Windows, where it *is* a registered share target, and AirDrop/Mail/
+  Messages on macOS); a clipboard copy plus a deep link via the new `POST /api/share`, which is the
+  only path that reaches WhatsApp on a Mac at all; and reveal-in-the-file-manager as the universal
+  floor. Linux gets the floor by construction — Chrome compiles Web Share out entirely there, so
+  `navigator.share` is `undefined`.
+
+  **Images only for the clipboard tier, and that is the world rather than a policy:** no OS carries
+  video or audio bytes on a clipboard, so the kernel refuses a non-image with a code the browser
+  turns into the reveal fallback, instead of copying nothing and opening a chat window over an empty
+  pasteboard.
+
+- **Optional chat handles, so the share lands in your own chat.** `GET/POST /api/share/config`
+  stores a WhatsApp number and a Telegram username in the global state dir (`share.json`), which
+  makes the deep link open "Message Yourself" / "Saved Messages" directly — the single-click case for
+  keeping something for yourself. Unkeyed and outside the workspace for `appearance.json`'s reason,
+  one step further: if a preference about someone's eyes does not belong in a teammate's diff, their
+  phone number belongs there considerably less. Absent, the app simply opens and you pick a chat.
+  Both values are validated against a strict charset at the boundary, on write **and on read** —
+  they are concatenated into a URL handed to an OS protocol handler, so this is the same discipline
+  `/api/appearance` applies to its enum, for a value substituted into a command rather than markup.
+
 ## [0.27.1] - 2026-08-05
 
 ### Changed

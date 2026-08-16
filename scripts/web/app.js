@@ -385,6 +385,149 @@ const IC_PLATFORM = document.body.dataset.platform || ''
 const fileManagerName = () => (IC_PLATFORM === 'darwin' ? 'Finder' : IC_PLATFORM === 'win32' ? 'Explorer' : 'your file manager')
 const revealLabel = () => (IC_PLATFORM === 'darwin' ? 'Open in Finder' : IC_PLATFORM === 'win32' ? 'Show in Explorer' : 'Open in file manager')
 
+// ------------------------------------------------------------------------- share
+//
+// THREE TIERS, and which one a file gets is a property of the file and the platform,
+// never a preference. The tiering exists because no single mechanism reaches every
+// destination on every OS:
+//
+//   1. navigator.share({files}) — the native sheet. One click, real bytes, no spawn.
+//      Reaches WhatsApp on Windows (it is a registered share target there); on macOS
+//      it reaches AirDrop/Mail/Messages but NOT WhatsApp, which ships no share
+//      extension; on Linux the API does not exist at all (compiled out of Chrome).
+//   2. Copy-to-clipboard + open the chat app (POST /api/share) — the only path that
+//      reaches WhatsApp on macOS. Images only: no OS carries video bytes on a
+//      clipboard, so the kernel refuses non-images rather than copying nothing.
+//   3. Reveal in the file manager — the universal floor, and the only path for video
+//      and audio on macOS. Already built (/api/reveal).
+//
+// Everything that decides WHICH tiers appear is computed BEFORE the menu opens, which
+// is what lets tier 1's failure handling stay silent (below).
+
+/** Chromium's Web Share cap: 10 files, 50 MiB total. We share one file, so this is it. */
+const WEBSHARE_MAX_BYTES = 50 * 1024 * 1024
+
+/**
+ * Chromium's own allow-list for shared files, intersected with what this app serves.
+ *
+ * This list is NOT redundant with `navigator.canShare()`, which is the trap: canShare
+ * validates only structure (is there a files array, does the URL parse) and returns
+ * TRUE for types the browser will then refuse — `.mov`, `.heic` and `.zip` all pass
+ * canShare and then reject at share() time. So the extension screen has to live here,
+ * client-side, or the button offers a share that fails after the click.
+ *
+ * The two absences that matter on a Mac are `.mov` and `.heic` — iPhone video and
+ * iPhone photos. Those fall to tier 3, which is also where /api/gallery/file leaves
+ * them (it serves streamable extensions only), so the two gates agree by construction.
+ */
+const WEBSHARE_EXTS = new Set([
+	'.avif', '.bmp', '.gif', '.jpeg', '.jpg', '.png', '.svg', '.tif', '.tiff', '.webp',
+	'.m4a', '.mp3', '.oga', '.ogg', '.opus', '.wav', '.weba',
+	'.mp4', '.mpeg', '.mpg', '.ogv', '.webm',
+	'.pdf', '.csv', '.txt',
+])
+
+/** ⌘ is the wrong glyph off macOS, and the kernel — not `navigator` — is the authority
+ *  on the machine it runs on. Same rule the two static shortcut hints follow. */
+const PASTE_HINT = IC_PLATFORM === 'darwin' ? '⌘V' : 'Ctrl+V'
+
+/** Media only: an image, video or audio file. The Share button hides for everything else. */
+const isShareableItem = (rel) => typeof rel === 'string' && (isImagePath(rel) || isVideoPath(rel) || isAudioPath(rel))
+
+/** Can this browser hand FILES to the OS at all? A zero-byte File is enough to ask —
+ *  we are probing the capability, not this file. Undefined on Linux and in Firefox,
+ *  which is the clean pre-click signal that tier 1 will never work here. */
+function canShareFiles() {
+	try {
+		return typeof navigator.canShare === 'function' &&
+			navigator.canShare({ files: [new File([''], 'probe.png', { type: 'image/png' })] })
+	} catch {
+		return false
+	}
+}
+
+/** Tier 1. Pull the bytes we already serve, wrap them as a File, hand them to the OS. */
+async function shareViaWebShare(rel) {
+	const name = rel.split('/').pop() || 'file'
+	let file
+	try {
+		const res = await fetch('/api/gallery/file?path=' + encodeURIComponent(rel), { headers: { 'X-IC-Token': TOKEN } })
+		if (!res.ok)
+			return toast('Could not read that file.', 4000)
+		const blob = await res.blob()
+		if (blob.size > WEBSHARE_MAX_BYTES)
+			return toast('Too large for the share sheet (50 MB max). Reveal it and attach it instead.', 4600)
+		file = new File([blob], name, { type: blob.type || 'application/octet-stream' })
+	} catch {
+		return toast('Could not read that file.', 4000)
+	}
+	// Ask again with the REAL file: the probe above answered for a PNG, and this one may
+	// be something the platform declines.
+	if (!navigator.canShare || !navigator.canShare({ files: [file] }))
+		return toast('This file type cannot be shared here.', 4000)
+	try {
+		await navigator.share({ files: [file] })
+	} catch (e) {
+		// AbortError covers BOTH "the reader cancelled" and "there were no share targets",
+		// and nothing distinguishes them. Say NOTHING: cancelling is overwhelmingly the
+		// common case, and an error toast on a deliberate dismissal is precisely the bug
+		// this branch exists to avoid. Only NotAllowedError — a real refusal — speaks up.
+		if (e && e.name === 'AbortError')
+			return
+		toast('Sharing was not allowed for this file.', 4000)
+	}
+}
+
+/** Tier 2. The kernel copies the image and opens the app; the reader pastes. */
+async function shareToChat(rel, target) {
+	const label = target === 'whatsapp' ? 'WhatsApp' : 'Telegram'
+	const { status, json } = await api('/api/share', {
+		method: 'POST',
+		body: JSON.stringify({ path: rel, target }),
+	})
+	if (status === 200 && json && json.ok) {
+		// Two different instructions, because the reader lands in two different places.
+		// Naming the paste explicitly is also what makes a lost clipboard legible: if
+		// something else took the pasteboard in between, "press ⌘V" failing reads as
+		// "something took my clipboard" rather than "this button is broken".
+		toast(json.deepLinked
+			? `Image copied — press ${PASTE_HINT} in ${label} to attach it.`
+			: `Image copied — pick a chat in ${label}, then press ${PASTE_HINT}.`, 5200)
+		return
+	}
+	toast((json && json.message) || `Could not share to ${label}.`, 4400)
+}
+
+/**
+ * Build and open the Share menu for the item currently in the overlay. Reuses the shared
+ * context menu — two menus that can disagree about what an action does are two different
+ * products, and this is the same component the tile/tree/breadcrumb right-click uses.
+ *
+ * Only ACHIEVABLE actions are listed. A WhatsApp row on a video would be a lie: the
+ * clipboard cannot carry it and the kernel would refuse, so the row is simply absent and
+ * Reveal carries that case. A menu that offers what it cannot do teaches the reader that
+ * the feature is unreliable.
+ */
+function openShareMenu(anchorEl) {
+	const rel = state.activeId
+	if (typeof rel !== 'string')
+		return
+	const items = []
+	if (canShareFiles() && WEBSHARE_EXTS.has(pathExt(rel)))
+		items.push({ label: 'Share…', onClick: () => shareViaWebShare(rel) })
+	if (isImagePath(rel)) {
+		items.push({ label: 'WhatsApp', onClick: () => shareToChat(rel, 'whatsapp') })
+		items.push({ label: 'Telegram', onClick: () => shareToChat(rel, 'telegram') })
+	}
+	if (items.length)
+		items.push({ separator: true })
+	items.push({ label: revealLabel(), onClick: () => revealPath(rel, 'files', false) })
+
+	// Anchor under the button, in viewport coordinates (what openContextMenu positions in).
+	const r = anchorEl.getBoundingClientRect()
+	openContextMenu({ x: Math.max(8, r.right - 190), y: r.bottom + 6, items, anchorEl })
+}
+
 /** The four actions every anchor offers — a folder OR any item (canvas, document, env,
  *  image, video, audio). The four are deliberately identical for both, because the two
  *  that differ do not differ in what the reader wants: Copy path / Copy name always name
@@ -5331,6 +5474,10 @@ function syncOverlayChrome() {
 		return
 	const folder = ocDirname(state.activeId)
 	buildCrumb(folder, state.activeId)
+	// Share is a MEDIA affordance: an image, video or audio file. Decided here, in the one
+	// place every routed item passes through, rather than in each of renderCanvas's four
+	// branches — four call sites is four chances to forget one.
+	$('ocShare').hidden = !isShareableItem(state.activeId)
 	// prev/next enable once the folder's order is known (async — a stale token is ignored).
 	$('ocPrev').disabled = true
 	$('ocNext').disabled = true
@@ -5859,8 +6006,11 @@ function showItemInfo(title) {
 	closeInfoDrawer()
 }
 // No drawer for this state (a presentation, or no item routed) — hide the button, collapse.
+// Share goes with it: syncOverlayChrome returns early when nothing is routed, so this is
+// the path that clears the button when the modal closes.
 function hideItemInfo() {
 	$('ocInfo').hidden = true
+	$('ocShare').hidden = true
 	closeInfoDrawer()
 }
 
@@ -9070,6 +9220,10 @@ $('ocPrev').addEventListener('click', () => ocStep(-1))
 $('ocNext').addEventListener('click', () => ocStep(1))
 // The info drawer toggles from its button, and closes from its own × — a chrome
 // affordance that never navigates (location.hash is untouched by either).
+// No stopPropagation: the outside-click guard already treats the ANCHOR as inside, which
+// is what stops the click that opens the menu from also closing it (the browse toolbar's
+// ⋮ is wired identically). Suppressing the event here would work by accident instead.
+$('ocShare').addEventListener('click', (e) => openShareMenu(e.currentTarget))
 $('ocInfo').addEventListener('click', () => toggleInfoDrawer())
 $('infoClose').addEventListener('click', () => closeInfoDrawer())
 

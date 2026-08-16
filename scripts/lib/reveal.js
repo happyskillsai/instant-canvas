@@ -129,4 +129,8 @@ function openTerminal(dir) {
 	return false
 }
 
-module.exports = { revealDir, openTerminal }
+// `onPath` is exported for lib/share.js, which probes the Linux clipboard tools the
+// same way this file probes terminals. It is deliberately NOT re-implemented there:
+// two copies of "is this command installed" are two copies that drift, and the second
+// one always drifts in the direction of forgetting PATHEXT on Windows.
+module.exports = { revealDir, openTerminal, onPath }
