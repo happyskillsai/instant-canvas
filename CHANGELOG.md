@@ -2,6 +2,21 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **The item info drawer now stays open when you step to the next file, and shows that file's
+  details.** It used to reset to collapsed on every item open, prev/next included — a deliberate
+  no-stickiness rule that turned out to defeat the drawer's best use. Comparing a field across
+  several files meant reopening it every single time, and a layout fact made it worse: the open
+  drawer covers the ‹ › buttons, so the keyboard is the only way to step with it open, and the
+  keyboard was exactly what threw the state away.
+
+  Opening a file **fresh from the folder still starts collapsed** — that is a new look at one
+  thing, and a drawer springing open because of something you did to an unrelated file five
+  minutes ago is clutter. Only sibling navigation carries it, implemented as a one-shot flag set
+  in the single funnel both the ‹ › buttons and the ←/→ keys pass through, so the two cannot
+  drift apart. Nothing else about the drawer moved.
+
 ## [0.28.1] - 2026-08-16
 
 ### Added

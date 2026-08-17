@@ -237,14 +237,59 @@ test.before(async () => {
 			await sleep(150)
 			out.escCollapsedDrawer = await evaluate('getComputedStyle(document.getElementById("docInfoDrawer")).display === "none" && window.ic.state.activeId === "report.canvas.json" && !document.getElementById("docModal").hidden')
 
-			// -- §3.2 collapsed AGAIN after prev/next (no stickiness): open, step, assert collapsed --
+			// -- the drawer CARRIES across sibling navigation, and its rows follow the new item --
+			// The open drawer covers the ‹ › buttons, so the keyboard is the only way to step with
+			// it open — and the keyboard was exactly what used to throw the state away.
+			// The file name lives in the panel's .g-mtitle, not in a labelled .g-mrow.
+			const nameRow = '(((document.querySelector("#docInfoPanel .g-mtitle")||{}).textContent)||"").trim()'
+			const arrow = (k) => 'document.body.focus(); document.dispatchEvent(new KeyboardEvent("keydown",{key:' + JSON.stringify(k) + ',bubbles:true}))'
+			await openC('report.canvas.json')
+			await evaluate('document.getElementById("ocInfo").click()')
+			await sleep(150)
+			out.carryStartOpen = await evaluate('getComputedStyle(document.getElementById("docInfoDrawer")).display !== "none"')
+			await evaluate(arrow('ArrowRight'))
+			out.steps.carryStepped = await until(evaluate, 'window.ic.state.activeId === "guide.md"', 8000)
+			out.carryStillOpen = await evaluate('getComputedStyle(document.getElementById("docInfoDrawer")).display !== "none"')
+			out.carryAriaExpanded = await evaluate('document.getElementById("ocInfo").getAttribute("aria-expanded") === "true"')
+			// The rows must be the NEW item's — a drawer held open showing the previous file's
+			// metadata would be worse than one that closed.
+			out.steps.carryRowsRefreshed = await until(evaluate, nameRow + ' === "guide.md"', 8000)
+			out.carryName = await evaluate(nameRow)
+
+			// Negative control: a CLOSED drawer must stay closed across the same gesture, or
+			// "carries across" would be satisfied by a drawer that simply always opens.
+			await evaluate('document.getElementById("infoClose").click()')
+			await sleep(120)
+			await evaluate(arrow('ArrowRight'))
+			out.steps.closedStepped = await until(evaluate, 'window.ic.state.activeId === "notes.md"', 8000)
+			await sleep(200)
+			out.closedStaysClosed = await evaluate('getComputedStyle(document.getElementById("docInfoDrawer")).display === "none"')
+
+			// And the carry does not leak past the gesture: reopen the drawer, leave to the
+			// folder, then open a file fresh — that is a new look, not a continuation, so it
+			// starts collapsed exactly as §3.2 requires.
+			await evaluate('document.getElementById("ocInfo").click()')
+			await sleep(120)
+			await evaluate('location.hash = "#/f/"')
+			await until(evaluate, 'document.getElementById("docModal").hidden', 6000)
+			await openC('pic.png')
+			await sleep(250)
+			out.freshOpenCollapsed = await evaluate('getComputedStyle(document.getElementById("docInfoDrawer")).display === "none"')
+
+			// -- the ‹ › BUTTONS carry the drawer too, exactly as the keys do above --
+			// Both go through ocStep, and a reader cannot guess a rule where the arrow key keeps
+			// their drawer and the button beside it does not. Opens its own item rather than
+			// inheriting wherever the previous block finished — pic.png is last in root order, so
+			// a step from there is a no-op and this would assert nothing.
+			await openC('report.canvas.json')
 			await evaluate('document.getElementById("ocInfo").click()')
 			await sleep(120)
 			out.reopenBeforeStep = await evaluate('getComputedStyle(document.getElementById("docInfoDrawer")).display !== "none"')
 			await evaluate('document.getElementById("ocNext").click()') // report.canvas.json → guide.md
 			out.steps.drawerStepped = await until(evaluate, 'window.ic.state.activeId === "guide.md"', 4000)
 			await sleep(200)
-			out.collapsedAfterStep = await evaluate('document.getElementById("docInfoDrawer").hasAttribute("hidden") && getComputedStyle(document.getElementById("docInfoDrawer")).display === "none" && document.getElementById("ocInfo").getAttribute("aria-expanded") === "false"')
+			out.carriedAfterButtonStep = await evaluate('!document.getElementById("docInfoDrawer").hasAttribute("hidden") && getComputedStyle(document.getElementById("docInfoDrawer")).display !== "none" && document.getElementById("ocInfo").getAttribute("aria-expanded") === "true"')
+			await evaluate('document.getElementById("infoClose").click()') // leave it closed for the blocks below
 
 			// -- §3.4/§3.7 image: Dimensions row present; the STAGE holds no .g-meta; the drawer holds one --
 			await openC('pic.png')
@@ -393,10 +438,28 @@ test('drawer: opens on click, closes via ×/Esc, and never navigates (§3.3)', {
 	assert.equal(R.escCollapsedDrawer, true, 'Esc collapsed the drawer without navigating away')
 })
 
-test('drawer: collapses again on every item open, including after prev/next (§3.2)', { skip }, () => {
-	assert.equal(R.reopenBeforeStep, true, 'the drawer was open before stepping')
+test('drawer: an open drawer CARRIES across sibling navigation, and its rows follow the new item', { skip }, () => {
+	// Keyboard first — the gesture that matters, because an open drawer covers the ‹ › buttons.
+	assert.equal(R.carryStartOpen, true, 'the drawer was open before stepping')
+	assert.equal(R.steps.carryStepped, true, '→ reached the sibling document')
+	assert.equal(R.carryStillOpen, true, 'the drawer is STILL open on the next item')
+	assert.equal(R.carryAriaExpanded, true, 'and #ocInfo still reports aria-expanded="true"')
+	// Held open is only useful if it repopulated — a drawer showing the PREVIOUS file's rows
+	// would be worse than one that closed.
+	assert.equal(R.steps.carryRowsRefreshed, true, 'the rows refreshed to the new item')
+	assert.equal(R.carryName, 'guide.md', 'the Name row names the item now on screen')
+	// The ‹ › buttons go through the same funnel and must not behave differently.
+	assert.equal(R.reopenBeforeStep, true, 'the drawer was open before the button step')
 	assert.equal(R.steps.drawerStepped, true, 'Next reached the sibling document')
-	assert.equal(R.collapsedAfterStep, true, 'the drawer reset to collapsed on the next item (no stickiness)')
+	assert.equal(R.carriedAfterButtonStep, true, 'the button carries the drawer exactly as the key does')
+})
+
+test('drawer: the carry is scoped to the gesture — closed stays closed, a fresh open collapses', { skip }, () => {
+	// Both are positive-control-shaped: without them, "carries across" would be satisfied by a
+	// drawer that simply opens on every render, which is the opposite bug and equally wrong.
+	assert.equal(R.steps.closedStepped, true, 'stepping again reached the next sibling')
+	assert.equal(R.closedStaysClosed, true, 'a CLOSED drawer stays closed across the same gesture')
+	assert.equal(R.freshOpenCollapsed, true, 'opening a file fresh from the folder starts collapsed (§3.2)')
 })
 
 test('drawer: copy buttons are resting-visible, the Path is absolute, and a copy toasts (§3.5)', { skip }, () => {

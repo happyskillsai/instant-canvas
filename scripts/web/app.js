@@ -5522,6 +5522,21 @@ function ocClose() {
 }
 
 /** prev/next — step through the folder's items in displayed order, across every kind. */
+/**
+ * True for exactly one upcoming render: the reader stepped to a sibling with the info drawer
+ * open, so `showItemInfo` should hold it open rather than collapse it.
+ *
+ * A one-shot flag rather than a `state.infoOpen` preference, deliberately. Sticky state would
+ * also survive closing the modal and opening some unrelated file later, which is the clutter
+ * the collapse-on-open rule exists to prevent. This carries the drawer across the ONE gesture
+ * that is a continuation — stepping between siblings — and nothing else.
+ *
+ * Set here because `ocStep` is the single funnel every sibling move goes through: the ‹ ›
+ * buttons and the ←/→ keys both call it. Setting it at the two key handlers instead would
+ * leave the buttons behaving differently from the keyboard for no reason a reader could guess.
+ */
+let infoCarriesToSibling = false
+
 function ocStep(delta) {
 	const rels = ocOrder.rels
 	const i = rels.indexOf(state.activeId)
@@ -5530,6 +5545,9 @@ function ocStep(delta) {
 	const j = i + delta
 	if (j < 0 || j >= rels.length)
 		return
+	// Read the CURRENT state before navigating: the drawer is open now iff the reader wants it
+	// open on the next item. If the step is refused above, nothing is set and nothing leaks.
+	infoCarriesToSibling = infoDrawerOpen()
 	location.hash = '#/c/' + encodeURIComponent(rels[j])
 }
 
@@ -6114,11 +6132,30 @@ function closeInfoDrawer() {
 }
 function toggleInfoDrawer() { if (infoDrawerOpen()) closeInfoDrawer(); else openInfoDrawer() }
 
-// Reveal the info button and FORCE the drawer collapsed — runs on every open, incl. prev/next,
-// so there is no stickiness. The panel is filled separately (renderMeta / renderItemMeta).
+// Reveal the info button and collapse the drawer — EXCEPT across sibling navigation, which
+// carries it through open (see `infoCarriesToSibling` on ocStep).
+//
+// The distinction is between two things that both land here as "a new item rendered". Opening
+// a file from the browse view is a fresh look at one thing, and a drawer that sprang open
+// because of something the reader did to a *different* file five minutes ago is clutter they
+// did not ask for — so that path still starts collapsed. Stepping prev/next is the opposite:
+// it is one continuous act of comparing siblings, and the reader who opened the drawer opened
+// it to read that field on each of them. Collapsing it there made the drawer unusable for the
+// one job it is best at, and it is worse than merely annoying because the open drawer covers
+// the ‹ › buttons — so the keyboard is the only way to step with it open, and the keyboard was
+// exactly what threw the state away.
+//
+// The panel content needs no special handling: every branch of renderCanvas fills it on the way
+// past (renderMeta from the stage, renderItemMeta from /api/meta), so a drawer held open simply
+// shows the new item's rows.
 function showItemInfo(title) {
 	$('docInfoTitle').textContent = title || 'Info'
 	$('ocInfo').hidden = false
+	if (infoCarriesToSibling) {
+		infoCarriesToSibling = false // one render only — consumed here, never sticky beyond it
+		openInfoDrawer()
+		return
+	}
 	closeInfoDrawer()
 }
 // No drawer for this state (a presentation, or no item routed) — hide the button, collapse.
@@ -6127,6 +6164,10 @@ function showItemInfo(title) {
 function hideItemInfo() {
 	$('ocInfo').hidden = true
 	$('ocShare').hidden = true
+	// Consume the carry here too. This is the other landing site for a render — a presentation,
+	// or the modal closing — and a flag set by a step that ended on one of those would otherwise
+	// survive to spring the drawer open on whatever the reader opened next.
+	infoCarriesToSibling = false
 	closeInfoDrawer()
 }
 
