@@ -365,28 +365,61 @@ test('a non-JSON content type is 415, inherited from readBody', async () => {
 	assert.equal(status, 415)
 })
 
-test('a real image copies and opens the app, and reports whether it deep-linked', { skip: posix ? false : 'POSIX only' }, async () => {
-	// Unconfigured first: the reader will land wherever the app was, so deepLinked is
-	// false and the browser's toast says "pick a chat" rather than "paste here".
+test('POST /api/share COPIES AND STOPS — it must not launch the app', { skip: posix ? false : 'POSIX only' }, async () => {
+	// The ordering guarantee, asserted at the layer that owns it. The app takes the
+	// foreground the instant it launches, so anything the page wants the reader to READ
+	// has to be painted first — which only works if this route hands control back after
+	// the copy. A route that launched here would put the instruction behind another
+	// window, which is exactly the bug this split exists to fix.
 	await post({ whatsappPhone: '', telegramUser: '' }, { route: '/api/share/config' })
 	fs.writeFileSync(shareLog, '')
 	const bare = await post({ path: 'photo.png', target: 'whatsapp' })
 	assert.equal(bare.status, 200)
 	assert.equal(bare.json.ok, true)
-	assert.equal(bare.json.deepLinked, false)
+	assert.equal(bare.json.deepLinked, false, 'unconfigured → the browser says "pick a chat"')
 
-	const inv = await waitForInvocations(shareLog, 3)
-	assert.deepEqual(inv.map((i) => i.cmd), ['sips', 'osascript', 'open'], 'convert, copy, THEN open — the clipboard is written before the app appears')
-	assert.deepEqual(inv[2].argv, ['-a', 'WhatsApp'])
+	const inv = await waitForInvocations(shareLog, 2)
+	assert.deepEqual(inv.map((i) => i.cmd), ['sips', 'osascript'], 'convert and copy, and nothing else')
 
-	// Configured: the same call now deep-links to the reader's own chat.
+	// "No launch happened" cannot be proven by waiting — a detached spawn's shim line lands
+	// whenever the OS gets to it (measured in reveal.test.js: 500 ms too short, 1200 ms
+	// enough), so any fixed sleep asserts an absence that simply had not arrived yet. This
+	// first draft slept 400 ms and was VACUOUS: sabotaging the route to launch here left it
+	// green. So pair it with a SENTINEL instead — fire a launch that is known to work, wait
+	// for that one, and require it to be the ONLY launch in the log. A copy route that also
+	// launched would put a second `open` in front of it.
+	const sentinel = await post({ target: 'whatsapp' }, { route: '/api/share/open' })
+	assert.equal(sentinel.json.ok, true, 'the sentinel launch itself worked')
+	const after = await waitForInvocations(shareLog, 3)
+	const opens = after.filter((i) => i.cmd === 'open')
+	assert.equal(opens.length, 1, 'exactly ONE launch — the sentinel; the copy route contributed none')
+})
+
+test('POST /api/share/open launches, and deep-links once a handle is configured', { skip: posix ? false : 'POSIX only' }, async () => {
+	await post({ whatsappPhone: '', telegramUser: '' }, { route: '/api/share/config' })
+	fs.writeFileSync(shareLog, '')
+	const bare = await post({ target: 'whatsapp' }, { route: '/api/share/open' })
+	assert.equal(bare.status, 200)
+	assert.equal(bare.json.ok, true)
+	assert.deepEqual((await waitForInvocations(shareLog, 1))[0], { cmd: 'open', argv: ['-a', 'WhatsApp'] })
+
 	const cfg = await post({ whatsappPhone: '+61 412 345 678' }, { route: '/api/share/config' })
 	assert.equal(cfg.json.whatsappPhone, '61412345678')
 	fs.writeFileSync(shareLog, '')
-	const linked = await post({ path: 'photo.png', target: 'whatsapp' })
-	assert.equal(linked.json.deepLinked, true)
-	const inv2 = await waitForInvocations(shareLog, 3)
-	assert.deepEqual(inv2[2].argv, ['whatsapp://send?phone=61412345678'])
+	await post({ target: 'whatsapp' }, { route: '/api/share/open' })
+	assert.deepEqual((await waitForInvocations(shareLog, 1))[0], { cmd: 'open', argv: ['whatsapp://send?phone=61412345678'] })
+})
+
+test('the launch route carries no path, and still checks its target enum and token', { skip: posix ? false : 'POSIX only' }, async () => {
+	fs.writeFileSync(shareLog, '')
+	const bad = await post({ target: 'signal' }, { route: '/api/share/open' })
+	assert.equal(bad.status, 400)
+	assert.equal(bad.json.code, 'BAD_TARGET')
+	await sleep(200)
+	assert.equal(readInvocations(shareLog).length, 0, 'an unknown target spawns nothing')
+
+	const noTok = await post({ target: 'whatsapp' }, { route: '/api/share/open', withToken: false })
+	assert.equal(noTok.status, 403)
 })
 
 test('the config route refuses a handle that would alter the URL', async () => {
@@ -433,7 +466,7 @@ test('the Share control is reachable, media-only, and its dialog round-trips a h
 	const url = JSON.parse(out).url
 
 	const R = await withChrome(CHROME, url, { args: ARGS, onNewDocument: PROBE }, async ({ evaluate }) => {
-		const o = {}
+		const o = { steps: {} }
 		const q = (sel) => 'document.querySelectorAll(' + JSON.stringify(sel) + ').length'
 		await until(evaluate, 'window.ic && location.hash === "#/f/"', 20000)
 
@@ -453,7 +486,28 @@ test('the Share control is reachable, media-only, and its dialog round-trips a h
 		await until(evaluate, 'getComputedStyle(document.getElementById("ocShare")).display !== "none"', 8000)
 		await evaluate('document.getElementById("ocShare").click()')
 		o.menuOpened = await until(evaluate, q('.ic-menu .menu-item') + ' > 0', 5000)
-		o.rows = await evaluate('JSON.stringify([...document.querySelectorAll(".ic-menu .menu-item")].map(function(b){ return b.textContent }))')
+		o.rows = await evaluate('JSON.stringify([...document.querySelectorAll(".ic-menu .menu-item")].map(function(b){ return (b.querySelector("span") || {}).textContent || "" }))')
+
+		// The mechanic line is RESTING-VISIBLE, not a title tooltip and not hover-gated —
+		// it tells the reader this copies rather than sends, and an instruction behind a
+		// gesture touch input does not have is one half the readers never receive.
+		o.hintCount = await evaluate(q('.ic-menu .menu-item-hint'))
+		o.hintVisible = await evaluate('(function(){ var h=[].slice.call(document.querySelectorAll(".ic-menu .menu-item-hint")); return h.length>0 && h.every(function(x){ var s=getComputedStyle(x); return s.display!=="none" && s.visibility!=="hidden" && parseFloat(s.opacity)>0.1 }) })()')
+		o.hintText = await evaluate('((document.querySelector(".ic-menu .menu-item-hint")||{}).textContent)||""')
+
+		// Clicking a chat row must leave a PERSISTENT instruction behind — the reader is
+		// about to be looking at another application, and a timed toast would be gone.
+		await evaluate('[...document.querySelectorAll(".ic-menu .menu-item")].filter(function(b){ return ((b.querySelector("span")||{}).textContent||"").indexOf("Paste to WhatsApp") === 0 })[0].click()')
+		o.steps.hintBarShown = await until(evaluate, '!!document.getElementById("shareHint")', 8000)
+		o.hintBarText = await evaluate('((document.querySelector("#shareHint .share-hint-msg")||{}).textContent)||""')
+		// Still there well past a toast's lifetime (the shortest is 2600ms).
+		await sleep(3200)
+		o.hintBarPersists = await evaluate('!!document.getElementById("shareHint")')
+		o.hintBarDismissible = await evaluate('(function(){ var b=document.querySelector("#shareHint .share-hint-x"); if(!b) return false; b.click(); return !document.getElementById("shareHint") })()')
+
+		// Reopen the menu for the dialog assertions below.
+		await evaluate('document.getElementById("ocShare").click()')
+		await until(evaluate, q('.ic-menu .menu-item') + ' > 0', 5000)
 
 		// The reachability assertion: click the row and the dialog must appear.
 		await evaluate('[...document.querySelectorAll(".ic-menu .menu-item")].filter(function(b){ return b.textContent.indexOf("Chat handles") === 0 })[0].click()')
@@ -480,8 +534,19 @@ test('the Share control is reachable, media-only, and its dialog round-trips a h
 	assert.equal(R.hiddenOnDoc, true, 'and hidden on a markdown document — media only')
 	assert.equal(R.menuOpened, true, 'the button opens the shared context menu')
 	const rows = JSON.parse(R.rows)
-	assert.ok(rows.some((r) => r === 'WhatsApp'), 'the image menu offers WhatsApp: ' + R.rows)
-	assert.ok(rows.some((r) => r === 'Telegram'), 'and Telegram: ' + R.rows)
+	// The row names the MECHANIC, not just the destination: this is the one target that
+	// does not receive the file, so a row reading "WhatsApp" promises a handoff that never
+	// happens and drops the reader into a chat with no idea why.
+	assert.ok(rows.some((r) => r === 'Paste to WhatsApp'), 'the image menu offers Paste to WhatsApp: ' + R.rows)
+	assert.ok(rows.some((r) => r === 'Paste to Telegram'), 'and Paste to Telegram: ' + R.rows)
+	assert.ok(R.hintCount >= 2, 'each chat row carries a mechanic line')
+	assert.equal(R.hintVisible, true, 'and it is visible at rest — never hover-gated')
+	assert.ok(/Copies the image/.test(R.hintText), 'the hint says it copies: ' + JSON.stringify(R.hintText))
+	assert.ok(/⌘V|Ctrl\+V/.test(R.hintText), 'and names the paste: ' + JSON.stringify(R.hintText))
+	assert.equal(R.steps.hintBarShown, true, 'clicking a chat row leaves an instruction on screen')
+	assert.ok(/press (⌘V|Ctrl\+V)/.test(R.hintBarText), 'which tells the reader to paste: ' + JSON.stringify(R.hintBarText))
+	assert.equal(R.hintBarPersists, true, 'and it PERSISTS past a toast lifetime — the reader is in another app by then')
+	assert.equal(R.hintBarDismissible, true, 'the × dismisses it')
 	assert.ok(rows.some((r) => r.indexOf('Chat handles') === 0), 'and the way in to the config: ' + R.rows)
 	assert.equal(R.dialogOpened, true, 'the config dialog is REACHABLE from the UI — the defect this test exists for')
 	assert.equal(R.errShown, true, 'an injection-shaped number is refused inline, not silently dropped')

@@ -1264,17 +1264,38 @@ async function route(req, res, url) {
 		const cfg = readShareCfg()
 		if (!(await copyImage(abs, galleryMime(abs))))
 			return sendJson(res, 200, { ok: false, code: 'CLIPBOARD_UNAVAILABLE', message: 'Could not copy the image to the clipboard on this system.' })
-		if (!openChatApp(target, cfg))
-			return sendJson(res, 200, { ok: false, code: 'NO_CHAT_APP', message: 'Copied the image, but could not open the app.' })
 
-		// `deepLinked` tells the browser whether the reader will land in their OWN chat
-		// or on whatever the app last had open, so the toast can say which — "paste in
-		// your chat" and "pick a chat, then paste" are different instructions.
+		// THIS ROUTE COPIES AND STOPS. Launching the app is `/api/share/open`, a second
+		// call the browser makes after it has painted the instruction — because the app
+		// takes the foreground the instant it launches, and a message rendered after that
+		// is a message rendered behind another window. This route used to do both, and the
+		// toast it triggered was correct and effectively invisible: the kernel raised
+		// WhatsApp, then answered, then the page painted "press ⌘V" into a window nobody
+		// was looking at any more. Ordering, not wording, was the bug.
+		//
+		// `deepLinked` says whether the reader will land in their OWN chat or on whatever
+		// the app last had open — "paste in your chat" and "pick a chat, then paste" are
+		// different instructions, and the browser needs to know which to show.
 		return sendJson(res, 200, {
 			ok: true,
 			target,
 			deepLinked: !!(target === 'whatsapp' ? cfg.whatsappPhone : cfg.telegramUser),
 		})
+	}
+
+	// Bring a chat app to the front. Split from the copy above so the browser controls the
+	// ORDER — it paints the paste instruction first, then asks for the app. It carries no
+	// path and touches no file: the only inputs are the target enum and the reader's own
+	// stored handles, so it grants nothing `/api/share` did not already grant. Reader-
+	// triggered like its sibling — no session, no CLI door, no agent surface.
+	if (method === 'POST' && p === '/api/share/open') {
+		const body = await readBody(req)
+		const target = body && body.target
+		if (target !== 'whatsapp' && target !== 'telegram')
+			return sendJson(res, 400, { ok: false, code: 'BAD_TARGET', message: 'target must be "whatsapp" or "telegram".' })
+		if (!openChatApp(target, readShareCfg()))
+			return sendJson(res, 200, { ok: false, code: 'NO_CHAT_APP', message: 'The image is on your clipboard, but the app could not be opened.' })
+		return sendJson(res, 200, { ok: true, target })
 	}
 
 	// The reader's own chat handles, for the deep link above. GLOBAL and unkeyed, beside

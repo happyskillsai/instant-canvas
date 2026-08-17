@@ -4,6 +4,22 @@
 
 ### Changed
 
+- **Sharing to a chat app now tells you what it did, at a moment you can read it.** The menu rows
+  read **Paste to WhatsApp** / **Paste to Telegram** with an always-visible second line — *Copies
+  the image · press ⌘V in the chat* — because this is the one destination that does not *receive*
+  the file. A row reading "WhatsApp" promised a handoff that never happens and left people in a
+  chat window with no idea why it opened.
+
+  The deeper problem was ordering, not wording. `POST /api/share` copied **and** launched the app
+  before it answered, so the page painted "press ⌘V" into a window that WhatsApp was already in
+  front of. The instruction was correct and nobody ever saw it. The route now **copies and stops**;
+  the browser paints the instruction, waits for the frame, and then calls the new
+  `POST /api/share/open` — because the browser is the only party that knows when it has actually
+  painted. That instruction is now a **persistent bar in the modal rather than a toast**: you are
+  about to spend minutes in another app, and a message on a timer is gone before you look back. It
+  is also the only surface that can tell you the paste failed — the clipboard is shared global
+  state and anything can take it. Dismissible, and cleared when you navigate.
+
 - **The item info drawer now stays open when you step to the next file, and shows that file's
   details.** It used to reset to collapsed on every item open, prev/next included — a deliberate
   no-stickiness rule that turned out to defeat the drawer's best use. Comparing a field across

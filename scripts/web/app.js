@@ -286,6 +286,19 @@ function openContextMenu({ x, y, items, anchorEl = null }) {
 		const label = document.createElement('span')
 		label.textContent = it.label
 		btn.appendChild(label)
+		// An optional second line, muted, under the label. ALWAYS VISIBLE — never a `title`
+		// tooltip or a hover reveal: this carries the mechanic a reader must know before
+		// they click ("this copies, you paste"), and an instruction behind a gesture that
+		// touch input does not have is an instruction half the readers never get (the
+		// resting-visible rule the drawer's copy buttons already follow —
+		// docs/gotchas/frontend.md).
+		if (it.hint) {
+			btn.classList.add('menu-item-2l')
+			const hint = document.createElement('span')
+			hint.className = 'menu-item-hint'
+			hint.textContent = it.hint
+			btn.appendChild(hint)
+		}
 		btn.addEventListener('click', () => {
 			closeContextMenu()
 			it.onClick()
@@ -478,24 +491,79 @@ async function shareViaWebShare(rel) {
 	}
 }
 
-/** Tier 2. The kernel copies the image and opens the app; the reader pastes. */
+/**
+ * A PERSISTENT instruction bar inside the modal, not a toast.
+ *
+ * A toast is the wrong instrument for this message twice over. It expires on a timer, and the
+ * reader is about to spend far longer than that in another application — so by the time they
+ * ⌘-tab back to see what they were supposed to do, it is gone. And if the paste failed (the
+ * clipboard is shared global state; anything can take it), the bar is the only surface left
+ * that can say so. It clears on navigation, and it is dismissible for the reader who knows.
+ */
+function clearShareHint() {
+	const el = document.getElementById('shareHint')
+	if (el) el.remove()
+}
+
+function showShareHint(text) {
+	clearShareHint()
+	const card = document.getElementById('docModalCard')
+	if (!card) return
+	const bar = document.createElement('div')
+	bar.className = 'share-hint'
+	bar.id = 'shareHint'
+	const msg = document.createElement('span')
+	msg.className = 'share-hint-msg'
+	msg.textContent = text
+	const x = document.createElement('button')
+	x.type = 'button'
+	x.className = 'share-hint-x'
+	x.setAttribute('aria-label', 'Dismiss')
+	x.textContent = '✕'
+	x.addEventListener('click', clearShareHint)
+	bar.append(msg, x)
+	card.appendChild(bar)
+	return bar
+}
+
+/**
+ * Tier 2, in the order the reader actually experiences it: copy → SHOW THE INSTRUCTION →
+ * open the app.
+ *
+ * The two steps are two calls on purpose. When one route did both, the kernel raised WhatsApp
+ * before it answered, so the page painted "press ⌘V" into a window that no longer had the
+ * foreground — the message was right and nobody ever saw it. Splitting it puts the ordering
+ * in the browser's hands, which is the only party that knows when it has actually painted.
+ * The double `requestAnimationFrame` is that guarantee: one frame to schedule, the next to be
+ * past the paint, and only then do we hand the foreground away.
+ */
 async function shareToChat(rel, target) {
 	const label = target === 'whatsapp' ? 'WhatsApp' : 'Telegram'
+
 	const { status, json } = await api('/api/share', {
 		method: 'POST',
 		body: JSON.stringify({ path: rel, target }),
 	})
-	if (status === 200 && json && json.ok) {
-		// Two different instructions, because the reader lands in two different places.
-		// Naming the paste explicitly is also what makes a lost clipboard legible: if
-		// something else took the pasteboard in between, "press ⌘V" failing reads as
-		// "something took my clipboard" rather than "this button is broken".
-		toast(json.deepLinked
-			? `Image copied — press ${PASTE_HINT} in ${label} to attach it.`
-			: `Image copied — pick a chat in ${label}, then press ${PASTE_HINT}.`, 5200)
+	if (status !== 200 || !json || !json.ok) {
+		showShareHint((json && json.message) || `Could not share to ${label}.`)
 		return
 	}
-	toast((json && json.message) || `Could not share to ${label}.`, 4400)
+
+	// Naming the paste explicitly is also what makes a lost clipboard legible: if something
+	// else took the pasteboard in between, a failing ⌘V reads as "something took my
+	// clipboard" rather than "this button is broken".
+	showShareHint(json.deepLinked
+		? `Image copied. ${label} is opening — press ${PASTE_HINT} in your chat, then send.`
+		: `Image copied. ${label} is opening — pick a chat, press ${PASTE_HINT}, then send.`)
+
+	await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))
+
+	const opened = await api('/api/share/open', { method: 'POST', body: JSON.stringify({ target }) })
+	if (opened.status !== 200 || !opened.json || !opened.json.ok) {
+		// The copy still happened, so say what is true: the clipboard is loaded and only the
+		// launch failed. Telling them to open it themselves is a working instruction.
+		showShareHint((opened.json && opened.json.message) || `The image is on your clipboard, but ${label} could not be opened.`)
+	}
 }
 
 /**
@@ -516,8 +584,14 @@ function openShareMenu(anchorEl) {
 	if (canShareFiles() && WEBSHARE_EXTS.has(pathExt(rel)))
 		items.push({ label: 'Share…', onClick: () => shareViaWebShare(rel) })
 	if (isImagePath(rel)) {
-		items.push({ label: 'WhatsApp', onClick: () => shareToChat(rel, 'whatsapp') })
-		items.push({ label: 'Telegram', onClick: () => shareToChat(rel, 'telegram') })
+		// "Paste to X", not "X". The row has to name the MECHANIC, because this is the one
+		// destination that does not simply receive the file — the app has no way to accept
+		// it, so the reader completes the send by pasting. A row reading "WhatsApp" promises
+		// a handoff that does not happen, and the reader lands in a chat window with no idea
+		// why. The hint line spells out the rest, always visible.
+		const hint = `Copies the image · press ${PASTE_HINT} in the chat`
+		items.push({ label: 'Paste to WhatsApp', hint, onClick: () => shareToChat(rel, 'whatsapp') })
+		items.push({ label: 'Paste to Telegram', hint, onClick: () => shareToChat(rel, 'telegram') })
 	}
 	if (items.length)
 		items.push({ separator: true })
@@ -6187,6 +6261,9 @@ async function populateItemInfoDrawer(rel, canvas) {
 async function renderCanvas() {
 	disposeCharts()
 	disposeGalleries()
+	// The share instruction belongs to the item it was raised for. Carrying it onto the next
+	// one would tell the reader to paste an image that is no longer on screen.
+	clearShareHint()
 	state.figByBlock = new Map() // rebound from the payload on a successful load below
 	// Navigating to a DIFFERENT canvas while presenting leaves the stage; a same-canvas hot
 	// reload keeps it (renderPresentationView re-shows it at the held slide).

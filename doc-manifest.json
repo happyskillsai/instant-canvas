@@ -71,7 +71,7 @@
         "Version handshake",
         "Drift check — `lib/drift.js`"
       ],
-      "line_count": 241,
+      "line_count": 242,
       "links_to": [
         "docs/canvas-schema.md",
         "docs/cli.md",

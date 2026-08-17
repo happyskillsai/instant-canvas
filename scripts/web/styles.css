@@ -676,6 +676,14 @@ select.inp{appearance:auto}
 .menu-item:hover{background:var(--accent-soft);color:var(--accent)}
 .menu-item.on{font-weight:650;color:var(--accent)}
 .menu-item .lucide{width:14px;height:14px;flex:0 0 auto}
+/* A two-line item: the action, then the mechanic under it in muted text. The base rule is a
+   row (`align-items:center`, label and trailing glyph on one line), so a hinted item has to
+   restack — column, and left-aligned rather than space-between, or the hint is pushed to the
+   far edge. The hint keeps `--muted` on hover instead of inheriting the accent, so the two
+   lines stay a heading and its subtitle rather than reading as one shouted string. */
+.menu-item-2l{flex-direction:column;align-items:flex-start;justify-content:flex-start;gap:2px}
+.menu-item-hint{font-size:11.5px;line-height:1.35;color:var(--muted)}
+.menu-item:hover .menu-item-hint{color:var(--muted)}
 
 /* The shared folder context menu wears the .menu skin and overrides only its geometry
    — the same thing .m-rate-menu does. POSITION:FIXED is load-bearing: the menu is
@@ -905,6 +913,20 @@ body.modal-open .main{overflow:hidden}
 .print-fab:hover{transform:translateY(-1px);box-shadow:0 9px 24px rgba(16,20,30,.32),0 3px 8px rgba(16,20,30,.2)}
 .print-fab:active{transform:translateY(0)}
 .print-fab[hidden]{display:none}
+
+/* The share instruction bar: a PERSISTENT message inside the modal card, raised when an image
+   is copied for a chat app. Persistent rather than a toast because the reader is about to
+   spend minutes in another application, and a message on a timer is gone before they look
+   back — and because a failed paste (the clipboard is shared global state) has nowhere else
+   to be reported. Anchored bottom-left so it never sits under the print FAB on the right. */
+.share-hint{position:absolute;left:24px;bottom:24px;z-index:6;display:flex;align-items:center;gap:12px;
+	max-width:min(520px,calc(100% - 48px));padding:11px 12px 11px 15px;border-radius:12px;
+	background:var(--panel);border:1px solid var(--border);box-shadow:var(--shadow);
+	font-size:13px;line-height:1.45;color:var(--text)}
+.share-hint-msg{flex:1 1 auto}
+.share-hint-x{flex:0 0 auto;width:22px;height:22px;display:inline-flex;align-items:center;justify-content:center;
+	border:none;border-radius:6px;background:none;color:var(--muted);font:inherit;font-size:12px;cursor:pointer}
+.share-hint-x:hover{background:var(--tint);color:var(--text)}
 .print-fab .lucide{width:22px;height:22px}
 
 /* one view at a time on screen; print always shows the deck */
@@ -1985,6 +2007,10 @@ button.rr-row:hover{border-color:var(--accent);background:var(--tint)}
 	.pal{display:none !important}
 	html{print-color-adjust:exact;-webkit-print-color-adjust:exact}
 	.print-fab{display:none !important}
+	/* The share hint is absolute inside the modal card, and the print block flattens that card
+	   into a static full-page container — so an undismissed bar would print into the document.
+	   It is chrome, never content; the same audit the toast rule below records. */
+	.share-hint{display:none !important}
 	/* A toast is `position: fixed`, which the print engine REPEATS on every page — so a
 	   deck printed while a toast was still up got that toast stamped onto each PDF page.
 	   Hide it here (the guardrail that covers Cmd+P too); the print button also clears it
