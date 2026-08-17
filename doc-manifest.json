@@ -564,7 +564,7 @@
         "`cdp.send()` has NO per-command timeout, so a probe against a HUNG page never returns",
         "A test double with NO idle timeout outlives every interrupted run"
       ],
-      "line_count": 275,
+      "line_count": 277,
       "links_to": [
         "docs/gotchas/frontend.md",
         "docs/gotchas/runtime.md",
@@ -668,7 +668,7 @@
         "Network perimeter",
         "What this does NOT protect against"
       ],
-      "line_count": 92,
+      "line_count": 93,
       "links_to": [
         "docs/architecture.md",
         "docs/cli.md"
