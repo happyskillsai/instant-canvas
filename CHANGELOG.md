@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.29.0] - 2026-08-17
+
 ### Fixed
 
 - **A busy kernel could be reported dead — and evicted from the registry, so nothing could find
