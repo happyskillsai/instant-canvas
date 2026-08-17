@@ -18,6 +18,14 @@
 	--bg:#f4f5f8; --shell:#e3e3e9; --panel:#ffffff; --panel-2:#fafbfc; --text:#1a1d24; --muted:#6b7280;
 	--border:#e6e8ec; --border-2:#eef0f3; --accent:#eb4a26; --accent-soft:#fbe7e0;
 	--green:#10b981; --amber:#f59e0b; --red:#ef4444; --shadow:0 1px 2px rgba(16,20,30,.06),0 8px 24px rgba(16,20,30,.06);
+	/* Notice blue — a FILLED alert surface, always with white ink (5.7:1, AA at this size).
+	   Declared once rather than per theme, unlike --green/--amber/--red above: those are INK
+	   on a themed surface, so they must lighten in the dark blocks to stay legible. This is
+	   the surface itself, and a filled panel wants the same darkness in both themes — a
+	   lighter dark-mode blue would drop the white text below AA (#3b82f6 is only 3.4:1).
+	   It is deliberately not --accent: the accent is the product's vermilion and already
+	   means "this is ours", while this has to read as "look here, now". */
+	--blue:#2563eb; --blue-ink:#ffffff;
 	--scrim:rgba(10,12,18,.45);
 	--c1:#6366f1; --c2:#10b981; --c3:#f59e0b; --c4:#ec4899; --c5:#06b6d4;
 	--inp-bg:#ffffff; --inp-border:#d3d8e0; --inp-border-hover:#b9c0cc;
@@ -914,19 +922,43 @@ body.modal-open .main{overflow:hidden}
 .print-fab:active{transform:translateY(0)}
 .print-fab[hidden]{display:none}
 
-/* The share instruction bar: a PERSISTENT message inside the modal card, raised when an image
-   is copied for a chat app. Persistent rather than a toast because the reader is about to
-   spend minutes in another application, and a message on a timer is gone before they look
-   back — and because a failed paste (the clipboard is shared global state) has nowhere else
-   to be reported. Anchored bottom-left so it never sits under the print FAB on the right. */
-.share-hint{position:absolute;left:24px;bottom:24px;z-index:6;display:flex;align-items:center;gap:12px;
-	max-width:min(520px,calc(100% - 48px));padding:11px 12px 11px 15px;border-radius:12px;
-	background:var(--panel);border:1px solid var(--border);box-shadow:var(--shadow);
-	font-size:13px;line-height:1.45;color:var(--text)}
+/* The share instruction bar: a PERSISTENT message raised when an image is copied for a chat
+   app. Persistent rather than a toast because the reader is about to spend minutes in another
+   application, and a message on a timer is gone before they look back — and because a failed
+   paste (the clipboard is shared global state) has nowhere else to be reported.
+
+   `position: fixed` on the BODY, not absolute inside the modal card. A z-index only outranks
+   siblings in its own stacking context, so a bar parented to the card could still be painted
+   over by anything at body level — the `.g-modal` dialogs (70), the context menu, a toast.
+   Living at the top level with 300 puts it above every one of them, the presenting stage
+   (200) included, which is what "always visible" actually requires. It is hidden in
+   @media print for the reason the toast rule below records: a fixed element is a PER-PAGE
+   element in print, so an undismissed bar would stamp itself onto every page of a PDF. */
+.share-hint{position:fixed;right:24px;bottom:24px;z-index:300;display:flex;align-items:center;gap:12px;
+	max-width:min(520px,calc(100vw - 48px));padding:12px 12px 12px 16px;border-radius:12px;
+	background:var(--blue);border:1px solid var(--blue);color:var(--blue-ink);
+	box-shadow:0 10px 30px rgba(16,20,30,.28),0 2px 6px rgba(16,20,30,.18);
+	font-size:13px;line-height:1.45;
+	animation:share-hint-in 260ms cubic-bezier(.16,.84,.44,1) both}
+/* Clears the print FAB when a deck is open. Set from JS rather than `:has()`, because the FAB
+   lives inside the modal card and this bar no longer does — there is no ancestor to scope on. */
+.share-hint.share-hint-raised{bottom:94px}
 .share-hint-msg{flex:1 1 auto}
-.share-hint-x{flex:0 0 auto;width:22px;height:22px;display:inline-flex;align-items:center;justify-content:center;
-	border:none;border-radius:6px;background:none;color:var(--muted);font:inherit;font-size:12px;cursor:pointer}
-.share-hint-x:hover{background:var(--tint);color:var(--text)}
+.share-hint-x{flex:0 0 auto;width:24px;height:24px;display:inline-flex;align-items:center;justify-content:center;
+	border:none;border-radius:6px;background:rgba(255,255,255,.14);color:var(--blue-ink);
+	font:inherit;font-size:12px;line-height:1;cursor:pointer}
+.share-hint-x:hover{background:rgba(255,255,255,.28)}
+/* Up on arrival, back down on the way out — motion is what pulls the eye to a corner the
+   reader is not looking at. The exit class is applied by clearShareHint, which then removes
+   the node after the animation's own duration. */
+@keyframes share-hint-in{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:translateY(0)}}
+@keyframes share-hint-out{from{opacity:1;transform:translateY(0)}to{opacity:0;transform:translateY(18px)}}
+.share-hint.share-hint-out{animation:share-hint-out 200ms cubic-bezier(.4,0,.7,.2) both}
+/* Motion is an accessibility setting, not a taste one: a reader who asked the OS for less of it
+   still gets the bar, instantly, with no travel. */
+@media (prefers-reduced-motion:reduce){
+	.share-hint,.share-hint.share-hint-out{animation:none}
+}
 .print-fab .lucide{width:22px;height:22px}
 
 /* one view at a time on screen; print always shows the deck */

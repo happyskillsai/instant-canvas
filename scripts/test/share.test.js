@@ -500,6 +500,15 @@ test('the Share control is reachable, media-only, and its dialog round-trips a h
 		await evaluate('[...document.querySelectorAll(".ic-menu .menu-item")].filter(function(b){ return ((b.querySelector("span")||{}).textContent||"").indexOf("Paste to WhatsApp") === 0 })[0].click()')
 		o.steps.hintBarShown = await until(evaluate, '!!document.getElementById("shareHint")', 8000)
 		o.hintBarText = await evaluate('((document.querySelector("#shareHint .share-hint-msg")||{}).textContent)||""')
+
+		// It has to be SEEN, so the presentation is asserted as computed values, never as the
+		// stylesheet text. Right-anchored, filled blue, animated in, and at the top of the
+		// stacking order — a z-index that only outranks its siblings would leave it under the
+		// body-level dialogs, which is the failure "always visible" is guarding against.
+		o.hintBarCss = await evaluate('(function(){ var e=document.getElementById("shareHint"); if(!e) return "{}"; var s=getComputedStyle(e); var r=e.getBoundingClientRect(); return JSON.stringify({ position:s.position, zIndex:s.zIndex, bg:s.backgroundColor, color:s.color, anim:s.animationName, rightGap:Math.round(window.innerWidth-r.right), leftGap:Math.round(r.left) }) })()')
+		// Parented to <body>, not to the modal card — that is what makes the z-index mean
+		// anything against the dialogs and the context menu.
+		o.hintBarAtBodyLevel = await evaluate('document.getElementById("shareHint").parentElement === document.body')
 		// Still there well past a toast's lifetime (the shortest is 2600ms).
 		await sleep(3200)
 		o.hintBarPersists = await evaluate('!!document.getElementById("shareHint")')
@@ -547,6 +556,17 @@ test('the Share control is reachable, media-only, and its dialog round-trips a h
 	assert.ok(/press (⌘V|Ctrl\+V)/.test(R.hintBarText), 'which tells the reader to paste: ' + JSON.stringify(R.hintBarText))
 	assert.equal(R.hintBarPersists, true, 'and it PERSISTS past a toast lifetime — the reader is in another app by then')
 	assert.equal(R.hintBarDismissible, true, 'the × dismisses it')
+	const css = JSON.parse(R.hintBarCss)
+	assert.equal(R.hintBarAtBodyLevel, true, 'the bar is parented to <body>, so its z-index outranks the body-level surfaces')
+	assert.equal(css.position, 'fixed', 'fixed, not absolute inside a card whose stacking context would trap it')
+	assert.ok(Number(css.zIndex) >= 300, 'z-index clears the presenting stage (200) and the dialogs (70): ' + css.zIndex)
+	assert.equal(css.bg, 'rgb(37, 99, 235)', 'filled with the notice blue, not the panel colour: ' + css.bg)
+	assert.equal(css.color, 'rgb(255, 255, 255)', 'white ink on it (5.7:1, AA at 13px): ' + css.color)
+	assert.ok(/share-hint-in/.test(css.anim), 'it animates in rather than appearing: ' + css.anim)
+	// Right-anchored: measured as a gap from each edge, so it cannot pass by reading a
+	// `right` property that a `left` override would have beaten anyway.
+	assert.ok(css.rightGap < css.leftGap, 'anchored to the RIGHT edge (gaps L/R: ' + css.leftGap + '/' + css.rightGap + ')')
+	assert.ok(css.rightGap <= 40, 'and sits close to it: ' + css.rightGap)
 	assert.ok(rows.some((r) => r.indexOf('Chat handles') === 0), 'and the way in to the config: ' + R.rows)
 	assert.equal(R.dialogOpened, true, 'the config dialog is REACHABLE from the UI — the defect this test exists for')
 	assert.equal(R.errShown, true, 'an injection-shaped number is refused inline, not silently dropped')

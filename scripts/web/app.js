@@ -500,18 +500,36 @@ async function shareViaWebShare(rel) {
  * clipboard is shared global state; anything can take it), the bar is the only surface left
  * that can say so. It clears on navigation, and it is dismissible for the reader who knows.
  */
-function clearShareHint() {
+/** Remove the bar. `immediate` skips the exit animation — used when one bar replaces another,
+ *  where two overlapping nodes would be worse than no transition. The id is released FIRST in
+ *  both paths, so a node still animating out can never be found by the next `showShareHint`
+ *  or by a test looking up `#shareHint`. */
+function clearShareHint(immediate) {
 	const el = document.getElementById('shareHint')
-	if (el) el.remove()
+	if (!el)
+		return
+	el.removeAttribute('id')
+	if (immediate) {
+		el.remove()
+		return
+	}
+	el.classList.add('share-hint-out')
+	// Removed on a timer rather than `animationend`: under prefers-reduced-motion the
+	// animation is `none` and that event never fires, which would leak the node forever.
+	setTimeout(() => el.remove(), 240)
 }
 
 function showShareHint(text) {
-	clearShareHint()
-	const card = document.getElementById('docModalCard')
-	if (!card) return
+	clearShareHint(true)
 	const bar = document.createElement('div')
 	bar.className = 'share-hint'
 	bar.id = 'shareHint'
+	// Sit above the print FAB when a deck has one on screen. Read from the button's own
+	// hidden state rather than assumed from the item kind — the FAB's visibility is decided
+	// by syncViewToggle, and duplicating that rule here is a second copy that drifts.
+	const fab = document.getElementById('printBtn')
+	if (fab && !fab.hidden)
+		bar.classList.add('share-hint-raised')
 	const msg = document.createElement('span')
 	msg.className = 'share-hint-msg'
 	msg.textContent = text
@@ -520,9 +538,11 @@ function showShareHint(text) {
 	x.className = 'share-hint-x'
 	x.setAttribute('aria-label', 'Dismiss')
 	x.textContent = '✕'
-	x.addEventListener('click', clearShareHint)
+	// The × animates out like any other dismissal — pass no argument, since a listener is
+	// handed the click Event and `clearShareHint(event)` would read as a truthy `immediate`.
+	x.addEventListener('click', () => clearShareHint())
 	bar.append(msg, x)
-	card.appendChild(bar)
+	document.body.appendChild(bar)
 	return bar
 }
 

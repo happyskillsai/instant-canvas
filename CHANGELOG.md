@@ -20,6 +20,14 @@
   is also the only surface that can tell you the paste failed — the clipboard is shared global
   state and anything can take it. Dismissible, and cleared when you navigate.
 
+  The bar is built to be **noticed**: bottom-right, filled with a new `--blue` notice colour
+  (deliberately not the product accent, which already means "this is ours" rather than "look
+  here, now"), sliding up as it arrives and back down as it goes, since it appears in a corner
+  nobody is watching. It sits **fixed on `<body>` at `z-index: 300`** rather than inside the
+  modal card — a z-index only outranks siblings in its own stacking context, so a bar parented
+  to the card could still end up under the dialogs, the context menu or a toast. `prefers-
+  reduced-motion` keeps the bar and drops the travel.
+
 - **The item info drawer now stays open when you step to the next file, and shows that file's
   details.** It used to reset to collapsed on every item open, prev/next included — a deliberate
   no-stickiness rule that turned out to defeat the drawer's best use. Comparing a field across
