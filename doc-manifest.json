@@ -491,7 +491,7 @@
         "A destructured `require` cannot be intercepted, and the test fails in a way that blames the subject",
         "Narrowing a path is one line; USING the narrowed one is another"
       ],
-      "line_count": 200,
+      "line_count": 204,
       "links_to": [
         "docs/architecture.md",
         "docs/security.md"

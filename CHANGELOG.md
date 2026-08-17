@@ -2,6 +2,24 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **A busy kernel could be reported dead — and evicted from the registry, so nothing could find
+  it again.** `readAlive()` health-pings with a 500 ms deadline and deletes the registry entry on
+  failure, and `pingHealth` reported every failure the same way: a bare null. So a kernel that was
+  alive and merely slow to answer under load was indistinguishable from one that had died, and the
+  cost was not a false "not running" but a **deletion** — after which the live process was
+  unreachable. It showed up as `instant-canvas status` denying a kernel that had answered a moment
+  earlier, and was caught as an intermittent test failure that only appeared under the extra load
+  of a coverage run.
+
+  The fix uses a distinction the transport was already making and the code discarded: **a dead port
+  is refused in microseconds; a busy one times out.** Only a timeout now earns a second, longer
+  probe. A refusal is still reaped on the first pass, so `kill -9` recovery keeps its speed —
+  measured at 7 ms to reap a dead port, never touching the retry budget. The rule, which this
+  project has now learned twice: a deadline that expires is evidence about the clock, not about
+  the peer.
+
 ### Changed
 
 - **Sharing to a chat app now tells you what it did, at a moment you can read it.** The menu rows

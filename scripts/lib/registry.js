@@ -70,22 +70,46 @@ function writeIdentity(root, { port, token }) {
 }
 
 /** GET /healthz on 127.0.0.1:<port> with a 500 ms timeout. Resolves to parsed body or null. */
-function pingHealth(port, timeoutMs = 500) {
+/**
+ * Probe `/healthz`, reporting WHY it failed as well as whether it did.
+ *
+ * The distinction is the whole point, and collapsing it is what made `readAlive` evict live
+ * kernels: **a dead port fails FAST** (nothing is listening → `ECONNREFUSED` in microseconds)
+ * while **a live-but-busy one TIMES OUT**. Both used to arrive as a bare `null`, so a kernel
+ * that was merely slow to answer under load was indistinguishable from one that had died —
+ * and the caller deleted its registry entry, after which nothing could find it again.
+ *
+ * Resolves `{ health, timedOut }`: `health` is the parsed body or null, `timedOut` says the
+ * request ran out of time rather than being refused.
+ */
+function probeHealth(port, timeoutMs = 500) {
 	return new Promise((resolve) => {
+		let timedOut = false
 		const req = http.get({ host: '127.0.0.1', port, path: '/healthz', timeout: timeoutMs }, (res) => {
 			let body = ''
 			res.setEncoding('utf8')
 			res.on('data', (c) => { body += c })
 			res.on('end', () => {
 				if (res.statusCode !== 200)
-					return resolve(null)
-				try { resolve(JSON.parse(body)) } catch { resolve(null) }
+					return resolve({ health: null, timedOut: false })
+				try { resolve({ health: JSON.parse(body), timedOut: false }) } catch { resolve({ health: null, timedOut: false }) }
 			})
 		})
-		req.on('timeout', () => req.destroy())
-		req.on('error', () => resolve(null))
+		// `destroy()` makes the request emit `error`, which is where we settle — so the flag
+		// has to be set BEFORE it, or the reason is lost by the time anyone reads it.
+		req.on('timeout', () => { timedOut = true; req.destroy() })
+		req.on('error', () => resolve({ health: null, timedOut }))
 	})
 }
+
+/** The original health-or-null contract, kept for callers that only need the boolean. */
+function pingHealth(port, timeoutMs = 500) {
+	return probeHealth(port, timeoutMs).then((r) => r.health)
+}
+
+/** How long the second, forgiving probe waits. Only ever reached after a timeout, so it is
+ *  paid exclusively on a machine that is already too busy to answer in 500 ms. */
+const SLOW_PING_TIMEOUT_MS = 2000
 
 /**
  * Registry entry whose kernel answers /healthz for THIS workspace, or null.
@@ -96,7 +120,16 @@ async function readAlive(root) {
 	const entry = read(root)
 	if (!entry || !entry.port)
 		return null
-	const health = await pingHealth(entry.port)
+	// One slow answer is not a death — the lesson the CLI's session polling already learned
+	// (gotchas/runtime.md), applied here at last. A TIMEOUT means the kernel did not answer
+	// within 500 ms, which on a loaded machine says nothing about whether it is alive; a
+	// REFUSED connection means nothing is listening on that port, which does. So only the
+	// timeout earns a second, longer probe. `kill -9` recovery is untouched and just as
+	// fast: a dead port is refused immediately, never retried, and the entry is removed on
+	// the first pass exactly as before.
+	let { health, timedOut } = await probeHealth(entry.port)
+	if (!health && timedOut)
+		health = await pingHealth(entry.port, SLOW_PING_TIMEOUT_MS)
 	let real = root
 	try { real = fs.realpathSync(path.resolve(root)) } catch { /* not on disk yet */ }
 	const ok = health

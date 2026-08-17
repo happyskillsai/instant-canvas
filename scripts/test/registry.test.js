@@ -68,6 +68,44 @@ test('readAlive returns the entry when the kernel answers for this workspace', a
 	srv.close()
 })
 
+test('readAlive KEEPS a live kernel that answers slowly — a timeout is not a death', async () => {
+	const root = tmpDir()
+	// Answers correctly, but only after the 500 ms first probe has given up. This is a
+	// loaded machine in miniature: the kernel is alive and will say so, just not quickly.
+	// Before the timeout/refused split, readAlive deleted this entry — so `status` reported
+	// a running kernel as dead AND evicted it, after which nothing could find it again.
+	const srv = http.createServer((req, res) => {
+		setTimeout(() => {
+			res.setHeader('Content-Type', 'application/json')
+			res.end(JSON.stringify({ ok: true, name: 'instantcanvas', version: '0.1.0', workspace: normalizeRoot(root), pid: process.pid }))
+		}, 900)
+	})
+	await new Promise((r) => srv.listen(0, '127.0.0.1', r))
+	registry.write(root, { root: normalizeRoot(root), pid: process.pid, port: srv.address().port, token: 't', startedAt: 'now' })
+
+	const alive = await registry.readAlive(root)
+	assert.ok(alive, 'the slow kernel is still reported alive')
+	assert.equal(alive.port, srv.address().port)
+	assert.ok(registry.read(root), 'and its registry entry SURVIVED')
+	srv.close()
+})
+
+test('readAlive still reaps a dead port FAST — the retry must not slow kill -9 recovery', async () => {
+	const root = tmpDir()
+	const port = await freePort() // refused immediately, never a timeout
+	registry.write(root, { root: normalizeRoot(root), pid: 999, port, token: 't', startedAt: 'now' })
+
+	// The positive control for the retry: a refused connection must NOT earn the forgiving
+	// second probe, or every dead kernel would cost the full slow-ping budget on a path that
+	// runs before every `open`. Bounded well under one retry (2 s) so the assertion fails if
+	// the branch ever widens to retry everything.
+	const t0 = Date.now()
+	assert.equal(await registry.readAlive(root), null)
+	const elapsed = Date.now() - t0
+	assert.equal(registry.read(root), null, 'the dead entry is still deleted')
+	assert.ok(elapsed < 1000, 'and reaped without paying the slow-ping retry (took ' + elapsed + 'ms)')
+})
+
 test('acquireSpawnLock acquires, blocks a second acquirer until released kernel is alive, breaks stale locks', async () => {
 	const root = tmpDir()
 	const lock = await registry.acquireSpawnLock(root)
