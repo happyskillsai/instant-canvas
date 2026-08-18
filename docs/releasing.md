@@ -6,6 +6,7 @@ source:
   - .agents/skills/release-cli/SKILL.md
   - .agents/skills/release-cli/scripts/preflight.sh
   - .agents/skills/release-cli/scripts/syncversion.js
+  - .agents/skills/release-cli/scripts/skillpublish.js
 ---
 
 # Releasing
@@ -47,4 +48,12 @@ Releases are orchestrated by the project skill at `.agents/skills/release-cli/` 
 
    The consequence to respect: **publishing without going through `/release-cli` no longer runs the suite.** If you ever publish off-workflow, run `npm test` yourself first.
 2. Smoke the consumer path from any directory: `npx -y @happyskillsai/instant-canvas catalog`.
-3. Republish the skill bundle to HappySkills — its `skill.json` already carries the new version.
+3. **Ask whether the skill bundle needs republishing at all — do not assume it does.**
+
+   ```bash
+   node .agents/skills/release-cli/scripts/skillpublish.js
+   ```
+
+   Exit `0` = unchanged, skip it; `10` = republish through the `happyskills-publish` flow and record it in `skills-lock.json`; `1` = undecidable (uncommitted bundle edits, or a missing tag), which is a state to fix rather than guess past.
+
+   **The two artifacts share a version but not a change rate.** The npm package carries the whole runtime; the bundle carries only the agent-facing contract (`SKILL.md`, `skill.json`, `CHANGELOG.md`, `LICENSE`). Most releases move the runtime and leave the contract byte-identical — 0.28.0, 0.28.1 and 0.29.0 all did — while `syncversion.js` bumps `skill.json` regardless, so **a version bump is not evidence that anything an agent reads has changed.** Republishing anyway is not merely wasted effort: it tells every pinned user they are behind for a version that gains them nothing, which teaches them to ignore the drift check ([architecture.md](architecture.md)) exactly when it will one day matter. The script compares the bundle against the last version `skills-lock.json` records as *published*, ignoring the version field for the reason above, and refuses to answer from a dirty tree because it reads committed state.

@@ -627,7 +627,7 @@
         "The release workflow: the `release-cli` skill",
         "Publishing checklist (manual, after the release commit and tag)"
       ],
-      "line_count": 50,
+      "line_count": 59,
       "links_to": [
         "docs/architecture.md",
         "docs/gotchas/packaging.md",
@@ -640,7 +640,8 @@
         "tools/rls.js",
         ".agents/skills/release-cli/SKILL.md",
         ".agents/skills/release-cli/scripts/preflight.sh",
-        ".agents/skills/release-cli/scripts/syncversion.js"
+        ".agents/skills/release-cli/scripts/syncversion.js",
+        ".agents/skills/release-cli/scripts/skillpublish.js"
       ],
       "source_unresolved": [],
       "tags": [

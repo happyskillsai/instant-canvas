@@ -108,10 +108,19 @@ git push && git push --tags
 
 ## Step 8 — Hand off the manual steps
 
-Print the deliberate next steps this skill never performs:
+Print the deliberate next steps this skill never performs.
 
-- `npm publish` — publishes to the npm registry; `prepublishOnly` re-runs the full suite; requires `npm login`.
-- Republish the HappySkills skill bundle (`.agents/skills/instant-canvas/`, whose `skill.json` already carries the new version) via the `happyskills-publish` flow.
+**`npm publish`** — always. It publishes the runtime to the npm registry; `prepublishOnly` re-runs the suite; requires `npm login`.
+
+**The HappySkills republish — ONLY if the bundle actually changed. Compute it, never assume it:**
+
+```bash
+node "$(git rev-parse --show-toplevel)/.agents/skills/release-cli/scripts/skillpublish.js"
+```
+
+Exit **0** = unchanged, say so and do not republish. Exit **10** = republish via the `happyskills-publish` flow, then record it in `skills-lock.json`. Exit **1** = it could not tell (uncommitted bundle edits, or a missing tag) — resolve that rather than guessing.
+
+This used to be an unconditional reminder, and that was wrong far more often than it was right: the npm package carries the whole runtime while the bundle carries only the agent-facing contract, so most releases leave `SKILL.md` byte-identical and `syncversion.js` bumps `skill.json` regardless. Three consecutive releases changed nothing an agent reads. **Republishing an unchanged bundle is worse than a wasted step** — every pinned user is told they are behind and gains nothing by updating, which trains them to ignore the drift check, the one signal that matters when the contract really does move. The script answers from git against the last version `skills-lock.json` records as published, ignoring the version field precisely because `syncversion.js` bumps it on every release and it therefore proves nothing.
 
 ## Mode C — the unreleased ledger
 
