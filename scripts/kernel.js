@@ -20,7 +20,7 @@ const { validate, collectBlocks, isInteractiveBlock, flattenFields, ISO_DATE_RE 
 const { readMarkdownSrc, inlineLocalImages, inlineImageFile, inlineMath, hasMarkdownExtension, renderableMarkdown, MAX_COVER_IMAGE_BYTES } = require('./lib/markdownsrc')
 const { virtualCanvasFor } = require('./lib/mdcanvas')
 const { virtualFormCanvasFor } = require('./lib/envcanvas')
-const { listImages, mediaStat, isStreamableFile, mediaKind, galleryMime, parseByteRange, normalizeRelDir, GALLERY_IMAGE_EXTS, MEDIA_VIDEO_EXTS, MEDIA_AUDIO_EXTS } = require('./lib/gallery')
+const { listImages, mediaStat, isStreamableFile, mediaKind, galleryMime, parseByteRange, normalizeRelDir, GALLERY_IMAGE_EXTS, MEDIA_VIDEO_EXTS, MEDIA_AUDIO_EXTS, MEDIA_PDF_EXTS, isPdfFile } = require('./lib/gallery')
 const { listDir, itemMeta } = require('./lib/browse')
 const { readAppearance, writeAppearance, MODES: APPEARANCE_MODES } = require('./lib/appearance')
 const { writeSelection, readSelection } = require('./lib/selection')
@@ -67,6 +67,10 @@ const MIME = {
 	'.png': 'image/png',
 	'.md': 'text/plain; charset=utf-8',
 	'.woff2': 'font/woff2',
+	// pdfjs-dist ships ESM ONLY — there is no UMD build. Without this entry the
+	// vendored module serves as application/octet-stream and the browser refuses it
+	// with an error that names neither the file nor the MIME.
+	'.mjs': 'text/javascript; charset=utf-8',
 }
 
 // ---------------------------------------------------------------- state
@@ -1439,6 +1443,14 @@ async function route(req, res, url) {
 			broadcast({ type: 'navigate', path: rel, kind: 'dir' })
 			return sendJson(res, 200, { ok: true, url: folderUrl(rel) })
 		}
+		// A PDF is recognised HERE, before `loadCanvas` would 404 it: there is no canvas
+		// to parse and never a session, because paper cannot submit. It navigates to the
+		// item modal like any other display file, and the viewer streams its bytes from
+		// the file route rather than receiving them in a payload.
+		if (isPdfFile(rel)) {
+			broadcast({ type: 'navigate', path: rel, kind: 'file' })
+			return sendJson(res, 200, { ok: true, url: canvasUrl(rel) })
+		}
 		const load = loadCanvas(rel)
 		if (load.status !== 200)
 			return sendJson(res, load.status, load.body)
@@ -1512,7 +1524,12 @@ async function route(req, res, url) {
 // ---------------------------------------------------------------- static
 
 function cspHeader() {
-	return "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; media-src 'self'; font-src 'self'; " +
+	// `worker-src 'self'` is declared explicitly rather than left to the CSP3 fallback
+	// chain (worker-src -> child-src -> script-src -> default-src): the PDF viewer's
+	// module worker is load-bearing, and a policy that depends on a fallback nobody
+	// has verified is a policy nobody can reason about. It permits our OWN worker only
+	// -- no `blob:`, so pdf.js's cross-origin CDN wrapper stays refused by design.
+	return "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; media-src 'self'; font-src 'self'; worker-src 'self'; " +
 		`connect-src 'self' ws://127.0.0.1:${PORT}`
 }
 
@@ -1560,6 +1577,7 @@ function serveShell(res) {
 		.replaceAll('__IC_IMAGE_EXTS__', JSON.stringify(GALLERY_IMAGE_EXTS))
 		.replaceAll('__IC_VIDEO_EXTS__', JSON.stringify(MEDIA_VIDEO_EXTS))
 		.replaceAll('__IC_AUDIO_EXTS__', JSON.stringify(MEDIA_AUDIO_EXTS))
+		.replaceAll('__IC_PDF_EXTS__', JSON.stringify(MEDIA_PDF_EXTS))
 		.replaceAll('__IC_DATE_RE__', ISO_DATE_RE.source)
 		.replaceAll('__IC_PLATFORM__', process.platform)
 		.replaceAll('__IC_APPEARANCE_ATTRS__', appearanceAttrs())
@@ -1695,6 +1713,10 @@ function handleGalleryDelete(res, body) {
 		const abs = path.resolve(ROOT, rel)
 		if (!insideRoot(ROOT, abs))
 			return bad('PATH_OUTSIDE_WORKSPACE', `"${rel}" is outside the workspace root — nothing was deleted.`)
+		// `mediaKind` -- NOT `classifyKind`. A PDF classifies as an item kind and is
+		// selectable, but must never be deletable from the browser, and this line is
+		// what keeps that true with no second guard: `mediaKind` does not answer for a
+		// PDF, so one lands here and is refused. Do not "fix" it to classifyKind.
 		if (mediaKind(rel) === null)
 			return bad('NOT_A_MEDIA_FILE', `"${rel}" is not an image, video or audio file — the whole request is refused and nothing was deleted.`)
 		let st = null
