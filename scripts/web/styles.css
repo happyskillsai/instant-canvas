@@ -1673,7 +1673,41 @@ body.presenting.cursor-hidden .stage{cursor:none}
    scroll is off (the stage handles zoom overflow). Scoped by body.image-overlay so the
    document deck/continuous layouts are untouched. */
 body.image-overlay .doc-modal-view,
-body.media-overlay .doc-modal-view{display:flex;overflow:hidden}
+body.media-overlay .doc-modal-view,
+body.pdf-overlay .doc-modal-view{display:flex;overflow:hidden}
+
+/* ---- PDF reader (virtualized pdf.js) --------------------------------------------
+   `.pdf-scroll` is the SCROLLER, and the IntersectionObserver's root — the pages are
+   its children, so the observer sees them relative to the pane rather than the window.
+
+   `content-visibility:auto` on `.pdf-page` is what makes a 500-page document cost the
+   layout of a handful. `contain-intrinsic-size` carries the `auto` keyword so the
+   browser REMEMBERS each page's real size once rendered: the placeholder starts at the
+   `--pdf-ratio` guess taken from page 1 and converges to the truth per page, with no
+   JS correction pass and no scroll anchoring to get wrong. The fallback ratio is A4
+   portrait. NOTE this stops only the work the BROWSER owns — a page RENDER is ours, and
+   is gated separately in `syncWindow` (see app.js). */
+.pdf-stage{flex:1 1 auto;display:flex;min-width:0;min-height:0;position:relative;--pdf-ratio:1.414}
+.pdf-scroll{flex:1 1 auto;overflow:auto;min-width:0;min-height:0;padding:16px;display:flex;
+	flex-direction:column;align-items:center;gap:16px;background:var(--panel-2)}
+/* `flex-shrink:0` is LOAD-BEARING, not a tidy default. These are flex items in a column
+   container, so the default `flex-shrink:1` lets the browser squash them to fit the
+   scroller rather than overflow it — and `aspect-ratio` loses that argument silently.
+   Measured: ten pages collapsed to 16px each inside a 338px pane, which put the
+   scroll midpoint on the LAST page, so the render window opened at page 10 and, since
+   every page was already on screen, never moved again. The viewer looked broken in a
+   way no error reported. */
+.pdf-page{flex:0 0 auto;width:min(100%,900px);aspect-ratio:1/var(--pdf-ratio);background:var(--panel);
+	border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,.18);overflow:hidden;
+	content-visibility:auto;contain-intrinsic-size:auto 1100px}
+/* A rendered page owns its own height — the canvas defines it, so the placeholder
+   aspect-ratio must stand down or a non-A4 page would be letterboxed inside it. */
+.pdf-page.is-rendered{aspect-ratio:auto}
+.pdf-canvas{display:block;width:100%;height:auto}
+.pdf-ph{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;
+	justify-content:center;gap:12px;color:var(--muted)}
+.pdf-ph[hidden]{display:none}
+.pdf-ph .lucide{width:64px;height:64px}
 .g-stage{flex:1 1 auto;display:flex;align-items:center;justify-content:center;overflow:hidden;
 	background:var(--panel-2);position:relative}
 .g-stage.zoomed{cursor:grab}
@@ -2082,6 +2116,10 @@ button.rr-row:hover{border-color:var(--accent);background:var(--tint)}
 	   cannot reach a deck (a gallery block is a deckBlocker), but a reader can still Cmd+P
 	   a continuous view holding one, so unskip them belt-and-braces. */
 	.gt{content-visibility:visible}
+	/* Same reason as `.gt` above: relevancy is viewport-based and a printed page has
+	   no viewport, so a skipped page can print BLANK. A PDF cannot reach the deck, but
+	   a reader can still Cmd+P the pane it is open in. */
+	.pdf-page{content-visibility:visible}
 	.sheet{box-shadow:none;margin:0}
 	.sheet:not(:last-child){break-after:page;page-break-after:always}
 

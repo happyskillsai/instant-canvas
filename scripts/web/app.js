@@ -28,6 +28,12 @@ const VIDEO_EXTS = new Set((() => {
 const AUDIO_EXTS = new Set((() => {
 	try { return JSON.parse(document.body.dataset.audioExts || '[]') } catch { return [] }
 })())
+// The PDF union, single-sourced the same way (`<body data-pdf-exts>`). A PDF is its own
+// kind, NOT media: it streams from the same file route, but it is never deletable from the
+// browser (see lib/gallery.js PDF_RENDERABLE), so it needs its own predicate here too.
+const PDF_EXTS = new Set((() => {
+	try { return JSON.parse(document.body.dataset.pdfExts || '[]') } catch { return [] }
+})())
 // The date-axis pattern, single-sourced from lib/validate.js the same way
 // (`<body data-date-re>`). It decides `xaxis.type: 'date'` vs `'category'`, and the
 // validator's density checks are written against exactly this rule — they exempt a date
@@ -40,6 +46,7 @@ const DATE_RE = (() => {
 const pathExt = (p) => { const m = /\.[^./\\]+$/.exec(String(p)); return m ? m[0].toLowerCase() : '' }
 const isImagePath = (p) => IMAGE_EXTS.has(pathExt(p))
 const isVideoPath = (p) => VIDEO_EXTS.has(pathExt(p))
+const isPdfPath = (p) => PDF_EXTS.has(pathExt(p))
 const isAudioPath = (p) => AUDIO_EXTS.has(pathExt(p))
 
 async function api(path, opts = {}) {
@@ -4844,6 +4851,20 @@ function syncViewToggle() {
 		closePalette()
 		return
 	}
+	// A PDF is not a document either — it is ALREADY paper, which is exactly why the deck
+	// controls make no sense on it: there is nothing for this app to paginate, theme or
+	// re-print. Same shape as the two branches above, with its own reasons.
+	if (state.pdfLand) {
+		$('viewToggle').hidden = true
+		$('presentBtn').hidden = true
+		$('printBtn').hidden = true
+		paperControl('tocBtn', { loaded: true, enabled: false, on: false, label: '', reason: 'This is a PDF — it carries its own structure, not one this app derives' })
+		paperControl('stripsBtn', { loaded: true, enabled: false, on: false, label: '', reason: 'This is a PDF — it is already paper, with its own headers' })
+		paperControl('paletteBtn', { loaded: true, enabled: false, on: false, label: '', reason: 'This is a PDF — it carries no document theme' })
+		paperControl('paperBtn', { loaded: false, enabled: false, on: false, label: '', reason: '' })
+		closePalette()
+		return
+	}
 	// A presentation owns the view-toggle slot with a Present control instead of the
 	// deck/continuous pair (D9): a deck has no continuous twin. The TOC and running-strip
 	// buttons stay in place but disable — a deck has neither — and the palette stays live.
@@ -6278,6 +6299,289 @@ async function populateItemInfoDrawer(rel, canvas) {
 	renderItemMeta($('docInfoPanel'), { stat, canvas, themeSource: state.themeSource, item })
 }
 
+// -------------------------------------------------------------------- PDF stage
+//
+// A read-only PDF reader, built on the vendored pdf.js (see scripts/web/vendor/VENDORED.md).
+// It mirrors createImageStage/createMediaStage's shape — a factory returning
+// { el, load, dispose, … } — and, like them, never calls /api/canvas: the bytes come from
+// the gallery file route, which serves PDFs with HTTP Range exactly as it serves video.
+//
+// THREE MEMORY BUDGETS, and they are separate problems with separate answers. A 200 MB PDF
+// is normal here, usually large because of embedded images:
+//
+//   1. The FILE BYTES.        disableStream + disableAutoFetch, so pdf.js pulls ~64 KB
+//                             ranges on demand instead of the whole file. Single-digit MB
+//                             resident whether the document is 2 MB or 200 MB.
+//   2. The CANVAS BACKING     Only pages near the viewport get a canvas. An A4 page at
+//      STORE.                 DPR 2 is ~18 MB of bitmap, so twenty mounted pages would
+//                             crash the tab on a SMALL document. Virtualize + evict.
+//   3. The DECODED IMAGE      The killer, and the one neither of the above touches: the
+//      XOBJECTS.              worker decodes an embedded image at its NATIVE resolution
+//                             regardless of the canvas size, so one full-page 4000×3000
+//                             JPEG is 48 MB decoded whether painted at 900px or 90px.
+//                             Only page.cleanup() releases it.
+//
+// Budget 3 is why the eviction ORDER below is not negotiable: PDFPageProxy.cleanup()
+// returns FALSE if a render is still in flight and defers the release until it finishes.
+// On seconds-long renders that window is wide enough to hold many pages at once, and a
+// deferred cleanup looks exactly like a successful one. Cancel first, then clean up.
+const PDF_WINDOW = 2 // pages rendered on each side of the viewport
+const PDF_MAX_SCALE = 1.5 // DPR ceiling — a page at 2 is ~4x the bitmap of one at 1
+
+let pdfLibPromise = null
+/** Load the vendored pdf.js once, lazily — 444 KB nobody pays for until they open a PDF. */
+function loadPdfLib() {
+	if (!pdfLibPromise) {
+		const q = '?token=' + encodeURIComponent(TOKEN)
+		pdfLibPromise = import('/assets/vendor/pdf.min.mjs' + q).then((lib) => {
+			// A same-origin workerSrc is NOT blob-wrapped by pdf.js (_createCDNWrapper fires
+			// only when _isSameOrigin is false), so `script-src 'self'` permits it and we need
+			// no `blob:`. The token rides as a query — buildable here, unlike a CSS url().
+			lib.GlobalWorkerOptions.workerSrc = '/assets/vendor/pdf.worker.min.mjs' + q
+			return lib
+		}).catch((err) => { pdfLibPromise = null; throw err })
+	}
+	return pdfLibPromise
+}
+
+function createPdfStage(metaPanel) {
+	const wrap = document.createElement('div')
+	wrap.className = 'pdf-stage'
+	const scroller = document.createElement('div')
+	scroller.className = 'pdf-scroll'
+	const ph = document.createElement('div')
+	ph.className = 'pdf-ph'
+	ph.hidden = true
+	wrap.append(scroller, ph)
+	const panel = metaPanel || document.createElement('div')
+	if (!metaPanel) { panel.className = 'g-meta'; wrap.append(panel) }
+
+	// `pages` maps a 1-based page number to its mounted record. A record holds the canvas,
+	// the live RenderTask and the PDFPageProxy — every one of which must be released by
+	// evict(), and none of which any CSS can reach.
+	const st = { path: null, doc: null, pages: new Map(), ro: null, gen: 0, lib: null, scrollBound: false }
+
+	function pageEl(n) { return scroller.querySelector('[data-pdf-page="' + n + '"]') }
+
+	/**
+	 * Release ONE page. The order is the whole point — see the header comment.
+	 * A cleanup() that returns false has silently deferred; we count that rather than
+	 * assume success, because the two are indistinguishable from the outside.
+	 */
+	async function evict(n) {
+		const rec = st.pages.get(n)
+		if (!rec) return
+		st.pages.delete(n)
+		if (rec.task) {
+			try { rec.task.cancel() } catch { /* already settled */ }
+			try { await rec.task.promise } catch { /* RenderingCancelledException — expected */ }
+		}
+		if (rec.page) {
+			const cleaned = rec.page.cleanup()
+			if (!cleaned) st.deferredCleanups = (st.deferredCleanups || 0) + 1
+		}
+		if (rec.canvas) {
+			// Zero the backing store BEFORE detaching: a detached canvas keeps its bitmap,
+			// the same way a detached <video> keeps playing.
+			rec.canvas.width = 0
+			rec.canvas.height = 0
+			rec.canvas.remove()
+		}
+		const host = pageEl(n)
+		if (host) host.classList.remove('is-rendered')
+	}
+
+	async function renderPage(n) {
+		if (st.pages.has(n) || !st.doc) return
+		const host = pageEl(n)
+		if (!host) return
+		const gen = st.gen
+		const rec = {}
+		st.pages.set(n, rec) // claim the slot first — re-entrancy guard
+		let page
+		try {
+			page = await st.doc.getPage(n)
+		} catch {
+			st.pages.delete(n)
+			return
+		}
+		if (gen !== st.gen || !st.pages.has(n)) { try { page.cleanup() } catch { /* gone */ } ; return }
+		rec.page = page
+		const cssW = host.clientWidth || scroller.clientWidth || 800
+		const base = page.getViewport({ scale: 1 })
+		const dpr = Math.min(PDF_MAX_SCALE, window.devicePixelRatio || 1)
+		const scale = (cssW / base.width) * dpr
+		const vp = page.getViewport({ scale })
+		const canvas = document.createElement('canvas')
+		canvas.className = 'pdf-canvas'
+		canvas.width = Math.max(1, Math.floor(vp.width))
+		canvas.height = Math.max(1, Math.floor(vp.height))
+		rec.canvas = canvas
+		host.append(canvas)
+		const task = page.render({ canvasContext: canvas.getContext('2d'), viewport: vp })
+		rec.task = task
+		try {
+			await task.promise
+			rec.task = null
+			if (gen === st.gen) host.classList.add('is-rendered')
+		} catch {
+			rec.task = null // cancelled (evicted mid-render) or failed — evict() owns the cleanup
+		}
+	}
+
+	/**
+	 * Which page is the reader actually looking at — the one containing the scroller's
+	 * vertical midpoint, falling back to the nearest.
+	 *
+	 * This is deliberately computed from SCROLL POSITION rather than from
+	 * IntersectionObserver entries. An observer answers "is this visible", which is not
+	 * the same question: when several pages intersect at once the callback delivers them
+	 * in an arbitrary batch, and picking one (the last, say) pins the window whereever
+	 * that batch happened to end. It also only fires on CHANGES, so a window that starts
+	 * wrong stays wrong. Scroll position is unambiguous and is re-read on every scroll.
+	 */
+	function centrePage() {
+		const mid = scroller.scrollTop + scroller.clientHeight / 2
+		const hosts = scroller.children
+		if (!hosts.length) return 1
+		for (let i = 0; i < hosts.length; i++) {
+			const h = hosts[i]
+			if (mid >= h.offsetTop && mid < h.offsetTop + h.offsetHeight)
+				return Number(h.dataset.pdfPage) || (i + 1)
+		}
+		return mid <= 0 ? 1 : hosts.length
+	}
+
+	/**
+	 * Mount/evict from ONE predicate, and gate the render on it. A render is OUR work, not
+	 * the browser's: `content-visibility` and `display:none` stop an <img>, but nothing in
+	 * CSS can stop a render we kicked off ourselves.
+	 */
+	function syncWindow() {
+		if (!st.doc) return
+		const centre = centrePage()
+		const lo = Math.max(1, centre - PDF_WINDOW)
+		const hi = Math.min(st.doc.numPages, centre + PDF_WINDOW)
+		for (const n of [...st.pages.keys()]) {
+			if (n < lo || n > hi) evict(n)
+		}
+		for (let n = lo; n <= hi; n++) renderPage(n)
+	}
+
+	// One rAF-coalesced handler: a scroll fires far more often than a window can change.
+	let scrollQueued = false
+	function onScroll() {
+		if (scrollQueued) return
+		scrollQueued = true
+		requestAnimationFrame(() => { scrollQueued = false; syncWindow() })
+	}
+
+	async function load(p) {
+		st.path = p
+		st.gen++
+		const gen = st.gen
+		let lib
+		try {
+			lib = await loadPdfLib()
+		} catch {
+			ph.hidden = false
+			ph.innerHTML = icon('file-text') + '<div class="g-noprev">The PDF viewer failed to load.</div>'
+			return
+		}
+		if (gen !== st.gen) return
+		st.lib = lib
+		const { json } = await api('/api/gallery/meta?path=' + encodeURIComponent(p))
+		if (gen !== st.gen) return
+		const m = json && json.ok ? json : null
+		renderMeta(panel, m, p)
+
+		// Every flag here is load-bearing and documented in vendor/VENDORED.md. Do not drop
+		// one to "simplify": useWasm alone is the difference between a viewer that works
+		// under our CSP and one that throws CompileError on a scanned document.
+		const task = lib.getDocument({
+			url: galleryFileUrl(p, m && m.modified),
+			disableRange: false, // ranged fetching ON — the reason a 200 MB file opens at all
+			disableStream: true, // no full-file GET (required for disableAutoFetch to work)
+			disableAutoFetch: true, // no background prefetch of the rest of the file
+			useWasm: false, // CSP: no wasm-unsafe-eval, so JPX/JBIG2 use the JS decoders
+			maxImageSize: 16777216, // a pathological scan degrades instead of OOMing the tab
+		})
+		st.loadingTask = task
+		let doc
+		try {
+			doc = await task.promise
+		} catch {
+			if (gen !== st.gen) return
+			ph.hidden = false
+			ph.innerHTML = icon('file-text') + '<div class="g-noprev">This PDF could not be opened.</div>'
+			return
+		}
+		if (gen !== st.gen) { try { task.destroy() } catch { /* gone */ } ; return }
+		st.doc = doc
+
+		// Placeholder geometry comes from page 1 alone. Measuring every page would mean
+		// getPage() on all N — exactly the cost virtualization exists to avoid. The CSS
+		// `contain-intrinsic-size: auto` then makes the browser REMEMBER each page's real
+		// size once rendered, so a mixed-size document converges with no JS correction.
+		let ratio = 1.414 // A4 portrait, until page 1 says otherwise
+		try {
+			const first = await doc.getPage(1)
+			const v = first.getViewport({ scale: 1 })
+			if (v.width > 0) ratio = v.height / v.width
+			first.cleanup()
+		} catch { /* keep the default */ }
+		if (gen !== st.gen) return
+
+		// One CSSOM write, on the stage ROOT rather than on each page. Every `.pdf-page`
+		// inherits it, so no DESCENDANT of `.pdf-stage` carries a style attribute and the
+		// zero-inline-styles assertion still holds. (The CSP exempts CSSOM from its rules,
+		// but the assertion is about the attribute, which setProperty still reflects into.)
+		wrap.style.setProperty('--pdf-ratio', String(ratio))
+		scroller.textContent = ''
+		for (let n = 1; n <= doc.numPages; n++) {
+			const host = document.createElement('div')
+			host.className = 'pdf-page'
+			host.dataset.pdfPage = String(n)
+			scroller.append(host)
+		}
+		// renderMeta never emits a Pages row, so syncMetaRow would silently no-op. Append
+		// it — page count is the one PDF fact the server deliberately does not compute
+		// (no server-side PDF parsing, exactly as video duration comes from the browser).
+		// The `data-mrow` key is set HERE, by the caller, exactly as the media stage sets
+		// it on its Duration and Dimensions rows — metaRow itself does not assign one.
+		const pagesRow = metaRow('Pages', String(doc.numPages), String(doc.numPages))
+		pagesRow.dataset.mrow = 'pages'
+		panel.append(pagesRow)
+
+		scroller.addEventListener('scroll', onScroll, { passive: true })
+		st.scrollBound = true
+		// A ResizeObserver re-windows on a pane resize: the page boxes change height, so the
+		// midpoint lands on a different page even though nobody scrolled.
+		st.ro = new ResizeObserver(() => onScroll())
+		st.ro.observe(scroller)
+		syncWindow()
+	}
+
+	return {
+		el: wrap,
+		load,
+		pageCount: () => (st.doc ? st.doc.numPages : 0),
+		deferredCleanups: () => st.deferredCleanups || 0,
+		mountedCanvases: () => scroller.querySelectorAll('canvas').length,
+		dispose() {
+			// Load-bearing, exactly as the media stage's is. An in-flight render holds its
+			// page's decoded images in the worker heap, and destroying the loading task
+			// without cancelling first leaves them there until the worker itself dies.
+			st.gen++
+			if (st.scrollBound) { scroller.removeEventListener('scroll', onScroll); st.scrollBound = false }
+			if (st.ro) { st.ro.disconnect(); st.ro = null }
+			for (const n of [...st.pages.keys()]) evict(n)
+			if (st.loadingTask) { try { st.loadingTask.destroy() } catch { /* gone */ } ; st.loadingTask = null }
+			st.doc = null
+		},
+	}
+}
+
 async function renderCanvas() {
 	disposeCharts()
 	disposeGalleries()
@@ -6295,8 +6599,10 @@ async function renderCanvas() {
 	const main = $('docModalView')
 	document.body.classList.remove('image-overlay')
 	document.body.classList.remove('media-overlay')
+	document.body.classList.remove('pdf-overlay')
 	state.imageLand = false
 	state.mediaLand = null
+	state.pdfLand = false
 	// Dispose the outgoing stage BEFORE it is replaced — a detached media element keeps
 	// playing until GC, so prev/next between two videos would leak the first one's audio.
 	overlayStage?.dispose?.()
@@ -6351,6 +6657,23 @@ async function renderCanvas() {
 		main.replaceChildren(stage.el)
 		stage.load(state.activeId)
 		showItemInfo(state.activeId.split('/').pop() || state.activeId) // stage.load fills the panel; reveal + collapse now
+		syncViewToggle()
+		return
+	}
+	// A PDF renders the virtualized pdf.js reader, mirroring the two branches above —
+	// /api/canvas is never called for it, and its bytes reach the viewer through the
+	// Range-serving file route rather than a payload.
+	if (isPdfPath(state.activeId)) {
+		state.canvasDoc = null
+		state.docLand = false
+		state.presLand = false
+		state.pdfLand = true
+		document.body.classList.add('pdf-overlay')
+		const stage = createPdfStage($('docInfoPanel')) // meta renders into the shared drawer
+		overlayStage = stage
+		main.replaceChildren(stage.el)
+		stage.load(state.activeId)
+		showItemInfo(state.activeId.split('/').pop() || state.activeId)
 		syncViewToggle()
 		return
 	}
