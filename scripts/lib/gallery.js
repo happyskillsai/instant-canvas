@@ -59,7 +59,32 @@ const AUDIO_METADATA_ONLY = { '.flac': 'audio/flac', '.aiff': 'audio/aiff', '.wm
 const MEDIA_VIDEO_EXTS = [...Object.keys(VIDEO_RENDERABLE), ...Object.keys(VIDEO_METADATA_ONLY)]
 const MEDIA_AUDIO_EXTS = [...Object.keys(AUDIO_RENDERABLE), ...Object.keys(AUDIO_METADATA_ONLY)]
 
+/**
+ * A document the browser can render but that is NOT media. Its bytes stream from the
+ * file route exactly as a video's do — the reader seeks a PDF the same way, and the
+ * viewer fetches byte RANGES rather than the whole file, which is the only reason a
+ * 200 MB document is openable at all.
+ *
+ * Deliberately kept OUT of `mediaKind`, and that is load-bearing rather than tidy:
+ * `mediaKind` is the DELETE route's gate (`NOT_A_MEDIA_FILE`, kernel.js), so folding
+ * `.pdf` into it would silently hand the browser the power to permanently delete a
+ * generated report. A PDF is selectable — so an agent can be handed "act on these" —
+ * without being deletable. Adding it here and nowhere else is what keeps those two
+ * facts independent, with no second guard to remember.
+ */
+const PDF_RENDERABLE = { '.pdf': 'application/pdf' }
+
+/**
+ * The PDF extension union, lowercase with the leading dot. Templated into the app
+ * shell (`__IC_PDF_EXTS__`) so the browser classifies a routed path WITHOUT a copied
+ * list — the same discipline as the image / video / audio unions above.
+ */
+const MEDIA_PDF_EXTS = Object.keys(PDF_RENDERABLE)
+
 const hasKey = (obj, ext) => Object.prototype.hasOwnProperty.call(obj, ext)
+
+/** A PDF, decided from the extension alone (never opened). */
+const isPdfFile = (name) => hasKey(PDF_RENDERABLE, extOf(name))
 
 /** A file a browser can draw (`<img src>` works). */
 const isRenderableImage = (name) => GALLERY_RENDERABLE.has(extOf(name))
@@ -80,6 +105,7 @@ const galleryMime = (name) => {
 		VIDEO_METADATA_ONLY[ext] ||
 		AUDIO_RENDERABLE[ext] ||
 		AUDIO_METADATA_ONLY[ext] ||
+		PDF_RENDERABLE[ext] ||
 		null
 	)
 }
@@ -87,6 +113,12 @@ const galleryMime = (name) => {
 /**
  * What kind of media a name is, decided from the extension alone (never opened):
  * `'image'` (the existing image union), `'video'`, `'audio'`, or `null`.
+ *
+ * DO NOT widen this to non-media kinds. It is the gate `POST /api/gallery/delete`
+ * refuses on (`NOT_A_MEDIA_FILE`), so every extension added here becomes deletable
+ * from the reader's browser. `.pdf` is deliberately absent for exactly that reason —
+ * see `PDF_RENDERABLE`. Callers that want "any streamable kind" want
+ * `isStreamableFile`; callers that want the item's kind want `classifyKind`.
  */
 const mediaKind = (name) => {
 	const ext = extOf(name)
@@ -102,8 +134,8 @@ const isRenderableMedia = (name) => {
 	return hasKey(VIDEO_RENDERABLE, ext) || hasKey(AUDIO_RENDERABLE, ext)
 }
 
-/** The file route's gate: an image OR a media file whose bytes we will stream. */
-const isStreamableFile = (name) => isRenderableImage(name) || isRenderableMedia(name)
+/** The file route's gate: an image, a media file, or a PDF whose bytes we will stream. */
+const isStreamableFile = (name) => isRenderableImage(name) || isRenderableMedia(name) || isPdfFile(name)
 
 /**
  * Parse an HTTP `Range` header against a known `size` (bytes). Pure and
@@ -282,7 +314,11 @@ function listImages(root, dirRel, { recursive = true, cap = 2000 } = {}) {
 function mediaStat(root, rel) {
 	if (typeof rel !== 'string')
 		return null
-	const kind = mediaKind(rel)
+	// `mediaKind` deliberately does not answer for a PDF (it is the delete gate — see
+	// PDF_RENDERABLE), but a PDF needs exactly this stat shape for the browse listing
+	// and the info drawer. Widening happens HERE, at the one caller that wants it,
+	// rather than in the predicate every other caller shares.
+	const kind = mediaKind(rel) || (isPdfFile(rel) ? 'pdf' : null)
 	if (!kind)
 		return null
 	const abs = path.resolve(root, rel)
@@ -323,6 +359,9 @@ module.exports = {
 	AUDIO_METADATA_ONLY,
 	MEDIA_VIDEO_EXTS,
 	MEDIA_AUDIO_EXTS,
+	PDF_RENDERABLE,
+	MEDIA_PDF_EXTS,
+	isPdfFile,
 	isRenderableImage,
 	isGalleryImage,
 	galleryMime,

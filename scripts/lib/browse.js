@@ -5,7 +5,7 @@ const path = require('node:path')
 const { insideRoot } = require('./paths')
 const { isExcludedDir, canvasEntry, documentEntry, envEntry } = require('./scan')
 const { companionIndex } = require('./companion')
-const { normalizeRelDir, mediaKind, mediaStat, isSkippable } = require('./gallery')
+const { normalizeRelDir, mediaKind, mediaStat, isSkippable, isPdfFile } = require('./gallery')
 const { hasMarkdownExtension } = require('./markdownsrc')
 const { isEnvFile } = require('./envfile')
 
@@ -18,7 +18,7 @@ const DEFAULT_CAP = 2000
 // The item kinds the browse view can filter by, in display group order. FOLDERS
 // are navigation, not items — they are never in this set and never a filterable
 // type. `env` is a `.env`/`.env.*` file, which OPENS as a synthesised form.
-const ITEM_KINDS = ['canvas', 'env', 'document', 'image', 'video', 'audio']
+const ITEM_KINDS = ['canvas', 'env', 'document', 'pdf', 'image', 'video', 'audio']
 
 /**
  * The scan's canvas/document builders return the sidebar's entry shape keyed by
@@ -102,6 +102,10 @@ function classifyKind(rel) {
 	const mkind = mediaKind(rel)
 	if (mkind)
 		return mkind
+	// A PDF is its own kind, NOT media: `mediaKind` gates deletion, so a PDF must
+	// classify here without ever answering there (see gallery.js PDF_RENDERABLE).
+	if (isPdfFile(rel))
+		return 'pdf'
 	if (hasMarkdownExtension(rel))
 		return 'document'
 	if (rel.endsWith('.json'))
@@ -130,7 +134,7 @@ function itemMeta(root, rel) {
 		return null
 
 	// Media: mediaStat is the shared image/video/audio gate (extension + lstat).
-	if (kind === 'image' || kind === 'video' || kind === 'audio')
+	if (kind === 'image' || kind === 'video' || kind === 'audio' || kind === 'pdf')
 		return mediaStat(root, rel)
 
 	// Canvas / document: decide from the extension, never open the file.
@@ -228,6 +232,12 @@ function collectFiles(root, relDir, index, want, buckets, cc, q) {
 		} else if (hasMarkdownExtension(name)) {
 			if (!want || want.has('document'))
 				add(buckets.document, withRel(documentEntry(root, rel, index)))
+		} else if (isPdfFile(name)) {
+			// A PDF groups with the documents, not the media: it is something to READ.
+			// `mediaItem` is still the right builder — the stat shape is identical, and
+			// `mediaStat` answers for a PDF (see gallery.js).
+			if (!want || want.has('pdf'))
+				add(buckets.pdf, mediaItem(root, rel))
 		} else {
 			// image / video / audio — decided from the extension, never opened, and
 			// only when the filter wants that kind (so the cap is spent on matches,
@@ -344,7 +354,7 @@ function listDir(root, dirRel, { cap = DEFAULT_CAP, dirsOnly = false, recursive 
 	const want = normalizeTypes(types)
 	const needle = normalizeQuery(q)
 	const index = companionIndex(root)
-	const buckets = { canvas: [], env: [], document: [], image: [], video: [], audio: [] }
+	const buckets = { canvas: [], env: [], document: [], pdf: [], image: [], video: [], audio: [] }
 	const cc = { total: 0, truncated: false, cap }
 
 	if (recursive)
@@ -352,7 +362,7 @@ function listDir(root, dirRel, { cap = DEFAULT_CAP, dirsOnly = false, recursive 
 	else
 		collectFiles(root, relDir, index, want, buckets, cc, needle)
 
-	const items = [...buckets.canvas, ...buckets.env, ...buckets.document, ...buckets.image, ...buckets.video, ...buckets.audio]
+	const items = [...buckets.canvas, ...buckets.env, ...buckets.document, ...buckets.pdf, ...buckets.image, ...buckets.video, ...buckets.audio]
 	return { dir: toPosix(relDir), dirs, items, truncated: cc.truncated, recursive: !!recursive }
 }
 
