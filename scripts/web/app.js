@@ -6504,6 +6504,12 @@ function createPdfStage(metaPanel) {
 			disableStream: true, // no full-file GET (required for disableAutoFetch to work)
 			disableAutoFetch: true, // no background prefetch of the rest of the file
 			useWasm: false, // CSP: no wasm-unsafe-eval, so JPX/JBIG2 use the JS decoders
+			// ...and `wasmUrl` is what those JS decoders are LOADED FROM. `useWasm: false`
+			// does not select an inlined decoder — it selects `openjpeg_nowasm_fallback.js`
+			// / `jbig2_nowasm_fallback.js`, which pdf.js still fetches from this prefix. With
+			// it unset a JPEG2000 or JBIG2 image renders BLANK, silently: no CSP violation,
+			// no console error, a page that simply has nothing on it. Measured, not guessed.
+			wasmUrl: '/assets/vendor/pdfwasm/',
 			maxImageSize: 16777216, // a pathological scan degrades instead of OOMing the tab
 		})
 		st.loadingTask = task

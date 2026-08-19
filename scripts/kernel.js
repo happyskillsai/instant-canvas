@@ -2142,7 +2142,16 @@ function boot() {
 			// non-secret, identical for every install, and expose neither workspace data
 			// nor the token; the Host allowlist above still applies. Nothing else is exempt.
 			const isPublicFont = req.method === 'GET' && /^\/assets\/vendor\/[A-Za-z0-9._-]+\.woff2$/.test(url.pathname)
-			if (!(req.method === 'GET' && url.pathname === '/healthz') && !isPublicFont) {
+			// The PDF viewer's pure-JS image decoders are exempt for the SAME reason and on
+			// the same terms as the fonts. pdf.js builds their URL by concatenating a
+			// filename onto the `wasmUrl` PREFIX (`JpxImage._noWasmFilename`), so a `?token=`
+			// query has nowhere to go — and a 403 here is silent: the page renders, the
+			// scanned image simply does not, with no error in the console. They are static
+			// vendored assets, identical for every install, carrying neither workspace data
+			// nor the token. The pattern is pinned to the two exact filenames rather than the
+			// directory, so it cannot widen into a general JS-serving hole.
+			const isPublicDecoder = req.method === 'GET' && /^\/assets\/vendor\/pdfwasm\/(openjpeg|jbig2)_nowasm_fallback\.js$/.test(url.pathname)
+			if (!(req.method === 'GET' && url.pathname === '/healthz') && !isPublicFont && !isPublicDecoder) {
 				const provided = url.searchParams.get('token') || req.headers['x-ic-token']
 				if (!tokenOk(provided))
 					return forbidden(res, 'Missing or invalid token.')
