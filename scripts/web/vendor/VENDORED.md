@@ -119,9 +119,17 @@ After rebuilding, re-verify: `eval(`, `new Worker`, and `importScripts` must all
 | `pdf.min.mjs` | 454,669 |
 | `pdf.worker.min.mjs` | 1,262,398 |
 
+Plus the two **pure-JS image decoders** in `pdfwasm/`:
+
+| File | Bytes |
+|---|---|
+| `pdfwasm/openjpeg_nowasm_fallback.js` | 451,590 |
+| `pdfwasm/jbig2_nowasm_fallback.js` | 145,703 |
+
 Deliberately NOT copied: source maps, `legacy/`, `pdf.sandbox.*`, the CMap tables, the standard
-font data, and the `.wasm` binaries. Every one of them is unreachable under the viewer's config
-(below), and together they are several MB we would ship for nothing.
+font data, and the `.wasm` binaries themselves. Those are unreachable under the viewer's config;
+the two `_nowasm_fallback.js` files are the opposite — **load-bearing, and shipping without them
+is a silent failure** (below).
 
 ## `pdfjs-dist` ships ESM ONLY — there is no UMD build
 
@@ -141,9 +149,34 @@ the MIME type.
 | `disableRange: false` | Ranged fetching ON — the reason a 200 MB file opens at all. |
 | `maxImageSize` | A pathological scan degrades to a skipped image instead of an OOM. pdf.js SKIPS silently above the cap, so the labeled fallback is ours to render. |
 
-`cMapUrl`, `standardFontDataUrl`, `wasmUrl` and `iccUrl` are all left **unset**, which makes
-`useWorkerFetch` derive `false`. That is what keeps the worker from issuing network requests of
-its own — every byte reaches it by message passing from the main thread.
+`cMapUrl`, `standardFontDataUrl` and `iccUrl` are left **unset**, which keeps `useWorkerFetch`
+false so the worker issues no network requests of its own — every byte reaches it by message
+passing from the main thread.
+
+**`wasmUrl` is NOT optional, despite `useWasm: false`, and this is the trap.** `useWasm: false`
+does not select a decoder built into `pdf.worker.min.mjs`. It selects a *different file*:
+
+```js
+class JpxImage extends WasmImage {
+  _filename = "openjpeg.wasm"; _noWasmFilename = "openjpeg_nowasm_fallback.js"
+}
+class JBig2CCITTFaxImage extends WasmImage {
+  _filename = "jbig2.wasm";   _noWasmFilename = "jbig2_nowasm_fallback.js"
+}
+```
+
+Both are fetched from the `wasmUrl` prefix. With `wasmUrl` unset there is nothing to fetch, so a
+JPEG2000 or JBIG2 image — i.e. the scanner and archival formats — renders as **nothing at all**:
+no CSP violation, no console error, no rejected promise, just a blank page. This shipped once and
+was caught only by counting pixels. `scripts/test/pdf.test.js` now asserts the two files serve
+**tokenless** (pdf.js concatenates the filename onto the prefix, so a `?token=` query has nowhere
+to go — the same shape as the `@font-face` trap), and `mediaui.test.js` asserts a real JPEG2000
+page actually paints ink.
+
+Neither fallback touches real WebAssembly: each shadows the global with a wasm2js shim
+(`var WebAssembly = {...}; isWasm2js: true`), so no `wasm-unsafe-eval` is needed. **Measured cost**
+of taking that path: a 2400×3000 JPEG2000 page renders in ~5.9 s versus ~350 ms for the same image
+as DCTDecode. Ordinary embedded JPEG is unaffected — the browser decodes it natively.
 
 ## Verified against THIS build (6.2.108), not inherited from an older one
 

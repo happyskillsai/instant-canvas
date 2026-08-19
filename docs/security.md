@@ -65,6 +65,20 @@ Instant Canvas keeps secrets out of the agent conversation **during capture**: t
 - **File drops are the first surface that writes ARBITRARY reader bytes at an ARBITRARY name, and the guards are sized for that.** `POST /api/upload/plan` + `PUT /api/upload` (`lib/upload.js`) let a reader drag files from their OS file manager into the folder they are viewing. It sits on the safe side of the line the removed folder-delete drew — this is **creation, not destruction**, and the framing that justifies it is *handing the agent data*: drop a CSV into the workspace, then ask the agent to chart it. But the name and the directory both arrive from the browser, so both are untrusted, and the route inherits every guard above plus a plan step. `safeName` refuses anything that is not a bare basename: **both** separators (`path.basename` on POSIX does not treat `\` as one, so a Windows browser could otherwise steer the write), `.`/`..`, a **leading dot** (a conservative v1 call — every dot-file surface here has bespoke semantics, and a drop is the wrong place to invent another), names over 255 **bytes**, the Windows reserved device names, a trailing dot or space, and control characters. `checkTarget` then confines **twice** — the directory, and the *joined* destination, since `relDir` and `name` can be individually innocent and combine into an escape — and `lstat`s the directory rather than `stat`ing it, so a **symlinked directory** that resolves back inside the root (which `insideRoot` admits happily) is refused by the one check that also refuses a plain file. Refusals are byte-clean, and the plan route reports collisions by **existence only**, never opening a file it names. Nothing is overwritten without an explicit confirmation, and the gate that enforces it is the `PUT`, not the plan: **the plan is a courtesy to the reader, never a token of authorization**, because a client can call `PUT` directly. There is no CLI door and no agent surface — an agent writes files with its own tools.
 - **`GET /api/meta` (the item info drawer's stat source) is the same discipline, applied to one file.** `lib/browse.js` `itemMeta` returns stat-only metadata for a single renderable path of any kind — and it is **pure `fs` stat**, serving no file bytes, so the `JSON.parse`-leak class does not apply at all. It classifies `kind` from the **extension** (media via `mediaStat`, else the markdown allowlist or a `.json`), confines with `insideRoot`, and `lstat`s before returning — one `!isFile()` check refuses both a **directory** and a **symlink** (the extension gate reads the *link* name, so a `report.canvas.json` symlinked at `.env` is refused). Anything else — a non-renderable extension, a directory, a symlink — is `null` → a **byte-clean 404**. It **never opens or parses** the file, so it can never echo a byte of a path it refuses.
 
+## The two tokenless static assets
+
+Every route requires the workspace token except `/healthz` and **two** classes of vendored static
+asset: the `*.woff2` chrome fonts, and `pdfwasm/{openjpeg,jbig2}_nowasm_fallback.js`, the PDF
+viewer's pure-JS image decoders. Both are exempt for the same structural reason — the consumer
+builds their URL by **concatenation** (a CSS `url()`, and pdf.js's `wasmUrl` prefix), so there is
+nowhere to put a query token — and both fail *silently* when refused, which is what makes a
+tokened gate the wrong answer rather than merely an inconvenient one.
+
+What makes the exemption safe is that these are inert, identical-for-every-install vendored bytes
+carrying neither workspace data nor the token, and that the pattern is pinned to **exact
+filenames** rather than the directory, so it cannot widen into a general JS-serving hole. The Host
+allowlist and the loopback bind still apply. Nothing else is exempt.
+
 ## Network perimeter
 
 - Loopback only: the literal `127.0.0.1`, no network mode, no HTTPS, no CORS.

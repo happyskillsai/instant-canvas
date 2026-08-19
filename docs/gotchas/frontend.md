@@ -582,3 +582,39 @@ the case where nobody scrolled but the boxes changed height.
 
 IntersectionObserver remains right for "should this lazy image fetch". It is the wrong instrument
 for "which item is the reader looking at".
+
+## Turning a decoder OFF is not the same as having one — pdf.js renders blank, in total silence
+
+`useWasm: false` reads like "use the built-in JS decoder instead". It is not. pdf.js resolves its
+JPEG2000 and JBIG2 decoders to a **filename**, and the flag only changes *which* file:
+
+```js
+class JpxImage extends WasmImage {
+  _filename = "openjpeg.wasm"; _noWasmFilename = "openjpeg_nowasm_fallback.js"
+}
+```
+
+Both are fetched from the `wasmUrl` prefix. We shipped `useWasm: false` with `wasmUrl` **unset**,
+believing the URLs were only needed for the WASM path — so there was nothing to fetch, and every
+JPEG2000 and JBIG2 image rendered as **nothing**.
+
+What makes this the worst shape of bug is the silence. There was no CSP violation, no console
+error, no rejected promise, no network failure the page could see. The canvas mounted. The page
+count was right. The scroll geometry was right. Every signal the suite already watched stayed
+green, including the zero-CSP-violation assertion the PDF work was most proud of. **Only pixels
+could see it** — the bug was caught by an unrelated benchmark that happened to count ink and got 0.
+
+Two lessons, and the second is the general one:
+
+- **A flag that names a strategy may only be selecting an asset.** Before trusting `disableX` /
+  `useY: false` to fall back to something built in, find what it actually resolves to.
+- **When a feature can fail by producing nothing, an assertion that something EXISTS proves
+  nothing.** `canvas !== null` passed throughout. The test that guards this counts ink, and it was
+  verified to fail (`ink=0`) by removing `wasmUrl` again.
+
+The fallbacks are also why the tokenless-asset exemption grew a second entry: pdf.js concatenates
+the filename onto the prefix, so `?token=` has nowhere to go and a tokened gate 403s them — again
+silently. Same shape as the `@font-face` trap, different consumer.
+
+Measured, for the record: on that path a 2400×3000 JPEG2000 page takes **~5.9 s**, against
+**~350 ms** for the same image as DCTDecode. Ordinary embedded JPEG never touches this code.
