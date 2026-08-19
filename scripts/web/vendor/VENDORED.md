@@ -106,3 +106,73 @@ a real stylesheet because `style-src 'self'` blocks the `<style>` element Plotly
 inject; `../csp-shim.js` disables that injection through Plotly's own `.no-inline-styles` hatch.
 
 After rebuilding, re-verify: `eval(`, `new Worker`, and `importScripts` must all be absent.
+
+---
+
+# pdf.js — `pdf.min.mjs` + `pdf.worker.min.mjs`
+
+`pdfjs-dist@6.2.108`, Apache-2.0. Copied verbatim from the published tarball's `build/` —
+**no custom build**, unlike Plotly. Two files only:
+
+| File | Bytes |
+|---|---|
+| `pdf.min.mjs` | 454,669 |
+| `pdf.worker.min.mjs` | 1,262,398 |
+
+Deliberately NOT copied: source maps, `legacy/`, `pdf.sandbox.*`, the CMap tables, the standard
+font data, and the `.wasm` binaries. Every one of them is unreachable under the viewer's config
+(below), and together they are several MB we would ship for nothing.
+
+## `pdfjs-dist` ships ESM ONLY — there is no UMD build
+
+This is why `kernel.js`'s `MIME` map carries `'.mjs'`. Without that entry the module is served
+`application/octet-stream` and the browser refuses it with an error naming neither the file nor
+the MIME type.
+
+## The viewer's `getDocument` flags are load-bearing — do not "clean them up"
+
+`createPdfStage` in `app.js` passes a specific set. Each defends something real:
+
+| Flag | Why |
+|---|---|
+| `useWasm: false` | **CSP.** pdf.js compiles WebAssembly for JPEG2000, JBIG2 and PostScript functions. Verified in this build: `useWasm` defaults to TRUE (`R = !1 !== e.useWasm`) and `WebAssembly.instantiate` is live in the worker. Our CSP has no `wasm-unsafe-eval`, so leaving it on throws `CompileError` on affected documents. JS fallback decoders cover all three, 2–4× slower on JPX/JBIG2. |
+| `disableStream: true` | No full-file GET. Required for `disableAutoFetch` to work at all (pdf.js's own docs). |
+| `disableAutoFetch: true` | No background prefetch of the whole file after the first range. |
+| `disableRange: false` | Ranged fetching ON — the reason a 200 MB file opens at all. |
+| `maxImageSize` | A pathological scan degrades to a skipped image instead of an OOM. pdf.js SKIPS silently above the cap, so the labeled fallback is ours to render. |
+
+`cMapUrl`, `standardFontDataUrl`, `wasmUrl` and `iccUrl` are all left **unset**, which makes
+`useWorkerFetch` derive `false`. That is what keeps the worker from issuing network requests of
+its own — every byte reaches it by message passing from the main thread.
+
+## Verified against THIS build (6.2.108), not inherited from an older one
+
+- **The worker is not blob-wrapped.** `_createCDNWrapper` (the only `createObjectURL` on the worker
+  path) fires only when `_isSameOrigin` is false. Our `workerSrc` is same-origin, so `script-src
+  'self'` permits it and no `blob:` is needed. The guard also returns false for an *opaque* origin
+  (`"null" === i.origin`) — so if the app is ever rendered inside a sandboxed iframe without
+  `allow-same-origin`, this flips and the CSP will refuse the worker.
+- **There is no `eval` path left.** `isEvalSupported` appears **zero** times in either bundle — the
+  option existed as recently as 5.3.48 and has been removed. The single `new Function` hit in the
+  worker is `new FunctionBasedShading`, a class name. Do not add `isEvalSupported: false` back: it
+  is a dead parameter in 6.x.
+- **WebGPU and hardware acceleration are opt-in.** `enableWebGPU` and `enableHWA` are both
+  `=== true` checks, so no GPU context is created unless we ask for one. We do not — this codebase
+  already has a WebGL-contexts-are-never-released gotcha and does not need a second one.
+- The second `createObjectURL` in the main bundle belongs to **rich-media annotation playback**
+  (audio/video embedded in a PDF), which the viewer does not mount.
+
+## Re-verification recipe (run after ANY version bump)
+
+Counts are version-specific; the SHAPES are what transfer. Read the surrounding ~70 characters
+before believing any count — `fetch(` in the worker is dominated by `xref.fetch()` /
+`Dict.fetch()` (PDF indirect-object resolution, not network) and `new Worker` by `new WorkerTask`
+(internal bookkeeping).
+
+```sh
+cd scripts/web/vendor
+grep -o ".\{200\}createObjectURL.\{120\}" pdf.min.mjs      # expect the _isSameOrigin guard
+grep -o ".\{130\}new Function.\{130\}" pdf.worker.min.mjs  # expect class names only, no eval
+grep -o ".\{30\}!1!==e\.useWasm.\{30\}" pdf.min.mjs         # confirms useWasm still defaults TRUE
+grep -oE "enableWebGPU|enableHWA" pdf.min.mjs              # confirm both are still opt-in
+```
