@@ -31,6 +31,93 @@ const CLI = path.join(__dirname, '..', 'instantcanvas.js')
 const CHROME = findChrome()
 const skip = CHROME ? false : 'Chrome not found — set CHROME_PATH to run the media UI test'
 
+/**
+ * A minimal, genuinely parseable PDF of `n` US-Letter pages, each stamping its own
+ * number so a rendered canvas has real ink. Hand-built because the alternative is
+ * shelling out to Chrome, and a fixture that needs a browser cannot be used by the
+ * tests that check the server.
+ */
+function buildPdf(n) {
+	const objs = []
+	const kids = []
+	for (let i = 0; i < n; i++) kids.push((4 + i * 2) + ' 0 R')
+	objs[1] = '<</Type/Catalog/Pages 2 0 R>>'
+	objs[2] = '<</Type/Pages/Kids[' + kids.join(' ') + ']/Count ' + n + '>>'
+	objs[3] = '<</Type/Font/Subtype/Type1/BaseFont/Helvetica>>'
+	for (let i = 0; i < n; i++) {
+		const stream = 'BT /F1 48 Tf 72 640 Td (Page ' + (i + 1) + ') Tj ET'
+		objs[4 + i * 2] = '<</Type/Page/Parent 2 0 R/MediaBox[0 0 612 792]/Resources<</Font<</F1 3 0 R>>>>/Contents ' + (5 + i * 2) + ' 0 R>>'
+		objs[5 + i * 2] = '<</Length ' + stream.length + '>>stream\n' + stream + '\nendstream'
+	}
+	let out = '%PDF-1.4\n'
+	const offsets = []
+	for (let i = 1; i < objs.length; i++) {
+		offsets[i] = out.length
+		out += i + ' 0 obj' + objs[i] + 'endobj\n'
+	}
+	const xref = out.length
+	out += 'xref\n0 ' + objs.length + '\n0000000000 65535 f \n'
+	for (let i = 1; i < objs.length; i++)
+		out += String(offsets[i]).padStart(10, '0') + ' 00000 n \n'
+	out += 'trailer<</Size ' + objs.length + '/Root 1 0 R>>\nstartxref\n' + xref + '\n%%EOF\n'
+	return Buffer.from(out, 'latin1')
+}
+
+
+/**
+ * A PDF that exercises the TWO pdf.js code paths this project could not verify
+ * statically, in one document — because they share a trigger population (print and
+ * design output), which is why one fixture covers both:
+ *
+ *   1. TYPE-4 (PostScript calculator) FUNCTIONS. A Separation colorspace whose tint
+ *      transform is a type-4 function, plus an axial shading driven by another. This
+ *      is the path that historically ran through `new Function` under
+ *      `isEvalSupported` — removed in 6.x, which is exactly what this asserts.
+ *   2. CMYK / ICCBased. An /ICCBased stream with /N 4, which is what reaches
+ *      pdf.js's `CmykICCBasedCS` — whose bundled-profile fetch uses a SYNCHRONOUS
+ *      XHR nobody could gate-trace through the minified private fields.
+ *
+ * If either violated the CSP, the zero-violation assertion below is what catches it.
+ */
+function buildCmykPdf() {
+	const tint = '{ dup 0.9 mul exch dup 0.2 mul exch dup 0.1 mul exch 0.05 mul }'
+	const content = [
+		'/CS0 cs 0.7 scn 40 620 250 90 re f',     // Separation -> type-4 tint transform
+		'/CS1 cs 0 0.8 0.9 0 scn 40 500 250 90 re f', // ICCBased CMYK (N 4)
+		'q 40 340 250 120 re W n /Sh0 sh Q',      // axial shading -> a second type-4
+		'BT /F1 24 Tf 40 300 Td (CMYK + type-4) Tj ET',
+	].join('\n')
+	const icc = '\u0000\u0000\u0000\u0000'
+
+	const objs = []
+	objs[1] = '<</Type/Catalog/Pages 2 0 R>>'
+	objs[2] = '<</Type/Pages/Kids[4 0 R]/Count 1>>'
+	objs[3] = '<</Type/Font/Subtype/Type1/BaseFont/Helvetica>>'
+	objs[4] = '<</Type/Page/Parent 2 0 R/MediaBox[0 0 612 792]' +
+		'/Resources<</Font<</F1 3 0 R>>/ColorSpace<</CS0 6 0 R/CS1 7 0 R>>/Shading<</Sh0 8 0 R>>>>' +
+		'/Contents 5 0 R>>'
+	objs[5] = '<</Length ' + content.length + '>>stream\n' + content + '\nendstream'
+	objs[6] = '[/Separation/Spot/DeviceCMYK 9 0 R]'
+	objs[7] = '[/ICCBased 10 0 R]'
+	objs[8] = '<</ShadingType 2/ColorSpace/DeviceCMYK/Coords[40 340 290 460]/Function 11 0 R/Extend[true true]>>'
+	objs[9] = '<</FunctionType 4/Domain[0 1]/Range[0 1 0 1 0 1 0 1]/Length ' + tint.length + '>>stream\n' + tint + '\nendstream'
+	objs[10] = '<</N 4/Length ' + icc.length + '>>stream\n' + icc + '\nendstream'
+	objs[11] = '<</FunctionType 4/Domain[0 1]/Range[0 1 0 1 0 1 0 1]/Length ' + tint.length + '>>stream\n' + tint + '\nendstream'
+
+	let out = '%PDF-1.4\n'
+	const offsets = []
+	for (let i = 1; i < objs.length; i++) {
+		offsets[i] = out.length
+		out += i + ' 0 obj' + objs[i] + 'endobj\n'
+	}
+	const xref = out.length
+	out += 'xref\n0 ' + objs.length + '\n0000000000 65535 f \n'
+	for (let i = 1; i < objs.length; i++)
+		out += String(offsets[i]).padStart(10, '0') + ' 00000 n \n'
+	out += 'trailer<</Size ' + objs.length + '/Root 1 0 R>>\nstartxref\n' + xref + '\n%%EOF\n'
+	return Buffer.from(out, 'latin1')
+}
+
 const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64')
 const b64 = (name) => Buffer.from(FIXTURES[name], 'base64')
 
@@ -66,6 +153,11 @@ test.before(async () => {
 	const pair = path.join(root, 'pair'); fs.mkdirSync(pair)
 	fs.writeFileSync(path.join(pair, 'a-doc.md'), '# Doc\n')
 	fs.writeFileSync(path.join(pair, 'b-clip.mp4'), b64('tiny.mp4'))
+	// A REAL five-page PDF, hand-built: enough pages that the render window (2 either
+	// side of centre) can never cover the whole document, which is what makes the
+	// "the window moved" assertion falsifiable. No external tool needed.
+	fs.writeFileSync(path.join(m, 'doc.pdf'), buildPdf(5))
+	fs.writeFileSync(path.join(m, 'cmyk.pdf'), buildCmykPdf())
 	// A corrupt video for the error card — 64 garbage bytes, no ffmpeg needed.
 	fs.writeFileSync(path.join(root, 'broken.mp4'), Buffer.alloc(64, 7))
 
@@ -229,6 +321,53 @@ test.before(async () => {
 			out.pngGoneFromDisk = !fs.existsSync(path.join(m, 'one.png'))
 			out.audioSurvivesDisk = fs.existsSync(path.join(m, 'tiny.mp3'))
 
+			// ============ (11) PDF: the virtualized reader ============
+			// Deliberately last: it navigates away from the browse view the delete section
+			// left behind, and it is the only step that loads the 1.65 MB vendored viewer.
+			await evaluate('location.hash = "#/c/m%2Fdoc.pdf"')
+			out.steps.pdfMounted = await until(evaluate, '!!document.querySelector(".pdf-stage")', 15000)
+			out.pdfFirstCanvas = await until(evaluate, '!!document.querySelector(".pdf-page canvas.pdf-canvas")', 30000)
+			out.pdfWorkerLoaded = await evaluate('performance.getEntriesByType("resource").some(function(e){ return e.name.indexOf("pdf.worker") >= 0 })')
+			await sleep(900)
+			out.pdfPageHosts = await evaluate(q('.pdf-page'))
+			// A page box must have REAL height. `aspect-ratio` loses silently to the flex
+			// default shrink, which collapsed all pages and froze the window at page 1.
+			out.pdfPageHeight = await evaluate('(function(){ var p = document.querySelector(".pdf-page"); return p ? Math.round(p.offsetHeight) : -1 })()')
+			out.pdfRenderedAtTop = await evaluate('JSON.stringify(Array.from(document.querySelectorAll(".pdf-page.is-rendered")).map(function(e){ return e.dataset.pdfPage }))')
+			out.pdfCanvasesAtTop = await evaluate(q('.pdf-stage canvas'))
+			out.pdfPagesRow = await evaluate('(document.querySelector("[data-mrow=pages] .g-mval") || {}).textContent || ""')
+			out.pdfInlineStyles = await evaluate(q('.pdf-stage [style]'))
+			out.pdfViewToggleHidden = await evaluate('document.getElementById("viewToggle").hidden')
+			out.pdfTocReason = await evaluate('document.getElementById("tocBtn").title || ""')
+			out.pdfShareHidden = await evaluate('document.getElementById("ocShare").hidden')
+			// Ranged fetching: many requests to the file route, never one whole-file GET.
+			out.pdfFileRequests = await evaluate('performance.getEntriesByType("resource").filter(function(e){ return e.name.indexOf("gallery/file") >= 0 }).length')
+			// Scroll to the end: the window must MOVE. Counting canvases alone is vacuous
+			// -- a frozen window scores identically -- so assert WHICH pages are rendered.
+			await evaluate('(function(){ var s = document.querySelector(".pdf-scroll"); s.scrollTop = s.scrollHeight })()')
+			await sleep(1800)
+			out.pdfRenderedAtEnd = await evaluate('JSON.stringify(Array.from(document.querySelectorAll(".pdf-page.is-rendered")).map(function(e){ return e.dataset.pdfPage }))')
+			out.pdfCanvasesAtEnd = await evaluate(q('.pdf-stage canvas'))
+			// And leaving disposes: no canvas may survive the navigation.
+			await evaluate('location.hash = "#/f/m"')
+			await sleep(500)
+			out.pdfCanvasesAfterLeave = await evaluate(q('.pdf-stage canvas'))
+
+			// ============ (12) the CMYK + type-4 fixture ============
+			// A CSP violation count taken here is only meaningful against a BASELINE:
+			// the run so far must already be clean, or "no new violations" is vacuous.
+			out.cspBeforeCmyk = await evaluate('window.__csp.length')
+			await evaluate('location.hash = "#/c/m%2Fcmyk.pdf"')
+			out.steps.cmykMounted = await until(evaluate, '!!document.querySelector(".pdf-stage")', 15000)
+			out.cmykRendered = await until(evaluate, '!!document.querySelector(".pdf-page canvas.pdf-canvas")', 30000)
+			await sleep(1200)
+			// Real ink, not a blank page: a colorspace that silently failed to resolve
+			// would still produce a canvas, just an empty one.
+			out.cmykInk = await evaluate('(function(){ var c = document.querySelector("canvas.pdf-canvas"); if (!c) return -1; var d = c.getContext("2d").getImageData(0, 0, Math.min(c.width, 400), Math.min(c.height, 400)).data; var n = 0; for (var i = 0; i < d.length; i += 4) { if (d[i] < 250 || d[i+1] < 250 || d[i+2] < 250) n++ } return n })()')
+			out.cspAfterCmyk = await evaluate('window.__csp.length')
+			out.cspDetail = await evaluate('JSON.stringify(window.__csp)')
+			out.errAfterCmyk = await evaluate('JSON.stringify(window.__err.slice(0, 4))')
+
 		} catch (e) {
 			out.driveError = String((e && e.stack) || e)
 		}
@@ -333,4 +472,54 @@ test('mediaui: (9) selecting a video by modifier-click and deleting video+png re
 test('mediaui: (10) zero CSP violations and zero page errors across the whole run', { skip, timeout: 180_000 }, () => {
 	assert.deepEqual(R.csp, [], 'zero CSP violations (a missing media-src fails HERE): ' + JSON.stringify(R.csp))
 	assert.deepEqual(R.errFinal, [], 'zero page errors: ' + JSON.stringify(R.errFinal))
+})
+
+test('mediaui: (11) the PDF reader mounts, renders real pages, and holds the CSP', { skip, timeout: 180_000 }, () => {
+	assert.equal(R.steps.pdfMounted, true, 'the pdf stage mounted')
+	assert.equal(R.pdfFirstCanvas, true, 'a page rendered to a canvas')
+	assert.equal(R.pdfWorkerLoaded, true, 'the module worker loaded under script-src self (no blob: needed)')
+	assert.equal(R.pdfPageHosts, 5, 'one placeholder per page')
+	assert.equal(R.pdfPagesRow, '5', 'page count comes from the browser, never the server')
+	assert.equal(R.pdfInlineStyles, 0, 'no descendant carries a style attribute (CSP)')
+	// A page box collapsing to nothing is the failure that froze the render window, and
+	// it reports no error of any kind — only geometry can see it.
+	assert.ok(R.pdfPageHeight > 400, 'a page box has real height, got ' + R.pdfPageHeight)
+	// A PDF is already paper: the deck controls hide and the paper controls disable WITH
+	// a reason. A hidden control teaches nothing.
+	assert.equal(R.pdfViewToggleHidden, true)
+	assert.match(R.pdfTocReason, /PDF/)
+	assert.equal(R.pdfShareHidden, true, 'no OS carries PDF bytes on a clipboard')
+})
+
+test('mediaui: (11) the PDF render WINDOW moves and evicts — not merely stays small', { skip, timeout: 180_000 }, () => {
+	const top = JSON.parse(R.pdfRenderedAtTop || '[]')
+	const end = JSON.parse(R.pdfRenderedAtEnd || '[]')
+	// The counts are bounded...
+	assert.ok(R.pdfCanvasesAtTop <= 5, 'window is bounded at the top, got ' + R.pdfCanvasesAtTop)
+	assert.ok(R.pdfCanvasesAtEnd <= 5, 'window is bounded at the end, got ' + R.pdfCanvasesAtEnd)
+	// ...but a bound alone is vacuous on a 5-page document: a viewer that rendered
+	// everything once and never evicted would also score <= 5. What proves virtualization
+	// is that the SET CHANGED — the first page is gone and the last has arrived.
+	assert.ok(top.includes('1'), 'page 1 renders at the top, got ' + R.pdfRenderedAtTop)
+	assert.ok(end.includes('5'), 'page 5 renders at the end, got ' + R.pdfRenderedAtEnd)
+	assert.ok(!end.includes('1'), 'page 1 was EVICTED on scroll, got ' + R.pdfRenderedAtEnd)
+	// Ranged fetching, not one whole-file GET — the reason a 200 MB file opens at all.
+	assert.ok(R.pdfFileRequests >= 2, 'the file was fetched in ranges, got ' + R.pdfFileRequests)
+	// dispose() is load-bearing: an abandoned canvas keeps its bitmap the way a detached
+	// <video> keeps playing.
+	assert.equal(R.pdfCanvasesAfterLeave, 0, 'leaving the PDF released every canvas')
+})
+
+test('mediaui: (12) a CMYK + type-4 PostScript PDF renders with no CSP violation', { skip, timeout: 180_000 }, () => {
+	assert.equal(R.steps.cmykMounted, true, 'the CMYK fixture mounted')
+	assert.equal(R.cmykRendered, true, 'it rendered to a canvas')
+	// The fixture drives a Separation tint transform, an axial shading and an ICCBased
+	// /N 4 colorspace. If any of them failed to resolve we would get a blank page, not
+	// an error -- so ink is the only witness that the colour paths actually ran.
+	assert.ok(R.cmykInk > 1000, 'the CMYK page has real ink, got ' + R.cmykInk)
+	// The baseline is what makes this non-vacuous: the run was already clean, so any
+	// increase is attributable to THIS document.
+	assert.equal(R.cspBeforeCmyk, 0, 'baseline was clean before the CMYK document')
+	assert.equal(R.cspAfterCmyk, 0, 'the CMYK document violated nothing: ' + R.cspDetail)
+	assert.equal(R.errAfterCmyk, '[]', 'and threw nothing: ' + R.errAfterCmyk)
 })
