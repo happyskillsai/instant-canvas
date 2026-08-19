@@ -135,3 +135,24 @@ under a *bare* npx spec it is the half that does the work.
 This is easy to get wrong, and it was: mid-session, a large hand-written `## [Unreleased]` block landed in the skill bundle's changelog because the entry above — which used to say that "several agent sessions accumulate entries into it in parallel" — read as an invitation. It is not. Two changelogs with two owners is a merge conflict waiting to happen, and the one the publish step generates is the one that ships.
 
 The rule, stated once: **root `CHANGELOG.md` is written by the session; the skill bundle's `CHANGELOG.md` is written by publish.** If a feature needs to be explained to *agents*, it belongs in **SKILL.md** — which is the contract they actually read — not in a changelog they never will.
+
+## `pdfjs-dist` ships ESM only, and the static MIME map has to know
+
+There is no UMD build in `pdfjs-dist@6.2.108` — `build/` contains `pdf.min.mjs` and
+`pdf.worker.min.mjs` and nothing else loadable. `kernel.js`'s `MIME` map was an eight-entry
+literal with no `.mjs`, so the module served as `application/octet-stream` and the browser
+refused it with an error that names neither the file nor the type. Any future vendored ESM
+dependency hits the same wall.
+
+The two files are copied **verbatim** from the published tarball — unlike Plotly, which needs a
+custom `--strict` build. What must not be copied is everything else: source maps, `legacy/`,
+`pdf.sandbox.*`, the CMap tables, the standard font data and the `.wasm` binaries are all
+unreachable under the viewer's config and would add several MB for nothing.
+
+Two flags in `createPdfStage` are CSP-critical and must survive any version bump — `useWasm:
+false` (pdf.js compiles WebAssembly for JPEG2000, JBIG2 and PostScript functions, and this CSP
+grants no `wasm-unsafe-eval`) and leaving `cMapUrl` / `standardFontDataUrl` / `wasmUrl` / `iccUrl`
+**unset**, which makes `useWorkerFetch` derive false so the worker issues no network requests of
+its own. `scripts/web/vendor/VENDORED.md` carries the full reasoning and a re-verification recipe;
+run it after any bump, and read the surrounding characters before believing a grep count — `fetch(`
+in that worker is dominated by `xref.fetch()`, not the network.

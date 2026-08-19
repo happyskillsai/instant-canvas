@@ -18,6 +18,22 @@ node --test scripts/test/   # from the repo root — `npm test` is the same thin
 
 849 tests at last count: ~200 drive a real browser (or headless printing) and skip when Chrome is absent, and three exercise the packed npm artifact end to end and skip without npm. `scripts/test/index.js` exists because `node --test <dir>` does not expand a directory on the pinned Node version — the directory resolves to `index.js`, which requires every `*.test.js` (see [gotchas/testing.md](gotchas/testing.md)).
 
+## PDF coverage — split by what each layer can actually prove
+
+`pdf.test.js` holds the **server** half and never boots a browser: the extension/kind predicates,
+`mediaStat`, `listDir` grouping, the Range contract (206 + `Content-Range` + a byte-exact slice,
+416 for unsatisfiable, 200 for malformed), the selection round-trip, the CSP header, `.mjs` MIME,
+and the CLI's widened `open` gate. Range lives here rather than in a browser test for the reason
+the media route already learned: **Chrome renders perfectly from a 200-only server**, so a browser
+assertion is green whether or not ranged fetching exists.
+
+The **browser** half is folded into `mediaui.test.js` rather than given its own file, because one
+Chrome-driving file too many tips the shared single-process loop over and fails the whole suite at
+once. It covers the viewer mounting, real ink on the canvas, the render window moving and evicting,
+`dispose()`, and a **CMYK + type-4 PostScript** fixture that exercises the two pdf.js paths that
+could not be verified by reading the minified source — asserted against a zero-violation baseline
+taken earlier in the same run, so an increase is attributable to that document.
+
 ## Suite layout
 
 | File | Covers |

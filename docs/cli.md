@@ -20,6 +20,14 @@ Entry point: `npx -y @happyskillsai/instant-canvas <command>`, run from any dire
 
 ## Commands
 
+**`open` accepts one non-canvas file kind: a `.pdf`.** It is the single exception to the rule that
+`open` takes a canvas, a markdown file, a `.env` or a folder — and it exists because this CLI
+*produces* PDFs, so `print report.md --out report.pdf && open report.pdf` closes a loop that would
+otherwise dead-end. A PDF opens in the browser's page-by-page reader, streamed in byte ranges, and
+creates **no session** (paper cannot submit). `validate`, `stamp`, `print` and `theme` all still
+refuse a PDF with `INVALID_SPEC`: there is no contract to check, no envelope to stamp, and it is
+already paper. Media files remain folder-only — `open <folder>`, never `open clip.mp4`.
+
 ```
 open <canvas.json | file.md | .env | folder> [--workspace <dir>] [--no-open] [--timeout <s>] [--result <file>]
 print <canvas.json | file.md> --out <file.pdf> [--workspace <dir>]

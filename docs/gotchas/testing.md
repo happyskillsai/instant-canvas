@@ -275,3 +275,26 @@ setTimeout(die, 30 * 60 * 1000).unref()   // backstop: Windows keeps the origina
 Three details worth copying. Both timers are **`unref()`'d** — the listening server is what keeps the process alive, and a watchdog must never be the reason it stays up. The exit routes through `die()`, so the fake **deregisters itself**, and a leak no longer strands a registry entry pointing at a dead port. And the absolute cap is deliberately an order of magnitude beyond the ~3-minute full suite, so it can only ever fire on a fake nobody is using. Verified both directions: an orphaned fake self-destructs in ~5 s, and a clean full run leaves **zero** behind.
 
 The rule generalises to any long-lived helper a suite spawns: **teardown that only runs on the happy path is not teardown.** Ask what collects the process when the runner dies, and if the answer is "the `after` hook," the answer is nothing.
+
+## A COUNT cannot prove virtualization — only the identities can
+
+The PDF reader's first assertion was `canvases <= 5` after scrolling a 10-page document. It passed.
+It also passes when virtualization is completely broken: a viewer frozen on pages 8–10 renders
+exactly three canvases forever, and a viewer that rendered everything once and never evicted scores
+identically on a document short enough to fit the cap. The number was true and proved nothing —
+the same vacuous-negative shape as a `[hidden]` check on an element the UA rule already covers.
+
+What has to be asserted is **which pages are mounted, and that the set CHANGED**:
+
+```
+top: ["1","2","3"]   end: ["8","9","10"]
+```
+
+Three claims, each of which fails on a different bug: page 1 present at the top (the window starts
+in the right place — this is what caught the collapsed-flex bug), page 10 present at the end (the
+window moved), and page 1 **absent** at the end (eviction actually ran, rather than the window
+merely growing). A fourth — zero canvases after navigating away — covers `dispose()`.
+
+The rule: when a bound is the thing under test, a measurement *within* the bound is not evidence.
+Assert the identity of what survived and what was released, and pair every negative with the
+positive control that must fire when the condition flips.

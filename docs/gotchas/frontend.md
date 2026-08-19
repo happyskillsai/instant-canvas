@@ -538,3 +538,47 @@ The two absences that matter most are the two a Mac user hits first: **`.mov` an
 **The failure taxonomy has a matching trap.** `share()` rejects with `AbortError` for BOTH "the reader cancelled" and "there were no share targets available", and nothing in the exception distinguishes them. Only `NotAllowedError` means a real refusal (a blocked type, or a missing user gesture). So `AbortError` must be answered with **silence** — cancelling is overwhelmingly the common case, and a "share failed" toast on a deliberate dismissal is precisely the bug. Do all the discriminating work *before* the click (secure context, `canShare`, your own extension list, the size cap), so that by the time `share()` runs, an `AbortError` can safely be assumed to be a cancel. Two more, worth knowing before trusting a success: on **Windows** the promise resolves when the share popup *launches*, not when the transfer completes, and on **macOS** a picker dismissed by clicking elsewhere can leave the share pending so the next call throws "an earlier share had not yet completed" (keep your own in-flight flag with a timeout rather than relying on the promise).
 
 Finally, `navigator.share` is **`undefined` on Linux** — not present-and-failing. Chrome enables Web Share only for Android/ChromeOS/Windows/macOS (`chrome_content_renderer_client.cc`), and the browser-side service is not even compiled in (`chrome/browser/webshare/BUILD.gn`). MDN's compat table records a flat `chrome: 128` and is simply wrong for Linux — it has no per-OS axis, and the entry that added macOS read as "everywhere". That is the good outcome for us: `canShare?.({files})` fails cleanly with no try/catch gymnastics. **Trust the Chromium source over any compat table for this API.**
+
+## `flex-shrink` silently beats `aspect-ratio`, and the page boxes collapse
+
+The PDF reader lays its page placeholders out as children of a column flex container, each
+sized by `aspect-ratio: 1/var(--pdf-ratio)`. Flex items default to `flex-shrink: 1`, and a flex
+container would rather **squash its children than overflow itself** — so `aspect-ratio` is not a
+floor, it is a preference that loses. Measured in a real browser: ten pages of a 10-page document
+computed to **16 px each** inside a 338 px pane, against an expected ~957 px.
+
+Nothing errored. The pages were there, the canvases rendered, the scrollbar existed. What made it
+visible was asking for geometry: `offsetHeight` on the first `.pdf-page`.
+
+The consequence was worse than the layout. Because every page now fitted on screen at once, the
+scroller's midpoint landed on the **last** one, so the render window opened at page 10 of 10 — and
+since nothing ever scrolled out of view, it never moved again. A one-line CSS default produced
+what looked like a broken virtualizer.
+
+`flex:0 0 auto` on `.pdf-page` is the fix, and it is load-bearing rather than tidy. The rule
+generalises: **whenever a flex child's size comes from `aspect-ratio`, `contain-intrinsic-size`,
+or an intrinsic ratio, pin `flex-shrink: 0`** — and assert the computed height in a browser, never
+the stylesheet, because the stylesheet says the right thing while the layout does not.
+
+## An IntersectionObserver answers "is it visible", which is not "where is the reader"
+
+The first version of the PDF render window took its centre from the observer callback — for each
+intersecting entry, re-centre on that page. It is the obvious reading of the API and it is wrong
+twice over.
+
+**Batching.** When several elements cross the threshold together the callback receives them in one
+arbitrary array. Looping over it means the **last entry wins**, so the window pins wherever that
+batch happened to end rather than where the reader is. With collapsed page boxes (above) every
+page intersected at once and the window opened on the final one.
+
+**Edge-triggering.** An observer fires on *changes* in intersection. A window that starts wrong
+therefore **stays** wrong: nothing subsequently changes state, so no callback ever arrives to
+correct it. Scrolling produced no events at all, which is why it looked frozen rather than jumpy.
+
+Scroll position is the unambiguous answer to the question actually being asked — which page
+contains the scroller's vertical midpoint — and it is re-read on every scroll rather than only on
+transitions. `syncWindow()` now computes it directly (rAF-coalesced), with a `ResizeObserver` for
+the case where nobody scrolled but the boxes changed height.
+
+IntersectionObserver remains right for "should this lazy image fetch". It is the wrong instrument
+for "which item is the reader looking at".

@@ -212,7 +212,7 @@
         "Result contract (stdout of `open`)",
         "The agent workflow"
       ],
-      "line_count": 171,
+      "line_count": 179,
       "links_to": [
         "docs/architecture.md",
         "docs/canvas-schema.md",
@@ -259,7 +259,7 @@
         "CSP shim",
         "Icons and vendored assets"
       ],
-      "line_count": 159,
+      "line_count": 160,
       "links_to": [
         "docs/architecture.md",
         "docs/canvas-schema.md",
@@ -384,9 +384,11 @@
         "A pixel offset that dodges a sibling panel breaks when the panel stops being a sibling",
         "A drop zone sized by its CONTENT is not the drop zone the reader sees",
         "The packer's orphan rule spun FOREVER when the heading was the sheet's only element",
-        "`navigator.canShare()` does NOT check the file-type allow-list it is asked about"
+        "`navigator.canShare()` does NOT check the file-type allow-list it is asked about",
+        "`flex-shrink` silently beats `aspect-ratio`, and the page boxes collapse",
+        "An IntersectionObserver answers \"is it visible\", which is not \"where is the reader\""
       ],
-      "line_count": 540,
+      "line_count": 584,
       "links_to": [
         "docs/architecture.md",
         "docs/gotchas/testing.md",
@@ -434,9 +436,10 @@
         "The skill loads from a mirror path",
         "Stamping the skill CHANGELOG means RENAMING `## [Unreleased]`, not adding a section under it",
         "`npx` with a bare spec runs the LOCAL project inside this repo — and pins everyone else to its cache",
-        "DO NOT hand-write the skill bundle's CHANGELOG — the publish step owns it"
+        "DO NOT hand-write the skill bundle's CHANGELOG — the publish step owns it",
+        "`pdfjs-dist` ships ESM only, and the static MIME map has to know"
       ],
-      "line_count": 137,
+      "line_count": 158,
       "links_to": [
         "docs/releasing.md"
       ],
@@ -562,9 +565,10 @@
         "Registering a value as a secret pollutes the whole single-process suite's redaction",
         "An error the code under test CAUSES ON PURPOSE is not a test failure",
         "`cdp.send()` has NO per-command timeout, so a probe against a HUNG page never returns",
-        "A test double with NO idle timeout outlives every interrupted run"
+        "A test double with NO idle timeout outlives every interrupted run",
+        "A COUNT cannot prove virtualization — only the identities can"
       ],
-      "line_count": 277,
+      "line_count": 300,
       "links_to": [
         "docs/gotchas/frontend.md",
         "docs/gotchas/runtime.md",
@@ -720,13 +724,14 @@
       "has_frontmatter": true,
       "headings": [
         "Testing",
+        "PDF coverage — split by what each layer can actually prove",
         "Suite layout",
         "Isolation patterns",
         "Coverage",
         "Security regressions",
         "Browser verification"
       ],
-      "line_count": 127,
+      "line_count": 143,
       "links_to": [
         "docs/architecture.md",
         "docs/gotchas/frontend.md",
