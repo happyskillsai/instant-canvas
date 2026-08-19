@@ -280,6 +280,26 @@ test('kernel: the shell templates the PDF extension union and serves .mjs as Jav
 	assert.match(worker.headers['content-type'], /javascript/)
 })
 
+test('kernel: the pure-JS image decoders serve TOKENLESSLY, or JPEG2000 renders blank', async () => {
+	// `useWasm: false` does not select a built-in decoder — it selects
+	// `openjpeg_nowasm_fallback.js`, which pdf.js fetches by concatenating the filename
+	// onto the `wasmUrl` PREFIX. A query token has nowhere to go in that concatenation,
+	// so these two files must pass the gate tokenless exactly as the woff2 fonts do.
+	// Without the exemption the fetch 403s and a scanned page renders as NOTHING: no CSP
+	// violation, no console error, no rejection. This assertion is the whole guard.
+	for (const name of ['openjpeg_nowasm_fallback.js', 'jbig2_nowasm_fallback.js']) {
+		const r = await httpReq({ port: K.port, path: '/assets/vendor/pdfwasm/' + name })
+		assert.equal(r.status, 200, name + ' must serve without a token')
+		assert.match(r.headers['content-type'], /javascript/, name)
+	}
+	// ...and the exemption must be exactly those two files, never the directory: anything
+	// else under it still requires the token, so this cannot widen into a JS-serving hole.
+	const other = await httpReq({ port: K.port, path: '/assets/vendor/pdfwasm/../pdf.min.mjs' })
+	assert.notEqual(other.status, 200, 'the exemption does not generalise to neighbours')
+	const tokened = await httpReq({ port: K.port, path: '/assets/vendor/pdf.min.mjs' })
+	assert.equal(tokened.status, 403, 'a normal vendored asset still needs the token')
+})
+
 test('cli: `open` accepts a PDF and creates NO session; validate/stamp/print still refuse', () => {
 	const run = (args) => {
 		try {

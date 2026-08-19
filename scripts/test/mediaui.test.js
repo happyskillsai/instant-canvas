@@ -79,6 +79,49 @@ function buildPdf(n) {
  *
  * If either violated the CSP, the zero-violation assertion below is what catches it.
  */
+
+/**
+ * A PDF whose only image is JPEG2000 (`/JPXDecode`) — the filter scanners and archival
+ * exports use, and the one pdf.js cannot decode with its own built-in code.
+ *
+ * This fixture exists because of a bug that shipped and rendered NOTHING: `useWasm: false`
+ * does not select an inlined JS decoder, it selects `openjpeg_nowasm_fallback.js`, which
+ * pdf.js still FETCHES from the `wasmUrl` prefix. With `wasmUrl` unset the fetch cannot
+ * happen and the image is simply absent — no CSP violation, no console error, no thrown
+ * exception, just a blank page. Every signal this suite already watches stayed green.
+ * Only pixels could see it, which is why the assertion counts ink.
+ */
+const JPX_CODESTREAM = Buffer.from('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', 'base64')
+
+function buildJpxPdf() {
+	const img = JPX_CODESTREAM
+	const content = Buffer.from('q 612 0 0 792 0 0 cm /Im0 Do Q', 'latin1')
+	const objs = [
+		null,
+		'<</Type/Catalog/Pages 2 0 R>>',
+		'<</Type/Pages/Kids[3 0 R]/Count 1>>',
+		'<</Type/Page/Parent 2 0 R/MediaBox[0 0 612 792]/Resources<</XObject<</Im0 5 0 R>>>>/Contents 4 0 R>>',
+		{ dict: '<</Length ' + content.length + '>>', stream: content },
+		{ dict: '<</Type/XObject/Subtype/Image/Width 160/Height 200/BitsPerComponent 8/Filter/JPXDecode/Length ' + img.length + '>>', stream: img },
+	]
+	const parts = []
+	let len = 0
+	const push = (b) => { const buf = Buffer.isBuffer(b) ? b : Buffer.from(b, 'latin1'); parts.push(buf); len += buf.length }
+	const offsets = []
+	push('%PDF-1.5\n')
+	for (let i = 1; i < objs.length; i++) {
+		offsets[i] = len
+		const o = objs[i]
+		if (typeof o === 'string') push(i + ' 0 obj' + o + 'endobj\n')
+		else { push(i + ' 0 obj' + o.dict + 'stream\n'); push(o.stream); push('\nendstream endobj\n') }
+	}
+	const xref = len
+	push('xref\n0 ' + objs.length + '\n0000000000 65535 f \n')
+	for (let i = 1; i < objs.length; i++) push(String(offsets[i]).padStart(10, '0') + ' 00000 n \n')
+	push('trailer<</Size ' + objs.length + '/Root 1 0 R>>\nstartxref\n' + xref + '\n%%EOF\n')
+	return Buffer.concat(parts)
+}
+
 function buildCmykPdf() {
 	const tint = '{ dup 0.9 mul exch dup 0.2 mul exch dup 0.1 mul exch 0.05 mul }'
 	const content = [
@@ -158,6 +201,7 @@ test.before(async () => {
 	// "the window moved" assertion falsifiable. No external tool needed.
 	fs.writeFileSync(path.join(m, 'doc.pdf'), buildPdf(5))
 	fs.writeFileSync(path.join(m, 'cmyk.pdf'), buildCmykPdf())
+	fs.writeFileSync(path.join(m, 'jpx.pdf'), buildJpxPdf())
 	// A corrupt video for the error card — 64 garbage bytes, no ffmpeg needed.
 	fs.writeFileSync(path.join(root, 'broken.mp4'), Buffer.alloc(64, 7))
 
@@ -365,6 +409,14 @@ test.before(async () => {
 			// would still produce a canvas, just an empty one.
 			out.cmykInk = await evaluate('(function(){ var c = document.querySelector("canvas.pdf-canvas"); if (!c) return -1; var d = c.getContext("2d").getImageData(0, 0, Math.min(c.width, 400), Math.min(c.height, 400)).data; var n = 0; for (var i = 0; i < d.length; i += 4) { if (d[i] < 250 || d[i+1] < 250 || d[i+2] < 250) n++ } return n })()')
 			out.cspAfterCmyk = await evaluate('window.__csp.length')
+
+			// ============ (13) JPEG2000 — the decoder that is NOT built in ============
+			await evaluate('location.hash = "#/f/m"'); await sleep(300)
+			await evaluate('location.hash = "#/c/m%2Fjpx.pdf"')
+			out.steps.jpxMounted = await until(evaluate, '!!document.querySelector(".pdf-page canvas.pdf-canvas")', 30000)
+			await sleep(1500)
+			out.jpxInk = await evaluate('(function(){ var c = document.querySelector("canvas.pdf-canvas"); if (!c) return -1; var d = c.getContext("2d").getImageData(0, 0, Math.min(c.width, 300), Math.min(c.height, 300)).data; var n = 0; for (var i = 0; i < d.length; i += 4) { if (d[i] < 250 || d[i+1] < 250 || d[i+2] < 250) n++ } return n })()')
+			out.cspAfterJpx = await evaluate('window.__csp.length')
 			out.cspDetail = await evaluate('JSON.stringify(window.__csp)')
 			out.errAfterCmyk = await evaluate('JSON.stringify(window.__err.slice(0, 4))')
 
@@ -522,4 +574,18 @@ test('mediaui: (12) a CMYK + type-4 PostScript PDF renders with no CSP violation
 	assert.equal(R.cspBeforeCmyk, 0, 'baseline was clean before the CMYK document')
 	assert.equal(R.cspAfterCmyk, 0, 'the CMYK document violated nothing: ' + R.cspDetail)
 	assert.equal(R.errAfterCmyk, '[]', 'and threw nothing: ' + R.errAfterCmyk)
+})
+
+test('mediaui: (13) a JPEG2000 page actually DECODES — the failure here is a blank page, not an error', { skip, timeout: 180_000 }, () => {
+	assert.equal(R.steps.jpxMounted, true, 'the JPX document mounted a canvas')
+	// THE assertion. `useWasm: false` selects openjpeg_nowasm_fallback.js, which pdf.js
+	// fetches from the wasmUrl prefix -- and with wasmUrl unset the image renders as
+	// nothing at all: no CSP violation, no console error, no rejected promise. A canvas
+	// exists either way, so only ink discriminates. This shipped once.
+	assert.ok(R.jpxInk > 500, 'the JPEG2000 image decoded and painted, got ink=' + R.jpxInk)
+	// The mechanism's positive control lives server-side in pdf.test.js (the fallback must
+	// serve 200 TOKENLESSLY): a main-thread resource-timing check cannot see it reliably --
+	// the entry buffer overflows across this run's navigations, so it reported a false
+	// negative while the image was demonstrably decoding.
+	assert.equal(R.cspAfterJpx, 0, 'and it needed no CSP grant (wasm2js shim, not real WebAssembly)')
 })
