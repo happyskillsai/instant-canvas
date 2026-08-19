@@ -28,6 +28,7 @@ const { figureMap } = require('./lib/figures')
 const { PKG_VERSION, UNKNOWN_VERSION } = require('./lib/pkgmeta')
 const { hasMarkdownExtension } = require('./lib/markdownsrc')
 const { isEnvFile } = require('./lib/envfile')
+const { isPdfFile } = require('./lib/gallery')
 const themeLib = require('./lib/theme')
 const themestore = require('./lib/themestore')
 const skillsconfig = require('./lib/skillsconfig')
@@ -226,6 +227,13 @@ function assertReadable(abs, command) {
 	// INVALID_SPEC throw below, and the .env-leak protection stays).
 	if (command === 'open' && isEnvFile(abs))
 		return
+	// A PDF is `open`-only, and it is the ONE non-media file kind the CLI opens
+	// directly. That is deliberate rather than inconsistent: this product GENERATES
+	// PDFs (`print <file.md> --out <file.pdf>`), so an agent that has just produced one
+	// must be able to show it. `validate`/`stamp`/`theme` still refuse — a PDF carries
+	// no canvas contract — and so does `print`, which would be re-printing paper.
+	if (command === 'open' && isPdfFile(abs))
+		return
 	// A directory is `open`-only: `open <folder>` renders its images as a gallery,
 	// the same way `open <file.md>` renders markdown. Nothing else acts on a folder —
 	// there is no contract to validate, no envelope to stamp, no file to print or theme.
@@ -338,11 +346,12 @@ async function cmdOpen(args) {
 	assertReadable(canvasAbs, 'open')
 	const isDir = fs.statSync(canvasAbs).isDirectory()
 
-	// A markdown file, a `.env` (a synthesised form) — or a folder (a gallery) — is
-	// already the data; the runtime synthesises the envelope for it, kernel-side. There
+	// A markdown file, a `.env` (a synthesised form), a PDF (rendered by the viewer,
+	// never parsed here) — or a folder (a gallery) — is already the data; the runtime
+	// synthesises the envelope for it, kernel-side. There
 	// is nothing to validate, and nothing for the agent to write. A `.env` in particular
 	// is NEVER read on the CLI side: its values must not reach the agent's context.
-	if (!hasMarkdownExtension(rel) && !isEnvFile(rel) && !isDir) {
+	if (!hasMarkdownExtension(rel) && !isEnvFile(rel) && !isPdfFile(rel) && !isDir) {
 		// Never launch UI for an invalid canvas.
 		const verdict = validate(fs.readFileSync(canvasAbs, 'utf8'), { root, self: rel })
 		log(renderHuman(verdict, rel))
