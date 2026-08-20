@@ -6507,6 +6507,12 @@ function createPdfStage(metaPanel) {
 		const task = lib.getDocument({
 			url: galleryFileUrl(p, m && m.modified),
 			disableRange: false, // ranged fetching ON — the reason a 200 MB file opens at all
+			// rangeChunkSize is deliberately LEFT AT ITS 64 KB DEFAULT. Raising it looks like
+			// an optimisation — fewer round trips — and is a regression: measured on a 20.6 MB
+			// document, first paint pulled 3.9 MB at 64 KB, 10.9 MB at 256 KB, and the ENTIRE
+			// 20.6 MB at 1 MB, for 46 / 45 / 22 requests. Bigger chunks buy a handful of
+			// requests and pay for them in over-fetch, which is the one thing this config
+			// exists to prevent. Bytes are the budget here, never request count.
 			disableStream: true, // no full-file GET (required for disableAutoFetch to work)
 			disableAutoFetch: true, // no background prefetch of the rest of the file
 			useWasm: false, // CSP: no wasm-unsafe-eval, so JPX/JBIG2 use the JS decoders
