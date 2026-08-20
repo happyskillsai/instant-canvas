@@ -163,6 +163,7 @@ const LUCIDE = {
 	'eye': '<path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/>',
 	'eye-off': '<path d="M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49"/><path d="M14.084 14.158a3 3 0 0 1-4.242-4.242"/><path d="M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143"/><path d="m2 2 20 20"/>',
 	'file-text': '<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/>',
+	'file-pdf': '<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><rect x="7" y="13.4" width="10" height="5.6" rx="1.3" fill="currentColor" stroke="none"/>',
 	'file-json': '<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 12a1 1 0 0 0-1 1v1a1 1 0 0 1-1 1 1 1 0 0 1 1 1v1a1 1 0 0 0 1 1"/><path d="M14 18a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1 1 1 0 0 1-1-1v-1a1 1 0 0 0-1-1"/>',
 	'folder': '<path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/>',
 	'house': '<path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"/><path d="M3 10a2 2 0 0 1 .709-1.528l7-6a2 2 0 0 1 2.582 0l7 6A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
@@ -6485,7 +6486,7 @@ function createPdfStage(metaPanel) {
 			lib = await loadPdfLib()
 		} catch {
 			ph.hidden = false
-			ph.innerHTML = icon('file-text') + '<div class="g-noprev">The PDF viewer failed to load.</div>'
+			ph.innerHTML = icon('file-pdf') + '<div class="g-noprev">The PDF viewer failed to load.</div>'
 			return
 		}
 		if (gen !== st.gen) return
@@ -6519,7 +6520,7 @@ function createPdfStage(metaPanel) {
 		} catch {
 			if (gen !== st.gen) return
 			ph.hidden = false
-			ph.innerHTML = icon('file-text') + '<div class="g-noprev">This PDF could not be opened.</div>'
+			ph.innerHTML = icon('file-pdf') + '<div class="g-noprev">This PDF could not be opened.</div>'
 			return
 		}
 		if (gen !== st.gen) { try { task.destroy() } catch { /* gone */ } ; return }
@@ -7876,8 +7877,14 @@ async function renderBrowse(main, rel) {
 			// nudged to the top-RIGHT so it clears the top-left icon chip.
 			const check = document.createElement('div'); check.className = 'gt-check'; check.innerHTML = icon('check'); tile.append(check)
 			if (bs.selection.has(it.rel)) tile.classList.add('selected')
-			const glyphName = it.kind === 'document' ? 'file-text' : it.kind === 'env' ? 'lock' : it.deck ? 'presentation' : 'file-json'
-			const kindLabel = it.kind === 'document' ? 'Document' : it.kind === 'env' ? 'Env' : it.deck ? 'Presentation' : 'Canvas'
+			// A PDF is checked FIRST: without it a PDF fell through to the canvas defaults and
+			// rendered a JSON glyph over the kicker "Canvas" — wrong on both counts, and the
+			// kind it is least like. It needs no class of its own here; every tile already
+			// carries `bt-<kind>` from line ~7815, which is what `.bt-pdf` in the stylesheet
+			// hooks. Adding it again would be dead code that reads as load-bearing.
+			const isPdf = it.kind === 'pdf'
+			const glyphName = isPdf ? 'file-pdf' : it.kind === 'document' ? 'file-text' : it.kind === 'env' ? 'lock' : it.deck ? 'presentation' : 'file-json'
+			const kindLabel = isPdf ? 'PDF' : it.kind === 'document' ? 'Document' : it.kind === 'env' ? 'Env' : it.deck ? 'Presentation' : 'Canvas'
 			const fileName = it.rel.split('/').pop()
 			const titleText = it.title || fileName
 			tile.title = titleText + '\n' + fileName + (it.enhanced ? '\nEnhanced by ' + it.enhanced : '')
@@ -7890,8 +7897,15 @@ async function renderBrowse(main, rel) {
 			}
 			const text = document.createElement('div'); text.className = 'bt-text'
 			const title = document.createElement('div'); title.className = 'bt-title'; title.textContent = titleText
-			const fname = document.createElement('div'); fname.className = 'bt-file'; fname.textContent = fileName
-			text.append(title, fname)
+			text.append(title)
+			// The file-name row is the SECOND line only when it says something the title does
+			// not. A canvas titled "Sales" over `sales.canvas.json` earns it; a PDF has no
+			// title at all, so `titleText` already IS the file name and the row would print
+			// `handbook.pdf` twice, once bold and once in mono.
+			if (fileName !== titleText) {
+				const fname = document.createElement('div'); fname.className = 'bt-file'; fname.textContent = fileName
+				text.append(fname)
+			}
 			tile.append(glyph, kicker, text)
 		}
 		// In subtree scope a tile can come from anywhere below the folder, so it carries
@@ -8103,14 +8117,19 @@ async function renderBrowse(main, rel) {
 		const shown = sortedItems()
 		const kn = (k) => shown.filter((i) => i.kind === k).length
 		const label = (n, one, many) => n + ' ' + (n === 1 ? one : many)
-		const KIND_WORDS = [['canvas', 'canvas', 'canvases'], ['env', 'env file', 'env files'], ['document', 'doc', 'docs'], ['image', 'image', 'images'], ['video', 'video', 'videos'], ['audio', 'audio file', 'audio files']]
-		const nf = kn('folder'), ne = kn('env'), ni = kn('image'), nv = kn('video'), na = kn('audio')
+		const KIND_WORDS = [['canvas', 'canvas', 'canvases'], ['env', 'env file', 'env files'], ['document', 'doc', 'docs'], ['pdf', 'PDF', 'PDFs'], ['image', 'image', 'images'], ['video', 'video', 'videos'], ['audio', 'audio file', 'audio files']]
+		const nf = kn('folder'), ne = kn('env'), ni = kn('image'), nv = kn('video'), na = kn('audio'), np = kn('pdf')
 		const parts = []
 		if (nf) parts.push(label(nf, 'folder', 'folders'))
 		if (bs.types.size === 0) {
 			parts.push(label(kn('canvas'), 'canvas', 'canvases'))
 			if (ne) parts.push(label(ne, 'env file', 'env files'))
-			parts.push(label(kn('document'), 'doc', 'docs'), label(ni, 'image', 'images'))
+			parts.push(label(kn('document'), 'doc', 'docs'))
+			// Conditional, like env/video/audio rather than like canvas/doc/image: the three
+			// unconditional kinds are the ones a workspace is ASSUMED to hold, so a zero is
+			// informative. A folder with no PDFs should not advertise "0 PDFs".
+			if (np) parts.push(label(np, 'PDF', 'PDFs'))
+			parts.push(label(ni, 'image', 'images'))
 			if (nv) parts.push(label(nv, 'video', 'videos'))
 			if (na) parts.push(label(na, 'audio file', 'audio files'))
 		} else {

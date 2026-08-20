@@ -1915,6 +1915,14 @@ audio.m-el{display:none} /* the audio element is never shown — the art card st
    one warm element in the grid), and no file name. Hidden dot-folders look the same. */
 .bt-folder .bt-glyph{background:color-mix(in srgb, var(--accent) 13%, transparent);color:var(--accent)}
 .bt-folder:hover .bt-glyph{background:color-mix(in srgb, var(--accent) 20%, transparent)}
+/* A PDF is the one item kind that carries a colour of its own, and it is deliberately
+   NOT --accent: the product's vermilion means "this app", and a folder already spends it.
+   --red is an INK token already declared in all three theme blocks (#ef4444 / #f87171),
+   so this follows light, dark and the OS-auto flip with no new value to keep in step.
+   One rule covers the grid tile AND the list row, because `.browse.g-list .bt-glyph`
+   only resizes the same chip. */
+.bt-pdf .bt-glyph{background:color-mix(in srgb, var(--red) 14%, transparent);color:var(--red)}
+.bt-pdf:hover .bt-glyph{background:color-mix(in srgb, var(--red) 22%, transparent)}
 .bt-folder .bt-title{min-height:0}
 /* A hidden dot-folder is NOT muted — it renders like any other folder (see the tree). */
 /* A FOLDER is navigation, never selectable — in select mode it dims to say so. Canvas

@@ -228,6 +228,16 @@ test.before(async () => {
 			out.audioIsCard = await evaluate('!!document.querySelector(".browse .bt-audio .gt-ph .lucide") && !document.querySelector(".browse .bt-audio .gt-ph[hidden]")')
 			out.countText = await evaluate('(document.querySelector(".browse .g-count") || {}).textContent || ""')
 			out.browseStyleAttrs = await evaluate(q('.browse [style]'))
+			// A PDF must be visually its OWN kind in the grid AND the list row. Before this
+			// it fell through to the canvas defaults: a JSON glyph under the kicker "Canvas".
+			out.pdfTiles = await evaluate(q('.browse .bt-pdf'))
+			out.pdfKicker = await evaluate('(document.querySelector(".browse .bt-pdf .bt-kicker") || {}).textContent || ""')
+			out.pdfGlyphColor = await evaluate('(function(){ var g = document.querySelector(".browse .bt-pdf .bt-glyph"); return g ? getComputedStyle(g).color : "" })()')
+			out.canvasGlyphColor = await evaluate('(function(){ var g = document.querySelector(".browse .bt-card:not(.bt-pdf):not(.bt-folder) .bt-glyph"); return g ? getComputedStyle(g).color : "" })()')
+			out.accentColor = await evaluate('getComputedStyle(document.documentElement).getPropertyValue("--accent").trim()')
+			out.redToken = await evaluate('getComputedStyle(document.documentElement).getPropertyValue("--red").trim()')
+			out.pdfFileRows = await evaluate('(function(){ var t = document.querySelector(".browse .bt-pdf"); return t ? t.querySelectorAll(".bt-file").length : -1 })()')
+			out.pdfGlyphIsFilled = await evaluate('!!document.querySelector(".browse .bt-pdf .bt-glyph rect[fill=currentColor]")')
 
 			// ============ (2) VIDEO PLAYER: mount, duration, dims, play, controls ============
 			await evaluate('location.hash = "#/c/m%2Ftiny.mp4"')
@@ -588,4 +598,27 @@ test('mediaui: (13) a JPEG2000 page actually DECODES — the failure here is a b
 	// the entry buffer overflows across this run's navigations, so it reported a false
 	// negative while the image was demonstrably decoding.
 	assert.equal(R.cspAfterJpx, 0, 'and it needed no CSP grant (wasm2js shim, not real WebAssembly)')
+})
+
+test('mediaui: (14) a PDF wears its own red glyph and kicker, in the tile and the list row', { skip, timeout: 180_000 }, () => {
+	assert.ok(R.pdfTiles >= 1, 'a .bt-pdf tile exists, got ' + R.pdfTiles)
+	assert.equal(R.pdfKicker, 'PDF', 'the kicker names the kind — it used to read "Canvas"')
+	assert.equal(R.pdfGlyphIsFilled, true, 'the glyph carries its filled badge, not a plain file outline')
+
+	// The colour must be RED and must not be the product accent. Asserting the computed
+	// value against the --red TOKEN (rather than a hardcoded hex) is what makes this
+	// survive a theme edit: the token is redefined per theme, the relationship is not.
+	const rgb = (hex) => {
+		const h = hex.replace('#', '')
+		return 'rgb(' + parseInt(h.slice(0, 2), 16) + ', ' + parseInt(h.slice(2, 4), 16) + ', ' + parseInt(h.slice(4, 6), 16) + ')'
+	}
+	assert.equal(R.pdfGlyphColor, rgb(R.redToken), 'the glyph is --red, got ' + R.pdfGlyphColor)
+	assert.notEqual(R.pdfGlyphColor, rgb(R.accentColor), 'and is NOT the vermilion accent, which a folder already spends')
+	assert.notEqual(R.pdfGlyphColor, R.canvasGlyphColor, 'and is distinguishable from a canvas glyph')
+
+	// A PDF has no title, so titleText IS the file name — printing the file row too showed
+	// `handbook.pdf` twice, once bold and once in mono.
+	assert.equal(R.pdfFileRows, 0, 'no duplicate file-name row under a title that is the file name')
+	// The count line named canvases, docs and images but never PDFs.
+	assert.match(R.countText, /\d+ PDFs?/, 'the count line names PDFs: ' + R.countText)
 })
