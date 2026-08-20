@@ -2,6 +2,37 @@
 
 ## [Unreleased]
 
+## [0.30.0] - 2026-08-20
+
+### Added
+
+- **PDFs are now a first-class file kind, and they open in a reader built for documents too large
+  to hold in memory.** A `.pdf` appears in the browse view beside canvases, documents and media —
+  listed, filterable, selectable, carrying a filled red glyph with a white `PDF` wordmark so it
+  reads at a glance in both the grid and the list. `open report.pdf` works directly, the one
+  non-canvas file the CLI opens by name: this product *produces* PDFs (`print report.md --out
+  report.pdf`), so an agent that has just made one can show it. `validate`, `stamp`, `print` and
+  `theme` still refuse — there is no contract to check, and it is already paper.
+
+  The reader is built around a 200 MB document being normal, usually because of embedded images,
+  and around three separate things that can exhaust memory. The **file bytes** never arrive whole:
+  pdf.js pulls 64 KB ranges from the same HTTP Range route that serves video, so opening a 20.6 MB
+  document reads 3.9 MB rather than 20.6. The **canvases** are virtualized to a five-page window
+  that moves with the scroll and releases what it leaves — across a full twenty-page scroll the JS
+  heap moved 13.8 MB → 14.7 MB and returned to 12.7 MB on close, with nothing left mounted. The
+  **decoded images**, which neither of those touches, are freed by cancelling the render *before*
+  cleaning up the page, because pdf.js silently defers the release otherwise.
+
+  One caveat if your PDFs come from a scanner: WebAssembly is off, because enabling it means
+  granting `wasm-unsafe-eval` in a policy that otherwise allows nothing. The pure-JS decoders that
+  replace it are 8.3× slower on JPEG2000 and JBIG2 — 1.8 s against 0.2 s for one 2400×3000 image.
+  Ordinary embedded JPEG is unaffected; the browser decodes it natively and never reaches that
+  code.
+
+  Selection carries `pdf` in its `kind` enum, so a reader can point at PDFs and hand them to an
+  agent. Deletion deliberately does not follow — a PDF is selectable but cannot be deleted from
+  the browser, which the media-only delete gate enforces by construction.
+
 ## [0.29.0] - 2026-08-17
 
 ### Fixed
