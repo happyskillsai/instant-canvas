@@ -616,5 +616,38 @@ The fallbacks are also why the tokenless-asset exemption grew a second entry: pd
 the filename onto the prefix, so `?token=` has nowhere to go and a tokened gate 403s them — again
 silently. Same shape as the `@font-face` trap, different consumer.
 
-Measured, for the record: on that path a 2400×3000 JPEG2000 page takes **~5.9 s**, against
-**~350 ms** for the same image as DCTDecode. Ordinary embedded JPEG never touches this code.
+Measured, for the record: isolated decode + render of one 2400×3000 JPEG2000 image is
+**1,831 ms** on the JS fallback against **221 ms** with WASM — **8.3×**, not the 2–4× pdf.js's
+docs quote, because the fallback is wasm2js-transpiled rather than hand-written. A full page in
+the app is ~5.9 s against ~350 ms for the same image as DCTDecode. Ordinary embedded JPEG never
+touches this code.
+
+## Fewer requests, more bytes — `rangeChunkSize` is a trap that looks like an optimisation
+
+The PDF viewer's first paint on a 20.6 MB document makes **46 ranged requests**. That number
+invites a fix, and pdf.js offers an obvious one: raise `rangeChunkSize` from its 64 KB default.
+Measured, on the same file:
+
+| `rangeChunkSize` | First-paint bytes | Requests |
+|---|---|---|
+| 64 KB (default) | **3.9 MB** | 46 |
+| 256 KB | 10.9 MB | 45 |
+| 1 MB | **20.6 MB — the whole file** | 22 |
+
+At 1 MB it fetches the entire document to paint page one. Every flag in that config exists to
+prevent exactly that, and this one setting quietly undoes all of them — while the metric a
+developer is most likely to be watching (request count) *improves*.
+
+The mechanism is over-fetch: pdf.js needs a few bytes of the page tree here and an image stream
+there, and each touch drags in a whole chunk. Bigger chunks mean each scattered read costs more,
+and a PDF that is not linearized scatters badly by construction.
+
+**Bytes are the budget here, never request count.** On loopback a request costs microseconds and
+a megabyte costs memory, so the two metrics do not merely differ — they point opposite ways. The
+config carries a comment saying so, and `mediaui.test.js` asserts first paint stays under 60% of
+the file, which is the only assertion in the suite that can see this regression (it reports
+**100%** when the chunk size is raised to 1 MB).
+
+The general rule: when a config knob trades one resource for another, find out which one you are
+actually short of before turning it. Here the whole feature exists because memory is scarce and
+round trips are free.

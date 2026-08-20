@@ -143,7 +143,7 @@ the MIME type.
 
 | Flag | Why |
 |---|---|
-| `useWasm: false` | **CSP.** pdf.js compiles WebAssembly for JPEG2000, JBIG2 and PostScript functions. Verified in this build: `useWasm` defaults to TRUE (`R = !1 !== e.useWasm`) and `WebAssembly.instantiate` is live in the worker. Our CSP has no `wasm-unsafe-eval`, so leaving it on throws `CompileError` on affected documents. JS fallback decoders cover all three, 2–4× slower on JPX/JBIG2. |
+| `useWasm: false` | **CSP.** pdf.js compiles WebAssembly for JPEG2000, JBIG2 and PostScript functions. Verified in this build: `useWasm` defaults to TRUE (`R = !1 !== e.useWasm`) and `WebAssembly.instantiate` is live in the worker. Our CSP has no `wasm-unsafe-eval`, so leaving it on throws `CompileError` on affected documents. JS fallback decoders cover all three. pdf.js's own docs say 2–4× slower; **measured on this build it is 8.3×** — 1,831 ms against 221 ms to decode and render one 2400×3000 JPEG2000 image — because the fallback is wasm2js-transpiled rather than hand-written JS. |
 | `disableStream: true` | No full-file GET. Required for `disableAutoFetch` to work at all (pdf.js's own docs). |
 | `disableAutoFetch: true` | No background prefetch of the whole file after the first range. |
 | `disableRange: false` | Ranged fetching ON — the reason a 200 MB file opens at all. |
@@ -175,8 +175,13 @@ page actually paints ink.
 
 Neither fallback touches real WebAssembly: each shadows the global with a wasm2js shim
 (`var WebAssembly = {...}; isWasm2js: true`), so no `wasm-unsafe-eval` is needed. **Measured cost**
-of taking that path: a 2400×3000 JPEG2000 page renders in ~5.9 s versus ~350 ms for the same image
-as DCTDecode. Ordinary embedded JPEG is unaffected — the browser decodes it natively.
+of taking that path, measured two ways: **isolated decode + render** of one 2400×3000 JPEG2000
+image is 1,831 ms against 221 ms with WASM (**8.3×**, and WASM lands near OpenJPEG's native C
+decoder at 275 ms); **a full page in the app** — document load, page setup and render at the
+DPR-capped scale — is ~5.9 s against ~350 ms for the same image as DCTDecode. Ordinary embedded
+JPEG is unaffected either way, because the browser decodes it natively and never reaches this
+code. That 8.3× is the whole content of the `wasm-unsafe-eval` question: widening the CSP buys
+that factor, on scanner and archival documents only.
 
 ## Verified against THIS build (6.2.108), not inherited from an older one
 

@@ -27,7 +27,7 @@ and the CLI's widened `open` gate. Range lives here rather than in a browser tes
 the media route already learned: **Chrome renders perfectly from a 200-only server**, so a browser
 assertion is green whether or not ranged fetching exists.
 
-The **browser** half is folded into `mediaui.test.js` rather than given its own file, because one
+One assertion there is load-bearing in a way the others are not: **first paint must fetch under 60% of a large fixture**. It is the only check in the suite that can see a `rangeChunkSize` or auto-fetch regression, both of which leave every other signal green while the viewer quietly downloads whole documents (it reports 100% when sabotaged). The **browser** half is folded into `mediaui.test.js` rather than given its own file, because one
 Chrome-driving file too many tips the shared single-process loop over and fails the whole suite at
 once. It covers the viewer mounting, real ink on the canvas, the render window moving and evicting,
 `dispose()`, and a **CMYK + type-4 PostScript** fixture that exercises the two pdf.js paths that
