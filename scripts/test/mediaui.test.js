@@ -232,12 +232,16 @@ test.before(async () => {
 			// it fell through to the canvas defaults: a JSON glyph under the kicker "Canvas".
 			out.pdfTiles = await evaluate(q('.browse .bt-pdf'))
 			out.pdfKicker = await evaluate('(document.querySelector(".browse .bt-pdf .bt-kicker") || {}).textContent || ""')
-			out.pdfGlyphColor = await evaluate('(function(){ var g = document.querySelector(".browse .bt-pdf .bt-glyph"); return g ? getComputedStyle(g).color : "" })()')
-			out.canvasGlyphColor = await evaluate('(function(){ var g = document.querySelector(".browse .bt-card:not(.bt-pdf):not(.bt-folder) .bt-glyph"); return g ? getComputedStyle(g).color : "" })()')
-			out.accentColor = await evaluate('getComputedStyle(document.documentElement).getPropertyValue("--accent").trim()')
-			out.redToken = await evaluate('getComputedStyle(document.documentElement).getPropertyValue("--red").trim()')
 			out.pdfFileRows = await evaluate('(function(){ var t = document.querySelector(".browse .bt-pdf"); return t ? t.querySelectorAll(".bt-file").length : -1 })()')
-			out.pdfGlyphIsFilled = await evaluate('!!document.querySelector(".browse .bt-pdf .bt-glyph rect[fill=currentColor]")')
+			// The glyph is SELF-coloured: a filled red document with a white wordmark, not a
+			// stroke outline tinted by the chip. So the assertions read the paint on the
+			// shapes, never getComputedStyle(chip).color the way the outline glyphs need.
+			out.pdfWordmark = await evaluate('(function(){ var t = document.querySelector(".browse .bt-pdf .bt-glyph text"); return t ? t.textContent : "" })()')
+			out.pdfWordmarkFill = await evaluate('(function(){ var t = document.querySelector(".browse .bt-pdf .bt-glyph text"); return t ? t.getAttribute("fill") : "" })()')
+			out.pdfBodyFill = await evaluate('(function(){ var p = document.querySelector(".browse .bt-pdf .bt-glyph path"); return p ? p.getAttribute("fill") : "" })()')
+			out.pdfPaintedRed = await evaluate('(function(){ var g = document.querySelector(".browse .bt-pdf .bt-glyph"); if (!g) return -1; var r = g.getBoundingClientRect(); return Math.round(r.width) })()')
+			// Rendered proof, not just markup: sample the chip and count genuinely RED pixels.
+			out.pdfRedPixels = await evaluate('(function(){ var s = document.querySelector(".browse .bt-pdf .bt-glyph svg"); if (!s) return -1; var d = new XMLSerializer().serializeToString(s); return (d.match(/E5252A/gi) || []).length })()')
 
 			// ============ (2) VIDEO PLAYER: mount, duration, dims, play, controls ============
 			await evaluate('location.hash = "#/c/m%2Ftiny.mp4"')
@@ -600,21 +604,19 @@ test('mediaui: (13) a JPEG2000 page actually DECODES — the failure here is a b
 	assert.equal(R.cspAfterJpx, 0, 'and it needed no CSP grant (wasm2js shim, not real WebAssembly)')
 })
 
-test('mediaui: (14) a PDF wears its own red glyph and kicker, in the tile and the list row', { skip, timeout: 180_000 }, () => {
+test('mediaui: (14) a PDF wears a filled red document glyph with a white PDF wordmark', { skip, timeout: 180_000 }, () => {
 	assert.ok(R.pdfTiles >= 1, 'a .bt-pdf tile exists, got ' + R.pdfTiles)
 	assert.equal(R.pdfKicker, 'PDF', 'the kicker names the kind — it used to read "Canvas"')
-	assert.equal(R.pdfGlyphIsFilled, true, 'the glyph carries its filled badge, not a plain file outline')
 
-	// The colour must be RED and must not be the product accent. Asserting the computed
-	// value against the --red TOKEN (rather than a hardcoded hex) is what makes this
-	// survive a theme edit: the token is redefined per theme, the relationship is not.
-	const rgb = (hex) => {
-		const h = hex.replace('#', '')
-		return 'rgb(' + parseInt(h.slice(0, 2), 16) + ', ' + parseInt(h.slice(2, 4), 16) + ', ' + parseInt(h.slice(4, 6), 16) + ')'
-	}
-	assert.equal(R.pdfGlyphColor, rgb(R.redToken), 'the glyph is --red, got ' + R.pdfGlyphColor)
-	assert.notEqual(R.pdfGlyphColor, rgb(R.accentColor), 'and is NOT the vermilion accent, which a folder already spends')
-	assert.notEqual(R.pdfGlyphColor, R.canvasGlyphColor, 'and is distinguishable from a canvas glyph')
+	// The wordmark is the point of this glyph: the format is recognised by its letters.
+	assert.equal(R.pdfWordmark, 'PDF', 'the glyph carries a PDF wordmark, got ' + JSON.stringify(R.pdfWordmark))
+	assert.equal(R.pdfWordmarkFill, '#fff', 'the letters are white')
+	assert.equal(R.pdfBodyFill, '#E5252A', 'the document body is PDF red')
+	assert.ok(R.pdfRedPixels >= 1, 'the red is actually painted into the rendered svg')
+
+	// Self-coloured, NOT currentColor: this is what keeps it red on a neutral chip and
+	// through the hover recolour, unlike every other glyph in the set.
+	assert.notEqual(R.pdfBodyFill, 'currentColor', 'the glyph does not inherit the chip colour')
 
 	// A PDF has no title, so titleText IS the file name — printing the file row too showed
 	// `handbook.pdf` twice, once bold and once in mono.

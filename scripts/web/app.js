@@ -163,7 +163,12 @@ const LUCIDE = {
 	'eye': '<path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/>',
 	'eye-off': '<path d="M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49"/><path d="M14.084 14.158a3 3 0 0 1-4.242-4.242"/><path d="M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143"/><path d="m2 2 20 20"/>',
 	'file-text': '<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/>',
-	'file-pdf': '<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><rect x="7" y="13.4" width="10" height="5.6" rx="1.3" fill="currentColor" stroke="none"/>',
+	// The one glyph in this set that is not a stroke outline. A PDF is recognised by its
+	// colour and its letters, so it is drawn the way the format's own icons are: a FILLED
+	// document in PDF red with a white wordmark, self-coloured rather than inheriting
+	// `currentColor` like its siblings. Every child therefore sets its own fill and
+	// `stroke="none"`, overriding the wrapper's stroke defaults from `icon()`.
+	'file-pdf': '<path d="M14.5 1.5H5.5A2.5 2.5 0 0 0 3 4v16a2.5 2.5 0 0 0 2.5 2.5h13A2.5 2.5 0 0 0 21 20V8Z" fill="#E5252A" stroke="none"/><path d="M14.5 1.5V6a2 2 0 0 0 2 2H21Z" fill="#A81419" stroke="none"/><text x="12" y="19" text-anchor="middle" font-size="8.4" font-weight="800" letter-spacing="-0.5" font-family="Inter, -apple-system, Segoe UI, Roboto, sans-serif" fill="#fff" stroke="none">PDF</text>',
 	'file-json': '<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 12a1 1 0 0 0-1 1v1a1 1 0 0 1-1 1 1 1 0 0 1 1 1v1a1 1 0 0 0 1 1"/><path d="M14 18a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1 1 1 0 0 1-1-1v-1a1 1 0 0 0-1-1"/>',
 	'folder': '<path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/>',
 	'house': '<path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"/><path d="M3 10a2 2 0 0 1 .709-1.528l7-6a2 2 0 0 1 2.582 0l7 6A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
