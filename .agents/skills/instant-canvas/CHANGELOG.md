@@ -5,6 +5,26 @@ The agent-facing contract for InstantCanvas. The runtime ships as the
 and LICENSE, and agents drive the CLI through `npx`. Versions track the runtime
 package they were authored alongside.
 
+## [0.30.0] - 2026-08-21
+
+### Added
+- **A `.pdf` is now something you can browse, open and hand to a user — and `open <file.pdf>` is
+  the one non-canvas FILE you may open by name.** That exception exists because you can also
+  *produce* one: `print report.md --out report.pdf` then `open report.pdf` shows the reader what
+  you just made, a loop that previously dead-ended because the workspace could not see the file it
+  had just written. Media stays folder-only (`open <folder>`, never `open clip.mp4`); a PDF does
+  not. `validate`, `stamp`, `print` and `theme` still refuse one with `INVALID_SPEC` — there is no
+  contract to check and it is already paper — and a PDF never creates a session, because paper
+  cannot submit.
+- **`selection` gained a `pdf` kind**, so the JSON you read from `selection` may now carry
+  `"kind":"pdf"` alongside `canvas|document|image|video|audio`. This is how a user points at PDFs
+  in the browser and asks you to act on them. **A PDF is selectable but NOT deletable from the
+  browser** — the in-browser delete still refuses anything that is not an image, video or audio
+  file, so acting on a selected PDF is your job, with your own tools.
+- **The browse view lists PDFs** beside canvases, documents and media, filterable by kind and
+  counted in the folder's count line. There is no PDF block and no canvas wrapper: do not author
+  one to show a PDF you already have, exactly as you would not wrap an existing markdown file.
+
 ## [0.27.1] - 2026-08-05
 
 ### Changed
