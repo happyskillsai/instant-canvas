@@ -88,9 +88,26 @@ if (dirty) {
 	process.exit(1)
 }
 
-// Every bundle file except skill.json: any change at all means the contract moved.
+// Every bundle file except the two the RELEASE MACHINERY itself always touches: any other
+// change at all means the contract moved.
+//
+// CHANGELOG.md is excluded for the same reason as skill.json, and it is not optional. The
+// publish step OWNS that file — `happyskills release` refuses with MISSING_CHANGELOG_ENTRY
+// until it carries a `## [<version>]` entry — so an entry is written on every single publish.
+// When the release tag is cut before that write (which is what following release-cli's staging
+// rule produces), the file differs from the tag the moment the publish succeeds, and this check
+// would report "republish needed" forever with nothing pending. Measured on v0.30.0: the whole
+// diff was 21 added lines and 0 removed, already live in the registry.
+//
+// A permanent false positive is the exact failure this check was added to remove — SKILL.md
+// argues that republishing an unchanged bundle "trains them to ignore the drift check, the one
+// signal that matters when the contract really does move".
+//
+// Known blind spot, accepted: a hand-edit to ONLY this file will not prompt a republish. The
+// changelog is documentation ABOUT the contract; agents read SKILL.md and skill.json.
+const RELEASE_TOUCHED = [`${BUNDLE}/skill.json`, `${BUNDLE}/CHANGELOG.md`]
 const changed = git(`git diff --name-only ${tag}..HEAD -- ${BUNDLE}`).split('\n').filter(Boolean)
-const substantive = changed.filter((f) => f !== `${BUNDLE}/skill.json`)
+const substantive = changed.filter((f) => !RELEASE_TOUCHED.includes(f))
 
 // skill.json separately: compare it field by field with the version REMOVED, so the bump
 // syncversion.js makes on every release does not masquerade as a contract change.
